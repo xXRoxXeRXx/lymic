@@ -19,10 +19,7 @@
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2",
-    "clsx": "^2.1.1",
-    "lucide-svelte": "^1.0.1",
-    "tailwind-merge": "^3.5.0",
-    "tailwind-variants": "^3.2.2"
+    "lucide-svelte": "^1.0.1"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",
