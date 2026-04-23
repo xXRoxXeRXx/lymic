@@ -48,7 +48,7 @@ async fn login(app: tauri::AppHandle, server_url: String, api_key: String) -> Re
     // Build a temporary ImmichClient purely to reuse its URL normalisation and
     // pooled reqwest Client. The client is discarded after the connection test.
     let temp_client = sync::ImmichClient::new(server_url.clone(), api_key.clone());
-    let url = format!("{}/server-info/config", temp_client.base_url());
+    let url = format!("{}/server/config", temp_client.base_url());
 
     let response = temp_client
         .http_client()
