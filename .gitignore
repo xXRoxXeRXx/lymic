@@ -1,0 +1,25 @@
+# Rust
+/target/
+/C:/temp_rust_build/
+**/*.rs.bk
+Cargo.lock
+
+# Node / JS
+node_modules/
+.svelte-kit/
+build/
+.env
+.env.*
+!.env.example
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# App Data
+immich_sync.db

@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --m3-primary: 66 133 244;
+    --m3-on-primary: 255 255 255;
+    --m3-primary-container: 211 227 253;
+    --m3-on-primary-container: 4 30 73;
+    
+    --m3-secondary: 83 94 116;
+    --m3-on-secondary: 255 255 255;
+    --m3-secondary-container: 219 225 249;
+    --m3-on-secondary-container: 16 27 48;
+    
+    --m3-surface: 248 249 255;
+    --m3-on-surface: 25 28 35;
+    --m3-surface-variant: 224 226 236;
+    --m3-on-surface-variant: 68 70 79;
+    
+    --m3-outline: 116 119 127;
+  }
+
+  .dark {
+    --m3-primary: 168 199 250;
+    --m3-on-primary: 4 48 120;
+    --m3-primary-container: 8 66 160;
+    --m3-on-primary-container: 211 227 253;
+    
+    --m3-secondary: 186 199 232;
+    --m3-on-secondary: 37 49 76;
+    --m3-secondary-container: 59 71 99;
+    --m3-on-secondary-container: 219 225 249;
+    
+    --m3-surface: 17 19 24;
+    --m3-on-surface: 227 226 230;
+    --m3-surface-variant: 68 70 79;
+    --m3-on-surface-variant: 196 198 207;
+    
+    --m3-outline: 142 144 153;
+  }
+
+  body {
+    @apply bg-[rgb(var(--m3-surface))] text-[rgb(var(--m3-on-surface))] transition-colors duration-300;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  .m3-card {
+    @apply bg-[rgb(var(--m3-surface-variant))] rounded-[28px] p-6 border-none shadow-none transition-all duration-200 hover:shadow-md;
+  }
+  
+  .m3-button-filled {
+    @apply bg-[rgb(var(--m3-primary))] text-[rgb(var(--m3-on-primary))] rounded-full px-6 py-2.5 font-medium transition-all hover:shadow-lg active:scale-95;
+  }
+
+  .m3-button-tonal {
+    @apply bg-[rgb(var(--m3-secondary-container))] text-[rgb(var(--m3-on-secondary-container))] rounded-full px-6 py-2.5 font-medium transition-all hover:shadow-md active:scale-95;
+  }
+
+  .m3-input {
+    @apply bg-transparent border-[rgb(var(--m3-outline))] border rounded-lg px-4 py-3 outline-none focus:border-[rgb(var(--m3-primary))] focus:border-2 transition-all;
+  }
+}
