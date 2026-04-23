@@ -257,11 +257,6 @@
             <SettingsIcon class="w-5 h-5" />
           {/if}
         </button>
-        <button class="m3-icon-button" title="Abmelden"
-                onclick={() => { isAuthenticated = false; invoke("logout"); }}
-                style="color: rgb(var(--m3-error));">
-          <LogOut class="w-5 h-5" />
-        </button>
       </div>
     </header>
 
@@ -414,6 +409,23 @@
                   <div class="m3-switch-thumb"></div>
                 </button>
               </div>
+            </div>
+
+            <div class="m3-card-elevated p-4 flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium" style="color: rgb(var(--m3-on-surface));">Konto</p>
+                <p class="text-xs mt-0.5" style="color: rgb(var(--m3-on-surface-variant));">
+                  Verbindung zum Server trennen
+                </p>
+              </div>
+              <button class="m3-button-outlined border-red-500/50 text-red-600 hover:bg-red-50" 
+                      style="color: rgb(var(--m3-error)); border-color: rgb(var(--m3-error) / 0.5);"
+                      onclick={() => { isAuthenticated = false; invoke("logout"); }}>
+                <div class="flex items-center gap-2">
+                  <LogOut class="w-4 h-4" />
+                  Abmelden
+                </div>
+              </button>
             </div>
           </div>
         {/if}
