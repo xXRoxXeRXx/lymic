@@ -4,120 +4,136 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { listen } from "@tauri-apps/api/event";
   import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-  import { LogOut, Settings as SettingsIcon, Play, Pause, FolderPlus, Folder, Trash2, ArrowLeft, ShieldCheck, Zap } from "lucide-svelte";
+  import {
+    LogOut, Settings as SettingsIcon, Play, FolderPlus, Folder,
+    Trash2, ArrowLeft, Cloud, CloudUpload, CheckCircle2,
+    AlertCircle, Info, RefreshCw, Clock, ChevronRight, X
+  } from "lucide-svelte";
 
+  // --- State ---
   let isAuthenticated = $state(false);
-  let currentView = $state("dashboard"); // "dashboard" or "settings"
+  let currentView = $state("dashboard");
   let serverUrl = $state("");
   let apiKey = $state("");
   let isLoggingIn = $state(false);
   let loginError = $state("");
-  let syncStatus = $state("Idle");
-  let lastSync = $state("Never");
+  let syncStatus = $state<"idle" | "syncing" | "error">("idle");
+  let lastSync = $state("Noch nie");
   let progress = $state(0);
   let currentFile = $state("");
   let watchedFolders = $state<any[]>([]);
   let isAutostartEnabled = $state(false);
-  let logs = $state<string[]>([]);
-  let showLogs = $state(false);
+  let logs = $state<LogEntry[]>([]);
+  let logEndEl: HTMLElement;
 
-  onMount(async () => {
-    try {
-      isAuthenticated = await invoke("get_auth_status");
-      await refreshFolders();
-      isAutostartEnabled = await isEnabled();
+  interface LogEntry {
+    id: number;
+    time: string;
+    level: "info" | "success" | "error" | "warn";
+    message: string;
+    raw: string;
+  }
 
-      const unlisten = await listen("sync-progress", (event) => {
-        syncStatus = "Syncing";
+  let logCounter = 0;
+
+  function parseLog(raw: string): LogEntry {
+    const timeMatch = raw.match(/\[(\d{2}:\d{2}:\d{2})\]/);
+    const levelMatch = raw.match(/\[(INFO|ERROR|SUCCESS|WARN)\]/i);
+    const time = timeMatch?.[1] ?? new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const rawLevel = (levelMatch?.[1] ?? "INFO").toUpperCase();
+
+    let level: LogEntry["level"] = "info";
+    if (rawLevel === "ERROR") level = "error";
+    else if (rawLevel === "SUCCESS") level = "success";
+    else if (rawLevel === "WARN") level = "warn";
+
+    let message = raw.replace(/\[\d{2}:\d{2}:\d{2}\]/, "").replace(/\[(INFO|ERROR|SUCCESS|WARN)\]/i, "").trim();
+
+    // Menschenlesbare Übersetzungen
+    message = message
+      .replace(/Starting manual synchronization\.\.\./, "Manuelle Synchronisation gestartet")
+      .replace(/Scanning folder: (.+)/, (_, p) => `📂 Ordner wird gescannt: ${p.split(/[\\/]/).pop()}`)
+      .replace(/Auto-sync: Starting pipeline for (\d+) files \((.+) MB\)/, (_, n, mb) => `🚀 Auto-Sync: ${n} Dateien (${mb} MB) werden verarbeitet`)
+      .replace(/Sync: Starting pipeline for (\d+) files \((.+) MB\)/, (_, n, mb) => `🚀 Sync: ${n} Dateien (${mb} MB) werden verarbeitet`)
+      .replace(/Processed (\d+) files\. (\d+) new uploads\./, (_, total, uploads) => `✅ ${total} Dateien verarbeitet, ${uploads} neue Uploads`)
+      .replace(/Auto-sync: Starting pipeline/, "🔄 Automatische Synchronisation läuft")
+      .replace(/Bulk check failed: (.+)/, (_, e) => `⚠️ Server-Prüfung fehlgeschlagen: ${e}`)
+      .replace(/Upload failed for (.+?): (.+)/, (_, file, err) => `❌ Upload fehlgeschlagen: ${file.split(/[\\/]/).pop()} — ${err}`)
+      .replace(/Attempting to connect to (.+)/, (_, url) => `🌐 Verbinde mit ${url}`)
+      .replace(/Auto-sync Complete/, "✅ Auto-Sync abgeschlossen")
+      .replace(/Sync Complete/, "✅ Sync abgeschlossen");
+
+    return { id: ++logCounter, time, level, message, raw };
+  }
+
+  onMount(() => {
+    (async () => {
+      try {
+        isAuthenticated = await invoke("get_auth_status");
+        await refreshFolders();
+        isAutostartEnabled = await isEnabled();
+
+        const u1 = await listen("sync-progress", (event) => {
+        syncStatus = "syncing";
         currentFile = (event.payload as string).split(/[\\/]/).pop() || "";
       });
-
-      const unlistenPct = await listen("sync-progress-percent", (event) => {
+      const u2 = await listen("sync-progress-percent", (event) => {
         progress = event.payload as number;
       });
-
-      const unlistenTrigger = await listen("trigger-sync", () => {
-        handleStartSync();
+      const u3 = await listen("trigger-sync", () => handleStartSync());
+      const u4 = await listen("log-message", (event) => {
+        const entry = parseLog(event.payload as string);
+        logs = [entry, ...logs].slice(0, 150);
       });
-
-      const unlistenLogs = await listen("log-message", (event) => {
-        logs = [event.payload as string, ...logs].slice(0, 100);
+      const u5 = await listen("sync-idle", () => {
+        syncStatus = "idle";
+        progress = 100;
+        lastSync = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+        setTimeout(() => { progress = 0; }, 2000);
       });
-
-      const unlistenIdle = await listen("sync-idle", () => {
-        syncStatus = "Idle";
-        lastSync = new Date().toLocaleTimeString();
-      });
-
-      return () => {
-        unlisten();
-        unlistenPct();
-        unlistenTrigger();
-        unlistenLogs();
-        unlistenIdle();
-      };
-    } catch (e) {
-      console.error("Failed to initialize dashboard", e);
-    }
+        return () => { u1(); u2(); u3(); u4(); u5(); };
+      } catch (e) {
+        console.error("Init failed", e);
+      }
+    })();
   });
 
   async function handleStartSync() {
-    syncStatus = "Syncing";
+    syncStatus = "syncing";
+    progress = 0;
     try {
       await invoke("start_sync");
-      syncStatus = "Idle";
-      lastSync = new Date().toLocaleTimeString();
+      syncStatus = "idle";
+      lastSync = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
     } catch (e) {
       console.error("Sync failed", e);
-      syncStatus = "Error";
+      syncStatus = "error";
     }
   }
 
   async function refreshFolders() {
-    try {
-      watchedFolders = await invoke("get_folders");
-    } catch (e) {
-      console.error("Failed to fetch folders", e);
-    }
+    try { watchedFolders = await invoke("get_folders"); } catch {}
   }
 
   async function handleAddFolder() {
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Folder to Sync",
-      });
-
+      const selected = await open({ directory: true, multiple: false, title: "Ordner auswählen" });
       if (selected && typeof selected === "string") {
         await invoke("add_folder", { path: selected });
         await refreshFolders();
       }
-    } catch (e) {
-      console.error("Failed to add folder", e);
-    }
+    } catch {}
   }
 
   async function handleRemoveFolder(id: number) {
-    try {
-      await invoke("remove_folder", { id });
-      await refreshFolders();
-    } catch (e) {
-      console.error("Failed to remove folder", e);
-    }
+    try { await invoke("remove_folder", { id }); await refreshFolders(); } catch {}
   }
 
   async function toggleAutostart() {
     try {
-      if (isAutostartEnabled) {
-        await disable();
-      } else {
-        await enable();
-      }
+      if (isAutostartEnabled) await disable(); else await enable();
       isAutostartEnabled = await isEnabled();
-    } catch (e) {
-      console.error("Failed to toggle autostart", e);
-    }
+    } catch {}
   }
 
   async function handleLogin() {
@@ -128,263 +144,354 @@
       await invoke("login", { serverUrl, apiKey });
       isAuthenticated = true;
     } catch (e) {
-      console.error("Login failed", e);
       loginError = e as string;
     } finally {
       isLoggingIn = false;
     }
   }
+
+  const statusConfig = {
+    idle:    { label: "Bereit",        color: "text-green-500",  bg: "bg-green-500",  ring: "bg-green-500/20" },
+    syncing: { label: "Synchronisiert", color: "text-blue-500",  bg: "bg-blue-500",   ring: "bg-blue-500/20" },
+    error:   { label: "Fehler",         color: "text-red-500",   bg: "bg-red-500",    ring: "bg-red-500/20" },
+  };
+
+  const levelConfig = {
+    info:    { icon: "ℹ", cls: "level-info" },
+    success: { icon: "✓", cls: "level-success" },
+    error:   { icon: "✕", cls: "level-error" },
+    warn:    { icon: "!", cls: "level-warn" },
+  };
 </script>
 
-<div class="min-h-screen flex flex-col font-sans">
+<div class="min-h-screen flex flex-col font-sans select-none" style="background: rgb(var(--m3-surface));">
+
+  <!-- ===== LOGIN ===== -->
   {#if !isAuthenticated}
-    <!-- Login View -->
-    <div class="flex-1 flex items-center justify-center p-6 bg-[rgb(var(--m3-surface))]">
-      <div class="w-full max-w-md m3-card bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-800">
-        <div class="flex flex-col items-center mb-8">
-          <div class="w-16 h-16 bg-[rgb(var(--m3-primary))] rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20">
-            <Zap class="text-white w-8 h-8" />
+    <div class="flex-1 flex items-center justify-center p-6">
+      <div class="w-full max-w-sm animate-fade-in-up">
+        <!-- Logo -->
+        <div class="flex flex-col items-center mb-10">
+          <div class="w-20 h-20 rounded-[28px] flex items-center justify-center mb-5 shadow-xl"
+               style="background: linear-gradient(135deg, rgb(var(--m3-primary)), rgb(66 99 244));">
+            <Cloud class="w-10 h-10 text-white" />
           </div>
-          <h1 class="text-2xl font-bold tracking-tight">Welcome to Immich</h1>
-          <p class="text-[rgb(var(--m3-on-surface-variant))] text-sm">Sign in to your server</p>
+          <h1 class="text-2xl font-semibold tracking-tight" style="color: rgb(var(--m3-on-surface));">
+            Immich Desktop Sync
+          </h1>
+          <p class="text-sm mt-1" style="color: rgb(var(--m3-on-surface-variant));">
+            Mit deinem Immich-Server verbinden
+          </p>
         </div>
 
-        <div class="space-y-4">
-          <div>
-            <label class="text-xs font-medium uppercase tracking-wider ml-1 mb-1 block text-zinc-500">Server URL</label>
-            <input 
-              type="text" 
-              placeholder="https://your-immich-instance.com" 
-              class="w-full m3-input bg-zinc-50 dark:bg-zinc-800" 
+        <!-- Card -->
+        <div class="m3-card-elevated p-6 space-y-5">
+          <div class="space-y-1">
+            <label class="text-xs font-medium uppercase tracking-wider" style="color: rgb(var(--m3-on-surface-variant));">
+              Server-URL
+            </label>
+            <input
+              type="text"
+              placeholder="https://mein-immich.example.com"
+              class="m3-input-outlined"
               bind:value={serverUrl}
+              onkeydown={(e) => e.key === "Enter" && handleLogin()}
             />
           </div>
-          <div>
-            <label class="text-xs font-medium uppercase tracking-wider ml-1 mb-1 block text-zinc-500">API Key</label>
-            <input 
-              type="password" 
-              placeholder="Your secret API key" 
-              class="w-full m3-input bg-zinc-50 dark:bg-zinc-800" 
+          <div class="space-y-1">
+            <label class="text-xs font-medium uppercase tracking-wider" style="color: rgb(var(--m3-on-surface-variant));">
+              API-Schlüssel
+            </label>
+            <input
+              type="password"
+              placeholder="Dein API-Schlüssel"
+              class="m3-input-outlined"
               bind:value={apiKey}
+              onkeydown={(e) => e.key === "Enter" && handleLogin()}
             />
           </div>
 
           {#if loginError}
-            <div class="p-3 rounded-xl bg-red-50 text-red-600 text-xs flex items-center gap-2 border border-red-100">
-              <Trash2 class="w-4 h-4" />
-              {loginError}
+            <div class="flex items-start gap-3 p-3 rounded-xl text-sm"
+                 style="background: rgb(var(--m3-error-container)); color: rgb(var(--m3-on-error-container));">
+              <AlertCircle class="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{loginError}</span>
             </div>
           {/if}
 
-          <button 
-            class="w-full m3-button-filled mt-4 flex items-center justify-center gap-2 h-12"
+          <button
+            class="m3-button-filled w-full h-12 flex items-center justify-center gap-2 text-sm"
             onclick={handleLogin}
-            disabled={isLoggingIn}
+            disabled={isLoggingIn || !serverUrl || !apiKey}
           >
             {#if isLoggingIn}
-              <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              <RefreshCw class="w-4 h-4 animate-spin" />
+              Verbinde...
             {:else}
-              Get Started
+              Anmelden
             {/if}
           </button>
         </div>
       </div>
     </div>
+
+  <!-- ===== DASHBOARD ===== -->
   {:else}
-    <!-- Dashboard View -->
-    <header class="h-16 px-6 flex items-center justify-between border-b border-[rgb(var(--m3-surface-variant))] sticky top-0 bg-[rgb(var(--m3-surface))] z-10">
+    <!-- Header -->
+    <header class="h-14 px-4 flex items-center justify-between shrink-0"
+            style="background: rgb(var(--m3-surface-container)); border-bottom: 1px solid rgb(var(--m3-outline-variant) / 0.5);">
       <div class="flex items-center gap-3">
-        <div class="w-8 h-8 bg-[rgb(var(--m3-primary))] rounded-lg flex items-center justify-center">
-          <Zap class="text-white w-4 h-4" />
+        <div class="w-8 h-8 rounded-xl flex items-center justify-center"
+             style="background: linear-gradient(135deg, rgb(var(--m3-primary)), rgb(66 99 244));">
+          <Cloud class="text-white w-4 h-4" />
         </div>
-        <h1 class="text-lg font-semibold tracking-tight">Immich Sync</h1>
+        <span class="font-semibold text-sm" style="color: rgb(var(--m3-on-surface));">Immich Sync</span>
       </div>
-      
-      <div class="flex items-center gap-2">
-        <button 
-          class="p-2 hover:bg-[rgb(var(--m3-surface-variant))] rounded-full transition-colors"
-          onclick={() => currentView = currentView === "settings" ? "dashboard" : "settings"}
-        >
+      <div class="flex items-center gap-1">
+        <button class="m3-icon-button"
+                onclick={() => currentView = currentView === "settings" ? "dashboard" : "settings"}
+                title={currentView === "settings" ? "Dashboard" : "Einstellungen"}>
           {#if currentView === "settings"}
             <ArrowLeft class="w-5 h-5" />
           {:else}
-            <SettingsIcon class="w-5 h-5 text-[rgb(var(--m3-on-surface-variant))]" />
+            <SettingsIcon class="w-5 h-5" />
           {/if}
         </button>
-        <button 
-          class="p-2 hover:bg-red-50 text-red-500 rounded-full transition-colors"
-          onclick={() => { isAuthenticated = false; invoke("logout"); }}
-        >
+        <button class="m3-icon-button" title="Abmelden"
+                onclick={() => { isAuthenticated = false; invoke("logout"); }}
+                style="color: rgb(var(--m3-error));">
           <LogOut class="w-5 h-5" />
         </button>
       </div>
     </header>
 
-    <main class="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full space-y-6 pb-24">
-      {#if currentView === "dashboard"}
-        <!-- Status Card -->
-        <div class="m3-card relative overflow-hidden group">
-          <div class="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-            <ShieldCheck class="w-32 h-32 text-[rgb(var(--m3-primary))]" />
-          </div>
-          
-          <div class="relative z-10">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="flex h-2 w-2 rounded-full {syncStatus === 'Syncing' ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}"></span>
-              <span class="text-xs font-medium uppercase tracking-widest text-[rgb(var(--m3-on-surface-variant))]">
-                System Status: {syncStatus}
-              </span>
-            </div>
-            <h2 class="text-3xl font-bold mb-4">Ready to Sync</h2>
-            
-            <div class="grid grid-cols-2 gap-4 mb-6">
-              <div class="bg-white/50 dark:bg-black/20 p-4 rounded-2xl">
-                <p class="text-xs text-[rgb(var(--m3-on-surface-variant))] mb-1">Last Update</p>
-                <p class="font-semibold">{lastSync}</p>
-              </div>
-              <div class="bg-white/50 dark:bg-black/20 p-4 rounded-2xl">
-                <p class="text-xs text-[rgb(var(--m3-on-surface-variant))] mb-1">Backup Progress</p>
-                <p class="font-semibold">{progress}%</p>
-              </div>
-            </div>
+    <!-- Body: two-column layout (scrollable content + log panel) -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- Left: Main Content -->
+      <div class="flex-1 overflow-y-auto p-5 space-y-4">
 
-            <div class="flex gap-3">
-              <button 
-                class="m3-button-filled flex-1 flex items-center justify-center gap-2 h-12 shadow-lg shadow-blue-500/20"
-                onclick={handleStartSync}
-                disabled={syncStatus === 'Syncing'}
-              >
-                {#if syncStatus === 'Syncing'}
-                  <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  Syncing...
-                {:else}
-                  <Play class="w-5 h-5 fill-current" />
-                  Sync Now
-                {/if}
-              </button>
-              <button 
-                class="m3-button-tonal w-12 h-12 p-0 flex items-center justify-center"
-                onclick={() => showLogs = !showLogs}
-              >
-                <div class="flex flex-col gap-0.5 items-center">
-                  <div class="w-4 h-0.5 bg-current rounded-full"></div>
-                  <div class="w-2.5 h-0.5 bg-current rounded-full"></div>
-                  <div class="w-4 h-0.5 bg-current rounded-full"></div>
+        {#if currentView === "dashboard"}
+          <!-- Status Hero Card -->
+          <div class="m3-card-elevated p-5 space-y-4">
+            <!-- Status row -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="relative">
+                  <div class="w-3 h-3 rounded-full {statusConfig[syncStatus].bg}
+                    {syncStatus === 'syncing' ? 'animate-status-pulse' : ''}">
+                  </div>
+                  {#if syncStatus === 'syncing'}
+                    <div class="absolute inset-0 rounded-full {statusConfig[syncStatus].ring} scale-150 animate-pulse-ring"></div>
+                  {/if}
                 </div>
-              </button>
+                <span class="text-sm font-medium {statusConfig[syncStatus].color}">
+                  {statusConfig[syncStatus].label}
+                </span>
+              </div>
+              <div class="flex items-center gap-1.5 text-xs" style="color: rgb(var(--m3-on-surface-variant));">
+                <Clock class="w-3.5 h-3.5" />
+                <span>Zuletzt: {lastSync}</span>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <!-- Folders Section -->
-        <div class="space-y-4">
-          <div class="flex items-center justify-between px-2">
-            <h3 class="text-lg font-semibold flex items-center gap-2">
-              <Folder class="w-5 h-5 text-[rgb(var(--m3-primary))]" />
-              Watched Folders
-            </h3>
-            <button 
-              class="text-sm font-medium text-[rgb(var(--m3-primary))] flex items-center gap-1 hover:underline"
-              onclick={handleAddFolder}
+            <!-- Progress Bar -->
+            <div class="space-y-2">
+              <div class="flex items-center justify-between text-xs" style="color: rgb(var(--m3-on-surface-variant));">
+                <span>
+                  {#if syncStatus === 'syncing'}
+                    {currentFile ? `📤 ${currentFile}` : "Vorbereitung..."}
+                  {:else if progress === 100}
+                    Abgeschlossen
+                  {:else}
+                    Bereit zum Synchronisieren
+                  {/if}
+                </span>
+                <span class="font-medium tabular-nums" style="color: rgb(var(--m3-primary));">
+                  {progress}%
+                </span>
+              </div>
+              <div class="m3-progress-bar {syncStatus === 'syncing' && progress === 0 ? 'm3-progress-bar-indeterminate' : ''}">
+                <div class="m3-progress-bar-track" style="width: {progress}%;"></div>
+              </div>
+            </div>
+
+            <!-- Action Button -->
+            <button
+              class="m3-button-filled w-full h-11 flex items-center justify-center gap-2"
+              onclick={handleStartSync}
+              disabled={syncStatus === 'syncing'}
             >
-              <FolderPlus class="w-4 h-4" />
-              Add Folder
+              {#if syncStatus === 'syncing'}
+                <RefreshCw class="w-4 h-4 animate-spin" />
+                Synchronisiert...
+              {:else}
+                <CloudUpload class="w-4 h-4" />
+                Jetzt synchronisieren
+              {/if}
             </button>
           </div>
 
-          <div class="grid gap-3">
-            {#each watchedFolders as folder}
-              <div class="flex items-center justify-between p-4 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl hover:border-[rgb(var(--m3-primary))] transition-all group">
-                <div class="flex items-center gap-4 overflow-hidden">
-                  <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-                    <Folder class="w-5 h-5" />
-                  </div>
-                  <div class="overflow-hidden">
-                    <p class="font-medium text-sm truncate">{folder.path.split(/[\\/]/).pop()}</p>
-                    <p class="text-xs text-zinc-500 truncate">{folder.path}</p>
-                  </div>
-                </div>
-                <button 
-                  class="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                  onclick={() => handleRemoveFolder(folder.id)}
-                >
-                  <Trash2 class="w-4 h-4" />
-                </button>
-              </div>
-            {/each}
-            
-            {#if watchedFolders.length === 0}
-              <div class="text-center py-12 m3-card border-dashed border-2 border-zinc-200 dark:border-zinc-800 bg-transparent">
-                <Folder class="w-12 h-12 text-zinc-300 mx-auto mb-3" />
-                <p class="text-zinc-500 font-medium">No folders added yet</p>
-                <button class="text-[rgb(var(--m3-primary))] text-sm hover:underline mt-1" onclick={handleAddFolder}>Add your first folder</button>
-              </div>
-            {/if}
-          </div>
-        </div>
-      {:else}
-        <!-- Settings View -->
-        <div class="space-y-6">
-          <div class="m3-card">
-            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
-              <SettingsIcon class="w-5 h-5 text-[rgb(var(--m3-primary))]" />
-              General Preferences
-            </h3>
-            <div class="space-y-4">
-              <div class="flex items-center justify-between py-2 border-b border-[rgb(var(--m3-surface))] last:border-0">
-                <div>
-                  <p class="font-medium text-sm text-[rgb(var(--m3-on-surface))]">Launch on Startup</p>
-                  <p class="text-xs text-[rgb(var(--m3-on-surface-variant))]">Automatically start sync client when you login</p>
-                </div>
-                <button 
-                  class="w-12 h-6 rounded-full transition-colors relative {isAutostartEnabled ? 'bg-[rgb(var(--m3-primary))]' : 'bg-zinc-300'}"
-                  onclick={toggleAutostart}
-                >
-                  <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform {isAutostartEnabled ? 'translate-x-6' : ''}"></div>
-                </button>
-              </div>
+          <!-- Folders Section -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between px-1">
+              <h2 class="text-sm font-semibold flex items-center gap-2" style="color: rgb(var(--m3-on-surface));">
+                <Folder class="w-4 h-4" style="color: rgb(var(--m3-primary));" />
+                Überwachte Ordner
+                {#if watchedFolders.length > 0}
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                        style="background: rgb(var(--m3-primary-container)); color: rgb(var(--m3-on-primary-container));">
+                    {watchedFolders.length}
+                  </span>
+                {/if}
+              </h2>
+              <button
+                class="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors"
+                style="color: rgb(var(--m3-primary)); background: rgb(var(--m3-primary) / 0.08);"
+                onclick={handleAddFolder}
+              >
+                <FolderPlus class="w-3.5 h-3.5" />
+                Hinzufügen
+              </button>
             </div>
-          </div>
-          <button 
-            class="w-full flex items-center justify-center gap-2 text-sm text-zinc-500 hover:text-[rgb(var(--m3-primary))] transition-colors py-4"
-            onclick={() => currentView = "dashboard"}
-          >
-            <ArrowLeft class="w-4 h-4" /> Back to Dashboard
-          </button>
-        </div>
-      {/if}
-    </main>
 
-    <!-- Logs Drawer -->
-    {#if showLogs}
-      <div class="fixed inset-x-0 bottom-0 z-20 h-2/3 bg-[rgb(var(--m3-surface))] border-t border-[rgb(var(--m3-surface-variant))] shadow-2xl flex flex-col transform transition-transform animate-in slide-in-from-bottom duration-300">
-        <div class="flex items-center justify-between px-6 py-4 border-b border-[rgb(var(--m3-surface-variant))] bg-white/50 backdrop-blur-md">
-          <div class="flex items-center gap-2">
-            <div class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-            <h3 class="font-semibold text-xs uppercase tracking-widest text-[rgb(var(--m3-on-surface-variant))]">Real-time Activity</h3>
+            <div class="space-y-2">
+              {#each watchedFolders as folder}
+                <div class="m3-card flex items-center gap-3 group cursor-default hover:shadow-sm"
+                     style="padding: 0.75rem 1rem;">
+                  <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                       style="background: rgb(var(--m3-primary-container)); color: rgb(var(--m3-primary));">
+                    <Folder class="w-4 h-4" />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium truncate" style="color: rgb(var(--m3-on-surface));">
+                      {folder.path.split(/[\\/]/).pop()}
+                    </p>
+                    <p class="text-xs truncate" style="color: rgb(var(--m3-on-surface-variant));">
+                      {folder.path}
+                    </p>
+                  </div>
+                  <button
+                    class="m3-icon-button opacity-0 group-hover:opacity-100 w-8 h-8 shrink-0"
+                    style="color: rgb(var(--m3-error));"
+                    onclick={() => handleRemoveFolder(folder.id)}
+                    title="Ordner entfernen"
+                  >
+                    <Trash2 class="w-4 h-4" />
+                  </button>
+                </div>
+              {/each}
+
+              {#if watchedFolders.length === 0}
+                <div class="flex flex-col items-center gap-3 py-10 rounded-2xl border-2 border-dashed"
+                     style="border-color: rgb(var(--m3-outline-variant)); color: rgb(var(--m3-on-surface-variant));">
+                  <Folder class="w-10 h-10 opacity-30" />
+                  <div class="text-center">
+                    <p class="text-sm font-medium">Noch keine Ordner</p>
+                    <button class="text-xs mt-1 underline" style="color: rgb(var(--m3-primary));"
+                            onclick={handleAddFolder}>
+                      Ersten Ordner hinzufügen
+                    </button>
+                  </div>
+                </div>
+              {/if}
+            </div>
           </div>
-          <button 
-            class="m3-button-tonal !px-4 !py-1 text-xs"
-            onclick={() => showLogs = false}
-          >
-            Close
-          </button>
-        </div>
-        <div class="flex-1 overflow-y-auto p-4 bg-zinc-950 text-zinc-300 font-mono text-[11px] space-y-1">
-          {#each logs as log}
-            <div class="flex gap-4 border-l-2 {log.includes('[ERROR]') ? 'border-red-500' : log.includes('[SUCCESS]') ? 'border-green-500' : 'border-blue-500'} pl-4 py-1 hover:bg-white/5 transition-colors">
-              <span class="text-zinc-600 shrink-0">{new Date().toLocaleTimeString()}</span>
-              <span class="break-all whitespace-pre-wrap">{log}</span>
+
+        {:else}
+          <!-- Settings View -->
+          <div class="space-y-4 animate-fade-in-up">
+            <h2 class="text-base font-semibold px-1" style="color: rgb(var(--m3-on-surface));">Einstellungen</h2>
+
+            <div class="m3-card-elevated space-y-0 divide-y" style="divide-color: rgb(var(--m3-outline-variant) / 0.4); padding: 0; overflow: hidden; border-radius: 16px;">
+              <div class="flex items-center justify-between p-4">
+                <div>
+                  <p class="text-sm font-medium" style="color: rgb(var(--m3-on-surface));">Autostart</p>
+                  <p class="text-xs mt-0.5" style="color: rgb(var(--m3-on-surface-variant));">
+                    Beim Systemstart automatisch starten
+                  </p>
+                </div>
+                <button class="m3-switch {isAutostartEnabled ? 'active' : ''}" onclick={toggleAutostart}>
+                  <div class="m3-switch-thumb"></div>
+                </button>
+              </div>
             </div>
-          {/each}
-          {#if logs.length === 0}
-            <div class="text-zinc-700 text-center py-20 flex flex-col items-center gap-2 italic">
-              <Zap class="w-8 h-8 opacity-20" />
-              Waiting for activity...
-            </div>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Right: Activity Log Panel -->
+      <div class="w-72 shrink-0 flex flex-col border-l"
+           style="border-color: rgb(var(--m3-outline-variant) / 0.5); background: rgb(var(--m3-surface-container-low));">
+        <!-- Log Header -->
+        <div class="px-4 py-3 flex items-center justify-between shrink-0 border-b"
+             style="border-color: rgb(var(--m3-outline-variant) / 0.4);">
+          <div class="flex items-center gap-2">
+            {#if syncStatus === 'syncing'}
+              <div class="w-2 h-2 rounded-full bg-blue-500 animate-status-pulse"></div>
+            {:else}
+              <div class="w-2 h-2 rounded-full" style="background: rgb(var(--m3-outline));"></div>
+            {/if}
+            <span class="text-xs font-semibold uppercase tracking-widest"
+                  style="color: rgb(var(--m3-on-surface-variant));">Aktivität</span>
+          </div>
+          {#if logs.length > 0}
+            <button class="m3-icon-button w-7 h-7" onclick={() => logs = []} title="Log leeren">
+              <X class="w-3.5 h-3.5" />
+            </button>
           {/if}
         </div>
+
+        <!-- Log Entries -->
+        <div class="flex-1 overflow-y-auto p-2 space-y-0.5">
+          {#if logs.length === 0}
+            <div class="flex flex-col items-center justify-center h-full gap-3 py-12"
+                 style="color: rgb(var(--m3-on-surface-variant));">
+              <Info class="w-8 h-8 opacity-20" />
+              <p class="text-xs text-center opacity-50">
+                Noch keine Aktivität.<br />Starte eine Synchronisation.
+              </p>
+            </div>
+          {:else}
+            {#each logs as log (log.id)}
+              <div class="log-item {levelConfig[log.level].cls} animate-fade-in-up">
+                <div class="log-item-icon">
+                  {levelConfig[log.level].icon}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs leading-snug break-words" style="color: rgb(var(--m3-on-surface));">
+                    {log.message}
+                  </p>
+                  <p class="text-[10px] mt-0.5 tabular-nums" style="color: rgb(var(--m3-on-surface-variant));">
+                    {log.time}
+                  </p>
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+
+        <!-- Log Footer: Stats -->
+        {#if logs.length > 0}
+          {@const errorCount = logs.filter(l => l.level === 'error').length}
+          {@const successCount = logs.filter(l => l.level === 'success').length}
+          <div class="px-4 py-2 border-t shrink-0 flex items-center gap-3"
+               style="border-color: rgb(var(--m3-outline-variant) / 0.4);">
+            <div class="flex items-center gap-1 text-[10px]" style="color: rgb(var(--m3-success));">
+              <CheckCircle2 class="w-3 h-3" />
+              {successCount}
+            </div>
+            {#if errorCount > 0}
+              <div class="flex items-center gap-1 text-[10px]" style="color: rgb(var(--m3-error));">
+                <AlertCircle class="w-3 h-3" />
+                {errorCount} Fehler
+              </div>
+            {/if}
+            <span class="ml-auto text-[10px]" style="color: rgb(var(--m3-on-surface-variant));">
+              {logs.length} Einträge
+            </span>
+          </div>
+        {/if}
       </div>
-    {/if}
+    </div>
   {/if}
 </div>

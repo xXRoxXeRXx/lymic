@@ -1,25 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
+    /* M3 Primary — Immich Blau */
     --m3-primary: 66 133 244;
     --m3-on-primary: 255 255 255;
     --m3-primary-container: 211 227 253;
     --m3-on-primary-container: 4 30 73;
-    
+
+    /* M3 Secondary */
     --m3-secondary: 83 94 116;
     --m3-on-secondary: 255 255 255;
     --m3-secondary-container: 219 225 249;
     --m3-on-secondary-container: 16 27 48;
-    
+
+    /* M3 Tertiary */
+    --m3-tertiary: 106 66 193;
+    --m3-on-tertiary: 255 255 255;
+    --m3-tertiary-container: 234 221 255;
+    --m3-on-tertiary-container: 33 0 94;
+
+    /* M3 Error */
+    --m3-error: 186 26 26;
+    --m3-on-error: 255 255 255;
+    --m3-error-container: 255 218 214;
+    --m3-on-error-container: 65 0 2;
+
+    /* M3 Success (custom) */
+    --m3-success: 52 168 83;
+    --m3-success-container: 205 237 212;
+    --m3-on-success-container: 10 53 25;
+
+    /* M3 Warning (custom) */
+    --m3-warning: 251 140 0;
+    --m3-warning-container: 255 236 179;
+
+    /* M3 Surface */
     --m3-surface: 248 249 255;
+    --m3-surface-dim: 216 218 228;
+    --m3-surface-bright: 248 249 255;
+    --m3-surface-container-lowest: 255 255 255;
+    --m3-surface-container-low: 242 244 251;
+    --m3-surface-container: 236 238 248;
+    --m3-surface-container-high: 230 232 242;
+    --m3-surface-container-highest: 225 227 237;
     --m3-on-surface: 25 28 35;
     --m3-surface-variant: 224 226 236;
     --m3-on-surface-variant: 68 70 79;
-    
+
+    /* M3 Outline */
     --m3-outline: 116 119 127;
+    --m3-outline-variant: 196 198 208;
+
+    /* M3 Scrim */
+    --m3-scrim: 0 0 0;
+    --m3-inverse-surface: 46 48 56;
+    --m3-inverse-on-surface: 240 240 250;
+    --m3-inverse-primary: 168 199 250;
+
+    /* Elevation Overlays */
+    --m3-elevation-1: rgba(66, 133, 244, 0.05);
+    --m3-elevation-2: rgba(66, 133, 244, 0.08);
+    --m3-elevation-3: rgba(66, 133, 244, 0.11);
   }
 
   .dark {
@@ -27,40 +73,453 @@
     --m3-on-primary: 4 48 120;
     --m3-primary-container: 8 66 160;
     --m3-on-primary-container: 211 227 253;
-    
+
     --m3-secondary: 186 199 232;
     --m3-on-secondary: 37 49 76;
     --m3-secondary-container: 59 71 99;
     --m3-on-secondary-container: 219 225 249;
-    
+
+    --m3-tertiary: 208 188 255;
+    --m3-on-tertiary: 56 30 114;
+    --m3-tertiary-container: 80 55 139;
+    --m3-on-tertiary-container: 234 221 255;
+
+    --m3-error: 255 180 171;
+    --m3-on-error: 105 0 5;
+    --m3-error-container: 147 0 10;
+    --m3-on-error-container: 255 218 214;
+
+    --m3-success: 129 201 149;
+    --m3-success-container: 28 107 52;
+    --m3-on-success-container: 205 237 212;
+
+    --m3-warning: 255 185 77;
+    --m3-warning-container: 120 66 0;
+
     --m3-surface: 17 19 24;
+    --m3-surface-dim: 17 19 24;
+    --m3-surface-bright: 55 58 64;
+    --m3-surface-container-lowest: 12 14 19;
+    --m3-surface-container-low: 25 27 32;
+    --m3-surface-container: 29 31 36;
+    --m3-surface-container-high: 39 42 48;
+    --m3-surface-container-highest: 50 52 58;
     --m3-on-surface: 227 226 230;
     --m3-surface-variant: 68 70 79;
     --m3-on-surface-variant: 196 198 207;
-    
+
     --m3-outline: 142 144 153;
+    --m3-outline-variant: 68 70 79;
+
+    --m3-scrim: 0 0 0;
+    --m3-inverse-surface: 227 226 230;
+    --m3-inverse-on-surface: 46 48 56;
+    --m3-inverse-primary: 26 90 186;
+
+    --m3-elevation-1: rgba(168, 199, 250, 0.05);
+    --m3-elevation-2: rgba(168, 199, 250, 0.08);
+    --m3-elevation-3: rgba(168, 199, 250, 0.11);
   }
 
   body {
-    @apply bg-[rgb(var(--m3-surface))] text-[rgb(var(--m3-on-surface))] transition-colors duration-300;
+    background-color: rgb(var(--m3-surface));
+    color: rgb(var(--m3-on-surface));
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--m3-outline-variant));
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--m3-outline));
   }
 }
 
 @layer components {
+  /* =====================
+     M3 Cards
+  ===================== */
   .m3-card {
-    @apply bg-[rgb(var(--m3-surface-variant))] rounded-[28px] p-6 border-none shadow-none transition-all duration-200 hover:shadow-md;
+    background-color: rgb(var(--m3-surface-container));
+    border-radius: 16px;
+    padding: 1.25rem;
+    border: 1px solid rgb(var(--m3-outline-variant) / 0.4);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
   }
-  
+
+  .m3-card-elevated {
+    background-color: rgb(var(--m3-surface-container-low));
+    border-radius: 16px;
+    padding: 1.25rem;
+    box-shadow:
+      0 1px 2px rgb(var(--m3-scrim) / 0.12),
+      0 2px 8px rgb(var(--m3-scrim) / 0.08);
+    border: none;
+    transition: box-shadow 0.2s ease;
+  }
+
+  .m3-card-filled {
+    background-color: rgb(var(--m3-surface-container-highest));
+    border-radius: 16px;
+    padding: 1.25rem;
+    border: none;
+    transition: background-color 0.2s ease;
+  }
+
+  /* =====================
+     M3 Buttons
+  ===================== */
   .m3-button-filled {
-    @apply bg-[rgb(var(--m3-primary))] text-[rgb(var(--m3-on-primary))] rounded-full px-6 py-2.5 font-medium transition-all hover:shadow-lg active:scale-95;
+    background-color: rgb(var(--m3-primary));
+    color: rgb(var(--m3-on-primary));
+    border-radius: 50px;
+    padding: 0.625rem 1.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    letter-spacing: 0.01em;
+    border: none;
+    cursor: pointer;
+    transition: box-shadow 0.2s ease, opacity 0.2s ease, transform 0.1s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .m3-button-filled:hover {
+    box-shadow: 0 2px 8px rgb(var(--m3-primary) / 0.4);
+  }
+
+  .m3-button-filled:active {
+    transform: scale(0.97);
+  }
+
+  .m3-button-filled:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
   }
 
   .m3-button-tonal {
-    @apply bg-[rgb(var(--m3-secondary-container))] text-[rgb(var(--m3-on-secondary-container))] rounded-full px-6 py-2.5 font-medium transition-all hover:shadow-md active:scale-95;
+    background-color: rgb(var(--m3-secondary-container));
+    color: rgb(var(--m3-on-secondary-container));
+    border-radius: 50px;
+    padding: 0.625rem 1.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    letter-spacing: 0.01em;
+    border: none;
+    cursor: pointer;
+    transition: box-shadow 0.2s ease, transform 0.1s ease;
   }
 
+  .m3-button-tonal:hover {
+    box-shadow: 0 2px 6px rgb(var(--m3-scrim) / 0.12);
+  }
+
+  .m3-button-tonal:active {
+    transform: scale(0.97);
+  }
+
+  .m3-button-outlined {
+    background-color: transparent;
+    color: rgb(var(--m3-primary));
+    border-radius: 50px;
+    padding: 0.625rem 1.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    letter-spacing: 0.01em;
+    border: 1px solid rgb(var(--m3-outline));
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+  }
+
+  .m3-button-outlined:hover {
+    background-color: rgb(var(--m3-primary) / 0.08);
+  }
+
+  .m3-button-outlined:active {
+    transform: scale(0.97);
+  }
+
+  .m3-icon-button {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+    color: rgb(var(--m3-on-surface-variant));
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+  }
+
+  .m3-icon-button:hover {
+    background-color: rgb(var(--m3-on-surface-variant) / 0.08);
+    color: rgb(var(--m3-on-surface));
+  }
+
+  .m3-icon-button:active {
+    transform: scale(0.92);
+  }
+
+  /* =====================
+     M3 Input
+  ===================== */
   .m3-input {
-    @apply bg-transparent border-[rgb(var(--m3-outline))] border rounded-lg px-4 py-3 outline-none focus:border-[rgb(var(--m3-primary))] focus:border-2 transition-all;
+    width: 100%;
+    background-color: rgb(var(--m3-surface-container-highest));
+    border: none;
+    border-bottom: 2px solid rgb(var(--m3-outline));
+    border-radius: 4px 4px 0 0;
+    padding: 1rem 1rem 0.5rem;
+    color: rgb(var(--m3-on-surface));
+    font-size: 0.9375rem;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .m3-input:focus {
+    border-bottom-color: rgb(var(--m3-primary));
+    border-bottom-width: 2px;
+  }
+
+  .m3-input::placeholder {
+    color: rgb(var(--m3-on-surface-variant));
+    font-size: 0.875rem;
+  }
+
+  .m3-input-outlined {
+    width: 100%;
+    background-color: transparent;
+    border: 1px solid rgb(var(--m3-outline));
+    border-radius: 4px;
+    padding: 0.875rem 1rem;
+    color: rgb(var(--m3-on-surface));
+    font-size: 0.9375rem;
+    outline: none;
+    transition: border-color 0.2s ease, border-width 0.1s ease;
+  }
+
+  .m3-input-outlined:focus {
+    border-color: rgb(var(--m3-primary));
+    border-width: 2px;
+    padding: 0.8125rem 0.9375rem;
+  }
+
+  .m3-input-outlined::placeholder {
+    color: rgb(var(--m3-on-surface-variant));
+  }
+
+  /* =====================
+     M3 Progress Bar
+  ===================== */
+  .m3-progress-bar {
+    width: 100%;
+    height: 4px;
+    background-color: rgb(var(--m3-surface-container-highest));
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .m3-progress-bar-track {
+    height: 100%;
+    background-color: rgb(var(--m3-primary));
+    border-radius: 2px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+  }
+
+  .m3-progress-bar-track::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.35) 50%,
+      transparent 100%
+    );
+    animation: m3-shimmer 1.5s infinite;
+  }
+
+  .m3-progress-bar-indeterminate .m3-progress-bar-track {
+    width: 30% !important;
+    animation: m3-progress-indeterminate 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* =====================
+     M3 Switch (Toggle)
+  ===================== */
+  .m3-switch {
+    width: 52px;
+    height: 32px;
+    border-radius: 16px;
+    position: relative;
+    cursor: pointer;
+    border: 2px solid rgb(var(--m3-outline));
+    background-color: rgb(var(--m3-surface-container-highest));
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .m3-switch.active {
+    background-color: rgb(var(--m3-primary));
+    border-color: rgb(var(--m3-primary));
+  }
+
+  .m3-switch-thumb {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%) translateX(2px);
+    width: 20px;
+    height: 20px;
+    background-color: rgb(var(--m3-outline));
+    border-radius: 50%;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, width 0.1s ease, height 0.1s ease;
+  }
+
+  .m3-switch.active .m3-switch-thumb {
+    transform: translateY(-50%) translateX(22px);
+    background-color: rgb(var(--m3-on-primary));
+    width: 24px;
+    height: 24px;
+    top: 50%;
+  }
+
+  /* =====================
+     M3 Chip
+  ===================== */
+  .m3-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    border: 1px solid rgb(var(--m3-outline-variant));
+    background-color: transparent;
+    color: rgb(var(--m3-on-surface-variant));
+    cursor: default;
+    transition: background-color 0.2s ease;
+  }
+
+  /* =====================
+     Log Item Styles
+  ===================== */
+  .log-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    transition: background-color 0.15s ease;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  .log-item:hover {
+    background-color: rgb(var(--m3-on-surface) / 0.04);
+  }
+
+  .log-item-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+    font-size: 0.75rem;
+  }
+
+  .log-item.level-info .log-item-icon {
+    background-color: rgb(var(--m3-primary) / 0.12);
+    color: rgb(var(--m3-primary));
+  }
+
+  .log-item.level-error .log-item-icon {
+    background-color: rgb(var(--m3-error) / 0.12);
+    color: rgb(var(--m3-error));
+  }
+
+  .log-item.level-success .log-item-icon {
+    background-color: rgb(var(--m3-success) / 0.12);
+    color: rgb(var(--m3-success));
+  }
+
+  .log-item.level-warn .log-item-icon {
+    background-color: rgb(var(--m3-warning) / 0.12);
+    color: rgb(var(--m3-warning));
+  }
+
+  /* =====================
+     Animations
+  ===================== */
+  @keyframes m3-shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
+
+  @keyframes m3-progress-indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgb(var(--m3-primary) / 0.4); }
+    70% { box-shadow: 0 0 0 8px rgb(var(--m3-primary) / 0); }
+    100% { box-shadow: 0 0 0 0 rgb(var(--m3-primary) / 0); }
+  }
+
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.3s ease forwards;
+  }
+
+  .animate-pulse-ring {
+    animation: pulse-ring 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+  }
+
+  .animate-status-pulse {
+    animation: status-pulse 2s ease-in-out infinite;
   }
 }
