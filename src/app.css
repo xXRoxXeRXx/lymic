@@ -1,4 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* Local Open Sans via @fontsource */
+@import "@fontsource/open-sans/index.css";
+@import "@fontsource/open-sans/400.css";
+@import "@fontsource/open-sans/500.css";
+@import "@fontsource/open-sans/600.css";
+@import "@fontsource/open-sans/700.css";
 
 @tailwind base;
 @tailwind components;
@@ -124,7 +129,7 @@
   body {
     background-color: rgb(var(--m3-surface));
     color: rgb(var(--m3-on-surface));
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Open Sans', system-ui, -apple-system, sans-serif;
     transition: background-color 0.3s ease, color 0.3s ease;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
