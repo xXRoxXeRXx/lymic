@@ -73,14 +73,27 @@ impl ImmichClient {
             return Ok(Vec::new());
         }
         let url = format!("{}/assets/bulk-upload-check", self.server_url);
+        
+        // Correct DTO: { "assets": [ { "id": "...", "checksum": "..." } ] }
+        let assets_items: Vec<serde_json::Value> = hashes
+            .iter()
+            .map(|h| json!({ "id": h, "checksum": h }))
+            .collect();
+
         let response = self
             .client
             .post(&url)
             .header("x-api-key", &self.api_key)
-            .json(&json!({ "checksums": hashes }))
+            .json(&json!({ "assets": assets_items }))
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("Check request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let err_text = response.text().await.unwrap_or_default();
+            return Err(format!("Server error during bulk check ({}): {}", status, err_text));
+        }
 
         let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
 
@@ -88,11 +101,13 @@ impl ImmichClient {
         if let Some(results) = data.get("results") {
             if let Some(arr) = results.as_array() {
                 for item in arr {
-                    if let (Some(hash), Some(action)) =
-                        (item.get("checksum"), item.get("action"))
+                    // Result DTO uses "id" to match the "id" sent in the request, 
+                    // and "action" to indicate if it should be accepted or rejected.
+                    if let (Some(id), Some(action)) =
+                        (item.get("id"), item.get("action"))
                     {
                         if action.as_str() == Some("reject") {
-                            existing.push(hash.as_str().unwrap_or_default().to_string());
+                            existing.push(id.as_str().unwrap_or_default().to_string());
                         }
                     }
                 }
