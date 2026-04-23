@@ -26,6 +26,14 @@ pub fn calculate_hash(path: &str) -> io::Result<String> {
     Ok(general_purpose::STANDARD.encode(result))
 }
 
+#[derive(Debug, Clone)]
+pub struct SyncAsset {
+    pub path: String,
+    pub size: u64,
+    pub hash: Option<String>,
+    pub mtime: i64,
+}
+
 pub struct ImmichClient {
     client: Client,
     server_url: String,
@@ -56,7 +64,14 @@ impl ImmichClient {
         &self.server_url
     }
 
+    pub fn api_key(&self) -> &str {
+        &self.api_key
+    }
+
     pub async fn check_assets_exist(&self, hashes: Vec<String>) -> Result<Vec<String>, String> {
+        if hashes.is_empty() {
+            return Ok(Vec::new());
+        }
         let url = format!("{}/assets/bulk-upload-check", self.server_url);
         let response = self
             .client
@@ -87,17 +102,6 @@ impl ImmichClient {
     }
 
     /// Upload a single asset.
-    ///
-    /// `precomputed_hash` is the SHA-1 base64 already calculated by the caller,
-    /// so we avoid hashing the file a second time. (Fix 4)
-    ///
-    /// The file is streamed directly from disk rather than buffered into RAM,
-    /// so large videos (multi-GB) will not cause OOM. (Fix 3)
-    ///
-    /// # TOCTOU note
-    /// File metadata is read before the file is opened for streaming. If the
-    /// file is replaced between the stat and the open, the hash/size stored in
-    /// the DB may not match the bytes actually sent. (Fix 12 — documented)
     pub async fn upload_asset(
         &self,
         path: &str,
@@ -112,7 +116,6 @@ impl ImmichClient {
             .unwrap_or("file")
             .to_string();
 
-        // Fix 10: propagate timestamp errors instead of unwrapping
         let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
         let created_at = metadata
             .created()
@@ -129,7 +132,6 @@ impl ImmichClient {
 
         let file_size = metadata.len();
 
-        // Fix 3: stream the file instead of loading it all into RAM
         let file = tokio::fs::File::open(path)
             .await
             .map_err(|e| format!("Cannot open file {}: {}", path, e))?;
@@ -147,7 +149,6 @@ impl ImmichClient {
             .text("fileModifiedAt", modified_at_iso)
             .part("assetData", asset_part);
 
-        // Check for sidecar file (.xmp)
         let sidecar_path = path_buf.with_extension("xmp");
         if sidecar_path.exists() {
             let sidecar_name = sidecar_path
@@ -155,7 +156,6 @@ impl ImmichClient {
                 .and_then(|n| n.to_str())
                 .unwrap_or("file.xmp")
                 .to_string();
-            // Sidecar files are typically tiny, loading into memory is fine
             let sidecar_bytes =
                 std::fs::read(&sidecar_path).map_err(|e| e.to_string())?;
             form = form.part(
@@ -168,8 +168,8 @@ impl ImmichClient {
             .client
             .post(&url)
             .header("x-api-key", &self.api_key)
-            .header("x-immich-checksum", precomputed_hash) // SHA-1 base64 (Fix 4, Fix 16)
-            .timeout(std::time::Duration::from_secs(300)) // Increased for large files
+            .header("x-immich-checksum", precomputed_hash)
+            .timeout(std::time::Duration::from_secs(300))
             .multipart(form)
             .send()
             .await
@@ -181,7 +181,6 @@ impl ImmichClient {
             Ok(data["id"].as_str().unwrap_or("").to_string())
         } else {
             let status = response.status();
-            // Fix 1: truncate server error bodies to avoid leaking sensitive header reflections
             let error_text = response
                 .text()
                 .await
@@ -193,3 +192,4 @@ impl ImmichClient {
         }
     }
 }
+

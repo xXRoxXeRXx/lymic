@@ -119,189 +119,115 @@ async fn remove_folder(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-async fn start_sync(
+async fn run_sync_pipeline(
     app: tauri::AppHandle,
-    pool: tauri::State<'_, sqlx::SqlitePool>,
+    pool: sqlx::SqlitePool,
+    client: std::sync::Arc<sync::ImmichClient>,
+    files: Vec<(String, u64)>,
+    is_auto: bool,
 ) -> Result<(), String> {
-    log_to_ui(&app, "INFO", "Starting manual synchronization...");
-    let folders = db::get_folders(&pool).await.map_err(|e| e.to_string())?;
-    let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-
-    let client = std::sync::Arc::new(sync::ImmichClient::new(
-        credentials.server_url,
-        credentials.api_key,
-    ));
+    let total_files = files.len();
+    let total_bytes: u64 = files.iter().map(|(_, s)| *s).sum();
+    let completed_bytes = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let success_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let device_id = format!("{}-IMMICH-DESKTOP", std::env::consts::OS.to_uppercase());
 
-    let mut all_files = Vec::new();
-    for folder in folders {
-        log_to_ui(&app, "INFO", &format!("Scanning folder: {}", folder.path));
-        let path = std::path::Path::new(&folder.path);
-        if !path.exists() {
-            log_to_ui(&app, "WARN", &format!("Path does not exist: {}", folder.path));
-            continue;
-        }
-
-        let walker = walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok());
-        for entry in walker {
-            if entry.file_type().is_file() && is_media_file(entry.path()) {
-                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                all_files.push((entry.path().to_string_lossy().to_string(), size));
-            }
-        }
-    }
-
-    let total_bytes: u64 = all_files.iter().map(|(_, size)| size).sum();
-    let file_count = all_files.len();
-    let completed_bytes = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-    // Fix 8: track actually-uploaded files for the completion notification
-    let success_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-
-    log_to_ui(
-        &app,
-        "INFO",
-        &format!(
-            "Found {} files to check ({:.2} MB)",
-            file_count,
-            total_bytes as f64 / 1024.0 / 1024.0
-        ),
-    );
-    let app_handle = std::sync::Arc::new(app.clone());
-    let pool_inner = pool.inner().clone();
-
-    log_to_ui(&app, "INFO", "Verifying assets with server...");
-
-    // 1. Calculate all hashes (cached by DB) and prepare for bulk check
-    let mut file_data = Vec::new();
-    for (path, size) in all_files {
-        let metadata = std::fs::metadata(&path).map_err(|e| e.to_string())?;
-        // Fix 11: safe timestamp fallback — avoid unwrap() on mtime/ctime
-        let mtime = metadata
-            .modified()
-            .or_else(|_| metadata.created())
-            .map(|t| {
-                t.duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs() as i64
-            })
-            .unwrap_or(0);
-        let size_i64 = size as i64;
-
-        let hash = if let Some(cached) =
-            db::get_cached_hash(&pool_inner, &path, mtime, size_i64).await
-        {
-            cached
-        } else {
-            let h = sync::calculate_hash(&path).map_err(|e| e.to_string())?;
-            // Update cache with new hash
-            let _ = db::update_sync_state(&pool_inner, &path, &h, mtime, size_i64, "PENDING", None)
-                .await;
-            h
-        };
-        file_data.push((path, size, hash, mtime));
-    }
-
-    if file_data.is_empty() {
-        log_to_ui(&app, "INFO", "No media files found.");
+    if files.is_empty() {
         return Ok(());
     }
 
-    // 2. Bulk check in chunks of 500
-    let mut missing_files = Vec::new();
-    for chunk in file_data.chunks(500) {
-        let hashes: Vec<String> = chunk.iter().map(|(_, _, h, _)| h.clone()).collect();
-        match client.check_assets_exist(hashes).await {
-            Ok(existing_hashes) => {
-                for (path, size, hash, mtime) in chunk {
-                    if !existing_hashes.contains(hash) {
-                        missing_files.push((path.clone(), *size, hash.clone(), *mtime));
-                    } else {
-                        // Already on server — mark synced locally
-                        let _ = db::update_sync_state(
-                            &pool_inner,
-                            path,
-                            hash,
-                            *mtime,
-                            *size as i64,
-                            "SYNCED",
-                            None,
-                        )
-                        .await;
-                        let done =
-                            completed_bytes.fetch_add(*size, std::sync::atomic::Ordering::SeqCst)
-                                + *size;
-                        // Fix 17: cap percentage at 100
-                        let pct = ((done as f64 / total_bytes as f64 * 100.0) as u32).min(100);
-                        let _ = app.emit("sync-progress-percent", pct);
+    let prefix = if is_auto { "Auto-sync" } else { "Sync" };
+    log_to_ui(&app, "INFO", &format!("{}: Starting pipeline for {} files ({:.2} MB)", 
+        prefix, total_files, total_bytes as f64 / 1024.0 / 1024.0));
+
+    // Pipeline Stage 1: Parallel Hashing (Concurrency = 4)
+    let hashed_stream = futures::stream::iter(files)
+        .map(|(path, size)| {
+            let pool = pool.clone();
+            async move {
+                let metadata = match std::fs::metadata(&path) {
+                    Ok(m) => m,
+                    Err(_) => return None,
+                };
+                let mtime = metadata.modified().or_else(|_| metadata.created()).map(|t| {
+                    t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64
+                }).unwrap_or(0);
+                
+                let hash = if let Some(h) = db::get_cached_hash(&pool, &path, mtime, size as i64).await {
+                    h
+                } else {
+                    match sync::calculate_hash(&path) {
+                        Ok(h) => {
+                            let _ = db::update_sync_state(&pool, &path, &h, mtime, size as i64, "PENDING", None).await;
+                            h
+                        }
+                        Err(_) => return None,
+                    }
+                };
+                Some(sync::SyncAsset { path, size, hash: Some(hash), mtime })
+            }
+        })
+        .buffer_unordered(4)
+        .filter_map(|x| async { x });
+
+    // Pipeline Stage 2: Buffered Bulk Check (Batch = 500)
+    let checked_stream = hashed_stream
+        .chunks(500)
+        .map(|chunk| {
+            let client = client.clone();
+            let pool = pool.clone();
+            let app = app.clone();
+            let completed_bytes = completed_bytes.clone();
+            async move {
+                let hashes: Vec<String> = chunk.iter().filter_map(|a| a.hash.clone()).collect();
+                let existing_hashes = match client.check_assets_exist(hashes).await {
+                    Ok(existing) => existing,
+                    Err(e) => {
+                        log_to_ui(&app, "ERROR", &format!("Bulk check failed: {}", e));
+                        Vec::new()
+                    }
+                };
+
+                let mut to_upload = Vec::new();
+                for asset in chunk {
+                    if let Some(hash) = &asset.hash {
+                        if existing_hashes.contains(hash) {
+                            let _ = db::update_sync_state(&pool, &asset.path, hash, asset.mtime, asset.size as i64, "SYNCED", None).await;
+                            completed_bytes.fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst);
+                        } else {
+                            to_upload.push(asset);
+                        }
                     }
                 }
+                to_upload
             }
-            Err(e) => {
-                log_to_ui(&app, "ERROR", &format!("Bulk check failed: {}", e));
-            }
-        }
-    }
+        })
+        .buffered(1) // One bulk check at a time to keep it orderly
+        .flat_map(futures::stream::iter);
 
-    let to_upload_count = missing_files.len();
-    log_to_ui(
-        &app,
-        "INFO",
-        &format!("Found {} files to upload/restore.", to_upload_count),
-    );
-
-    // 3. Upload missing files (concurrency = 3)
-    futures::stream::iter(missing_files)
-        .map(|(file_path, file_size, hash, mtime)| {
+    // Pipeline Stage 3: Concurrent Upload (Concurrency = 3)
+    checked_stream
+        .map(|asset| {
             let client = client.clone();
             let device_id = device_id.clone();
-            let app = app_handle.clone();
-            let pool_clone = pool_inner.clone();
+            let app = app.clone();
+            let pool = pool.clone();
             let completed_bytes = completed_bytes.clone();
             let success_count = success_count.clone();
             async move {
-                let _ = app.emit("sync-progress", &file_path);
-                log_to_ui(&app, "INFO", &format!("Uploading: {}", file_path));
-                // Fix 4: pass precomputed hash — no second SHA-1 pass inside upload_asset
-                match client.upload_asset(&file_path, &device_id, &hash).await {
+                let hash = asset.hash.as_ref().unwrap();
+                let _ = app.emit("sync-progress", &asset.path);
+                match client.upload_asset(&asset.path, &device_id, hash).await {
                     Ok(remote_id) => {
-                        log_to_ui(&app, "SUCCESS", &format!("Uploaded {}", file_path));
-                        let _ = db::update_sync_state(
-                            &pool_clone,
-                            &file_path,
-                            &hash,
-                            mtime,
-                            file_size as i64,
-                            "SYNCED",
-                            Some(&remote_id),
-                        )
-                        .await;
+                        let _ = db::update_sync_state(&pool, &asset.path, hash, asset.mtime, asset.size as i64, "SYNCED", Some(&remote_id)).await;
                         success_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     }
                     Err(e) => {
-                        // Fix 1: error string is already sanitized/truncated inside upload_asset
-                        log_to_ui(
-                            &app,
-                            "ERROR",
-                            &format!("Failed to upload {}: {}", file_path, e),
-                        );
-                        let _ = db::update_sync_state(
-                            &pool_clone,
-                            &file_path,
-                            &hash,
-                            mtime,
-                            file_size as i64,
-                            "FAILED",
-                            None,
-                        )
-                        .await;
+                        log_to_ui(&app, "ERROR", &format!("Upload failed for {}: {}", asset.path, e));
+                        let _ = db::update_sync_state(&pool, &asset.path, hash, asset.mtime, asset.size as i64, "FAILED", None).await;
                     }
                 }
-
-                let done =
-                    completed_bytes.fetch_add(file_size, std::sync::atomic::Ordering::SeqCst)
-                        + file_size;
-                // Fix 17: cap at 100
+                let done = completed_bytes.fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst) + asset.size;
                 let pct = ((done as f64 / total_bytes as f64 * 100.0) as u32).min(100);
                 let _ = app.emit("sync-progress-percent", pct);
             }
@@ -310,15 +236,44 @@ async fn start_sync(
         .collect::<Vec<_>>()
         .await;
 
-    // Fix 8: report actual uploaded count, not total scanned count
     let uploaded = success_count.load(std::sync::atomic::Ordering::SeqCst);
-    send_notification(
-        &app,
-        "Sync Complete",
-        &format!("Uploaded {} new file(s). ({} already synced)", uploaded, file_count - to_upload_count),
-    );
+    if !is_auto || uploaded > 0 {
+        send_notification(&app, &format!("{} Complete", prefix), 
+            &format!("Processed {} files. {} new uploads.", total_files, uploaded));
+    }
+    
+    let _ = app.emit("sync-idle", ());
     Ok(())
 }
+
+#[tauri::command]
+async fn start_sync(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<(), String> {
+    log_to_ui(&app, "INFO", "Starting manual synchronization...");
+    let folders = db::get_folders(&pool).await.map_err(|e| e.to_string())?;
+    let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
+    let client = std::sync::Arc::new(sync::ImmichClient::new(credentials.server_url, credentials.api_key));
+
+    let mut all_files = Vec::new();
+    for folder in folders {
+        log_to_ui(&app, "INFO", &format!("Scanning folder: {}", folder.path));
+        let path = std::path::Path::new(&folder.path);
+        if path.exists() {
+            let walker = walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok());
+            for entry in walker {
+                if entry.file_type().is_file() && is_media_file(entry.path()) {
+                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                    all_files.push((entry.path().to_string_lossy().to_string(), size));
+                }
+            }
+        }
+    }
+
+    run_sync_pipeline(app, pool.inner().clone(), client, all_files, false).await
+}
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -387,12 +342,12 @@ pub fn run() {
 
                     if !paths_buffer.is_empty() {
                         let paths: Vec<String> = paths_buffer.drain().collect();
-                        let total_files = paths.len();
-                        log_to_ui(
-                            &handle_task,
-                            "INFO",
-                            &format!("Auto-sync batch started: {} files", total_files),
-                        );
+                        let mut files = Vec::new();
+                        for p in paths {
+                            if let Ok(m) = std::fs::metadata(&p) {
+                                files.push((p, m.len()));
+                            }
+                        }
 
                         let pool = handle_task.state::<sqlx::SqlitePool>();
                         let pool_inner = pool.inner().clone();
@@ -402,143 +357,7 @@ pub fn run() {
                                 creds.server_url,
                                 creds.api_key,
                             ));
-                            let device_id =
-                                format!("{}-IMMICH-DESKTOP", std::env::consts::OS.to_uppercase());
-                            let completed_count =
-                                std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-
-                            let _ = handle_task.emit("sync-progress-percent", 0u32);
-
-                            // Fix 5: collect paths into (path, hash, mtime, size) tuples,
-                            //         then use the same 500-item bulk check as start_sync
-                            //         instead of one API call per file.
-                            let mut file_data: Vec<(String, String, i64, i64)> = Vec::new();
-                            for path_str in &paths {
-                                let metadata = match std::fs::metadata(path_str) {
-                                    Ok(m) => m,
-                                    Err(_) => continue,
-                                };
-                                // Fix 11: safe fallback for mtime/ctime
-                                let mtime = metadata
-                                    .modified()
-                                    .or_else(|_| metadata.created())
-                                    .map(|t| {
-                                        t.duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap_or_default()
-                                            .as_secs() as i64
-                                    })
-                                    .unwrap_or(0);
-                                let size = metadata.len() as i64;
-
-                                let hash = if let Some(cached) =
-                                    db::get_cached_hash(&pool_inner, path_str, mtime, size).await
-                                {
-                                    cached
-                                } else if let Ok(h) = sync::calculate_hash(path_str) {
-                                    h
-                                } else {
-                                    continue;
-                                };
-                                file_data.push((path_str.clone(), hash, mtime, size));
-                            }
-
-                            // Fix 5: bulk check in chunks of 500
-                            let mut to_upload: Vec<(String, String, i64, i64)> = Vec::new();
-                            for chunk in file_data.chunks(500) {
-                                let hashes: Vec<String> =
-                                    chunk.iter().map(|(_, h, _, _)| h.clone()).collect();
-                                match client.check_assets_exist(hashes).await {
-                                    Ok(existing_hashes) => {
-                                        for (path_str, hash, mtime, size) in chunk {
-                                            if existing_hashes.contains(hash) {
-                                                let _ = db::update_sync_state(
-                                                    &pool_inner,
-                                                    path_str,
-                                                    hash,
-                                                    *mtime,
-                                                    *size,
-                                                    "SYNCED",
-                                                    None,
-                                                )
-                                                .await;
-                                            } else {
-                                                to_upload.push((
-                                                    path_str.clone(),
-                                                    hash.clone(),
-                                                    *mtime,
-                                                    *size,
-                                                ));
-                                            }
-                                        }
-                                    }
-                                    Err(e) => {
-                                        log_to_ui(
-                                            &handle_task,
-                                            "ERROR",
-                                            &format!("Auto-sync bulk check failed: {}", e),
-                                        );
-                                    }
-                                }
-                            }
-
-                            let upload_total = to_upload.len();
-                            futures::stream::iter(to_upload)
-                                .map(|(path_str, hash, mtime, size)| {
-                                    let client = client.clone();
-                                    let device_id = device_id.clone();
-                                    let handle = handle_task.clone();
-                                    let pool = pool_inner.clone();
-                                    let completed = completed_count.clone();
-                                    async move {
-                                        let _ = handle.emit("sync-progress", &path_str);
-                                        // Fix 4: pass precomputed hash
-                                        match client
-                                            .upload_asset(&path_str, &device_id, &hash)
-                                            .await
-                                        {
-                                            Ok(remote_id) => {
-                                                let _ = db::update_sync_state(
-                                                    &pool,
-                                                    &path_str,
-                                                    &hash,
-                                                    mtime,
-                                                    size,
-                                                    "SYNCED",
-                                                    Some(&remote_id),
-                                                )
-                                                .await;
-                                            }
-                                            Err(e) => {
-                                                // Fix 1: error string already sanitized in upload_asset
-                                                log_to_ui(
-                                                    &handle,
-                                                    "ERROR",
-                                                    &format!("Auto-sync failed: {}", e),
-                                                );
-                                                let _ = db::update_sync_state(
-                                                    &pool,
-                                                    &path_str,
-                                                    &hash,
-                                                    mtime,
-                                                    size,
-                                                    "FAILED",
-                                                    None,
-                                                )
-                                                .await;
-                                            }
-                                        }
-
-                                        let done = completed.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-                                        // Fix 17: cap at 100
-                                        let pct = ((done as f64 / upload_total.max(1) as f64 * 100.0) as u32).min(100);
-                                        let _ = handle.emit("sync-progress-percent", pct);
-                                    }
-                                })
-                                .buffer_unordered(2)
-                                .collect::<Vec<_>>()
-                                .await;
-
-                            let _ = handle_task.emit("sync-idle", ());
+                            let _ = run_sync_pipeline(handle_task.clone(), pool_inner, client, files, true).await;
                         }
                     }
                 }
