@@ -64,9 +64,6 @@ impl ImmichClient {
         &self.server_url
     }
 
-    pub fn api_key(&self) -> &str {
-        &self.api_key
-    }
 
     pub async fn check_assets_exist(&self, hashes: Vec<String>) -> Result<Vec<String>, String> {
         if hashes.is_empty() {
