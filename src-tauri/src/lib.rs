@@ -24,6 +24,20 @@ fn is_media_file(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
+fn scan_folder_for_media(path: &std::path::Path) -> Vec<(String, u64)> {
+    let mut files = Vec::new();
+    if path.exists() {
+        let walker = walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok());
+        for entry in walker {
+            if entry.file_type().is_file() && is_media_file(entry.path()) {
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                files.push((entry.path().to_string_lossy().to_string(), size));
+            }
+        }
+    }
+    files
+}
+
 fn send_notification(app: &tauri::AppHandle, title: &str, body: &str) {
     let _ = app.notification()
         .builder()
@@ -79,6 +93,7 @@ async fn get_auth_status() -> Result<bool, String> {
 //         for the lock (std::sync::Mutex::lock blocks the current thread).
 #[tauri::command]
 async fn add_folder(
+    app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
     watcher: tauri::State<'_, tokio::sync::Mutex<notify::RecommendedWatcher>>,
     path: String,
@@ -86,10 +101,21 @@ async fn add_folder(
     let id = db::add_folder(&pool, &path)
         .await
         .map_err(|e| e.to_string())?;
-    // Fix 2: map_err instead of unwrap() — a poisoned mutex no longer panics.
-    // Fix 6: .await for tokio::sync::Mutex
+    
     let mut w = watcher.lock().await;
     let _ = watcher::watch_path(&mut w, &path);
+
+    // Auto-sync the new folder immediately in background
+    let pool_inner = pool.inner().clone();
+    let path_clone = path.clone();
+    tauri::async_runtime::spawn(async move {
+        let files = scan_folder_for_media(std::path::Path::new(&path_clone));
+        if let Ok(Some(creds)) = auth::get_credentials() {
+            let client = std::sync::Arc::new(sync::ImmichClient::new(creds.server_url, creds.api_key));
+            let _ = run_sync_pipeline(app, pool_inner, client, files, true).await;
+        }
+    });
+
     Ok(id)
 }
 
@@ -259,16 +285,7 @@ async fn start_sync(
     let mut all_files = Vec::new();
     for folder in folders {
         log_to_ui(&app, "INFO", &format!("Scanning folder: {}", folder.path));
-        let path = std::path::Path::new(&folder.path);
-        if path.exists() {
-            let walker = walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok());
-            for entry in walker {
-                if entry.file_type().is_file() && is_media_file(entry.path()) {
-                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                    all_files.push((entry.path().to_string_lossy().to_string(), size));
-                }
-            }
-        }
+        all_files.extend(scan_folder_for_media(std::path::Path::new(&folder.path)));
     }
 
     run_sync_pipeline(app, pool.inner().clone(), client, all_files, false).await
@@ -312,10 +329,13 @@ pub fn run() {
                 let mut paths_buffer = std::collections::HashSet::new();
                 while let Some(event) = rx.recv().await {
                     for p in event.paths {
-                        if let Some(s) = p.to_str() {
-                            let path_buf = std::path::Path::new(s);
-                            // Fix 9: apply same media extension filter as start_sync
-                            if path_buf.is_file() && is_media_file(path_buf) {
+                        if p.is_dir() {
+                            // If a directory is created/modified, scan it recursively
+                            for (file_path, _size) in scan_folder_for_media(&p) {
+                                paths_buffer.insert(file_path);
+                            }
+                        } else if p.is_file() && is_media_file(&p) {
+                            if let Some(s) = p.to_str() {
                                 paths_buffer.insert(s.to_string());
                             }
                         }
@@ -327,10 +347,12 @@ pub fn run() {
                         match tokio::time::timeout(timeout, rx.recv()).await {
                             Ok(Some(next_event)) => {
                                 for p in next_event.paths {
-                                    if let Some(s) = p.to_str() {
-                                        let path_buf = std::path::Path::new(s);
-                                        // Fix 9: extension filter here too
-                                        if path_buf.is_file() && is_media_file(path_buf) {
+                                    if p.is_dir() {
+                                        for (file_path, _size) in scan_folder_for_media(&p) {
+                                            paths_buffer.insert(file_path);
+                                        }
+                                    } else if p.is_file() && is_media_file(&p) {
+                                        if let Some(s) = p.to_str() {
                                             paths_buffer.insert(s.to_string());
                                         }
                                     }
