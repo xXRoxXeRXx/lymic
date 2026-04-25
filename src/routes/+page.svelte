@@ -11,6 +11,7 @@
     ChevronRight, ExternalLink, Minus, Activity, Power
   } from "lucide-svelte";
   import hero from "$lib/assets/hero.png";
+  import logo from "$lib/assets/logo.png";
 
   // --- State ---
   let isAuthenticated = $state(false);
@@ -149,11 +150,11 @@
       <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
     </div>
     
-    <div class="absolute top-12 left-12 flex items-center gap-3 text-white">
-      <div class="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center">
-        <Cloud class="w-5 h-5" />
+    <div class="absolute top-12 left-12 flex items-center gap-4 text-white">
+      <div class="w-12 h-12 overflow-hidden rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center p-2">
+        <img src={logo} alt="Lymic Logo" class="w-full h-full object-contain" />
       </div>
-      <span class="font-bold tracking-tight text-lg">Lymic</span>
+      <span class="font-bold tracking-tight text-xl">Lymic</span>
     </div>
 
     <div class="absolute bottom-12 left-12 right-12 text-white">
@@ -191,7 +192,10 @@
       <!-- ===== LOGIN VIEW ===== -->
       {#if !isAuthenticated}
         <div class="max-w-md mx-auto py-20 space-y-10 animate-in">
-          <div class="text-center space-y-4">
+          <div class="text-center space-y-6">
+            <div class="w-20 h-20 mx-auto bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center p-4 mb-4">
+              <img src={logo} alt="Lymic Logo" class="w-full h-full object-contain" />
+            </div>
             <h2 class="text-3xl font-bold text-slate-900">Anmelden</h2>
             <p class="text-slate-500 text-sm">Verbinde deinen Desktop mit deinem Immich-Server.</p>
           </div>
