@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Immich Desktop Sync",
+  "productName": "Lymic",
   "version": "0.1.0",
-  "identifier": "com.immich.desktop-sync",
+  "identifier": "com.lymic.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",

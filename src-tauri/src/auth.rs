@@ -7,7 +7,7 @@ pub struct AuthConfig {
     pub api_key: String,
 }
 
-const SERVICE_NAME: &str = "immich-desktop-sync";
+const SERVICE_NAME: &str = "lymic-sync";
 const ACCOUNT_NAME: &str = "api-credentials";
 
 pub fn store_credentials(server_url: &str, api_key: &str) -> Result<(), String> {
