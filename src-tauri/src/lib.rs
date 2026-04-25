@@ -330,6 +330,28 @@ pub fn run() {
             // Fix 6: tokio::sync::Mutex so async commands use .lock().await
             handle.manage(tokio::sync::Mutex::new(watcher));
 
+            // Auto-sync on startup
+            let handle_sync = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                // Give the UI a small delay to ensure it's ready for events
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                
+                if let Ok(Some(creds)) = auth::get_credentials() {
+                    let pool = handle_sync.state::<sqlx::SqlitePool>();
+                    if let Ok(folders) = db::get_folders(pool.inner()).await {
+                        let mut all_files = Vec::new();
+                        for folder in folders {
+                            all_files.extend(scan_folder_for_media(std::path::Path::new(&folder.path)));
+                        }
+                        
+                        if !all_files.is_empty() {
+                            let client = std::sync::Arc::new(sync::ImmichClient::new(creds.server_url, creds.api_key));
+                            let _ = run_sync_pipeline(handle_sync, pool.inner().clone(), client, all_files, true).await;
+                        }
+                    }
+                }
+            });
+
             // Background Task to handle Watcher Events (Batched + debounced)
             let handle_task = handle.clone();
             tauri::async_runtime::spawn(async move {
