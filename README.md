@@ -1,11 +1,9 @@
-# 📸 Immich Desktop Sync
+# Lymic
 
-[![Rust](https://img.shields.io/badge/rust-%23E32F26.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Tauri](https://img.shields.io/badge/Tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=FFFFFF)](https://tauri.app/)
-[![Svelte](https://img.shields.io/badge/Svelte-ff3e00?style=for-the-badge&logo=svelte&logoColor=white)](https://svelte.dev/)
-[![Material Design](https://img.shields.io/badge/Material%20Design%203-%23757575.svg?style=for-the-badge&logo=material-design&logoColor=white)](https://m3.material.io/)
+[![License](https://img.shields.io/github/license/xXRoxXeRXx/immich-desktop-sync?style=for-the-badge)](LICENSE)
+[![Material Design](https://img.shields.io/badge/UI-Modern%20Editorial-%230F172A.svg?style=for-the-badge&logo=material-design&logoColor=white)](https://m3.material.io/)
 
-A high-performance, cross-platform desktop synchronization client for [Immich](https://immich.app/). Effortlessly keep your local media library in sync with your personal Immich server with a focus on speed, reliability, and a premium user experience.
+**Lymic** is a high-performance, cross-platform desktop synchronization client for [Immich](https://immich.app/). Effortlessly keep your local media library in sync with your personal Immich server with a focus on speed, reliability, and a premium editorial user experience.
 
 ---
 

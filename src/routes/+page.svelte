@@ -153,7 +153,7 @@
       <div class="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center">
         <Cloud class="w-5 h-5" />
       </div>
-      <span class="font-bold tracking-tight text-lg">Immich Desktop</span>
+      <span class="font-bold tracking-tight text-lg">Lymic</span>
     </div>
 
     <div class="absolute bottom-12 left-12 right-12 text-white">
@@ -374,11 +374,11 @@
     <!-- Global Footer -->
     <footer class="h-16 px-10 border-t border-black/5 flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest shrink-0">
       <div class="flex items-center gap-6">
-        <span>© 2024 Immich</span>
+        <span>© 2024 Lymic</span>
         <div class="w-1.5 h-1.5 rounded-full {syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : 'bg-emerald-500'}"></div>
       </div>
       <div class="flex items-center gap-6">
-        <span>Status: {syncStatus === 'syncing' ? 'Aktiv' : 'Verbunden'}</span>
+        <span>Lymic Engine v.2.4</span>
       </div>
     </footer>
 
