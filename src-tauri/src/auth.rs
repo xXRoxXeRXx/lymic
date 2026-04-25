@@ -35,6 +35,9 @@ pub fn get_credentials() -> Result<Option<AuthConfig>, String> {
 
 pub fn delete_credentials() -> Result<(), String> {
     let entry = Entry::new(SERVICE_NAME, ACCOUNT_NAME).map_err(|e| e.to_string())?;
-    entry.delete_password().map_err(|e| e.to_string())?;
-    Ok(())
+    // Fix #7: NoEntry is the desired end-state; treat it as success.
+    match entry.delete_password() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
 }

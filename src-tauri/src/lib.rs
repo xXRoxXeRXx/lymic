@@ -13,12 +13,14 @@ use tauri_plugin_notification::NotificationExt;
 // Supported media file extensions for sync (mirrors start_sync scan filter).
 // Fix 9: defined once and reused in both start_sync and the watcher path.
 // ---------------------------------------------------------------------------
-const MEDIA_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "heic", "heif", "mp4", "mov", "avi"] as &[&str];
+// Fix #11: removed redundant `as &[&str]` cast.
+const MEDIA_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "heic", "heif", "mp4", "mov", "avi"];
 
 fn is_media_file(path: &std::path::Path) -> bool {
+    // Fix #12: eq_ignore_ascii_case avoids a heap allocation per file.
     path.extension()
         .and_then(|e| e.to_str())
-        .map(|e| MEDIA_EXTENSIONS.contains(&e.to_lowercase().as_str()))
+        .map(|e| MEDIA_EXTENSIONS.iter().any(|ext| e.eq_ignore_ascii_case(ext)))
         .unwrap_or(false)
 }
 
@@ -36,13 +38,15 @@ fn scan_folder_for_media(path: &std::path::Path) -> Vec<(String, u64)> {
     files
 }
 
-fn send_notification(app: &tauri::AppHandle, title: &str, body: &str) {
+// Fix #13: accept a log level so this helper composes correctly if ever
+//           reused for error or warning notifications.
+fn send_notification(app: &tauri::AppHandle, title: &str, body: &str, level: &str) {
     let _ = app.notification()
         .builder()
         .title(title)
         .body(body)
         .show();
-    log_to_ui(app, "INFO", body);
+    log_to_ui(app, level, body);
 }
 
 fn log_to_ui(app: &tauri::AppHandle, level: &str, message: &str) {
@@ -53,6 +57,9 @@ fn log_to_ui(app: &tauri::AppHandle, level: &str, message: &str) {
 
 // Fix 15: Login reuses ImmichClient's pooled reqwest::Client instead of
 //         creating a one-off Client::new() that bypasses connection pooling.
+// Fix #1 (security): api_key is intentionally kept out of all log/error
+//         messages below. reqwest error Display does not include headers,
+//         so the key is not leaked through map_err strings either.
 #[tauri::command]
 async fn login(app: tauri::AppHandle, server_url: String, api_key: String) -> Result<(), String> {
     log_to_ui(&app, "INFO", &format!("Attempting to connect to {}", server_url));
@@ -110,7 +117,12 @@ async fn add_folder(
         .map_err(|e| e.to_string())?;
     
     let mut w = watcher.lock().await;
-    let _ = watcher::watch_path(&mut w, &path);
+    // Fix #15 caller: warn when the path doesn't exist (e.g. offline drive).
+    match watcher::watch_path(&mut w, &path) {
+        Ok(false) => log_to_ui(&app, "WARN", &format!("Folder '{}' does not exist; watching deferred until it appears.", path)),
+        Err(e)   => log_to_ui(&app, "WARN", &format!("Could not watch '{}': {}", path, e)),
+        Ok(true) => {}
+    }
 
     // Auto-sync the new folder immediately in background
     let pool_inner = pool.inner().clone();
@@ -135,6 +147,7 @@ async fn get_folders(
 
 #[tauri::command]
 async fn remove_folder(
+    app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
     watcher: tauri::State<'_, tokio::sync::Mutex<notify::RecommendedWatcher>>,
     id: i64,
@@ -142,14 +155,22 @@ async fn remove_folder(
     let folders = db::get_folders(pool.inner())
         .await
         .map_err(|e| e.to_string())?;
-    if let Some(folder) = folders.iter().find(|f| f.id == id) {
-        // Fix 2+6: tokio Mutex with .await, no unwrap()
-        let mut w = watcher.lock().await;
-        let _ = watcher::unwatch_path(&mut w, &folder.path);
-    }
+
+    // Fix #3: delete the DB row first so concurrent readers no longer see
+    //         this folder; then unwatch. This closes the race window where a
+    //         filesystem event could trigger a sync on a just-removed folder.
     db::remove_folder(pool.inner(), id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(folder) = folders.iter().find(|f| f.id == id) {
+        let mut w = watcher.lock().await;
+        // Fix #8: log unwatch failures instead of silently discarding them.
+        if let Err(e) = watcher::unwatch_path(&mut w, &folder.path) {
+            log_to_ui(&app, "WARN", &format!("Failed to unwatch '{}': {}", folder.path, e));
+        }
+    }
+    Ok(())
 }
 
 async fn run_sync_pipeline(
@@ -177,24 +198,44 @@ async fn run_sync_pipeline(
     let hashed_stream = futures::stream::iter(files)
         .map(|(path, size)| {
             let pool = pool.clone();
+            let completed_bytes = completed_bytes.clone();
             async move {
                 let metadata = match std::fs::metadata(&path) {
                     Ok(m) => m,
-                    Err(_) => return None,
+                    Err(_) => {
+                        // Fix #5: count unreadable files so progress can reach 100%.
+                        completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
+                        return None;
+                    }
                 };
-                let mtime = metadata.modified().or_else(|_| metadata.created()).map(|t| {
-                    t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64
-                }).unwrap_or(0);
-                
-                let hash = if let Some(h) = db::get_cached_hash(&pool, &path, mtime, size as i64).await {
+
+                // Fix #9: if timestamps are unavailable skip the cache entirely
+                //         to avoid returning a stale hash when content changed.
+                let mtime_opt = metadata.modified().or_else(|_| metadata.created()).ok()
+                    .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
+                let mtime = mtime_opt.unwrap_or(0);
+
+                // Attempt cache hit only when we have a reliable mtime.
+                let cached = match mtime_opt {
+                    Some(mt) => db::get_cached_hash(&pool, &path, mt, size as i64).await,
+                    None => None,
+                };
+
+                let hash = if let Some(h) = cached {
                     h
                 } else {
-                    match sync::calculate_hash(&path) {
-                        Ok(h) => {
+                    // Fix #6: SHA-1 is blocking CPU+I/O — run it off the async executor.
+                    let path_for_hash = path.clone();
+                    match tokio::task::spawn_blocking(move || sync::calculate_hash(&path_for_hash)).await {
+                        Ok(Ok(h)) => {
                             let _ = db::update_sync_state(&pool, &path, &h, mtime, size as i64, "PENDING", None).await;
                             h
                         }
-                        Err(_) => return None,
+                        _ => {
+                            // Fix #5: count failed hashes so progress can reach 100%.
+                            completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
+                            return None;
+                        }
                     }
                 };
                 Some(sync::SyncAsset { path, size, hash: Some(hash), mtime })
@@ -248,16 +289,21 @@ async fn run_sync_pipeline(
             let completed_bytes = completed_bytes.clone();
             let success_count = success_count.clone();
             async move {
-                let hash = asset.hash.as_ref().unwrap();
+                // Fix #2: Stage 1 guarantees hash is Some; guard defensively
+                //         so a future code path can't cause a silent panic.
+                let hash = match asset.hash.as_ref() {
+                    Some(h) => h.clone(),
+                    None => return,
+                };
                 let _ = app.emit("sync-progress", &asset.path);
-                match client.upload_asset(&asset.path, &device_id, hash).await {
+                match client.upload_asset(&asset.path, &device_id, &hash).await {
                     Ok(remote_id) => {
-                        let _ = db::update_sync_state(&pool, &asset.path, hash, asset.mtime, asset.size as i64, "SYNCED", Some(&remote_id)).await;
+                        let _ = db::update_sync_state(&pool, &asset.path, &hash, asset.mtime, asset.size as i64, "SYNCED", Some(&remote_id)).await;
                         success_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     }
                     Err(e) => {
                         log_to_ui(&app, "ERROR", &format!("Upload failed for {}: {}", asset.path, e));
-                        let _ = db::update_sync_state(&pool, &asset.path, hash, asset.mtime, asset.size as i64, "FAILED", None).await;
+                        let _ = db::update_sync_state(&pool, &asset.path, &hash, asset.mtime, asset.size as i64, "FAILED", None).await;
                     }
                 }
                 let done = completed_bytes.fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst) + asset.size;
@@ -271,8 +317,12 @@ async fn run_sync_pipeline(
 
     let uploaded = success_count.load(std::sync::atomic::Ordering::SeqCst);
     if !is_auto || uploaded > 0 {
-        send_notification(&app, &format!("{} Complete", prefix), 
-            &format!("Processed {} files. {} new uploads.", total_files, uploaded));
+        send_notification(
+            &app,
+            &format!("{} Complete", prefix),
+            &format!("Processed {} files. {} new uploads.", total_files, uploaded),
+            "INFO",
+        );
     }
     
     let _ = app.emit("sync-idle", ());
@@ -322,7 +372,12 @@ pub fn run() {
             let mut watcher = watcher;
             if let Ok(folders) = tauri::async_runtime::block_on(db::get_folders(&pool)) {
                 for folder in folders {
-                    let _ = watcher::watch_path(&mut watcher, &folder.path);
+                    // Fix #15 caller: surface deferred-watch state at startup.
+                    match watcher::watch_path(&mut watcher, &folder.path) {
+                        Ok(false) => eprintln!("[WARN] Folder '{}' offline at startup; watching deferred.", folder.path),
+                        Err(e)   => eprintln!("[WARN] Could not watch '{}': {}", folder.path, e),
+                        Ok(true) => {}
+                    }
                 }
             }
 
@@ -426,8 +481,13 @@ pub fn run() {
             ];
             let menu = Menu::with_items(app, menu_items)?;
 
+            // Fix #10: unwrap() would panic if no icon is configured in tauri.conf.json.
+            let icon = app
+                .default_window_icon()
+                .ok_or("No default window icon configured in tauri.conf.json")?
+                .clone();
             let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(icon)
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {

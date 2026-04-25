@@ -61,9 +61,11 @@ pub async fn add_folder(pool: &SqlitePool, path: &str) -> Result<i64, sqlx::Erro
 }
 
 pub async fn get_folders(pool: &SqlitePool) -> Result<Vec<WatchedFolder>, sqlx::Error> {
-    sqlx::query_as::<_, WatchedFolder>("SELECT * FROM watched_folders")
-        .fetch_all(pool)
-        .await
+    sqlx::query_as::<_, WatchedFolder>(
+        "SELECT id, path, recursive, target_album_id FROM watched_folders",
+    )
+    .fetch_all(pool)
+    .await
 }
 
 pub async fn remove_folder(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
