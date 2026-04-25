@@ -8,6 +8,9 @@ use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState}
 use tauri::{Emitter, Manager};
 use futures::StreamExt;
 use tauri_plugin_notification::NotificationExt;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+struct SyncState(AtomicBool);
 
 // ---------------------------------------------------------------------------
 // Supported media file extensions for sync (mirrors start_sync scan filter).
@@ -333,19 +336,33 @@ async fn run_sync_pipeline(
 async fn start_sync(
     app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
+    sync_state: tauri::State<'_, SyncState>,
 ) -> Result<(), String> {
-    log_to_ui(&app, "INFO", "Starting manual synchronization...");
-    let folders = db::get_folders(pool.inner()).await.map_err(|e| e.to_string())?;
-    let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-    let client = std::sync::Arc::new(sync::ImmichClient::new(credentials.server_url, credentials.api_key));
-
-    let mut all_files = Vec::new();
-    for folder in folders {
-        log_to_ui(&app, "INFO", &format!("Scanning folder: {}", folder.path));
-        all_files.extend(scan_folder_for_media(std::path::Path::new(&folder.path)));
+    // Attempt to set sync_state to true. If it was already true, return early.
+    if sync_state.0.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        log_to_ui(&app, "WARN", "Manual sync already in progress. Ignoring request.");
+        return Ok(());
     }
 
-    run_sync_pipeline(app, pool.inner().clone(), client, all_files, false).await
+    log_to_ui(&app, "INFO", "Starting manual synchronization...");
+    
+    // Ensure we reset the state when we're done, even if we fail.
+    let result = async {
+        let folders = db::get_folders(pool.inner()).await.map_err(|e| e.to_string())?;
+        let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
+        let client = std::sync::Arc::new(sync::ImmichClient::new(credentials.server_url, credentials.api_key));
+
+        let mut all_files = Vec::new();
+        for folder in folders {
+            log_to_ui(&app, "INFO", &format!("Scanning folder: {}", folder.path));
+            all_files.extend(scan_folder_for_media(std::path::Path::new(&folder.path)));
+        }
+
+        run_sync_pipeline(app, pool.inner().clone(), client, all_files, false).await
+    }.await;
+
+    sync_state.0.store(false, Ordering::SeqCst);
+    result
 }
 
 
@@ -384,6 +401,7 @@ pub fn run() {
             handle.manage(pool);
             // Fix 6: tokio::sync::Mutex so async commands use .lock().await
             handle.manage(tokio::sync::Mutex::new(watcher));
+            handle.manage(SyncState(AtomicBool::new(false)));
 
             // Auto-sync on startup
             let handle_sync = handle.clone();

@@ -59,6 +59,44 @@
   // all 5 listeners were permanently leaking on unmount.
   onMount(() => {
     let unlisteners: (() => void)[] = [];
+    let isMounted = true;
+
+    async function setupListeners() {
+      const listeners = await Promise.all([
+        listen("sync-progress", (event) => {
+          if (!isMounted) return;
+          syncStatus = "syncing";
+          currentFile = (event.payload as string).split(/[/\\]/).pop() || "";
+        }),
+        listen("sync-progress-percent", (event) => {
+          if (!isMounted) return;
+          progress = event.payload as number;
+        }),
+        listen("trigger-sync", () => {
+          if (!isMounted) return;
+          handleStartSync();
+        }),
+        listen("log-message", (event) => {
+          if (!isMounted) return;
+          const entry = parseLog(event.payload as string);
+          logs = [entry, ...logs].slice(0, 50);
+        }),
+        listen("sync-idle", () => {
+          if (!isMounted) return;
+          syncStatus = "idle";
+          progress = 100;
+          lastSync = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+          setTimeout(() => { if (isMounted) progress = 0; }, 2000);
+        }),
+      ]);
+
+      if (!isMounted) {
+        listeners.forEach(un => un());
+      } else {
+        unlisteners = listeners;
+      }
+    }
+
     (async () => {
       try {
         isAuthenticated = await invoke("get_auth_status");
@@ -67,38 +105,29 @@
         }
         await refreshFolders();
         isAutostartEnabled = await isEnabled();
-
-        unlisteners = await Promise.all([
-          listen("sync-progress", (event) => {
-            syncStatus = "syncing";
-            currentFile = (event.payload as string).split(/[/\\]/).pop() || "";
-          }),
-          listen("sync-progress-percent", (event) => {
-            progress = event.payload as number;
-          }),
-          listen("trigger-sync", () => handleStartSync()),
-          listen("log-message", (event) => {
-            const entry = parseLog(event.payload as string);
-            logs = [entry, ...logs].slice(0, 50);
-          }),
-          listen("sync-idle", () => {
-            syncStatus = "idle";
-            progress = 100;
-            lastSync = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-            setTimeout(() => { progress = 0; }, 2000);
-          }),
-        ]);
+        
+        if (isMounted) {
+          await setupListeners();
+        }
       } catch (e) {
         console.error("Init failed", e);
       }
     })();
-    return () => unlisteners.forEach(fn => fn());
+
+    return () => {
+      isMounted = false;
+      unlisteners.forEach(fn => fn());
+    };
   });
 
   // FIX: Removed syncStatus = "idle" / lastSync update here.
   // The sync-idle event is now the sole source of truth for completion state,
   // preventing the progress bar from disappearing before the backend finishes.
   async function handleStartSync() {
+    if (syncStatus === "syncing") {
+      console.warn("Sync already in progress, ignoring trigger.");
+      return;
+    }
     syncStatus = "syncing";
     progress = 0;
     try {
