@@ -13,9 +13,7 @@ use tauri_plugin_notification::NotificationExt;
 // Supported media file extensions for sync (mirrors start_sync scan filter).
 // Fix 9: defined once and reused in both start_sync and the watcher path.
 // ---------------------------------------------------------------------------
-const MEDIA_EXTENSIONS: &[&str] = &[
-    "jpg", "jpeg", "png", "gif", "heic", "heif", "mp4", "mov", "avi",
-];
+const MEDIA_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "heic", "heif", "mp4", "mov", "avi"] as &[&str];
 
 fn is_media_file(path: &std::path::Path) -> bool {
     path.extension()
@@ -89,6 +87,15 @@ async fn get_auth_status() -> Result<bool, String> {
     Ok(auth::get_credentials()?.is_some())
 }
 
+#[tauri::command]
+async fn get_server_url() -> Result<String, String> {
+    if let Some(creds) = auth::get_credentials()? {
+        Ok(creds.server_url)
+    } else {
+        Ok("".to_string())
+    }
+}
+
 // Fix 6: tokio::sync::Mutex avoids blocking the async executor while waiting
 //         for the lock (std::sync::Mutex::lock blocks the current thread).
 #[tauri::command]
@@ -98,7 +105,7 @@ async fn add_folder(
     watcher: tauri::State<'_, tokio::sync::Mutex<notify::RecommendedWatcher>>,
     path: String,
 ) -> Result<i64, String> {
-    let id = db::add_folder(&pool, &path)
+    let id = db::add_folder(pool.inner(), &path)
         .await
         .map_err(|e| e.to_string())?;
     
@@ -123,7 +130,7 @@ async fn add_folder(
 async fn get_folders(
     pool: tauri::State<'_, sqlx::SqlitePool>,
 ) -> Result<Vec<db::WatchedFolder>, String> {
-    db::get_folders(&pool).await.map_err(|e| e.to_string())
+    db::get_folders(pool.inner()).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -132,7 +139,7 @@ async fn remove_folder(
     watcher: tauri::State<'_, tokio::sync::Mutex<notify::RecommendedWatcher>>,
     id: i64,
 ) -> Result<(), String> {
-    let folders = db::get_folders(&pool)
+    let folders = db::get_folders(pool.inner())
         .await
         .map_err(|e| e.to_string())?;
     if let Some(folder) = folders.iter().find(|f| f.id == id) {
@@ -140,7 +147,7 @@ async fn remove_folder(
         let mut w = watcher.lock().await;
         let _ = watcher::unwatch_path(&mut w, &folder.path);
     }
-    db::remove_folder(&pool, id)
+    db::remove_folder(pool.inner(), id)
         .await
         .map_err(|e| e.to_string())
 }
@@ -278,7 +285,7 @@ async fn start_sync(
     pool: tauri::State<'_, sqlx::SqlitePool>,
 ) -> Result<(), String> {
     log_to_ui(&app, "INFO", "Starting manual synchronization...");
-    let folders = db::get_folders(&pool).await.map_err(|e| e.to_string())?;
+    let folders = db::get_folders(pool.inner()).await.map_err(|e| e.to_string())?;
     let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
     let client = std::sync::Arc::new(sync::ImmichClient::new(credentials.server_url, credentials.api_key));
 
@@ -390,7 +397,12 @@ pub fn run() {
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
             let sync_i = MenuItem::with_id(app, "sync", "Sync Now", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&sync_i, &show_i, &quit_i])?;
+            let menu_items: &[&dyn tauri::menu::IsMenuItem<tauri::Wry>] = &[
+                &sync_i,
+                &show_i,
+                &quit_i,
+            ];
+            let menu = Menu::with_items(app, menu_items)?;
 
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
@@ -434,6 +446,7 @@ pub fn run() {
             login,
             logout,
             get_auth_status,
+            get_server_url,
             add_folder,
             get_folders,
             remove_folder,

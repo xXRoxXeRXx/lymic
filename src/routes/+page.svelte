@@ -58,6 +58,9 @@
     (async () => {
       try {
         isAuthenticated = await invoke("get_auth_status");
+        if (isAuthenticated) {
+          serverUrl = await invoke("get_server_url");
+        }
         await refreshFolders();
         isAutostartEnabled = await isEnabled();
 
@@ -150,16 +153,14 @@
       <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
     </div>
     
-    <div class="absolute top-12 left-12 flex items-center gap-4 text-white">
-      <div class="w-12 h-12 overflow-hidden rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center p-2">
-        <img src={logo} alt="Lymic Logo" class="w-full h-full object-contain" />
-      </div>
-      <span class="font-bold tracking-tight text-xl">Lymic</span>
+    <div class="absolute top-12 left-12 flex items-center gap-3 text-white">
+      <img src={logo} alt="Lymic Logo" class="w-16 h-16 object-contain" />
+      <span class="font-bold tracking-tight text-3xl">Lymic</span>
     </div>
 
     <div class="absolute bottom-12 left-12 right-12 text-white">
-      <p class="text-xs font-semibold uppercase tracking-[0.3em] opacity-60 mb-2">Sync Manager</p>
-      <h1 class="text-4xl font-bold tracking-tight">Deine Fotos.<br/>Sicher lokal.</h1>
+      <p class="text-xs font-semibold uppercase tracking-[0.3em] opacity-60 mb-2">Immich Desktop Client</p>
+      <h1 class="text-4xl font-bold tracking-tight">Deine Momente<br/>Sicher in Immich</h1>
     </div>
   </aside>
 
@@ -187,15 +188,12 @@
       {/if}
     </header>
 
-    <main class="flex-1 overflow-y-auto p-10 space-y-10">
+    <main class="flex-1 overflow-y-auto p-10 flex flex-col {!isAuthenticated ? 'justify-center' : 'space-y-10'}">
       
       <!-- ===== LOGIN VIEW ===== -->
       {#if !isAuthenticated}
-        <div class="max-w-md mx-auto py-20 space-y-10 animate-in">
-          <div class="text-center space-y-6">
-            <div class="w-20 h-20 mx-auto bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center p-4 mb-4">
-              <img src={logo} alt="Lymic Logo" class="w-full h-full object-contain" />
-            </div>
+        <div class="max-w-md w-full mx-auto space-y-10 animate-in">
+          <div class="text-center space-y-4">
             <h2 class="text-3xl font-bold text-slate-900">Anmelden</h2>
             <p class="text-slate-500 text-sm">Verbinde deinen Desktop mit deinem Immich-Server.</p>
           </div>
@@ -344,14 +342,13 @@
 
       <!-- ===== SETTINGS VIEW ===== -->
       {:else if currentView === "settings"}
-        <div class="max-w-2xl mx-auto space-y-10 animate-in">
-          <h2 class="text-3xl font-bold text-slate-900">Einstellungen</h2>
+        <div class="space-y-10 animate-in">
           
           <div class="glass-pane space-y-2 !p-0 overflow-hidden">
             <div class="p-8 flex items-center justify-between border-b border-black/5">
               <div class="space-y-1">
                 <p class="font-bold text-slate-900">Autostart</p>
-                <p class="text-xs text-slate-500">Immich beim Systemstart automatisch öffnen.</p>
+                <p class="text-xs text-slate-500">Lymic beim Systemstart automatisch öffnen.</p>
               </div>
               <button class="w-12 h-6 border rounded-full relative transition-all {isAutostartEnabled ? 'bg-blue-600 border-blue-600' : 'bg-slate-200 border-slate-200'}" 
                       onclick={toggleAutostart}>
@@ -376,14 +373,8 @@
     </main>
 
     <!-- Global Footer -->
-    <footer class="h-16 px-10 border-t border-black/5 flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest shrink-0">
-      <div class="flex items-center gap-6">
-        <span>© 2024 Lymic</span>
-        <div class="w-1.5 h-1.5 rounded-full {syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : 'bg-emerald-500'}"></div>
-      </div>
-      <div class="flex items-center gap-6">
-        <span>Lymic Engine v.2.4</span>
-      </div>
+    <footer class="h-16 px-10 border-t border-black/5 flex items-center justify-end text-[10px] font-bold text-slate-400 uppercase tracking-widest shrink-0">
+      <span>Lymic - Unofficial Immich Desktop Client</span>
     </footer>
 
   </div>

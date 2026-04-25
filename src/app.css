@@ -9,12 +9,15 @@
     --glass-border: rgba(255, 255, 255, 0.5);
   }
 
-  body {
-    background: #F8FAFC;
+  html, body {
+    background: #F1F5F9;
     color: rgb(var(--text-main));
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     margin: 0;
+    overscroll-behavior: none;
+    height: 100%;
+    width: 100%;
   }
 }
 
