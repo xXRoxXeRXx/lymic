@@ -62,6 +62,23 @@
 
 ---
 
+## 🔑 Immich API Configuration
+
+To use Lymic, you need to generate an API Key in your Immich web interface (**Account Settings** → **API Keys**).
+
+### Required Permissions (Scopes)
+When creating the API Key, ensure the following permissions are granted for full functionality:
+
+- **`asset.upload`**: Required to transmit new media files to the server.
+- **`asset.read`**: Required to verify if a file already exists on the server before uploading.
+- **`server_info.read`**: Required to validate the connection and check server compatibility.
+
+> [!TIP]
+> Lymic adheres to the principle of least privilege. It currently **does not** require `asset.delete` or `album.write` permissions unless you are using specific experimental features.
+
+
+---
+
 ## ⚙️ How it Works
 
 1. **Scan**: The app scans your watched folders for media files (`jpg`, `mp4`, `heic`, etc.).
