@@ -337,8 +337,8 @@ pub fn run() {
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 
                 if let Ok(Some(creds)) = auth::get_credentials() {
-                    let pool = handle_sync.state::<sqlx::SqlitePool>();
-                    if let Ok(folders) = db::get_folders(pool.inner()).await {
+                    let pool = handle_sync.state::<sqlx::SqlitePool>().inner().clone();
+                    if let Ok(folders) = db::get_folders(&pool).await {
                         let mut all_files = Vec::new();
                         for folder in folders {
                             all_files.extend(scan_folder_for_media(std::path::Path::new(&folder.path)));
@@ -346,7 +346,7 @@ pub fn run() {
                         
                         if !all_files.is_empty() {
                             let client = std::sync::Arc::new(sync::ImmichClient::new(creds.server_url, creds.api_key));
-                            let _ = run_sync_pipeline(handle_sync, pool.inner().clone(), client, all_files, true).await;
+                            let _ = run_sync_pipeline(handle_sync, pool, client, all_files, true).await;
                         }
                     }
                 }
