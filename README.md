@@ -2,9 +2,9 @@
   <img src="lymic.png" width="200" alt="Lymic Logo">
 </p>
 
-# Lymic
+# Lymic - Cross platform desktop client for Immich
 
-[![License](https://img.shields.io/github/license/xXRoxXeRXx/immich-desktop-sync?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/github/license/xXRoxXeRXx/lymic?style=for-the-badge)](LICENSE)
 [![Built with Tauri](https://img.shields.io/badge/Built%20with-Tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
 [![SvelteKit](https://img.shields.io/badge/Frontend-SvelteKit-%23FF3E00.svg?style=for-the-badge&logo=svelte&logoColor=white)](https://kit.svelte.dev/)
 
@@ -57,8 +57,8 @@ The easiest way to get started is to download the latest installer for your oper
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/xXRoxXeRXx/immich-desktop-sync.git
-   cd immich-desktop-sync
+   git clone https://github.com/xXRoxXeRXx/lymic.git
+   cd lymic
    ```
 
 2. **Install dependencies**

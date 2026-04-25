@@ -5,7 +5,7 @@ First off, thank you for considering contributing to Lymic! It's people like you
 ## How Can I Contribute?
 
 ### Reporting Bugs
-* Check the [issue tracker](https://github.com/xXRoxXeRXx/immich-desktop-sync/issues) to see if the bug has already been reported.
+* Check the [issue tracker](https://github.com/xXRoxXeRXx/lymic/issues) to see if the bug has already been reported.
 * If not, create a new issue. Include a clear title and description, as much relevant information as possible, and a code sample or a test case demonstrating the expected behavior that is not occurring.
 
 ### Suggesting Enhancements

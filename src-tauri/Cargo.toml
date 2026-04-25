@@ -2,7 +2,7 @@
 name = "lymic-desktop"
 version = "0.1.0"
 description = "High-performance desktop sync client for Immich built with Tauri"
-repository = "https://github.com/xXRoxXeRXx/immich-desktop-sync"
+repository = "https://github.com/xXRoxXeRXx/lymic"
 authors = ["xXRoxXeRXx"]
 edition = "2021"
 

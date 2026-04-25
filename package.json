@@ -5,12 +5,12 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/xXRoxXeRXx/immich-desktop-sync.git"
+    "url": "https://github.com/xXRoxXeRXx/lymic.git"
   },
   "bugs": {
-    "url": "https://github.com/xXRoxXeRXx/immich-desktop-sync/issues"
+    "url": "https://github.com/xXRoxXeRXx/lymic/issues"
   },
-  "homepage": "https://github.com/xXRoxXeRXx/immich-desktop-sync#readme",
+  "homepage": "https://github.com/xXRoxXeRXx/lymic#readme",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
