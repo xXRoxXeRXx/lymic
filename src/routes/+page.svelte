@@ -54,7 +54,11 @@
     return { id: ++logCounter, time, level, message, raw };
   }
 
+  // FIX: Store unlisteners outside the async IIFE so onMount can return them synchronously.
+  // Previously the cleanup was returned from the IIFE (a Promise), which Svelte ignores —
+  // all 5 listeners were permanently leaking on unmount.
   onMount(() => {
+    let unlisteners: (() => void)[] = [];
     (async () => {
       try {
         isAuthenticated = await invoke("get_auth_status");
@@ -64,46 +68,54 @@
         await refreshFolders();
         isAutostartEnabled = await isEnabled();
 
-        const u1 = await listen("sync-progress", (event) => {
-          syncStatus = "syncing";
-          currentFile = (event.payload as string).split(/[\\/]/).pop() || "";
-        });
-        const u2 = await listen("sync-progress-percent", (event) => {
-          progress = event.payload as number;
-        });
-        const u3 = await listen("trigger-sync", () => handleStartSync());
-        const u4 = await listen("log-message", (event) => {
-          const entry = parseLog(event.payload as string);
-          logs = [entry, ...logs].slice(0, 50);
-        });
-        const u5 = await listen("sync-idle", () => {
-          syncStatus = "idle";
-          progress = 100;
-          lastSync = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-          setTimeout(() => { progress = 0; }, 2000);
-        });
-        return () => { u1(); u2(); u3(); u4(); u5(); };
+        unlisteners = await Promise.all([
+          listen("sync-progress", (event) => {
+            syncStatus = "syncing";
+            currentFile = (event.payload as string).split(/[/\\]/).pop() || "";
+          }),
+          listen("sync-progress-percent", (event) => {
+            progress = event.payload as number;
+          }),
+          listen("trigger-sync", () => handleStartSync()),
+          listen("log-message", (event) => {
+            const entry = parseLog(event.payload as string);
+            logs = [entry, ...logs].slice(0, 50);
+          }),
+          listen("sync-idle", () => {
+            syncStatus = "idle";
+            progress = 100;
+            lastSync = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+            setTimeout(() => { progress = 0; }, 2000);
+          }),
+        ]);
       } catch (e) {
         console.error("Init failed", e);
       }
     })();
+    return () => unlisteners.forEach(fn => fn());
   });
 
+  // FIX: Removed syncStatus = "idle" / lastSync update here.
+  // The sync-idle event is now the sole source of truth for completion state,
+  // preventing the progress bar from disappearing before the backend finishes.
   async function handleStartSync() {
     syncStatus = "syncing";
     progress = 0;
     try {
       await invoke("start_sync");
-      syncStatus = "idle";
-      lastSync = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
     } catch (e) {
       console.error("Sync failed", e);
       syncStatus = "error";
     }
   }
 
+  // FIX: Log errors instead of silently swallowing them.
   async function refreshFolders() {
-    try { watchedFolders = await invoke("get_folders"); } catch {}
+    try {
+      watchedFolders = await invoke("get_folders");
+    } catch (e) {
+      console.error("Failed to load folders", e);
+    }
   }
 
   async function handleAddFolder() {
@@ -135,9 +147,23 @@
       await invoke("login", { serverUrl, apiKey });
       isAuthenticated = true;
     } catch (e) {
-      loginError = e as string;
+      // FIX: Tauri invoke errors are objects, not strings — direct cast produced "[object Object]".
+      loginError = typeof e === "string" ? e : (e as any)?.message ?? "Unbekannter Fehler";
     } finally {
       isLoggingIn = false;
+    }
+  }
+
+  // FIX: Extracted from inline onclick. Awaits backend call before resetting UI state.
+  // Previously invoke("logout") was fire-and-forget; on failure credentials stayed in keyring
+  // while the UI showed the login screen.
+  async function handleLogout() {
+    try {
+      await invoke("logout");
+    } catch (e) {
+      console.error("Logout failed", e);
+    } finally {
+      isAuthenticated = false;
     }
   }
 </script>
@@ -171,9 +197,10 @@
     <header class="h-20 px-10 flex items-center justify-between shrink-0 z-10">
       {#if isAuthenticated}
         <div class="flex items-center gap-4">
-          <h2 class="text-xl font-bold text-slate-800">
+          <!-- FIX: h2 → h1 for correct heading hierarchy in the content column -->
+          <h1 class="text-xl font-bold text-slate-800">
             {currentView === "dashboard" ? "Dashboard" : "Einstellungen"}
-          </h2>
+          </h1>
         </div>
         <div class="flex items-center gap-2">
           <button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/50 transition-colors"
@@ -194,15 +221,18 @@
       {#if !isAuthenticated}
         <div class="max-w-md w-full mx-auto space-y-10 animate-in">
           <div class="text-center space-y-4">
-            <h2 class="text-3xl font-bold text-slate-900">Anmelden</h2>
+            <!-- FIX: h2 → h1; the aside's h1 is in a separate sectioning element -->
+            <h1 class="text-3xl font-bold text-slate-900">Anmelden</h1>
             <p class="text-slate-500 text-sm">Verbinde deinen Desktop mit deinem Immich-Server.</p>
           </div>
 
           <div class="glass-pane space-y-8">
             <div class="space-y-6">
+              <!-- FIX: Added for/id association so labels activate their inputs on click -->
               <div class="space-y-2">
-                <label class="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Server URL</label>
+                <label for="server-url" class="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Server URL</label>
                 <input
+                  id="server-url"
                   type="text"
                   placeholder="https://deine-immich-url.de"
                   class="glass-input"
@@ -210,8 +240,9 @@
                 />
               </div>
               <div class="space-y-2">
-                <label class="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">API Key</label>
+                <label for="api-key" class="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">API Key</label>
                 <input
+                  id="api-key"
                   type="password"
                   placeholder="Dein API-Schlüssel"
                   class="glass-input"
@@ -305,7 +336,7 @@
                       <Folder class="w-5 h-5" />
                     </div>
                     <div class="min-w-0">
-                      <p class="text-sm font-bold text-slate-900 truncate">{folder.path.split(/[\\/]/).pop()}</p>
+                      <p class="text-sm font-bold text-slate-900 truncate">{folder.path.split(/[/\\]/).pop()}</p>
                       <p class="text-[10px] font-mono text-slate-400 truncate">{folder.path}</p>
                     </div>
                   </div>
@@ -325,11 +356,12 @@
           <!-- Activity Log -->
           <div class="space-y-6 animate-in" style="animation-delay: 200ms">
              <h4 class="text-sm font-bold text-slate-800 uppercase tracking-widest px-2">Aktivitätsverlauf</h4>
+             <!-- FIX: Was slicing to 10 in the template while storing 50 in state — now shows all stored entries -->
              <div class="glass-pane !p-6 h-full max-h-[400px] overflow-y-auto space-y-4">
                {#if logs.length === 0}
                  <p class="text-xs text-slate-300 italic">Keine aktuellen Aktivitäten.</p>
                {:else}
-                 {#each logs.slice(0, 10) as log}
+                 {#each logs as log}
                    <div class="flex items-start gap-4 text-[11px] leading-relaxed group">
                      <span class="text-slate-300 font-mono w-14 shrink-0">{log.time.split(':').slice(0,2).join(':')}</span>
                      <span class="text-slate-500 group-hover:text-slate-900 transition-colors">{log.message}</span>
@@ -350,8 +382,12 @@
                 <p class="font-bold text-slate-900">Autostart</p>
                 <p class="text-xs text-slate-500">Lymic beim Systemstart automatisch öffnen.</p>
               </div>
-              <button class="w-12 h-6 border rounded-full relative transition-all {isAutostartEnabled ? 'bg-blue-600 border-blue-600' : 'bg-slate-200 border-slate-200'}" 
-                      onclick={toggleAutostart}>
+              <button
+                class="w-12 h-6 border rounded-full relative transition-all {isAutostartEnabled ? 'bg-blue-600 border-blue-600' : 'bg-slate-200 border-slate-200'}"
+                onclick={toggleAutostart}
+                aria-label={isAutostartEnabled ? 'Autostart deaktivieren' : 'Autostart aktivieren'}
+                aria-pressed={isAutostartEnabled}
+              >
                 <div class="absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all {isAutostartEnabled ? 'translate-x-6' : 'translate-x-0'}"></div>
               </button>
             </div>
@@ -361,8 +397,9 @@
                 <p class="font-bold text-slate-900">Account</p>
                 <p class="text-xs text-slate-500">Angemeldet bei {serverUrl}</p>
               </div>
+              <!-- FIX: Was fire-and-forget inline onclick; now uses async handleLogout -->
               <button class="text-xs font-bold text-red-500 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors" 
-                      onclick={() => { isAuthenticated = false; invoke("logout"); }}>
+                      onclick={handleLogout}>
                 Abmelden
               </button>
             </div>

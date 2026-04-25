@@ -23,6 +23,7 @@
 
 @layer components {
   /* Modern Glass Pane */
+  /* FIX: transition moved to base rule so the exit animation (mouse-off) is also smooth */
   .glass-pane {
     background: var(--glass-bg);
     backdrop-filter: blur(20px);
@@ -31,13 +32,13 @@
     border-radius: 24px;
     padding: 2rem;
     box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+    transition: all 0.3s ease;
   }
 
   .glass-pane:hover {
     background: rgba(255, 255, 255, 0.8);
     border-color: rgba(37, 99, 235, 0.2);
     transform: translateY(-2px);
-    transition: all 0.3s ease;
   }
 
   /* Clean Button */
