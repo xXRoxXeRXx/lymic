@@ -10,7 +10,7 @@ use tokio_util::io::ReaderStream;
 ///
 /// Immich's bulk-upload-check endpoint and x-immich-checksum header both
 /// expect SHA-1 encoded as standard base64 (RFC 4648 §4), which is what
-/// `general_purpose::STANDARD.encode` produces. (Fix 16 — documented)
+/// `general_purpose::STANDARD.encode` produces. (Documented)
 pub fn calculate_hash(path: &str) -> io::Result<String> {
     let mut file = File::open(path)?;
     let mut hasher = Sha1::new();
@@ -53,8 +53,7 @@ impl ImmichClient {
         }
     }
 
-    /// Expose the pooled reqwest Client so callers can reuse it (e.g. login
-    /// connection test) without creating a new Client::new() each time. (Fix 15)
+    /// connection test) without creating a new Client::new() each time.
     pub fn http_client(&self) -> &Client {
         &self.client
     }

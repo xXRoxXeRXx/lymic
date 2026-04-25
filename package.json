@@ -36,7 +36,8 @@
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2",
-    "lucide-svelte": "^1.0.1"
+    "lucide-svelte": "^1.0.1",
+    "svelte-i18n": "^4.0.1"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",

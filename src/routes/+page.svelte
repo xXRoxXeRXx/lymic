@@ -8,8 +8,9 @@
     Settings as SettingsIcon, FolderPlus, Folder,
     Trash2, ArrowLeft, Cloud, CloudUpload,
     AlertCircle, Info, RefreshCw, Clock, X, User,
-    ChevronRight, ExternalLink, Minus, Activity, Power
+    ChevronRight, ExternalLink, Minus, Activity, Power, Globe
   } from "lucide-svelte";
+  import { t, locale } from "svelte-i18n";
   import hero from "$lib/assets/hero.png";
   import logo from "$lib/assets/logo.png";
 
@@ -27,6 +28,21 @@
   let watchedFolders = $state<any[]>([]);
   let isAutostartEnabled = $state(false);
   let logs = $state<LogEntry[]>([]);
+  
+  // Initialize locale
+  const savedLocale = typeof localStorage !== 'undefined' ? localStorage.getItem('lymic-locale') : null;
+  if (savedLocale) {
+    $locale = savedLocale;
+  }
+
+  // Persist locale and notify backend
+  $effect(() => {
+    const currentLocale = $locale;
+    if (currentLocale) {
+      localStorage.setItem('lymic-locale', currentLocale);
+      invoke('update_locale', { locale: currentLocale }).catch(console.error);
+    }
+  });
 
   interface LogEntry {
     id: number;
@@ -41,7 +57,7 @@
   function parseLog(raw: string): LogEntry {
     const timeMatch = raw.match(/\[(\d{2}:\d{2}:\d{2})\]/);
     const levelMatch = raw.match(/\[(INFO|ERROR|SUCCESS|WARN)\]/i);
-    const time = timeMatch?.[1] ?? new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const time = timeMatch?.[1] ?? new Date().toLocaleTimeString($locale === 'de' ? 'de-DE' : 'en-US', { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     const rawLevel = (levelMatch?.[1] ?? "INFO").toUpperCase();
 
     let level: LogEntry["level"] = "info";
@@ -54,7 +70,7 @@
     return { id: ++logCounter, time, level, message, raw };
   }
 
-  // FIX: Store unlisteners outside the async IIFE so onMount can return them synchronously.
+  // Store unlisteners outside the async IIFE so onMount can return them synchronously.
   // Previously the cleanup was returned from the IIFE (a Promise), which Svelte ignores —
   // all 5 listeners were permanently leaking on unmount.
   onMount(() => {
@@ -85,7 +101,7 @@
           if (!isMounted) return;
           syncStatus = "idle";
           progress = 100;
-          lastSync = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+          lastSync = new Date().toLocaleTimeString($locale === 'de' ? 'de-DE' : 'en-US', { hour: "2-digit", minute: "2-digit" });
           setTimeout(() => { if (isMounted) progress = 0; }, 2000);
         }),
       ]);
@@ -120,7 +136,7 @@
     };
   });
 
-  // FIX: Removed syncStatus = "idle" / lastSync update here.
+  // Removed syncStatus = "idle" / lastSync update here.
   // The sync-idle event is now the sole source of truth for completion state,
   // preventing the progress bar from disappearing before the backend finishes.
   async function handleStartSync() {
@@ -138,7 +154,7 @@
     }
   }
 
-  // FIX: Log errors instead of silently swallowing them.
+  // Log errors instead of silently swallowing them.
   async function refreshFolders() {
     try {
       watchedFolders = await invoke("get_folders");
@@ -149,7 +165,7 @@
 
   async function handleAddFolder() {
     try {
-      const selected = await open({ directory: true, multiple: false, title: "Ordner auswählen" });
+      const selected = await open({ directory: true, multiple: false, title: $t('select_folder') });
       if (selected && typeof selected === "string") {
         await invoke("add_folder", { path: selected });
         await refreshFolders();
@@ -176,14 +192,14 @@
       await invoke("login", { serverUrl, apiKey });
       isAuthenticated = true;
     } catch (e) {
-      // FIX: Tauri invoke errors are objects, not strings — direct cast produced "[object Object]".
+      // Tauri invoke errors are objects, not strings — direct cast produced "[object Object]".
       loginError = typeof e === "string" ? e : (e as any)?.message ?? "Unbekannter Fehler";
     } finally {
       isLoggingIn = false;
     }
   }
 
-  // FIX: Extracted from inline onclick. Awaits backend call before resetting UI state.
+  // Extracted from inline onclick. Awaits backend call before resetting UI state.
   // Previously invoke("logout") was fire-and-forget; on failure credentials stayed in keyring
   // while the UI showed the login screen.
   async function handleLogout() {
@@ -214,8 +230,8 @@
     </div>
 
     <div class="absolute bottom-12 left-12 right-12 text-white">
-      <p class="text-xs font-semibold uppercase tracking-[0.3em] opacity-60 mb-2">Immich Desktop Client</p>
-      <h1 class="text-4xl font-bold tracking-tight">Deine Momente<br/>Sicher in Immich</h1>
+      <p class="text-xs font-semibold uppercase tracking-[0.3em] opacity-60 mb-2">{$t('hero_tagline')}</p>
+      <h1 class="text-4xl font-bold tracking-tight">{@html $t('hero_title')}</h1>
     </div>
   </aside>
 
@@ -226,9 +242,9 @@
     <header class="h-20 px-10 flex items-center justify-between shrink-0 z-10">
       {#if isAuthenticated}
         <div class="flex items-center gap-4">
-          <!-- FIX: h2 → h1 for correct heading hierarchy in the content column -->
+          <!-- h2 → h1 for correct heading hierarchy in the content column -->
           <h1 class="text-xl font-bold text-slate-800">
-            {currentView === "dashboard" ? "Dashboard" : "Einstellungen"}
+            {currentView === "dashboard" ? $t('dashboard') : $t('settings')}
           </h1>
         </div>
         <div class="flex items-center gap-2">
@@ -250,30 +266,30 @@
       {#if !isAuthenticated}
         <div class="max-w-md w-full mx-auto space-y-10 animate-in">
           <div class="text-center space-y-4">
-            <!-- FIX: h2 → h1; the aside's h1 is in a separate sectioning element -->
-            <h1 class="text-3xl font-bold text-slate-900">Anmelden</h1>
-            <p class="text-slate-500 text-sm">Verbinde deinen Desktop mit deinem Immich-Server.</p>
+            <!-- h2 → h1; the aside's h1 is in a separate sectioning element -->
+            <h1 class="text-3xl font-bold text-slate-900">{$t('login')}</h1>
+            <p class="text-slate-500 text-sm">{$t('login_subtitle')}</p>
           </div>
 
           <div class="glass-pane space-y-8">
             <div class="space-y-6">
-              <!-- FIX: Added for/id association so labels activate their inputs on click -->
+              <!-- Added for/id association so labels activate their inputs on click -->
               <div class="space-y-2">
-                <label for="server-url" class="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Server URL</label>
+                <label for="server-url" class="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">{$t('server_url')}</label>
                 <input
                   id="server-url"
                   type="text"
-                  placeholder="https://deine-immich-url.de"
+                  placeholder={$t('server_url_placeholder')}
                   class="glass-input"
                   bind:value={serverUrl}
                 />
               </div>
               <div class="space-y-2">
-                <label for="api-key" class="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">API Key</label>
+                <label for="api-key" class="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">{$t('api_key')}</label>
                 <input
                   id="api-key"
                   type="password"
-                  placeholder="Dein API-Schlüssel"
+                  placeholder={$t('api_key_placeholder')}
                   class="glass-input"
                   bind:value={apiKey}
                 />
@@ -292,7 +308,7 @@
               onclick={handleLogin}
               disabled={isLoggingIn || !serverUrl || !apiKey}
             >
-              {isLoggingIn ? 'Verbinde...' : 'Anmelden'}
+              {isLoggingIn ? $t('connect') : $t('login')}
             </button>
           </div>
         </div>
@@ -305,10 +321,10 @@
             <div class="space-y-1">
               <div class="flex items-center gap-2">
                  <div class="w-2 h-2 rounded-full {syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : 'bg-emerald-500'}"></div>
-                 <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Status</span>
+                 <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{$t('status')}</span>
               </div>
               <h3 class="text-3xl font-bold text-slate-900">
-                {syncStatus === 'syncing' ? 'Synchronisierung läuft' : 'Alles aktuell'}
+                {syncStatus === 'syncing' ? $t('sync_running') : $t('all_up_to_date')}
               </h3>
             </div>
             <button
@@ -316,7 +332,7 @@
               onclick={handleStartSync}
               disabled={syncStatus === 'syncing'}
             >
-              {syncStatus === 'syncing' ? 'Synchronisiere...' : 'Jetzt synchronisieren'}
+              {syncStatus === 'syncing' ? $t('syncing') : $t('sync_now')}
             </button>
           </div>
 
@@ -326,18 +342,18 @@
                 <div class="glass-progress-fill" style="width: {progress}%;"></div>
               </div>
               <div class="flex justify-between text-xs font-medium text-slate-400">
-                <span>{progress}% abgeschlossen</span>
+                <span>{progress}% {$t('completed')}</span>
                 <span class="truncate max-w-[250px]">{currentFile}</span>
               </div>
             </div>
           {:else}
             <div class="flex gap-10 pt-2 border-t border-black/5">
               <div class="space-y-1">
-                <p class="text-xs font-bold text-slate-300 uppercase tracking-wider">Letzter Sync</p>
-                <p class="font-semibold text-slate-600">{lastSync}</p>
+                <p class="text-xs font-bold text-slate-300 uppercase tracking-wider">{$t('last_sync')}</p>
+                <p class="font-semibold text-slate-600">{lastSync === 'Noch nie' ? $t('never') : lastSync}</p>
               </div>
               <div class="space-y-1">
-                <p class="text-xs font-bold text-slate-300 uppercase tracking-wider">Server</p>
+                <p class="text-xs font-bold text-slate-300 uppercase tracking-wider">{$t('server')}</p>
                 <p class="font-semibold text-slate-600 truncate max-w-[150px]">{serverUrl.replace(/https?:\/\//, '')}</p>
               </div>
             </div>
@@ -350,7 +366,7 @@
           <!-- Folder Management -->
           <div class="space-y-6 animate-in" style="animation-delay: 100ms">
             <div class="flex items-center justify-between px-2">
-              <h4 class="text-sm font-bold text-slate-800 uppercase tracking-widest">Synchronisierte Ordner</h4>
+              <h4 class="text-sm font-bold text-slate-800 uppercase tracking-widest">{$t('synced_folders')}</h4>
               <button class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors" 
                       onclick={handleAddFolder}>
                 <FolderPlus class="w-4 h-4" />
@@ -375,20 +391,20 @@
                 </div>
               {/each}
               {#if watchedFolders.length === 0}
-                 <div class="glass-pane !p-12 text-center border-dashed border-2">
-                   <p class="text-sm text-slate-400 italic">Noch keine Ordner hinzugefügt.</p>
-                 </div>
+                  <div class="glass-pane !p-12 text-center border-dashed border-2">
+                    <p class="text-sm text-slate-400 italic">{$t('no_folders')}</p>
+                  </div>
               {/if}
             </div>
           </div>
 
           <!-- Activity Log -->
           <div class="space-y-6 animate-in" style="animation-delay: 200ms">
-             <h4 class="text-sm font-bold text-slate-800 uppercase tracking-widest px-2">Aktivitätsverlauf</h4>
-             <!-- FIX: Was slicing to 10 in the template while storing 50 in state — now shows all stored entries -->
+             <h4 class="text-sm font-bold text-slate-800 uppercase tracking-widest px-2">{$t('activity_log')}</h4>
+             <!-- Was slicing to 10 in the template while storing 50 in state — now shows all stored entries -->
              <div class="glass-pane !p-6 h-full max-h-[400px] overflow-y-auto space-y-4">
                {#if logs.length === 0}
-                 <p class="text-xs text-slate-300 italic">Keine aktuellen Aktivitäten.</p>
+                 <p class="text-xs text-slate-300 italic">{$t('no_activity')}</p>
                {:else}
                  {#each logs as log}
                    <div class="flex items-start gap-4 text-[11px] leading-relaxed group">
@@ -408,8 +424,8 @@
           <div class="glass-pane space-y-2 !p-0 overflow-hidden">
             <div class="p-8 flex items-center justify-between border-b border-black/5">
               <div class="space-y-1">
-                <p class="font-bold text-slate-900">Autostart</p>
-                <p class="text-xs text-slate-500">Lymic beim Systemstart automatisch öffnen.</p>
+                <p class="font-bold text-slate-900">{$t('autostart')}</p>
+                <p class="text-xs text-slate-500">{$t('autostart_subtitle')}</p>
               </div>
               <button
                 class="w-12 h-6 border rounded-full relative transition-all {isAutostartEnabled ? 'bg-blue-600 border-blue-600' : 'bg-slate-200 border-slate-200'}"
@@ -421,15 +437,34 @@
               </button>
             </div>
 
+            <div class="p-8 flex items-center justify-between border-b border-black/5">
+              <div class="space-y-1">
+                <p class="font-bold text-slate-900">Language / Sprache</p>
+                <p class="text-xs text-slate-500">Choose your preferred language.</p>
+              </div>
+              <div class="flex gap-2">
+                <button 
+                  class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'en' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
+                  onclick={() => $locale = 'en'}>
+                  EN
+                </button>
+                <button 
+                  class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'de' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
+                  onclick={() => $locale = 'de'}>
+                  DE
+                </button>
+              </div>
+            </div>
+
             <div class="p-8 flex items-center justify-between">
               <div class="space-y-1">
-                <p class="font-bold text-slate-900">Account</p>
-                <p class="text-xs text-slate-500">Angemeldet bei {serverUrl}</p>
+                <p class="font-bold text-slate-900">{$t('account')}</p>
+                <p class="text-xs text-slate-500">{$t('logged_in_at')} {serverUrl}</p>
               </div>
-              <!-- FIX: Was fire-and-forget inline onclick; now uses async handleLogout -->
+              <!-- Was fire-and-forget inline onclick; now uses async handleLogout -->
               <button class="text-xs font-bold text-red-500 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors" 
                       onclick={handleLogout}>
-                Abmelden
+                {$t('logout')}
               </button>
             </div>
           </div>

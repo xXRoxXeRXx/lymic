@@ -3,7 +3,7 @@ mod db;
 mod sync;
 mod watcher;
 
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{Menu, MenuItem, MenuItemKind};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
 use tauri::{Emitter, Manager};
 use futures::StreamExt;
@@ -11,16 +11,18 @@ use tauri_plugin_notification::NotificationExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 struct SyncState(AtomicBool);
+struct LocaleState(std::sync::Mutex<String>);
+struct TrayMenuState(Menu<tauri::Wry>);
 
 // ---------------------------------------------------------------------------
 // Supported media file extensions for sync (mirrors start_sync scan filter).
-// Fix 9: defined once and reused in both start_sync and the watcher path.
+// Defined once and reused in both start_sync and the watcher path.
 // ---------------------------------------------------------------------------
-// Fix #11: removed redundant `as &[&str]` cast.
+// removed redundant `as &[&str]` cast.
 const MEDIA_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "heic", "heif", "mp4", "mov", "avi"];
 
 fn is_media_file(path: &std::path::Path) -> bool {
-    // Fix #12: eq_ignore_ascii_case avoids a heap allocation per file.
+    // eq_ignore_ascii_case avoids a heap allocation per file.
     path.extension()
         .and_then(|e| e.to_str())
         .map(|e| MEDIA_EXTENSIONS.iter().any(|ext| e.eq_ignore_ascii_case(ext)))
@@ -41,7 +43,7 @@ fn scan_folder_for_media(path: &std::path::Path) -> Vec<(String, u64)> {
     files
 }
 
-// Fix #13: accept a log level so this helper composes correctly if ever
+// accept a log level so this helper composes correctly if ever
 //           reused for error or warning notifications.
 fn send_notification(app: &tauri::AppHandle, title: &str, body: &str, level: &str) {
     let _ = app.notification()
@@ -58,9 +60,9 @@ fn log_to_ui(app: &tauri::AppHandle, level: &str, message: &str) {
     let _ = app.emit("log-message", log_line);
 }
 
-// Fix 15: Login reuses ImmichClient's pooled reqwest::Client instead of
+// Login reuses ImmichClient's pooled reqwest::Client instead of
 //         creating a one-off Client::new() that bypasses connection pooling.
-// Fix #1 (security): api_key is intentionally kept out of all log/error
+// (security): api_key is intentionally kept out of all log/error
 //         messages below. reqwest error Display does not include headers,
 //         so the key is not leaked through map_err strings either.
 #[tauri::command]
@@ -106,7 +108,33 @@ async fn get_server_url() -> Result<String, String> {
     }
 }
 
-// Fix 6: tokio::sync::Mutex avoids blocking the async executor while waiting
+#[tauri::command]
+fn update_locale(app: tauri::AppHandle, state: tauri::State<'_, LocaleState>, locale: String) -> Result<(), String> {
+    let mut current = state.0.lock().map_err(|e| e.to_string())?;
+    *current = locale.clone();
+    
+    // Update tray menu labels
+    let quit_label = if locale == "de" { "Beenden" } else { "Quit" };
+    let show_label = if locale == "de" { "Fenster anzeigen" } else { "Show Window" };
+    let sync_label = if locale == "de" { "Jetzt synchronisieren" } else { "Sync Now" };
+
+    let tray_menu = app.state::<TrayMenuState>();
+    let menu = &tray_menu.0;
+    
+    if let Some(MenuItemKind::MenuItem(item)) = menu.get("quit") {
+        let _ = item.set_text(quit_label);
+    }
+    if let Some(MenuItemKind::MenuItem(item)) = menu.get("show") {
+        let _ = item.set_text(show_label);
+    }
+    if let Some(MenuItemKind::MenuItem(item)) = menu.get("sync") {
+        let _ = item.set_text(sync_label);
+    }
+    
+    Ok(())
+}
+
+// tokio::sync::Mutex avoids blocking the async executor while waiting
 //         for the lock (std::sync::Mutex::lock blocks the current thread).
 #[tauri::command]
 async fn add_folder(
@@ -120,7 +148,7 @@ async fn add_folder(
         .map_err(|e| e.to_string())?;
     
     let mut w = watcher.lock().await;
-    // Fix #15 caller: warn when the path doesn't exist (e.g. offline drive).
+    // warn when the path doesn't exist (e.g. offline drive).
     match watcher::watch_path(&mut w, &path) {
         Ok(false) => log_to_ui(&app, "WARN", &format!("Folder '{}' does not exist; watching deferred until it appears.", path)),
         Err(e)   => log_to_ui(&app, "WARN", &format!("Could not watch '{}': {}", path, e)),
@@ -159,7 +187,7 @@ async fn remove_folder(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Fix #3: delete the DB row first so concurrent readers no longer see
+    // delete the DB row first so concurrent readers no longer see
     //         this folder; then unwatch. This closes the race window where a
     //         filesystem event could trigger a sync on a just-removed folder.
     db::remove_folder(pool.inner(), id)
@@ -168,7 +196,7 @@ async fn remove_folder(
 
     if let Some(folder) = folders.iter().find(|f| f.id == id) {
         let mut w = watcher.lock().await;
-        // Fix #8: log unwatch failures instead of silently discarding them.
+        // log unwatch failures instead of silently discarding them.
         if let Err(e) = watcher::unwatch_path(&mut w, &folder.path) {
             log_to_ui(&app, "WARN", &format!("Failed to unwatch '{}': {}", folder.path, e));
         }
@@ -206,13 +234,13 @@ async fn run_sync_pipeline(
                 let metadata = match std::fs::metadata(&path) {
                     Ok(m) => m,
                     Err(_) => {
-                        // Fix #5: count unreadable files so progress can reach 100%.
+                        // count unreadable files so progress can reach 100%.
                         completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
                         return None;
                     }
                 };
 
-                // Fix #9: if timestamps are unavailable skip the cache entirely
+                // if timestamps are unavailable skip the cache entirely
                 //         to avoid returning a stale hash when content changed.
                 let mtime_opt = metadata.modified().or_else(|_| metadata.created()).ok()
                     .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
@@ -227,7 +255,7 @@ async fn run_sync_pipeline(
                 let hash = if let Some(h) = cached {
                     h
                 } else {
-                    // Fix #6: SHA-1 is blocking CPU+I/O — run it off the async executor.
+                    // SHA-1 is blocking CPU+I/O — run it off the async executor.
                     let path_for_hash = path.clone();
                     match tokio::task::spawn_blocking(move || sync::calculate_hash(&path_for_hash)).await {
                         Ok(Ok(h)) => {
@@ -235,7 +263,7 @@ async fn run_sync_pipeline(
                             h
                         }
                         _ => {
-                            // Fix #5: count failed hashes so progress can reach 100%.
+                            // count failed hashes so progress can reach 100%.
                             completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
                             return None;
                         }
@@ -292,7 +320,7 @@ async fn run_sync_pipeline(
             let completed_bytes = completed_bytes.clone();
             let success_count = success_count.clone();
             async move {
-                // Fix #2: Stage 1 guarantees hash is Some; guard defensively
+                // Stage 1 guarantees hash is Some; guard defensively
                 //         so a future code path can't cause a silent panic.
                 let hash = match asset.hash.as_ref() {
                     Some(h) => h.clone(),
@@ -320,10 +348,25 @@ async fn run_sync_pipeline(
 
     let uploaded = success_count.load(std::sync::atomic::Ordering::SeqCst);
     if !is_auto || uploaded > 0 {
+        let locale_state = app.state::<LocaleState>();
+        let locale = locale_state.0.lock().map(|l| l.clone()).unwrap_or_else(|_| "en".to_string());
+        
+        let title = if locale == "de" {
+            format!("{} Abgeschlossen", prefix)
+        } else {
+            format!("{} Complete", prefix)
+        };
+        
+        let body = if locale == "de" {
+            format!("{} Dateien verarbeitet. {} neue Uploads.", total_files, uploaded)
+        } else {
+            format!("Processed {} files. {} new uploads.", total_files, uploaded)
+        };
+
         send_notification(
             &app,
-            &format!("{} Complete", prefix),
-            &format!("Processed {} files. {} new uploads.", total_files, uploaded),
+            &title,
+            &body,
             "INFO",
         );
     }
@@ -380,7 +423,7 @@ pub fn run() {
             // Initialize Watcher
             let watcher = watcher::create_watcher(tx).map_err(|e| e.to_string())?;
 
-            // Fix 7: if DB init fails, return Err from setup() so the app exits
+            // if DB init fails, return Err from setup() so the app exits
             //         cleanly instead of silently continuing without managed state.
             let pool = tauri::async_runtime::block_on(db::init(&handle))
                 .map_err(|e| format!("Failed to initialize database: {}", e))?;
@@ -389,7 +432,7 @@ pub fn run() {
             let mut watcher = watcher;
             if let Ok(folders) = tauri::async_runtime::block_on(db::get_folders(&pool)) {
                 for folder in folders {
-                    // Fix #15 caller: surface deferred-watch state at startup.
+                    // surface deferred-watch state at startup.
                     match watcher::watch_path(&mut watcher, &folder.path) {
                         Ok(false) => eprintln!("[WARN] Folder '{}' offline at startup; watching deferred.", folder.path),
                         Err(e)   => eprintln!("[WARN] Could not watch '{}': {}", folder.path, e),
@@ -399,9 +442,10 @@ pub fn run() {
             }
 
             handle.manage(pool);
-            // Fix 6: tokio::sync::Mutex so async commands use .lock().await
+            // tokio::sync::Mutex so async commands use .lock().await
             handle.manage(tokio::sync::Mutex::new(watcher));
             handle.manage(SyncState(AtomicBool::new(false)));
+            handle.manage(LocaleState(std::sync::Mutex::new("de".to_string())));
 
             // Auto-sync on startup
             let handle_sync = handle.clone();
@@ -488,23 +532,24 @@ pub fn run() {
             });
 
             // Setup Tray Icon
-            // Fix 14: greet() command removed (scaffold dead code)
-            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let show_i = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
-            let sync_i = MenuItem::with_id(app, "sync", "Sync Now", true, None::<&str>)?;
+            // greet() command removed (scaffold dead code)
+            let quit_i = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Fenster anzeigen", true, None::<&str>)?;
+            let sync_i = MenuItem::with_id(app, "sync", "Jetzt synchronisieren", true, None::<&str>)?;
             let menu_items: &[&dyn tauri::menu::IsMenuItem<tauri::Wry>] = &[
                 &sync_i,
                 &show_i,
                 &quit_i,
             ];
             let menu = Menu::with_items(app, menu_items)?;
+            handle.manage(TrayMenuState(menu.clone()));
 
-            // Fix #10: unwrap() would panic if no icon is configured in tauri.conf.json.
+            // unwrap() would panic if no icon is configured in tauri.conf.json.
             let icon = app
                 .default_window_icon()
                 .ok_or("No default window icon configured in tauri.conf.json")?
                 .clone();
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id("main")
                 .icon(icon)
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -542,7 +587,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Fix 14: greet removed
+            // greet removed
             login,
             logout,
             get_auth_status,
@@ -550,7 +595,8 @@ pub fn run() {
             add_folder,
             get_folders,
             remove_folder,
-            start_sync
+            start_sync,
+            update_locale
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

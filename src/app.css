@@ -23,7 +23,7 @@
 
 @layer components {
   /* Modern Glass Pane */
-  /* FIX: transition moved to base rule so the exit animation (mouse-off) is also smooth */
+  /* transition moved to base rule so the exit animation (mouse-off) is also smooth */
   .glass-pane {
     background: var(--glass-bg);
     backdrop-filter: blur(20px);
