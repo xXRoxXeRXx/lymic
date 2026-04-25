@@ -1,8 +1,16 @@
 {
-  "name": "lymic-app",
+  "name": "lymic",
   "version": "0.1.0",
-  "description": "",
+  "description": "High-performance desktop sync client for Immich",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xXRoxXeRXx/immich-desktop-sync.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xXRoxXeRXx/immich-desktop-sync/issues"
+  },
+  "homepage": "https://github.com/xXRoxXeRXx/immich-desktop-sync#readme",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",

@@ -1,9 +1,15 @@
+<p align="center">
+  <img src="lymic.png" width="200" alt="Lymic Logo">
+</p>
+
 # Lymic
 
 [![License](https://img.shields.io/github/license/xXRoxXeRXx/immich-desktop-sync?style=for-the-badge)](LICENSE)
 [![Material Design](https://img.shields.io/badge/UI-Modern%20Editorial-%230F172A.svg?style=for-the-badge&logo=material-design&logoColor=white)](https://m3.material.io/)
 
 **Lymic** is a high-performance, cross-platform desktop synchronization client for [Immich](https://immich.app/). Effortlessly keep your local media library in sync with your personal Immich server with a focus on speed, reliability, and a premium editorial user experience.
+
+![Lymic Screenshot](lymic_screen.png)
 
 ---
 
@@ -31,13 +37,20 @@
 
 ## 🚀 Getting Started
 
-### Prerequisites
+### Download
 
+The easiest way to get started is to download the latest installer for your operating system from the [Releases](https://github.com/xXRoxXeRXx/immich-desktop-sync/releases) page.
+
+### Building from Source
+
+If you prefer to build Lymic yourself, follow these steps:
+
+#### Prerequisites
 - [Rust](https://www.rust-lang.org/tools/install) (latest stable)
 - [Node.js](https://nodejs.org/) (v18+)
 - OS-specific dependencies (see [Tauri documentation](https://tauri.app/v1/guides/getting-started/prerequisites))
 
-### Installation
+#### Installation
 
 1. **Clone the repository**
    ```bash
@@ -90,13 +103,19 @@ When creating the API Key, ensure the following permissions are granted for full
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request or open an issue for bugs and feature requests.
+Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to get started.
+
+---
+
+## ⚠️ Disclaimer
+
+**Lymic is an unofficial community project and is not affiliated with, maintained, or endorsed by the official Immich team.** Use it at your own risk. Always ensure you have backups of your precious media.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE) (or specify your license).
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
