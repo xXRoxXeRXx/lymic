@@ -544,12 +544,12 @@ pub fn run() {
             let menu = Menu::with_items(app, menu_items)?;
             handle.manage(TrayMenuState(menu.clone()));
 
-            // unwrap() would panic if no icon is configured in tauri.conf.json.
             let icon = app
                 .default_window_icon()
                 .ok_or("No default window icon configured in tauri.conf.json")?
                 .clone();
-            let _tray = TrayIconBuilder::with_id("main")
+
+            let tray_builder = TrayIconBuilder::with_id("main")
                 .icon(icon)
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -575,14 +575,25 @@ pub fn run() {
                     } = event
                     {
                         let app = tray.app_handle();
+                        
+                        // On macOS, the menu usually shows on left click.
+                        // On Windows, we often want to show the window on left click.
+                        #[cfg(not(target_os = "macos"))]
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
                     }
-                })
-                .show_menu_on_left_click(false)
-                .build(app)?;
+                });
+
+            // On macOS, it's standard to show the menu on left click.
+            #[cfg(target_os = "macos")]
+            let tray_builder = tray_builder.show_menu_on_left_click(true);
+            
+            #[cfg(not(target_os = "macos"))]
+            let tray_builder = tray_builder.show_menu_on_left_click(false);
+
+            let _tray = tray_builder.build(app)?;
 
             Ok(())
         })

@@ -45,6 +45,20 @@
 
 The easiest way to get started is to download the latest installer for your operating system from the [Releases](https://github.com/xXRoxXeRXx/immich-desktop-sync/releases) page.
 
+> [!IMPORTANT]
+> **macOS Users:** Since this is an open-source project without a paid Apple Developer certificate, macOS will block the app as "unidentified" or "damaged".
+>
+> **Option 1 (Recommended):**
+> 1. Drag the app into your **Applications** folder.
+> 2. **Right-click** (or Control-click) the app icon and select **Open**.
+> 3. Click **Open** in the confirmation dialog.
+>
+> **Option 2 (If Option 1 fails):**
+> If you still see the "App is damaged" message, run the following command in your terminal:
+> ```bash
+> xattr -cr /Applications/Lymic.app
+> ```
+
 ### Building from Source
 
 #### Prerequisites
