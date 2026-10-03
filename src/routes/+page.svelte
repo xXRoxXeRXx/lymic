@@ -231,7 +231,10 @@
 
     <div class="absolute bottom-12 left-12 right-12 text-white">
       <p class="text-xs font-semibold uppercase tracking-[0.3em] opacity-60 mb-2">{$t('hero_tagline')}</p>
-      <h1 class="text-4xl font-bold tracking-tight">{@html $t('hero_title')}</h1>
+      <h1 class="text-4xl font-bold tracking-tight">
+        {$t('hero_title_line_1')}<br />
+        {$t('hero_title_line_2')}
+      </h1>
     </div>
   </aside>
 
