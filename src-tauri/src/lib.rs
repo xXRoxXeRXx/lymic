@@ -268,20 +268,31 @@ async fn add_event_paths(
     failures_buffer: &mut std::collections::HashMap<String, FileFailure>,
     event: notify::Event,
 ) -> Result<(), String> {
-    let mut directories = Vec::new();
-    let mut files = Vec::new();
-    for path in event.paths {
-        if path.is_dir() {
-            directories.push(path);
-        } else if is_media_file(&path) {
-            files.push(path);
+    // Determining whether an event path is a directory can access slow or offline storage.
+    let (directories, files) = tokio::task::spawn_blocking(move || {
+        let mut directories = Vec::new();
+        let mut files = Vec::new();
+        for path in event.paths {
+            if path.is_dir() {
+                directories.push(path);
+            } else if is_media_file(&path) {
+                files.push(path);
+            }
         }
+        (directories, files)
+    })
+    .await
+    .map_err(|error| format!("Could not classify watcher paths: {}", error))?;
+
+    if directories.is_empty() && files.is_empty() {
+        return Ok(());
     }
 
-    for scan_result in [
-        scan_folders_for_media(directories).await?,
-        scan_paths_for_media(files).await?,
-    ] {
+    let (folder_scan, file_scan) = tokio::try_join!(
+        scan_folders_for_media(directories),
+        scan_paths_for_media(files),
+    )?;
+    for scan_result in [folder_scan, file_scan] {
         for asset in scan_result.files {
             files_buffer.insert(asset.path.clone(), asset);
         }
