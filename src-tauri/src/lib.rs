@@ -30,55 +30,135 @@ fn is_media_file(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
-fn scan_folder_for_media(path: &std::path::Path) -> Vec<(String, u64)> {
-    let mut files = Vec::new();
-    if path.exists() {
-        let walker = walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok());
-        for entry in walker {
-            if entry.file_type().is_file() && is_media_file(entry.path()) {
-                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                files.push((entry.path().to_string_lossy().to_string(), size));
+#[derive(Debug)]
+struct Asset {
+    path: String,
+    size: u64,
+    mtime: i64,
+}
+
+#[derive(Debug)]
+struct FileFailure {
+    path: String,
+    error: String,
+}
+
+#[derive(Debug, Default)]
+struct ScanResult {
+    files: Vec<Asset>,
+    failures: Vec<FileFailure>,
+}
+
+fn metadata_mtime(metadata: &std::fs::Metadata) -> i64 {
+    metadata
+        .modified()
+        .or_else(|_| metadata.created())
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .and_then(|duration| i64::try_from(duration.as_nanos()).ok())
+        .unwrap_or(0)
+}
+
+fn scan_folder_for_media(path: &std::path::Path) -> ScanResult {
+    let mut result = ScanResult::default();
+    for entry in walkdir::WalkDir::new(path) {
+        match entry {
+            Ok(entry) if entry.file_type().is_file() && is_media_file(entry.path()) => {
+                let file_path = entry.path().to_string_lossy().to_string();
+                match entry.metadata() {
+                    Ok(metadata) => result.files.push(Asset {
+                        path: file_path,
+                        size: metadata.len(),
+                        mtime: metadata_mtime(&metadata),
+                    }),
+                    Err(error) => result.failures.push(FileFailure {
+                        path: file_path,
+                        error: format!("Could not read file metadata: {}", error),
+                    }),
+                }
             }
+            Ok(_) => {}
+            Err(error) => result.failures.push(FileFailure {
+                path: error
+                    .path()
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .to_string(),
+                error: format!("Could not scan path: {}", error),
+            }),
         }
     }
-    files
+    result
 }
 
 async fn scan_folders_for_media(
     paths: Vec<std::path::PathBuf>,
-) -> Result<Vec<(String, u64)>, String> {
+) -> Result<ScanResult, String> {
     tokio::task::spawn_blocking(move || {
-        paths
-            .iter()
-            .flat_map(|path| scan_folder_for_media(path))
-            .collect()
+        let mut result = ScanResult::default();
+        for path in paths {
+            let scan_result = scan_folder_for_media(&path);
+            result.files.extend(scan_result.files);
+            result.failures.extend(scan_result.failures);
+        }
+        result
     })
     .await
     .map_err(|e| format!("Media scan task failed: {}", e))
 }
 
+async fn scan_paths_for_media(
+    paths: Vec<std::path::PathBuf>,
+) -> Result<ScanResult, String> {
+    tokio::task::spawn_blocking(move || {
+        let mut result = ScanResult::default();
+        for path in paths {
+            if !is_media_file(&path) {
+                continue;
+            }
+
+            match std::fs::metadata(&path) {
+                Ok(metadata) if metadata.is_file() => result.files.push(Asset {
+                    path: path.to_string_lossy().to_string(),
+                    size: metadata.len(),
+                    mtime: metadata_mtime(&metadata),
+                }),
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => result.failures.push(FileFailure {
+                    path: path.to_string_lossy().to_string(),
+                    error: format!("Could not read file metadata: {}", error),
+                }),
+            }
+        }
+        result
+    })
+    .await
+    .map_err(|e| format!("Media path scan task failed: {}", e))
+}
+
 async fn add_event_paths(
-    paths_buffer: &mut std::collections::HashSet<String>,
+    files_buffer: &mut std::collections::HashMap<String, Asset>,
+    failures_buffer: &mut std::collections::HashMap<String, FileFailure>,
     event: notify::Event,
 ) -> Result<(), String> {
     let mut directories = Vec::new();
+    let mut files = Vec::new();
     for path in event.paths {
         if path.is_dir() {
             directories.push(path);
-        } else if path.is_file() && is_media_file(&path) {
-            if let Some(path) = path.to_str() {
-                paths_buffer.insert(path.to_string());
-            }
+        } else if is_media_file(&path) {
+            files.push(path);
         }
     }
 
-    if !directories.is_empty() {
-        paths_buffer.extend(
-            scan_folders_for_media(directories)
-                .await?
-                .into_iter()
-                .map(|(path, _)| path),
-        );
+    for scan_result in [scan_folders_for_media(directories).await?, scan_paths_for_media(files).await?] {
+        for asset in scan_result.files {
+            files_buffer.insert(asset.path.clone(), asset);
+        }
+        for failure in scan_result.failures {
+            failures_buffer.insert(failure.path.clone(), failure);
+        }
     }
     Ok(())
 }
@@ -201,10 +281,16 @@ async fn add_folder(
     let coordinator = sync_coordinator.0.clone();
     let path_clone = path.clone();
     tauri::async_runtime::spawn(async move {
-        let files = scan_folder_for_media(std::path::Path::new(&path_clone));
+        let scan_result = match scan_folders_for_media(vec![std::path::PathBuf::from(path_clone)]).await {
+            Ok(result) => result,
+            Err(error) => {
+                log_to_ui(&app, "ERROR", &error);
+                return;
+            }
+        };
         if let Ok(Some(creds)) = auth::get_credentials() {
             let client = std::sync::Arc::new(sync::ImmichClient::new(creds.server_url, creds.api_key));
-            let _ = run_sync_pipeline(app, pool_inner, client, files, true, coordinator).await;
+            let _ = run_sync_pipeline(app, pool_inner, client, scan_result, true, coordinator).await;
         }
     });
 
@@ -250,7 +336,7 @@ async fn run_sync_pipeline(
     app: tauri::AppHandle,
     pool: sqlx::SqlitePool,
     client: std::sync::Arc<sync::ImmichClient>,
-    files: Vec<(String, u64)>,
+    scan_result: ScanResult,
     is_auto: bool,
     coordinator: std::sync::Arc<tokio::sync::Mutex<()>>,
 ) -> Result<(), String> {
@@ -268,14 +354,24 @@ async fn run_sync_pipeline(
             coordinator.lock().await
         }
     };
+    let ScanResult { files, failures } = scan_result;
     let total_files = files.len();
-    let total_bytes: u64 = files.iter().map(|(_, s)| *s).sum();
+    let total_bytes: u64 = files.iter().map(|asset| asset.size).sum();
     let completed_bytes = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let success_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let scan_failure_count = failures.len();
+    let failure_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(scan_failure_count));
     let device_id = format!("{}-IMMICH-DESKTOP", std::env::consts::OS.to_uppercase());
 
-    if files.is_empty() {
-        return Ok(());
+    for failure in failures {
+        log_to_ui(
+            &app,
+            "ERROR",
+            &format!("{}: {}", failure.path, failure.error),
+        );
+        if let Err(error) = db::mark_sync_failed(&pool, &failure.path, 0, 0).await {
+            log_to_ui(&app, "ERROR", &format!("Could not persist failure for {}: {}", failure.path, error));
+        }
     }
 
     let prefix = if is_auto { "Auto-sync" } else { "Sync" };
@@ -284,37 +380,18 @@ async fn run_sync_pipeline(
 
     // Pipeline Stage 1: Parallel Hashing (Concurrency = 4)
     let hashed_stream = futures::stream::iter(files)
-        .map(|(path, size)| {
+        .map(|asset| {
             let pool = pool.clone();
+            let app = app.clone();
             let completed_bytes = completed_bytes.clone();
+            let failure_count = failure_count.clone();
             async move {
-                let metadata = match std::fs::metadata(&path) {
-                    Ok(m) => m,
-                    Err(_) => {
-                        // count unreadable files so progress can reach 100%.
-                        completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
-                        return None;
-                    }
-                };
-
-                // if timestamps are unavailable skip the cache entirely
-                //         to avoid returning a stale hash when content changed.
-                let mtime_opt = metadata
-                    .modified()
-                    .or_else(|_| metadata.created())
-                    .ok()
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    // Seconds plus file size can match after a rapid in-place edit. Preserve
-                    // filesystem timestamp precision so such edits invalidate the hash cache.
-                    // Existing second-precision cache rows deliberately miss once after this
-                    // upgrade and are replaced with precise timestamps on that sync.
-                    .and_then(|d| i64::try_from(d.as_nanos()).ok());
-                let mtime = mtime_opt.unwrap_or(0);
+                let Asset { path, size, mtime } = asset;
 
                 // Attempt cache hit only when we have a reliable mtime.
-                let cached = match mtime_opt {
-                    Some(mt) => db::get_cached_hash(&pool, &path, mt, size as i64).await,
-                    None => None,
+                let cached = match mtime {
+                    0 => None,
+                    _ => db::get_cached_hash(&pool, &path, mtime, size as i64).await,
                 };
 
                 let hash = if let Some(h) = cached {
@@ -327,8 +404,21 @@ async fn run_sync_pipeline(
                             let _ = db::update_sync_state(&pool, &path, &h, mtime, size as i64, "PENDING", None).await;
                             h
                         }
-                        _ => {
-                            // count failed hashes so progress can reach 100%.
+                        Ok(Err(error)) => {
+                            log_to_ui(&app, "ERROR", &format!("Hashing failed for {}: {}", path, error));
+                            if let Err(error) = db::mark_sync_failed(&pool, &path, mtime, size as i64).await {
+                                log_to_ui(&app, "ERROR", &format!("Could not persist failure for {}: {}", path, error));
+                            }
+                            failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
+                            return None;
+                        }
+                        Err(error) => {
+                            log_to_ui(&app, "ERROR", &format!("Hashing task failed for {}: {}", path, error));
+                            if let Err(error) = db::mark_sync_failed(&pool, &path, mtime, size as i64).await {
+                                log_to_ui(&app, "ERROR", &format!("Could not persist failure for {}: {}", path, error));
+                            }
+                            failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
                             return None;
                         }
@@ -384,6 +474,7 @@ async fn run_sync_pipeline(
             let pool = pool.clone();
             let completed_bytes = completed_bytes.clone();
             let success_count = success_count.clone();
+            let failure_count = failure_count.clone();
             async move {
                 // Stage 1 guarantees hash is Some; guard defensively
                 //         so a future code path can't cause a silent panic.
@@ -399,7 +490,10 @@ async fn run_sync_pipeline(
                     }
                     Err(e) => {
                         log_to_ui(&app, "ERROR", &format!("Upload failed for {}: {}", asset.path, e));
-                        let _ = db::update_sync_state(&pool, &asset.path, &hash, asset.mtime, asset.size as i64, "FAILED", None).await;
+                        if let Err(error) = db::mark_sync_failed(&pool, &asset.path, asset.mtime, asset.size as i64).await {
+                            log_to_ui(&app, "ERROR", &format!("Could not persist failure for {}: {}", asset.path, error));
+                        }
+                        failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                 }
                 let done = completed_bytes.fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst) + asset.size;
@@ -412,7 +506,9 @@ async fn run_sync_pipeline(
         .await;
 
     let uploaded = success_count.load(std::sync::atomic::Ordering::SeqCst);
-    if !is_auto || uploaded > 0 {
+    let failed = failure_count.load(std::sync::atomic::Ordering::SeqCst);
+    let processed = total_files.saturating_sub(failed.saturating_sub(scan_failure_count));
+    if !is_auto || uploaded > 0 || failed > 0 {
         let locale_state = app.state::<LocaleState>();
         let locale = locale_state.0.lock().map(|l| l.clone()).unwrap_or_else(|_| "en".to_string());
         
@@ -423,9 +519,9 @@ async fn run_sync_pipeline(
         };
         
         let body = if locale == "de" {
-            format!("{} Dateien verarbeitet. {} neue Uploads.", total_files, uploaded)
+            format!("{} Dateien verarbeitet. {} neue Uploads. {} Fehler.", processed, uploaded, failed)
         } else {
-            format!("Processed {} files. {} new uploads.", total_files, uploaded)
+            format!("Processed {} files. {} new uploads. {} errors.", processed, uploaded, failed)
         };
 
         send_notification(
@@ -461,17 +557,20 @@ async fn start_sync(
         let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
         let client = std::sync::Arc::new(sync::ImmichClient::new(credentials.server_url, credentials.api_key));
 
-        let mut all_files = Vec::new();
-        for folder in folders {
+        for folder in &folders {
             log_to_ui(&app, "INFO", &format!("Scanning folder: {}", folder.path));
-            all_files.extend(scan_folder_for_media(std::path::Path::new(&folder.path)));
         }
+        let folder_paths = folders
+            .into_iter()
+            .map(|folder| std::path::PathBuf::from(folder.path))
+            .collect();
+        let scan_result = scan_folders_for_media(folder_paths).await?;
 
         run_sync_pipeline(
             app,
             pool.inner().clone(),
             client,
-            all_files,
+            scan_result,
             false,
             sync_coordinator.0.clone(),
         ).await
@@ -538,15 +637,25 @@ pub fn run() {
                 if let Ok(Some(creds)) = auth::get_credentials() {
                     let pool = handle_sync.state::<sqlx::SqlitePool>().inner().clone();
                     if let Ok(folders) = db::get_folders(&pool).await {
-                        let mut all_files = Vec::new();
-                        for folder in folders {
-                            all_files.extend(scan_folder_for_media(std::path::Path::new(&folder.path)));
+                        for folder in &folders {
+                            log_to_ui(&handle_sync, "INFO", &format!("Scanning folder: {}", folder.path));
                         }
+                        let folder_paths = folders
+                            .into_iter()
+                            .map(|folder| std::path::PathBuf::from(folder.path))
+                            .collect();
+                        let scan_result = match scan_folders_for_media(folder_paths).await {
+                            Ok(result) => result,
+                            Err(error) => {
+                                log_to_ui(&handle_sync, "ERROR", &error);
+                                return;
+                            }
+                        };
                         
-                        if !all_files.is_empty() {
+                        if !scan_result.files.is_empty() || !scan_result.failures.is_empty() {
                             let client = std::sync::Arc::new(sync::ImmichClient::new(creds.server_url, creds.api_key));
                             let coordinator = handle_sync.state::<SyncCoordinator>().0.clone();
-                            let _ = run_sync_pipeline(handle_sync, pool, client, all_files, true, coordinator).await;
+                            let _ = run_sync_pipeline(handle_sync, pool, client, scan_result, true, coordinator).await;
                         }
                     }
                 }
@@ -557,11 +666,12 @@ pub fn run() {
             let rescan_requested_task = rescan_requested.clone();
             let rescan_notify_task = rescan_notify.clone();
             tauri::async_runtime::spawn(async move {
-                let mut paths_buffer = std::collections::HashSet::new();
+                let mut files_buffer = std::collections::HashMap::new();
+                let mut failures_buffer = std::collections::HashMap::new();
                 loop {
                     tokio::select! {
                         Some(event) = rx.recv() => {
-                            if let Err(e) = add_event_paths(&mut paths_buffer, event).await {
+                            if let Err(e) = add_event_paths(&mut files_buffer, &mut failures_buffer, event).await {
                                 log_to_ui(&handle_task, "ERROR", &e);
                             }
                         }
@@ -574,7 +684,7 @@ pub fn run() {
                     loop {
                         tokio::select! {
                             Some(event) = rx.recv() => {
-                                if let Err(e) = add_event_paths(&mut paths_buffer, event).await {
+                                if let Err(e) = add_event_paths(&mut files_buffer, &mut failures_buffer, event).await {
                                     log_to_ui(&handle_task, "ERROR", &e);
                                 }
                                 debounce.as_mut().reset(
@@ -595,7 +705,8 @@ pub fn run() {
                         );
                         // The full folder scan is a superset of buffered paths, so discard
                         // them to avoid duplicate work after an event-stream loss.
-                        paths_buffer.clear();
+                        files_buffer.clear();
+                        failures_buffer.clear();
                         let pool = handle_task.state::<sqlx::SqlitePool>();
                         match db::get_folders(pool.inner()).await {
                             Ok(folders) => {
@@ -604,9 +715,14 @@ pub fn run() {
                                     .map(|folder| std::path::PathBuf::from(folder.path))
                                     .collect();
                                 match scan_folders_for_media(folder_paths).await {
-                                    Ok(files) => paths_buffer.extend(
-                                        files.into_iter().map(|(file_path, _)| file_path),
-                                    ),
+                                    Ok(scan_result) => {
+                                        for asset in scan_result.files {
+                                            files_buffer.insert(asset.path.clone(), asset);
+                                        }
+                                        for failure in scan_result.failures {
+                                            failures_buffer.insert(failure.path.clone(), failure);
+                                        }
+                                    }
                                     Err(e) => log_to_ui(&handle_task, "ERROR", &e),
                                 }
                             }
@@ -618,14 +734,10 @@ pub fn run() {
                         }
                     }
 
-                    if !paths_buffer.is_empty() {
-                        let paths: Vec<String> = paths_buffer.drain().collect();
-                        let mut files = Vec::new();
-                        for p in paths {
-                            if let Ok(m) = std::fs::metadata(&p) {
-                                files.push((p, m.len()));
-                            }
-                        }
+                    if !files_buffer.is_empty() || !failures_buffer.is_empty() {
+                        let mut scan_result = ScanResult::default();
+                        scan_result.files.extend(files_buffer.drain().map(|(_, asset)| asset));
+                        scan_result.failures.extend(failures_buffer.drain().map(|(_, failure)| failure));
 
                         let pool = handle_task.state::<sqlx::SqlitePool>();
                         let pool_inner = pool.inner().clone();
@@ -640,7 +752,7 @@ pub fn run() {
                                 handle_task.clone(),
                                 pool_inner,
                                 client,
-                                files,
+                                scan_result,
                                 true,
                                 coordinator,
                             ).await;

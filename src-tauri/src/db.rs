@@ -78,7 +78,9 @@ pub async fn remove_folder(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error
 
 pub async fn get_cached_hash(pool: &SqlitePool, path: &str, mtime: i64, size: i64) -> Option<String> {
     let result = sqlx::query(
-        "SELECT file_hash FROM sync_state WHERE local_path = ? AND last_modified = ? AND size = ?",
+        "SELECT file_hash FROM sync_state
+         WHERE local_path = ? AND last_modified = ? AND size = ?
+           AND status = 'SYNCED' AND file_hash != ''",
     )
     .bind(path)
     .bind(mtime)
@@ -138,6 +140,46 @@ mod tests {
             None
         );
     }
+
+    #[tokio::test]
+    async fn failed_state_clears_hash_and_is_never_cached() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE sync_state (
+                local_path TEXT PRIMARY KEY,
+                file_hash TEXT NOT NULL,
+                last_modified INTEGER NOT NULL,
+                size INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                remote_id TEXT
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        update_sync_state(&pool, "photo.jpg", "old-hash", 42, 123, "SYNCED", None)
+            .await
+            .unwrap();
+        mark_sync_failed(&pool, "photo.jpg", 42, 123)
+            .await
+            .unwrap();
+
+        assert_eq!(get_cached_hash(&pool, "photo.jpg", 42, 123).await, None);
+
+        use sqlx::Row;
+        let row = sqlx::query("SELECT file_hash, status FROM sync_state WHERE local_path = ?")
+            .bind("photo.jpg")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(row.get::<String, _>("file_hash"), "");
+        assert_eq!(row.get::<String, _>("status"), "FAILED");
+    }
 }
 
 pub async fn update_sync_state(
@@ -165,6 +207,30 @@ pub async fn update_sync_state(
     .bind(size)
     .bind(status)
     .bind(remote_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn mark_sync_failed(
+    pool: &SqlitePool,
+    path: &str,
+    mtime: i64,
+    size: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO sync_state (local_path, file_hash, last_modified, size, status, remote_id)
+         VALUES (?, '', ?, ?, 'FAILED', NULL)
+         ON CONFLICT(local_path) DO UPDATE SET
+            file_hash = excluded.file_hash,
+            last_modified = excluded.last_modified,
+            size = excluded.size,
+            status = excluded.status,
+            remote_id = NULL",
+    )
+    .bind(path)
+    .bind(mtime)
+    .bind(size)
     .execute(pool)
     .await?;
     Ok(())
