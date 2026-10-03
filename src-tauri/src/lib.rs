@@ -631,8 +631,6 @@ async fn run_sync_pipeline(
     let scan_failure_count = failures.len();
     let failure_count =
         std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(scan_failure_count));
-    let device_id = format!("{}-IMMICH-DESKTOP", std::env::consts::OS.to_uppercase());
-
     for failure in failures {
         log_to_ui(
             &app,
@@ -819,7 +817,6 @@ async fn run_sync_pipeline(
         futures::stream::iter(to_upload)
             .map(|asset| {
                 let client = client.clone();
-                let device_id = device_id.clone();
                 let app = app.clone();
                 let pool = pool.clone();
                 let completed_bytes = completed_bytes.clone();
@@ -833,7 +830,7 @@ async fn run_sync_pipeline(
                         None => return,
                     };
                     let _ = app.emit("sync-progress", &asset.path);
-                    match client.upload_asset(&asset.path, &device_id, &hash).await {
+                    match client.upload_asset(&asset.path, &hash).await {
                         Ok(remote_id) => {
                             if let Err(error) = db::update_sync_state(
                                 &pool,

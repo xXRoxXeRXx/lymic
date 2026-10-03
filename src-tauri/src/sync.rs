@@ -123,8 +123,11 @@ impl ImmichClient {
     pub async fn validate_connection(&self) -> Result<(), String> {
         let response = self
             .client
-            .get(self.endpoint_url("server/config"))
+            // An empty bulk check validates both reachability and the API key without
+            // relying on the deprecated server/config endpoint.
+            .post(self.endpoint_url("assets/bulk-upload-check"))
             .header("x-api-key", &self.api_key)
+            .json(&json!({ "assets": [] }))
             .send()
             .await
             .map_err(|_| "Connection failed".to_string())?;
@@ -180,12 +183,7 @@ impl ImmichClient {
     }
 
     /// Upload a single asset.
-    pub async fn upload_asset(
-        &self,
-        path: &str,
-        device_id: &str,
-        precomputed_hash: &str,
-    ) -> Result<String, String> {
+    pub async fn upload_asset(&self, path: &str, precomputed_hash: &str) -> Result<String, String> {
         let url = self.endpoint_url("assets");
         let path_buf = std::path::PathBuf::from(path);
         let file_name = path_buf
@@ -221,8 +219,6 @@ impl ImmichClient {
         .file_name(file_name);
 
         let mut form = reqwest::multipart::Form::new()
-            .text("deviceAssetId", path.to_string())
-            .text("deviceId", device_id.to_string())
             .text("fileCreatedAt", created_at_iso)
             .text("fileModifiedAt", modified_at_iso)
             .part("assetData", asset_part);
@@ -436,9 +432,22 @@ fn parse_bulk_check_response(
         }
         *remaining -= 1;
 
-        match action {
-            "accept" => {}
-            "reject" => existing.push(id.to_string()),
+        match (
+            action,
+            result.get("reason").and_then(serde_json::Value::as_str),
+        ) {
+            ("accept", None) | ("accept", Some(_)) => {}
+            // Older Immich versions did not include a reason for rejected assets.
+            ("reject", None) | ("reject", Some("duplicate")) => existing.push(id.to_string()),
+            ("reject", Some("unsupported-format")) => {
+                return Err(format!("Asset rejected as unsupported format: {}", id));
+            }
+            ("reject", Some(reason)) => {
+                return Err(format!(
+                    "Asset rejected with unknown reason '{}': {}",
+                    reason, id
+                ));
+            }
             _ => {
                 return Err(format!(
                     "Invalid bulk-check response: unknown action '{}'",
@@ -504,27 +513,27 @@ mod tests {
         let cases = [
             (
                 "https://immich.example",
-                "https://immich.example/api/server/config",
+                "https://immich.example/api/assets/bulk-upload-check",
             ),
             (
                 "https://immich.example/",
-                "https://immich.example/api/server/config",
+                "https://immich.example/api/assets/bulk-upload-check",
             ),
             (
                 "https://immich.example/api",
-                "https://immich.example/api/server/config",
+                "https://immich.example/api/assets/bulk-upload-check",
             ),
             (
                 "https://immich.example/api/",
-                "https://immich.example/api/server/config",
+                "https://immich.example/api/assets/bulk-upload-check",
             ),
             (
                 "https://immich.example/custom/path",
-                "https://immich.example/custom/path/api/server/config",
+                "https://immich.example/custom/path/api/assets/bulk-upload-check",
             ),
             (
                 "https://immich.example:8443",
-                "https://immich.example:8443/api/server/config",
+                "https://immich.example:8443/api/assets/bulk-upload-check",
             ),
         ];
 
@@ -532,7 +541,7 @@ mod tests {
             let client = ImmichClient::new(server_url.to_string(), "key".to_string())
                 .expect("HTTPS URL should be accepted");
             assert_eq!(
-                client.endpoint_url("/server/config").as_str(),
+                client.endpoint_url("/assets/bulk-upload-check").as_str(),
                 expected_endpoint
             );
         }
@@ -561,6 +570,16 @@ mod tests {
         ] {
             assert!(parse_bulk_check_response(&invalid, &hashes).is_err());
         }
+
+        let unsupported_format = json!({
+            "results": [
+                { "id": "first", "action": "reject", "reason": "unsupported-format" },
+                { "id": "second", "action": "accept" }
+            ]
+        });
+        assert!(parse_bulk_check_response(&unsupported_format, &hashes)
+            .unwrap_err()
+            .contains("unsupported format"));
     }
 
     #[test]
