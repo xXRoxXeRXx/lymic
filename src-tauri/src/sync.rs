@@ -68,8 +68,8 @@ impl fmt::Display for BulkCheckError {
 
 impl ImmichClient {
     pub fn new(server_url: String, api_key: String) -> Result<Self, String> {
-        let mut base_url = Url::parse(server_url.trim())
-            .map_err(|_| "Invalid server URL".to_string())?;
+        let mut base_url =
+            Url::parse(server_url.trim()).map_err(|_| "Invalid server URL".to_string())?;
 
         if base_url.scheme() != "https" {
             return Err("Only HTTPS server URLs are supported".to_string());
@@ -131,7 +131,6 @@ impl ImmichClient {
         Ok(())
     }
 
-
     pub async fn check_assets_exist(
         &self,
         hashes: Vec<String>,
@@ -140,7 +139,7 @@ impl ImmichClient {
             return Ok(Vec::new());
         }
         let url = self.endpoint_url("assets/bulk-upload-check");
-        
+
         // Correct DTO: { "assets": [ { "id": "...", "checksum": "..." } ] }
         let assets_items: Vec<serde_json::Value> = hashes
             .iter()
@@ -162,9 +161,12 @@ impl ImmichClient {
 
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES)
             .await
-            .map_err(|e| BulkCheckError::Retryable(format!("Invalid bulk-check response: {}", e)))?;
-        let data: serde_json::Value = serde_json::from_slice(&body)
-            .map_err(|e| BulkCheckError::Retryable(format!("Invalid bulk-check response: {}", e)))?;
+            .map_err(|e| {
+                BulkCheckError::Retryable(format!("Invalid bulk-check response: {}", e))
+            })?;
+        let data: serde_json::Value = serde_json::from_slice(&body).map_err(|e| {
+            BulkCheckError::Retryable(format!("Invalid bulk-check response: {}", e))
+        })?;
 
         parse_bulk_check_response(&data, &hashes).map_err(BulkCheckError::Retryable)
     }
@@ -224,8 +226,7 @@ impl ImmichClient {
                 .and_then(|n| n.to_str())
                 .unwrap_or("file.xmp")
                 .to_string();
-            let sidecar_bytes =
-                std::fs::read(&sidecar_path).map_err(|e| e.to_string())?;
+            let sidecar_bytes = std::fs::read(&sidecar_path).map_err(|e| e.to_string())?;
             form = form.part(
                 "sidecarData",
                 reqwest::multipart::Part::bytes(sidecar_bytes).file_name(sidecar_name),
@@ -249,7 +250,10 @@ impl ImmichClient {
                 .map_err(|e| format!("Invalid upload response: {}", e))?;
             Ok(data["id"].as_str().unwrap_or("").to_string())
         } else {
-            Err(format!("Upload failed: {}", response_status_error(response).await))
+            Err(format!(
+                "Upload failed: {}",
+                response_status_error(response).await
+            ))
         }
     }
 }
@@ -267,7 +271,9 @@ async fn bulk_check_response_error(response: Response) -> BulkCheckError {
     let status = response.status();
     let detail = response_error_detail(response).await;
     match bulk_check_status_error(status) {
-        BulkCheckError::Retryable(message) => BulkCheckError::Retryable(format!("{}{}", message, detail)),
+        BulkCheckError::Retryable(message) => {
+            BulkCheckError::Retryable(format!("{}{}", message, detail))
+        }
         BulkCheckError::NonRetryable(message) => {
             BulkCheckError::NonRetryable(format!("{}{}", message, detail))
         }
@@ -309,9 +315,18 @@ async fn read_error_body_capped(mut response: Response, max_bytes: usize) -> Str
     }
 }
 
-async fn read_response_body_limited(mut response: Response, max_bytes: usize) -> Result<Vec<u8>, String> {
-    if response.content_length().is_some_and(|length| length > max_bytes as u64) {
-        return Err(format!("response body exceeds {} KiB limit", max_bytes / 1024));
+async fn read_response_body_limited(
+    mut response: Response,
+    max_bytes: usize,
+) -> Result<Vec<u8>, String> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        return Err(format!(
+            "response body exceeds {} KiB limit",
+            max_bytes / 1024
+        ));
     }
 
     let capacity = response
@@ -321,7 +336,10 @@ async fn read_response_body_limited(mut response: Response, max_bytes: usize) ->
     let mut body = Vec::with_capacity(capacity);
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
         if chunk.len() > max_bytes.saturating_sub(body.len()) {
-            return Err(format!("response body exceeds {} KiB limit", max_bytes / 1024));
+            return Err(format!(
+                "response body exceeds {} KiB limit",
+                max_bytes / 1024
+            ));
         }
         body.extend_from_slice(&chunk);
     }
@@ -372,7 +390,12 @@ fn parse_bulk_check_response(
         match action {
             "accept" => {}
             "reject" => existing.push(id.to_string()),
-            _ => return Err(format!("Invalid bulk-check response: unknown action '{}'", action)),
+            _ => {
+                return Err(format!(
+                    "Invalid bulk-check response: unknown action '{}'",
+                    action
+                ))
+            }
         }
     }
 
@@ -429,10 +452,22 @@ mod tests {
     #[test]
     fn normalizes_secure_server_urls() {
         let cases = [
-            ("https://immich.example", "https://immich.example/api/server/config"),
-            ("https://immich.example/", "https://immich.example/api/server/config"),
-            ("https://immich.example/api", "https://immich.example/api/server/config"),
-            ("https://immich.example/api/", "https://immich.example/api/server/config"),
+            (
+                "https://immich.example",
+                "https://immich.example/api/server/config",
+            ),
+            (
+                "https://immich.example/",
+                "https://immich.example/api/server/config",
+            ),
+            (
+                "https://immich.example/api",
+                "https://immich.example/api/server/config",
+            ),
+            (
+                "https://immich.example/api/",
+                "https://immich.example/api/server/config",
+            ),
             (
                 "https://immich.example/custom/path",
                 "https://immich.example/custom/path/api/server/config",
@@ -446,7 +481,10 @@ mod tests {
         for (server_url, expected_endpoint) in cases {
             let client = ImmichClient::new(server_url.to_string(), "key".to_string())
                 .expect("HTTPS URL should be accepted");
-            assert_eq!(client.endpoint_url("/server/config").as_str(), expected_endpoint);
+            assert_eq!(
+                client.endpoint_url("/server/config").as_str(),
+                expected_endpoint
+            );
         }
     }
 
@@ -490,7 +528,10 @@ mod tests {
         )
         .await;
 
-        assert_eq!(read_response_body_limited(response, 4).await.unwrap(), b"test");
+        assert_eq!(
+            read_response_body_limited(response, 4).await.unwrap(),
+            b"test"
+        );
     }
 
     #[tokio::test]
@@ -535,7 +576,9 @@ mod tests {
 
         let detail = read_error_body_capped(response, MAX_ERROR_RESPONSE_BYTES).await;
         assert!(detail.ends_with("... [truncated]"));
-        assert_eq!(detail.len(), MAX_ERROR_RESPONSE_BYTES + ": ".len() + "... [truncated]".len());
+        assert_eq!(
+            detail.len(),
+            MAX_ERROR_RESPONSE_BYTES + ": ".len() + "... [truncated]".len()
+        );
     }
 }
-

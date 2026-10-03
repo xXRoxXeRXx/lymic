@@ -76,7 +76,12 @@ pub async fn remove_folder(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error
     Ok(())
 }
 
-pub async fn get_cached_hash(pool: &SqlitePool, path: &str, mtime: i64, size: i64) -> Option<String> {
+pub async fn get_cached_hash(
+    pool: &SqlitePool,
+    path: &str,
+    mtime: i64,
+    size: i64,
+) -> Option<String> {
     let result = sqlx::query(
         "SELECT file_hash FROM sync_state
          WHERE local_path = ? AND last_modified = ? AND size = ?
@@ -165,9 +170,7 @@ mod tests {
         update_sync_state(&pool, "photo.jpg", "old-hash", 42, 123, "SYNCED", None)
             .await
             .unwrap();
-        mark_sync_failed(&pool, "photo.jpg", 42, 123)
-            .await
-            .unwrap();
+        mark_sync_failed(&pool, "photo.jpg", 42, 123).await.unwrap();
 
         assert_eq!(get_cached_hash(&pool, "photo.jpg", 42, 123).await, None);
 

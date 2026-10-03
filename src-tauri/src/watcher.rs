@@ -84,8 +84,10 @@ mod tests {
         send_or_request_rescan(&tx, 2, &dirty, &notify);
 
         assert!(dirty.load(Ordering::Acquire));
-        assert!(tokio::time::timeout(std::time::Duration::ZERO, notify.notified())
-            .await
-            .is_ok());
+        assert!(
+            tokio::time::timeout(std::time::Duration::ZERO, notify.notified())
+                .await
+                .is_ok()
+        );
     }
 }

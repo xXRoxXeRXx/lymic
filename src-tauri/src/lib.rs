@@ -3,12 +3,12 @@ mod db;
 mod sync;
 mod watcher;
 
-use tauri::menu::{Menu, MenuItem, MenuItemKind};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
-use tauri::{Emitter, Manager};
 use futures::{StreamExt, TryStreamExt};
-use tauri_plugin_notification::NotificationExt;
 use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::menu::{Menu, MenuItem, MenuItemKind};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
 
 struct SyncState(AtomicBool);
 struct SyncCoordinator(std::sync::Arc<tokio::sync::Mutex<()>>);
@@ -41,13 +41,19 @@ impl Drop for SyncIdleEmitter {
 // Defined once and reused in both start_sync and the watcher path.
 // ---------------------------------------------------------------------------
 // removed redundant `as &[&str]` cast.
-const MEDIA_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "heic", "heif", "mp4", "mov", "avi"];
+const MEDIA_EXTENSIONS: &[&str] = &[
+    "jpg", "jpeg", "png", "gif", "heic", "heif", "mp4", "mov", "avi",
+];
 
 fn is_media_file(path: &std::path::Path) -> bool {
     // eq_ignore_ascii_case avoids a heap allocation per file.
     path.extension()
         .and_then(|e| e.to_str())
-        .map(|e| MEDIA_EXTENSIONS.iter().any(|ext| e.eq_ignore_ascii_case(ext)))
+        .map(|e| {
+            MEDIA_EXTENSIONS
+                .iter()
+                .any(|ext| e.eq_ignore_ascii_case(ext))
+        })
         .unwrap_or(false)
 }
 
@@ -100,11 +106,7 @@ fn scan_folder_for_media(path: &std::path::Path) -> ScanResult {
             }
             Ok(_) => {}
             Err(error) => result.failures.push(FileFailure {
-                path: error
-                    .path()
-                    .unwrap_or(path)
-                    .to_string_lossy()
-                    .to_string(),
+                path: error.path().unwrap_or(path).to_string_lossy().to_string(),
                 error: format!("Could not scan path: {}", error),
             }),
         }
@@ -112,9 +114,7 @@ fn scan_folder_for_media(path: &std::path::Path) -> ScanResult {
     result
 }
 
-async fn scan_folders_for_media(
-    paths: Vec<std::path::PathBuf>,
-) -> Result<ScanResult, String> {
+async fn scan_folders_for_media(paths: Vec<std::path::PathBuf>) -> Result<ScanResult, String> {
     tokio::task::spawn_blocking(move || {
         let mut result = ScanResult::default();
         for path in paths {
@@ -128,9 +128,7 @@ async fn scan_folders_for_media(
     .map_err(|e| format!("Media scan task failed: {}", e))
 }
 
-async fn scan_paths_for_media(
-    paths: Vec<std::path::PathBuf>,
-) -> Result<ScanResult, String> {
+async fn scan_paths_for_media(paths: Vec<std::path::PathBuf>) -> Result<ScanResult, String> {
     tokio::task::spawn_blocking(move || {
         let mut result = ScanResult::default();
         for path in paths {
@@ -173,7 +171,10 @@ async fn add_event_paths(
         }
     }
 
-    for scan_result in [scan_folders_for_media(directories).await?, scan_paths_for_media(files).await?] {
+    for scan_result in [
+        scan_folders_for_media(directories).await?,
+        scan_paths_for_media(files).await?,
+    ] {
         for asset in scan_result.files {
             files_buffer.insert(asset.path.clone(), asset);
         }
@@ -187,11 +188,7 @@ async fn add_event_paths(
 // accept a log level so this helper composes correctly if ever
 //           reused for error or warning notifications.
 fn send_notification(app: &tauri::AppHandle, title: &str, body: &str, level: &str) {
-    let _ = app.notification()
-        .builder()
-        .title(title)
-        .body(body)
-        .show();
+    let _ = app.notification().builder().title(title).body(body).show();
     log_to_ui(app, level, body);
 }
 
@@ -255,18 +252,30 @@ async fn get_server_url() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn update_locale(app: tauri::AppHandle, state: tauri::State<'_, LocaleState>, locale: String) -> Result<(), String> {
+fn update_locale(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, LocaleState>,
+    locale: String,
+) -> Result<(), String> {
     let mut current = state.0.lock().map_err(|e| e.to_string())?;
     *current = locale.clone();
-    
+
     // Update tray menu labels
     let quit_label = if locale == "de" { "Beenden" } else { "Quit" };
-    let show_label = if locale == "de" { "Fenster anzeigen" } else { "Show Window" };
-    let sync_label = if locale == "de" { "Jetzt synchronisieren" } else { "Sync Now" };
+    let show_label = if locale == "de" {
+        "Fenster anzeigen"
+    } else {
+        "Show Window"
+    };
+    let sync_label = if locale == "de" {
+        "Jetzt synchronisieren"
+    } else {
+        "Sync Now"
+    };
 
     let tray_menu = app.state::<TrayMenuState>();
     let menu = &tray_menu.0;
-    
+
     if let Some(MenuItemKind::MenuItem(item)) = menu.get("quit") {
         let _ = item.set_text(quit_label);
     }
@@ -276,7 +285,7 @@ fn update_locale(app: tauri::AppHandle, state: tauri::State<'_, LocaleState>, lo
     if let Some(MenuItemKind::MenuItem(item)) = menu.get("sync") {
         let _ = item.set_text(sync_label);
     }
-    
+
     Ok(())
 }
 
@@ -293,12 +302,19 @@ async fn add_folder(
     let id = db::add_folder(pool.inner(), &path)
         .await
         .map_err(|e| e.to_string())?;
-    
+
     let mut w = watcher.lock().await;
     // warn when the path doesn't exist (e.g. offline drive).
     match watcher::watch_path(&mut w, &path) {
-        Ok(false) => log_to_ui(&app, "WARN", &format!("Folder '{}' does not exist; watching deferred until it appears.", path)),
-        Err(e)   => log_to_ui(&app, "WARN", &format!("Could not watch '{}': {}", path, e)),
+        Ok(false) => log_to_ui(
+            &app,
+            "WARN",
+            &format!(
+                "Folder '{}' does not exist; watching deferred until it appears.",
+                path
+            ),
+        ),
+        Err(e) => log_to_ui(&app, "WARN", &format!("Could not watch '{}': {}", path, e)),
         Ok(true) => {}
     }
 
@@ -307,13 +323,14 @@ async fn add_folder(
     let coordinator = sync_coordinator.0.clone();
     let path_clone = path.clone();
     tauri::async_runtime::spawn(async move {
-        let scan_result = match scan_folders_for_media(vec![std::path::PathBuf::from(path_clone)]).await {
-            Ok(result) => result,
-            Err(error) => {
-                log_to_ui(&app, "ERROR", &error);
-                return;
-            }
-        };
+        let scan_result =
+            match scan_folders_for_media(vec![std::path::PathBuf::from(path_clone)]).await {
+                Ok(result) => result,
+                Err(error) => {
+                    log_to_ui(&app, "ERROR", &error);
+                    return;
+                }
+            };
         if let Ok(Some(creds)) = auth::get_credentials() {
             if let Some(client) = create_authenticated_client(&app, creds) {
                 if let Err(error) = run_sync_pipeline(
@@ -339,7 +356,9 @@ async fn add_folder(
 async fn get_folders(
     pool: tauri::State<'_, sqlx::SqlitePool>,
 ) -> Result<Vec<db::WatchedFolder>, String> {
-    db::get_folders(pool.inner()).await.map_err(|e| e.to_string())
+    db::get_folders(pool.inner())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -364,7 +383,11 @@ async fn remove_folder(
         let mut w = watcher.lock().await;
         // log unwatch failures instead of silently discarding them.
         if let Err(e) = watcher::unwatch_path(&mut w, &folder.path) {
-            log_to_ui(&app, "WARN", &format!("Failed to unwatch '{}': {}", folder.path, e));
+            log_to_ui(
+                &app,
+                "WARN",
+                &format!("Failed to unwatch '{}': {}", folder.path, e),
+            );
         }
     }
     Ok(())
@@ -401,7 +424,8 @@ async fn run_sync_pipeline(
     let completed_bytes = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let success_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let scan_failure_count = failures.len();
-    let failure_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(scan_failure_count));
+    let failure_count =
+        std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(scan_failure_count));
     let device_id = format!("{}-IMMICH-DESKTOP", std::env::consts::OS.to_uppercase());
 
     for failure in failures {
@@ -411,13 +435,25 @@ async fn run_sync_pipeline(
             &format!("{}: {}", failure.path, failure.error),
         );
         if let Err(error) = db::mark_sync_failed(&pool, &failure.path, 0, 0).await {
-            log_to_ui(&app, "ERROR", &format!("Could not persist failure for {}: {}", failure.path, error));
+            log_to_ui(
+                &app,
+                "ERROR",
+                &format!("Could not persist failure for {}: {}", failure.path, error),
+            );
         }
     }
 
     let prefix = if is_auto { "Auto-sync" } else { "Sync" };
-    log_to_ui(&app, "INFO", &format!("{}: Starting pipeline for {} files ({:.2} MB)", 
-        prefix, total_files, total_bytes as f64 / 1024.0 / 1024.0));
+    log_to_ui(
+        &app,
+        "INFO",
+        &format!(
+            "{}: Starting pipeline for {} files ({:.2} MB)",
+            prefix,
+            total_files,
+            total_bytes as f64 / 1024.0 / 1024.0
+        ),
+    );
 
     // Pipeline Stage 1: Parallel Hashing (Concurrency = 4)
     let hashed_stream = futures::stream::iter(files)
@@ -440,24 +476,55 @@ async fn run_sync_pipeline(
                 } else {
                     // SHA-1 is blocking CPU+I/O — run it off the async executor.
                     let path_for_hash = path.clone();
-                    match tokio::task::spawn_blocking(move || sync::calculate_hash(&path_for_hash)).await {
+                    match tokio::task::spawn_blocking(move || sync::calculate_hash(&path_for_hash))
+                        .await
+                    {
                         Ok(Ok(h)) => {
-                            let _ = db::update_sync_state(&pool, &path, &h, mtime, size as i64, "PENDING", None).await;
+                            let _ = db::update_sync_state(
+                                &pool,
+                                &path,
+                                &h,
+                                mtime,
+                                size as i64,
+                                "PENDING",
+                                None,
+                            )
+                            .await;
                             h
                         }
                         Ok(Err(error)) => {
-                            log_to_ui(&app, "ERROR", &format!("Hashing failed for {}: {}", path, error));
-                            if let Err(error) = db::mark_sync_failed(&pool, &path, mtime, size as i64).await {
-                                log_to_ui(&app, "ERROR", &format!("Could not persist failure for {}: {}", path, error));
+                            log_to_ui(
+                                &app,
+                                "ERROR",
+                                &format!("Hashing failed for {}: {}", path, error),
+                            );
+                            if let Err(error) =
+                                db::mark_sync_failed(&pool, &path, mtime, size as i64).await
+                            {
+                                log_to_ui(
+                                    &app,
+                                    "ERROR",
+                                    &format!("Could not persist failure for {}: {}", path, error),
+                                );
                             }
                             failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
                             return None;
                         }
                         Err(error) => {
-                            log_to_ui(&app, "ERROR", &format!("Hashing task failed for {}: {}", path, error));
-                            if let Err(error) = db::mark_sync_failed(&pool, &path, mtime, size as i64).await {
-                                log_to_ui(&app, "ERROR", &format!("Could not persist failure for {}: {}", path, error));
+                            log_to_ui(
+                                &app,
+                                "ERROR",
+                                &format!("Hashing task failed for {}: {}", path, error),
+                            );
+                            if let Err(error) =
+                                db::mark_sync_failed(&pool, &path, mtime, size as i64).await
+                            {
+                                log_to_ui(
+                                    &app,
+                                    "ERROR",
+                                    &format!("Could not persist failure for {}: {}", path, error),
+                                );
                             }
                             failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
@@ -465,7 +532,12 @@ async fn run_sync_pipeline(
                         }
                     }
                 };
-                Some(sync::SyncAsset { path, size, hash: Some(hash), mtime })
+                Some(sync::SyncAsset {
+                    path,
+                    size,
+                    hash: Some(hash),
+                    mtime,
+                })
             }
         })
         .buffer_unordered(4)
@@ -481,14 +553,25 @@ async fn run_sync_pipeline(
             let completed_bytes = completed_bytes.clone();
             async move {
                 let hashes: Vec<String> = chunk.iter().filter_map(|a| a.hash.clone()).collect();
-                let existing_hashes = check_assets_exist_with_backoff(&client, hashes, &app).await?;
+                let existing_hashes =
+                    check_assets_exist_with_backoff(&client, hashes, &app).await?;
 
                 let mut to_upload = Vec::new();
                 for asset in chunk {
                     if let Some(hash) = &asset.hash {
                         if existing_hashes.contains(hash) {
-                            let _ = db::update_sync_state(&pool, &asset.path, hash, asset.mtime, asset.size as i64, "SYNCED", None).await;
-                            completed_bytes.fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst);
+                            let _ = db::update_sync_state(
+                                &pool,
+                                &asset.path,
+                                hash,
+                                asset.mtime,
+                                asset.size as i64,
+                                "SYNCED",
+                                None,
+                            )
+                            .await;
+                            completed_bytes
+                                .fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst);
                         } else {
                             to_upload.push(asset);
                         }
@@ -521,18 +604,47 @@ async fn run_sync_pipeline(
                     let _ = app.emit("sync-progress", &asset.path);
                     match client.upload_asset(&asset.path, &device_id, &hash).await {
                         Ok(remote_id) => {
-                            let _ = db::update_sync_state(&pool, &asset.path, &hash, asset.mtime, asset.size as i64, "SYNCED", Some(&remote_id)).await;
+                            let _ = db::update_sync_state(
+                                &pool,
+                                &asset.path,
+                                &hash,
+                                asset.mtime,
+                                asset.size as i64,
+                                "SYNCED",
+                                Some(&remote_id),
+                            )
+                            .await;
                             success_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                         }
                         Err(e) => {
-                            log_to_ui(&app, "ERROR", &format!("Upload failed for {}: {}", asset.path, e));
-                            if let Err(error) = db::mark_sync_failed(&pool, &asset.path, asset.mtime, asset.size as i64).await {
-                                log_to_ui(&app, "ERROR", &format!("Could not persist failure for {}: {}", asset.path, error));
+                            log_to_ui(
+                                &app,
+                                "ERROR",
+                                &format!("Upload failed for {}: {}", asset.path, e),
+                            );
+                            if let Err(error) = db::mark_sync_failed(
+                                &pool,
+                                &asset.path,
+                                asset.mtime,
+                                asset.size as i64,
+                            )
+                            .await
+                            {
+                                log_to_ui(
+                                    &app,
+                                    "ERROR",
+                                    &format!(
+                                        "Could not persist failure for {}: {}",
+                                        asset.path, error
+                                    ),
+                                );
                             }
                             failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
                     }
-                    let done = completed_bytes.fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst) + asset.size;
+                    let done = completed_bytes
+                        .fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst)
+                        + asset.size;
                     let pct = ((done as f64 / total_bytes as f64 * 100.0) as u32).min(100);
                     let _ = app.emit("sync-progress-percent", pct);
                 }
@@ -547,28 +659,33 @@ async fn run_sync_pipeline(
     let processed = total_files.saturating_sub(failed.saturating_sub(scan_failure_count));
     if !is_auto || uploaded > 0 || failed > 0 {
         let locale_state = app.state::<LocaleState>();
-        let locale = locale_state.0.lock().map(|l| l.clone()).unwrap_or_else(|_| "en".to_string());
-        
+        let locale = locale_state
+            .0
+            .lock()
+            .map(|l| l.clone())
+            .unwrap_or_else(|_| "en".to_string());
+
         let title = if locale == "de" {
             format!("{} Abgeschlossen", prefix)
         } else {
             format!("{} Complete", prefix)
         };
-        
+
         let body = if locale == "de" {
-            format!("{} Dateien verarbeitet. {} neue Uploads. {} Fehler.", processed, uploaded, failed)
+            format!(
+                "{} Dateien verarbeitet. {} neue Uploads. {} Fehler.",
+                processed, uploaded, failed
+            )
         } else {
-            format!("Processed {} files. {} new uploads. {} errors.", processed, uploaded, failed)
+            format!(
+                "Processed {} files. {} new uploads. {} errors.",
+                processed, uploaded, failed
+            )
         };
 
-        send_notification(
-            &app,
-            &title,
-            &body,
-            "INFO",
-        );
+        send_notification(&app, &title, &body, "INFO");
     }
-    
+
     Ok(SyncSummary {
         processed,
         uploaded,
@@ -626,19 +743,29 @@ async fn start_sync(
     sync_coordinator: tauri::State<'_, SyncCoordinator>,
 ) -> Result<SyncSummary, String> {
     // Attempt to set sync_state to true. If it was already true, return early.
-    if sync_state.0.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-        log_to_ui(&app, "WARN", "Manual sync already in progress. Ignoring request.");
+    if sync_state
+        .0
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        log_to_ui(
+            &app,
+            "WARN",
+            "Manual sync already in progress. Ignoring request.",
+        );
         return Err("Sync already in progress".to_string());
     }
 
     log_to_ui(&app, "INFO", "Starting manual synchronization...");
-    
+
     // Ensure we reset the state when we're done, even if we fail.
     let result = async {
-        let folders = db::get_folders(pool.inner()).await.map_err(|e| e.to_string())?;
+        let folders = db::get_folders(pool.inner())
+            .await
+            .map_err(|e| e.to_string())?;
         let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-        let client = create_authenticated_client(&app, credentials)
-            .ok_or("Invalid server configuration")?;
+        let client =
+            create_authenticated_client(&app, credentials).ok_or("Invalid server configuration")?;
 
         for folder in &folders {
             log_to_ui(&app, "INFO", &format!("Scanning folder: {}", folder.path));
@@ -656,13 +783,14 @@ async fn start_sync(
             scan_result,
             false,
             sync_coordinator.0.clone(),
-        ).await
-    }.await;
+        )
+        .await
+    }
+    .await;
 
     sync_state.0.store(false, Ordering::SeqCst);
     result
 }
-
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -715,7 +843,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 // Give the UI a small delay to ensure it's ready for events
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                
+
                 if let Ok(Some(creds)) = auth::get_credentials() {
                     let pool = handle_sync.state::<sqlx::SqlitePool>().inner().clone();
                     if let Ok(folders) = db::get_folders(&pool).await {
@@ -733,7 +861,7 @@ pub fn run() {
                                 return;
                             }
                         };
-                        
+
                         if !scan_result.files.is_empty() || !scan_result.failures.is_empty() {
                             if let Some(client) = create_authenticated_client(&handle_sync, creds) {
                                 let coordinator = handle_sync.state::<SyncCoordinator>().0.clone();
@@ -901,7 +1029,7 @@ pub fn run() {
                     } = event
                     {
                         let app = tray.app_handle();
-                        
+
                         // On macOS, the menu usually shows on left click.
                         // On Windows, we often want to show the window on left click.
                         #[cfg(not(target_os = "macos"))]
@@ -915,7 +1043,7 @@ pub fn run() {
             // On macOS, it's standard to show the menu on left click.
             #[cfg(target_os = "macos")]
             let tray_builder = tray_builder.show_menu_on_left_click(true);
-            
+
             #[cfg(not(target_os = "macos"))]
             let tray_builder = tray_builder.show_menu_on_left_click(false);
 
