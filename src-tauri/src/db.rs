@@ -95,6 +95,51 @@ pub async fn get_cached_hash(pool: &SqlitePool, path: &str, mtime: i64, size: i6
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    #[tokio::test]
+    async fn cached_hash_misses_when_mtime_differs_within_a_second() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE sync_state (
+                local_path TEXT PRIMARY KEY,
+                file_hash TEXT NOT NULL,
+                last_modified INTEGER NOT NULL,
+                size INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                remote_id TEXT
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        update_sync_state(
+            &pool,
+            "photo.jpg",
+            "cached-hash",
+            1_700_000_000_100_000_000,
+            123,
+            "SYNCED",
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            get_cached_hash(&pool, "photo.jpg", 1_700_000_000_200_000_000, 123).await,
+            None
+        );
+    }
+}
+
 pub async fn update_sync_state(
     pool: &SqlitePool,
     path: &str,

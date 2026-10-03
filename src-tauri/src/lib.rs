@@ -44,6 +44,45 @@ fn scan_folder_for_media(path: &std::path::Path) -> Vec<(String, u64)> {
     files
 }
 
+async fn scan_folders_for_media(
+    paths: Vec<std::path::PathBuf>,
+) -> Result<Vec<(String, u64)>, String> {
+    tokio::task::spawn_blocking(move || {
+        paths
+            .iter()
+            .flat_map(|path| scan_folder_for_media(path))
+            .collect()
+    })
+    .await
+    .map_err(|e| format!("Media scan task failed: {}", e))
+}
+
+async fn add_event_paths(
+    paths_buffer: &mut std::collections::HashSet<String>,
+    event: notify::Event,
+) -> Result<(), String> {
+    let mut directories = Vec::new();
+    for path in event.paths {
+        if path.is_dir() {
+            directories.push(path);
+        } else if path.is_file() && is_media_file(&path) {
+            if let Some(path) = path.to_str() {
+                paths_buffer.insert(path.to_string());
+            }
+        }
+    }
+
+    if !directories.is_empty() {
+        paths_buffer.extend(
+            scan_folders_for_media(directories)
+                .await?
+                .into_iter()
+                .map(|(path, _)| path),
+        );
+    }
+    Ok(())
+}
+
 // accept a log level so this helper composes correctly if ever
 //           reused for error or warning notifications.
 fn send_notification(app: &tauri::AppHandle, title: &str, body: &str, level: &str) {
@@ -260,8 +299,16 @@ async fn run_sync_pipeline(
 
                 // if timestamps are unavailable skip the cache entirely
                 //         to avoid returning a stale hash when content changed.
-                let mtime_opt = metadata.modified().or_else(|_| metadata.created()).ok()
-                    .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
+                let mtime_opt = metadata
+                    .modified()
+                    .or_else(|_| metadata.created())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    // Seconds plus file size can match after a rapid in-place edit. Preserve
+                    // filesystem timestamp precision so such edits invalidate the hash cache.
+                    // Existing second-precision cache rows deliberately miss once after this
+                    // upgrade and are replaced with precise timestamps on that sync.
+                    .and_then(|d| i64::try_from(d.as_nanos()).ok());
                 let mtime = mtime_opt.unwrap_or(0);
 
                 // Attempt cache hit only when we have a reliable mtime.
@@ -444,10 +491,18 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let handle = app.handle().clone();
-            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            const WATCH_EVENT_QUEUE_CAPACITY: usize = 4_096;
+            let (tx, mut rx) = tokio::sync::mpsc::channel(WATCH_EVENT_QUEUE_CAPACITY);
+            let rescan_requested = std::sync::Arc::new(AtomicBool::new(false));
+            let rescan_notify = std::sync::Arc::new(tokio::sync::Notify::new());
 
             // Initialize Watcher
-            let watcher = watcher::create_watcher(tx).map_err(|e| e.to_string())?;
+            let watcher = watcher::create_watcher(
+                tx,
+                rescan_requested.clone(),
+                rescan_notify.clone(),
+            )
+                .map_err(|e| e.to_string())?;
 
             // if DB init fails, return Err from setup() so the app exits
             //         cleanly instead of silently continuing without managed state.
@@ -499,40 +554,67 @@ pub fn run() {
 
             // Background Task to handle Watcher Events (Batched + debounced)
             let handle_task = handle.clone();
+            let rescan_requested_task = rescan_requested.clone();
+            let rescan_notify_task = rescan_notify.clone();
             tauri::async_runtime::spawn(async move {
                 let mut paths_buffer = std::collections::HashSet::new();
-                while let Some(event) = rx.recv().await {
-                    for p in event.paths {
-                        if p.is_dir() {
-                            // If a directory is created/modified, scan it recursively
-                            for (file_path, _size) in scan_folder_for_media(&p) {
-                                paths_buffer.insert(file_path);
-                            }
-                        } else if p.is_file() && is_media_file(&p) {
-                            if let Some(s) = p.to_str() {
-                                paths_buffer.insert(s.to_string());
+                loop {
+                    tokio::select! {
+                        Some(event) = rx.recv() => {
+                            if let Err(e) = add_event_paths(&mut paths_buffer, event).await {
+                                log_to_ui(&handle_task, "ERROR", &e);
                             }
                         }
+                        _ = rescan_notify_task.notified() => {}
                     }
 
                     // Debounce: wait for 2s of silence before processing
-                    let timeout = tokio::time::Duration::from_secs(2);
+                    let debounce = tokio::time::sleep(tokio::time::Duration::from_secs(2));
+                    tokio::pin!(debounce);
                     loop {
-                        match tokio::time::timeout(timeout, rx.recv()).await {
-                            Ok(Some(next_event)) => {
-                                for p in next_event.paths {
-                                    if p.is_dir() {
-                                        for (file_path, _size) in scan_folder_for_media(&p) {
-                                            paths_buffer.insert(file_path);
-                                        }
-                                    } else if p.is_file() && is_media_file(&p) {
-                                        if let Some(s) = p.to_str() {
-                                            paths_buffer.insert(s.to_string());
-                                        }
-                                    }
+                        tokio::select! {
+                            Some(event) = rx.recv() => {
+                                if let Err(e) = add_event_paths(&mut paths_buffer, event).await {
+                                    log_to_ui(&handle_task, "ERROR", &e);
+                                }
+                                debounce.as_mut().reset(
+                                    tokio::time::Instant::now()
+                                        + tokio::time::Duration::from_secs(2),
+                                );
+                            }
+                            _ = rescan_notify_task.notified() => {}
+                            _ = &mut debounce => break,
+                        }
+                    }
+
+                    if rescan_requested_task.swap(false, Ordering::AcqRel) {
+                        log_to_ui(
+                            &handle_task,
+                            "WARN",
+                            "File watcher event queue overflowed; reconciling all watched folders.",
+                        );
+                        // The full folder scan is a superset of buffered paths, so discard
+                        // them to avoid duplicate work after an event-stream loss.
+                        paths_buffer.clear();
+                        let pool = handle_task.state::<sqlx::SqlitePool>();
+                        match db::get_folders(pool.inner()).await {
+                            Ok(folders) => {
+                                let folder_paths = folders
+                                    .into_iter()
+                                    .map(|folder| std::path::PathBuf::from(folder.path))
+                                    .collect();
+                                match scan_folders_for_media(folder_paths).await {
+                                    Ok(files) => paths_buffer.extend(
+                                        files.into_iter().map(|(file_path, _)| file_path),
+                                    ),
+                                    Err(e) => log_to_ui(&handle_task, "ERROR", &e),
                                 }
                             }
-                            _ => break, // Timeout or channel closed
+                            Err(e) => log_to_ui(
+                                &handle_task,
+                                "ERROR",
+                                &format!("Could not reconcile watched folders after event loss: {}", e),
+                            ),
                         }
                     }
 
