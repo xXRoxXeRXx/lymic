@@ -74,7 +74,7 @@ impl WatcherState {
     }
 
     pub fn watch_path(&mut self, path: &str) -> notify::Result<WatchRegistration> {
-        self.reconcile_path(path, Path::new(path).exists())
+        self.reconcile_path(path, Path::new(path).is_dir())
     }
 
     pub fn reconcile_path(
@@ -102,7 +102,7 @@ impl WatcherState {
     }
 
     fn stop_watching(&mut self, path: &Path) -> notify::Result<()> {
-        if !self.watched_paths.remove(path) {
+        if !self.watched_paths.contains(path) {
             return Ok(());
         }
 
@@ -111,6 +111,7 @@ impl WatcherState {
                 return Err(error);
             }
         }
+        self.watched_paths.remove(path);
         Ok(())
     }
 }
@@ -197,6 +198,46 @@ mod tests {
             WatchRegistration::PathUnavailable
         );
         assert!(watcher.unwatch_path(path.to_str().unwrap()).is_ok());
+    }
+
+    #[test]
+    fn file_is_not_registered_as_a_directory() {
+        let path = std::env::temp_dir().join(format!(
+            "lymic-watcher-file-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, "not a directory").unwrap();
+        let mut watcher = test_watcher();
+
+        assert_eq!(
+            watcher.watch_path(path.to_str().unwrap()).unwrap(),
+            WatchRegistration::PathUnavailable
+        );
+
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn unwatching_allows_directory_to_be_registered_again() {
+        let path = temporary_directory();
+        let path_string = path.to_str().unwrap();
+        let mut watcher = test_watcher();
+
+        assert_eq!(
+            watcher.watch_path(path_string).unwrap(),
+            WatchRegistration::Registered
+        );
+        watcher.unwatch_path(path_string).unwrap();
+        assert_eq!(
+            watcher.watch_path(path_string).unwrap(),
+            WatchRegistration::Registered
+        );
+
+        std::fs::remove_dir(path).unwrap();
     }
 
     #[test]

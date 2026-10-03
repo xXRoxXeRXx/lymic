@@ -525,37 +525,59 @@ async fn add_folder(
         return Err(message);
     }
 
-    let id = db::add_folder(pool.inner(), &normalized_path_string)
-        .await
-        .map_err(|e| e.to_string())?;
-
     let path = normalized_path_string;
     let path_for_check = PathBuf::from(&path);
-    let is_available = match tokio::task::spawn_blocking(move || path_for_check.exists()).await {
-        Ok(is_available) => is_available,
+    let is_available = match tokio::task::spawn_blocking(move || {
+        std::fs::metadata(path_for_check).map(|metadata| metadata.is_dir())
+    })
+    .await
+    {
+        Ok(Ok(true)) => true,
+        Ok(Ok(false)) => return Err(format!("Path '{}' is not a directory.", path)),
+        Ok(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Ok(Err(error)) => return Err(format!("Could not access folder '{}': {}", path, error)),
         Err(error) => {
-            log_to_ui(
-                &app,
-                "WARN",
-                &format!("Could not check folder '{}': {}", path, error),
-            );
-            false
+            return Err(format!("Could not check folder '{}': {}", path, error));
         }
     };
 
-    let mut w = watcher.lock().await;
-    // warn when the path doesn't exist (e.g. offline drive).
-    match w.reconcile_path(&path, is_available) {
-        Ok(watcher::WatchRegistration::PathUnavailable) => log_to_ui(
+    let registration = if is_available {
+        let mut w = watcher.lock().await;
+        w.reconcile_path(&path, true)
+            .map_err(|error| format!("Could not watch '{}': {}", path, error))?
+    } else {
+        watcher::WatchRegistration::PathUnavailable
+    };
+
+    let id = match db::add_folder(pool.inner(), &path).await {
+        Ok(id) => id,
+        Err(error) => {
+            if registration == watcher::WatchRegistration::Registered {
+                let mut w = watcher.lock().await;
+                if let Err(unwatch_error) = watcher::unwatch_path(&mut w, &path) {
+                    log_to_ui(
+                        &app,
+                        "ERROR",
+                        &format!(
+                            "Could not undo watcher registration for '{}': {}",
+                            path, unwatch_error
+                        ),
+                    );
+                }
+            }
+            return Err(error.to_string());
+        }
+    };
+
+    if registration == watcher::WatchRegistration::PathUnavailable {
+        log_to_ui(
             &app,
             "WARN",
             &format!(
                 "Folder '{}' does not exist; watching deferred until it appears.",
                 path
             ),
-        ),
-        Err(e) => log_to_ui(&app, "WARN", &format!("Could not watch '{}': {}", path, e)),
-        Ok(_) => {}
+        );
     }
 
     // An offline folder will be scanned when the deferred-watch task registers it.
@@ -597,23 +619,42 @@ async fn remove_folder(
         .await
         .map_err(|e| e.to_string())?;
 
-    // delete the DB row first so concurrent readers no longer see
-    //         this folder; then unwatch. This closes the race window where a
-    //         filesystem event could trigger a sync on a just-removed folder.
-    db::remove_folder(pool.inner(), id)
-        .await
-        .map_err(|e| e.to_string())?;
-
     if let Some(folder) = folders.iter().find(|f| f.id == id) {
-        let mut w = watcher.lock().await;
-        // log unwatch failures instead of silently discarding them.
-        if let Err(e) = watcher::unwatch_path(&mut w, &folder.path) {
-            log_to_ui(
-                &app,
-                "WARN",
-                &format!("Failed to unwatch '{}': {}", folder.path, e),
-            );
+        let path = folder.path.clone();
+        {
+            let mut w = watcher.lock().await;
+            if let Err(e) = watcher::unwatch_path(&mut w, &path) {
+                log_to_ui(
+                    &app,
+                    "WARN",
+                    &format!("Failed to unwatch '{}': {}", path, e),
+                );
+                return Err(format!("Failed to unwatch '{}': {}", path, e));
+            }
         }
+
+        if let Err(error) = db::remove_folder(pool.inner(), id).await {
+            let path_for_check = PathBuf::from(&path);
+            let is_available = tokio::task::spawn_blocking(move || path_for_check.is_dir())
+                .await
+                .unwrap_or(false);
+            let mut w = watcher.lock().await;
+            if let Err(rewatch_error) = w.reconcile_path(&path, is_available) {
+                log_to_ui(
+                    &app,
+                    "ERROR",
+                    &format!(
+                        "Could not restore watcher registration for '{}': {}",
+                        path, rewatch_error
+                    ),
+                );
+            }
+            return Err(error.to_string());
+        }
+    } else {
+        db::remove_folder(pool.inner(), id)
+            .await
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -1156,7 +1197,7 @@ pub fn run() {
                             .into_iter()
                             .map(|folder| {
                                 let path = std::path::PathBuf::from(folder.path);
-                                let is_available = path.exists();
+                                let is_available = path.is_dir();
                                 (path, is_available)
                             })
                             .collect::<Vec<_>>()
