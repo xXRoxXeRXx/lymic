@@ -7,11 +7,13 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Read};
+use tokio::io::AsyncReadExt as _;
 use tokio_util::io::ReaderStream;
 use url::Url;
 
 const MAX_ERROR_RESPONSE_BYTES: usize = 8 * 1024;
 const MAX_SUCCESS_RESPONSE_BYTES: usize = 1024 * 1024;
+const MAX_SIDECAR_BYTES: u64 = 10 * 1024 * 1024;
 
 /// Calculate the SHA-1 hash of a file, returned as standard base64.
 ///
@@ -226,17 +228,40 @@ impl ImmichClient {
             .part("assetData", asset_part);
 
         let sidecar_path = path_buf.with_extension("xmp");
-        if sidecar_path.exists() {
+        let sidecar_file = match tokio::fs::File::open(&sidecar_path).await {
+            Ok(file) => Some(file),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(format!(
+                    "Cannot open sidecar {}: {}",
+                    sidecar_path.display(),
+                    error
+                ));
+            }
+        };
+        if let Some(sidecar_file) = sidecar_file {
             let sidecar_name = sidecar_path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("file.xmp")
                 .to_string();
-            let sidecar_bytes = std::fs::read(&sidecar_path).map_err(|e| e.to_string())?;
-            form = form.part(
-                "sidecarData",
-                reqwest::multipart::Part::bytes(sidecar_bytes).file_name(sidecar_name),
-            );
+            let sidecar_metadata = sidecar_file
+                .metadata()
+                .await
+                .map_err(|e| format!("Cannot read sidecar metadata for {}: {}", sidecar_name, e))?;
+            if sidecar_metadata.is_file() {
+                let sidecar_size = sidecar_metadata.len();
+                validate_sidecar_size(sidecar_size)?;
+                let sidecar_stream = ReaderStream::new(sidecar_file.take(sidecar_size));
+                form = form.part(
+                    "sidecarData",
+                    reqwest::multipart::Part::stream_with_length(
+                        reqwest::Body::wrap_stream(sidecar_stream),
+                        sidecar_size,
+                    )
+                    .file_name(sidecar_name),
+                );
+            }
         }
 
         let response = self
@@ -260,6 +285,17 @@ impl ImmichClient {
             ))
         }
     }
+}
+
+fn validate_sidecar_size(size: u64) -> Result<(), String> {
+    if size > MAX_SIDECAR_BYTES {
+        return Err(format!(
+            "XMP sidecar exceeds {} MiB limit (size: {} bytes)",
+            MAX_SIDECAR_BYTES / (1024 * 1024),
+            size
+        ));
+    }
+    Ok(())
 }
 
 fn bulk_check_status_error(status: StatusCode) -> BulkCheckError {
@@ -423,7 +459,8 @@ fn parse_bulk_check_response(
 mod tests {
     use super::{
         bulk_check_status_error, parse_bulk_check_response, parse_upload_response,
-        read_error_body_capped, read_response_body_limited, ImmichClient, MAX_ERROR_RESPONSE_BYTES,
+        read_error_body_capped, read_response_body_limited, validate_sidecar_size, ImmichClient,
+        MAX_ERROR_RESPONSE_BYTES, MAX_SIDECAR_BYTES,
     };
     use reqwest::{Client, Response, StatusCode};
     use serde_json::json;
@@ -549,6 +586,14 @@ mod tests {
         assert!(!bulk_check_status_error(StatusCode::UNAUTHORIZED).is_retryable());
         assert!(!bulk_check_status_error(StatusCode::FORBIDDEN).is_retryable());
         assert!(bulk_check_status_error(StatusCode::INTERNAL_SERVER_ERROR).is_retryable());
+    }
+
+    #[test]
+    fn sidecar_size_limit_allows_boundary_and_rejects_larger_files() {
+        assert!(validate_sidecar_size(MAX_SIDECAR_BYTES).is_ok());
+        let error = validate_sidecar_size(MAX_SIDECAR_BYTES + 1).unwrap_err();
+        assert!(error.contains("exceeds"));
+        assert!(error.contains(&(MAX_SIDECAR_BYTES + 1).to_string()));
     }
 
     #[tokio::test]
