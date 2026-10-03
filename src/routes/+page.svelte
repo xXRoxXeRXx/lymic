@@ -11,6 +11,7 @@
     ChevronRight, ExternalLink, Minus, Activity, Power, Globe
   } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
+  import { isSupportedLocale } from "../lib/i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
 
@@ -34,17 +35,22 @@
   
   // Initialize locale
   const savedLocale = typeof localStorage !== 'undefined' ? localStorage.getItem('lymic-locale') : null;
-  if (savedLocale) {
+  if (isSupportedLocale(savedLocale)) {
     $locale = savedLocale;
+  } else if (savedLocale) {
+    localStorage.removeItem('lymic-locale');
   }
 
   // Persist locale and notify backend
   $effect(() => {
-    const currentLocale = $locale;
-    if (currentLocale) {
-      localStorage.setItem('lymic-locale', currentLocale);
-      invoke('update_locale', { locale: currentLocale }).catch(console.error);
+    if (!isSupportedLocale($locale)) {
+      $locale = 'en';
+      return;
     }
+
+    const currentLocale = $locale;
+    localStorage.setItem('lymic-locale', currentLocale);
+    invoke('update_locale', { locale: currentLocale }).catch(console.error);
   });
 
   interface LogEntry {

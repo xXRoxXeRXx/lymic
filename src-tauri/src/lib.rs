@@ -7,6 +7,7 @@ use futures::{StreamExt, TryStreamExt};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use tauri::menu::{Menu, MenuItem, MenuItemKind};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
@@ -16,6 +17,37 @@ struct SyncState(AtomicBool);
 struct SyncCoordinator(std::sync::Arc<tokio::sync::Mutex<()>>);
 struct LocaleState(std::sync::Mutex<String>);
 struct TrayMenuState(Menu<tauri::Wry>);
+
+#[derive(serde::Deserialize)]
+struct BackendTranslations {
+    tray_quit: String,
+    tray_show: String,
+    tray_sync: String,
+    notification_complete_title: String,
+    notification_complete_body: String,
+}
+
+fn is_supported_locale(locale: &str) -> bool {
+    matches!(locale, "en" | "de")
+}
+
+// The backend consumes its strings from the frontend's translation catalog so the
+// tray and notifications cannot drift from the application language.
+fn backend_translations(locale: &str) -> &'static BackendTranslations {
+    static EN_TRANSLATIONS: OnceLock<BackendTranslations> = OnceLock::new();
+    static DE_TRANSLATIONS: OnceLock<BackendTranslations> = OnceLock::new();
+
+    match locale {
+        "de" => DE_TRANSLATIONS.get_or_init(|| {
+            serde_json::from_str(include_str!("../../src/lib/i18n/de.json"))
+                .expect("German translations must be valid")
+        }),
+        _ => EN_TRANSLATIONS.get_or_init(|| {
+            serde_json::from_str(include_str!("../../src/lib/i18n/en.json"))
+                .expect("English translations must be valid")
+        }),
+    }
+}
 
 const BULK_CHECK_MAX_ATTEMPTS: usize = 3;
 const BULK_CHECK_INITIAL_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1);
@@ -389,33 +421,27 @@ fn update_locale(
     state: tauri::State<'_, LocaleState>,
     locale: String,
 ) -> Result<(), String> {
+    if !is_supported_locale(&locale) {
+        return Err(format!("Unsupported locale: {}", locale));
+    }
+
     let mut current = state.0.lock().map_err(|e| e.to_string())?;
     *current = locale.clone();
 
     // Update tray menu labels
-    let quit_label = if locale == "de" { "Beenden" } else { "Quit" };
-    let show_label = if locale == "de" {
-        "Fenster anzeigen"
-    } else {
-        "Show Window"
-    };
-    let sync_label = if locale == "de" {
-        "Jetzt synchronisieren"
-    } else {
-        "Sync Now"
-    };
+    let translations = backend_translations(&locale);
 
     let tray_menu = app.state::<TrayMenuState>();
     let menu = &tray_menu.0;
 
     if let Some(MenuItemKind::MenuItem(item)) = menu.get("quit") {
-        let _ = item.set_text(quit_label);
+        let _ = item.set_text(&translations.tray_quit);
     }
     if let Some(MenuItemKind::MenuItem(item)) = menu.get("show") {
-        let _ = item.set_text(show_label);
+        let _ = item.set_text(&translations.tray_show);
     }
     if let Some(MenuItemKind::MenuItem(item)) = menu.get("sync") {
-        let _ = item.set_text(sync_label);
+        let _ = item.set_text(&translations.tray_sync);
     }
 
     Ok(())
@@ -883,23 +909,15 @@ async fn run_sync_pipeline(
             .map(|l| l.clone())
             .unwrap_or_else(|_| "en".to_string());
 
-        let title = if locale == "de" {
-            format!("{} Abgeschlossen", prefix)
-        } else {
-            format!("{} Complete", prefix)
-        };
-
-        let body = if locale == "de" {
-            format!(
-                "{} Dateien verarbeitet. {} neue Uploads. {} Fehler.",
-                processed, uploaded, failed
-            )
-        } else {
-            format!(
-                "Processed {} files. {} new uploads. {} errors.",
-                processed, uploaded, failed
-            )
-        };
+        let translations = backend_translations(&locale);
+        let title = translations
+            .notification_complete_title
+            .replacen("{}", prefix, 1);
+        let body = translations
+            .notification_complete_body
+            .replace("{processed}", &processed.to_string())
+            .replace("{uploaded}", &uploaded.to_string())
+            .replace("{failed}", &failed.to_string());
 
         send_notification(&app, &title, &body, "INFO");
     }
@@ -1077,7 +1095,7 @@ pub fn run() {
             handle.manage(tokio::sync::Mutex::new(watcher));
             handle.manage(SyncState(AtomicBool::new(false)));
             handle.manage(SyncCoordinator(std::sync::Arc::new(tokio::sync::Mutex::new(()))));
-            handle.manage(LocaleState(std::sync::Mutex::new("de".to_string())));
+            handle.manage(LocaleState(std::sync::Mutex::new("en".to_string())));
 
             // Missing folders are persisted so removable and network storage can be
             // selected while offline. Retry them periodically once they become available.
@@ -1310,9 +1328,10 @@ pub fn run() {
 
             // Setup Tray Icon
             // greet() command removed (scaffold dead code)
-            let quit_i = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
-            let show_i = MenuItem::with_id(app, "show", "Fenster anzeigen", true, None::<&str>)?;
-            let sync_i = MenuItem::with_id(app, "sync", "Jetzt synchronisieren", true, None::<&str>)?;
+            let translations = backend_translations("en");
+            let quit_i = MenuItem::with_id(app, "quit", &translations.tray_quit, true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", &translations.tray_show, true, None::<&str>)?;
+            let sync_i = MenuItem::with_id(app, "sync", &translations.tray_sync, true, None::<&str>)?;
             let menu_items: &[&dyn tauri::menu::IsMenuItem<tauri::Wry>] = &[
                 &sync_i,
                 &show_i,
@@ -1394,6 +1413,27 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod locale_tests {
+    use super::*;
+
+    #[test]
+    fn validates_all_supported_locales_and_translations() {
+        assert!(is_supported_locale("en"));
+        assert!(is_supported_locale("de"));
+        assert!(!is_supported_locale("fr"));
+        assert!(!is_supported_locale(""));
+
+        let en = backend_translations("en");
+        assert!(!en.tray_quit.is_empty());
+        assert!(!en.notification_complete_body.is_empty());
+
+        let de = backend_translations("de");
+        assert!(!de.tray_quit.is_empty());
+        assert!(!de.notification_complete_body.is_empty());
+    }
 }
 
 #[cfg(test)]

@@ -36,5 +36,5 @@
   "tray_show": "Fenster anzeigen",
   "tray_sync": "Jetzt synchronisieren",
   "notification_complete_title": "{} Abgeschlossen",
-  "notification_complete_body": "{} Dateien verarbeitet. {} neue Uploads."
+  "notification_complete_body": "{processed} Dateien verarbeitet. {uploaded} neue Uploads. {failed} Fehler."
 }

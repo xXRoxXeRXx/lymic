@@ -36,5 +36,5 @@
   "tray_show": "Show Window",
   "tray_sync": "Sync Now",
   "notification_complete_title": "{} Complete",
-  "notification_complete_body": "Processed {} files. {} new uploads."
+  "notification_complete_body": "Processed {processed} files. {uploaded} new uploads. {failed} errors."
 }
