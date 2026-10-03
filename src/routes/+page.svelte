@@ -80,7 +80,7 @@
 
   // Store unlisteners outside the async IIFE so onMount can return them synchronously.
   // Previously the cleanup was returned from the IIFE (a Promise), which Svelte ignores —
-  // all 5 listeners were permanently leaking on unmount.
+  // all event listeners were permanently leaking on unmount.
   onMount(() => {
     let unlisteners: (() => void)[] = [];
     componentMounted = true;
@@ -95,6 +95,18 @@
         listen("sync-progress-percent", (event) => {
           if (!componentMounted) return;
           progress = event.payload as number;
+        }),
+        listen("sync-started", () => {
+          if (!componentMounted) return;
+          if (progressResetTimer) clearTimeout(progressResetTimer);
+          progressResetTimer = undefined;
+          syncStatus = "syncing";
+          progress = 0;
+        }),
+        listen("sync-error", () => {
+          if (!componentMounted) return;
+          syncStatus = "error";
+          progress = 0;
         }),
         listen("trigger-sync", () => {
           if (!componentMounted) return;
@@ -143,7 +155,7 @@
 
   function finishSync(summary?: SyncSummary) {
     if (!componentMounted) return;
-    if (summary && summary.failed > 0) {
+    if (syncStatus === "error" || (summary && summary.failed > 0)) {
       syncStatus = "error";
       progress = 0;
       return;

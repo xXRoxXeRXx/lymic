@@ -1,7 +1,9 @@
 use base64::{engine::general_purpose, Engine as _};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::json;
 use sha1::{Digest, Sha1};
+use std::collections::HashMap;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, Read};
 use tokio_util::io::ReaderStream;
@@ -39,6 +41,26 @@ pub struct ImmichClient {
     client: Client,
     server_url: Url,
     api_key: String,
+}
+
+#[derive(Debug)]
+pub enum BulkCheckError {
+    Retryable(String),
+    NonRetryable(String),
+}
+
+impl BulkCheckError {
+    pub fn is_retryable(&self) -> bool {
+        matches!(self, Self::Retryable(_))
+    }
+}
+
+impl fmt::Display for BulkCheckError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Retryable(message) | Self::NonRetryable(message) => message.fmt(formatter),
+        }
+    }
 }
 
 impl ImmichClient {
@@ -104,7 +126,10 @@ impl ImmichClient {
     }
 
 
-    pub async fn check_assets_exist(&self, hashes: Vec<String>) -> Result<Vec<String>, String> {
+    pub async fn check_assets_exist(
+        &self,
+        hashes: Vec<String>,
+    ) -> Result<Vec<String>, BulkCheckError> {
         if hashes.is_empty() {
             return Ok(Vec::new());
         }
@@ -123,32 +148,18 @@ impl ImmichClient {
             .json(&json!({ "assets": assets_items }))
             .send()
             .await
-            .map_err(|_| "Check request failed".to_string())?;
+            .map_err(|_| BulkCheckError::Retryable("Check request failed".to_string()))?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            return Err(format!("Server error during bulk check ({})", status));
+            return Err(bulk_check_status_error(response.status()));
         }
 
-        let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| BulkCheckError::Retryable(format!("Invalid bulk-check response: {}", e)))?;
 
-        let mut existing = Vec::new();
-        if let Some(results) = data.get("results") {
-            if let Some(arr) = results.as_array() {
-                for item in arr {
-                    // Result DTO uses "id" to match the "id" sent in the request, 
-                    // and "action" to indicate if it should be accepted or rejected.
-                    if let (Some(id), Some(action)) =
-                        (item.get("id"), item.get("action"))
-                    {
-                        if action.as_str() == Some("reject") {
-                            existing.push(id.as_str().unwrap_or_default().to_string());
-                        }
-                    }
-                }
-            }
-        }
-        Ok(existing)
+        parse_bulk_check_response(&data, &hashes).map_err(BulkCheckError::Retryable)
     }
 
     /// Upload a single asset.
@@ -236,9 +247,75 @@ impl ImmichClient {
     }
 }
 
+fn bulk_check_status_error(status: StatusCode) -> BulkCheckError {
+    let message = format!("Server error during bulk check ({})", status);
+    if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
+        BulkCheckError::NonRetryable(message)
+    } else {
+        BulkCheckError::Retryable(message)
+    }
+}
+
+fn parse_bulk_check_response(
+    data: &serde_json::Value,
+    requested_hashes: &[String],
+) -> Result<Vec<String>, String> {
+    let results = data
+        .get("results")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("Invalid bulk-check response: missing results array")?;
+
+    if results.len() != requested_hashes.len() {
+        return Err(format!(
+            "Invalid bulk-check response: expected {} results, received {}",
+            requested_hashes.len(),
+            results.len()
+        ));
+    }
+
+    let mut expected: HashMap<&str, usize> = HashMap::new();
+    for hash in requested_hashes {
+        *expected.entry(hash).or_default() += 1;
+    }
+
+    let mut existing = Vec::new();
+    for result in results {
+        let id = result
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("Invalid bulk-check response: result missing string id")?;
+        let action = result
+            .get("action")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("Invalid bulk-check response: result missing string action")?;
+
+        let remaining = expected
+            .get_mut(id)
+            .ok_or("Invalid bulk-check response: unexpected result id")?;
+        if *remaining == 0 {
+            return Err("Invalid bulk-check response: duplicate result id".to_string());
+        }
+        *remaining -= 1;
+
+        match action {
+            "accept" => {}
+            "reject" => existing.push(id.to_string()),
+            _ => return Err(format!("Invalid bulk-check response: unknown action '{}'", action)),
+        }
+    }
+
+    if expected.values().any(|remaining| *remaining != 0) {
+        return Err("Invalid bulk-check response: response omitted requested assets".to_string());
+    }
+
+    Ok(existing)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ImmichClient;
+    use super::{bulk_check_status_error, parse_bulk_check_response, ImmichClient};
+    use reqwest::StatusCode;
+    use serde_json::json;
 
     #[test]
     fn rejects_insecure_or_sensitive_server_urls() {
@@ -274,6 +351,38 @@ mod tests {
                 .expect("HTTPS URL should be accepted");
             assert_eq!(client.endpoint_url("/server/config").as_str(), expected_endpoint);
         }
+    }
+
+    #[test]
+    fn bulk_check_requires_a_complete_valid_response() {
+        let hashes = vec!["first".to_string(), "second".to_string()];
+        let valid = json!({
+            "results": [
+                { "id": "first", "action": "reject" },
+                { "id": "second", "action": "accept" }
+            ]
+        });
+        assert_eq!(
+            parse_bulk_check_response(&valid, &hashes).unwrap(),
+            vec!["first".to_string()]
+        );
+
+        for invalid in [
+            json!({}),
+            json!({ "results": [] }),
+            json!({ "results": [{ "id": "first", "action": "accept" }, { "id": "unknown", "action": "accept" }] }),
+            json!({ "results": [{ "id": "first", "action": "accept" }, { "id": "first", "action": "reject" }] }),
+            json!({ "results": [{ "id": "first", "action": "ignore" }, { "id": "second", "action": "accept" }] }),
+        ] {
+            assert!(parse_bulk_check_response(&invalid, &hashes).is_err());
+        }
+    }
+
+    #[test]
+    fn authentication_errors_are_not_retryable() {
+        assert!(!bulk_check_status_error(StatusCode::UNAUTHORIZED).is_retryable());
+        assert!(!bulk_check_status_error(StatusCode::FORBIDDEN).is_retryable());
+        assert!(bulk_check_status_error(StatusCode::INTERNAL_SERVER_ERROR).is_retryable());
     }
 }
 

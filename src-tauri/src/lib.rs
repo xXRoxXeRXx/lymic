@@ -6,7 +6,7 @@ mod watcher;
 use tauri::menu::{Menu, MenuItem, MenuItemKind};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
 use tauri::{Emitter, Manager};
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use tauri_plugin_notification::NotificationExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -14,6 +14,10 @@ struct SyncState(AtomicBool);
 struct SyncCoordinator(std::sync::Arc<tokio::sync::Mutex<()>>);
 struct LocaleState(std::sync::Mutex<String>);
 struct TrayMenuState(Menu<tauri::Wry>);
+
+const BULK_CHECK_MAX_ATTEMPTS: usize = 3;
+const BULK_CHECK_INITIAL_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1);
+const _: () = assert!(BULK_CHECK_MAX_ATTEMPTS > 0);
 
 #[derive(serde::Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -197,6 +201,10 @@ fn log_to_ui(app: &tauri::AppHandle, level: &str, message: &str) {
     let _ = app.emit("log-message", log_line);
 }
 
+fn emit_sync_error(app: &tauri::AppHandle, error: &str) {
+    let _ = app.emit("sync-error", error);
+}
+
 fn create_authenticated_client(
     app: &tauri::AppHandle,
     credentials: auth::AuthConfig,
@@ -308,15 +316,18 @@ async fn add_folder(
         };
         if let Ok(Some(creds)) = auth::get_credentials() {
             if let Some(client) = create_authenticated_client(&app, creds) {
-                let _ = run_sync_pipeline(
-                    app,
+                if let Err(error) = run_sync_pipeline(
+                    app.clone(),
                     pool_inner,
                     client,
                     scan_result,
                     true,
                     coordinator,
                 )
-                .await;
+                .await
+                {
+                    emit_sync_error(&app, &error);
+                }
             }
         }
     });
@@ -383,6 +394,7 @@ async fn run_sync_pipeline(
             coordinator.lock().await
         }
     };
+    let _ = app.emit("sync-started", ());
     let ScanResult { files, failures } = scan_result;
     let total_files = files.len();
     let total_bytes: u64 = files.iter().map(|asset| asset.size).sum();
@@ -460,7 +472,7 @@ async fn run_sync_pipeline(
         .filter_map(|x| async { x });
 
     // Pipeline Stage 2: Buffered Bulk Check (Batch = 500)
-    let checked_stream = hashed_stream
+    let checked_batches = hashed_stream
         .chunks(500)
         .map(|chunk| {
             let client = client.clone();
@@ -469,13 +481,7 @@ async fn run_sync_pipeline(
             let completed_bytes = completed_bytes.clone();
             async move {
                 let hashes: Vec<String> = chunk.iter().filter_map(|a| a.hash.clone()).collect();
-                let existing_hashes = match client.check_assets_exist(hashes).await {
-                    Ok(existing) => existing,
-                    Err(e) => {
-                        log_to_ui(&app, "ERROR", &format!("Bulk check failed: {}", e));
-                        Vec::new()
-                    }
-                };
+                let existing_hashes = check_assets_exist_with_backoff(&client, hashes, &app).await?;
 
                 let mut to_upload = Vec::new();
                 for asset in chunk {
@@ -488,51 +494,53 @@ async fn run_sync_pipeline(
                         }
                     }
                 }
-                to_upload
+                Ok::<_, String>(to_upload)
             }
         })
-        .buffered(1) // One bulk check at a time to keep it orderly
-        .flat_map(futures::stream::iter);
+        .buffered(1); // One bulk check at a time to keep it orderly
 
     // Pipeline Stage 3: Concurrent Upload (Concurrency = 3)
-    checked_stream
-        .map(|asset| {
-            let client = client.clone();
-            let device_id = device_id.clone();
-            let app = app.clone();
-            let pool = pool.clone();
-            let completed_bytes = completed_bytes.clone();
-            let success_count = success_count.clone();
-            let failure_count = failure_count.clone();
-            async move {
-                // Stage 1 guarantees hash is Some; guard defensively
-                //         so a future code path can't cause a silent panic.
-                let hash = match asset.hash.as_ref() {
-                    Some(h) => h.clone(),
-                    None => return,
-                };
-                let _ = app.emit("sync-progress", &asset.path);
-                match client.upload_asset(&asset.path, &device_id, &hash).await {
-                    Ok(remote_id) => {
-                        let _ = db::update_sync_state(&pool, &asset.path, &hash, asset.mtime, asset.size as i64, "SYNCED", Some(&remote_id)).await;
-                        success_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    }
-                    Err(e) => {
-                        log_to_ui(&app, "ERROR", &format!("Upload failed for {}: {}", asset.path, e));
-                        if let Err(error) = db::mark_sync_failed(&pool, &asset.path, asset.mtime, asset.size as i64).await {
-                            log_to_ui(&app, "ERROR", &format!("Could not persist failure for {}: {}", asset.path, error));
+    futures::pin_mut!(checked_batches);
+    while let Some(to_upload) = checked_batches.try_next().await? {
+        futures::stream::iter(to_upload)
+            .map(|asset| {
+                let client = client.clone();
+                let device_id = device_id.clone();
+                let app = app.clone();
+                let pool = pool.clone();
+                let completed_bytes = completed_bytes.clone();
+                let success_count = success_count.clone();
+                let failure_count = failure_count.clone();
+                async move {
+                    // Stage 1 guarantees hash is Some; guard defensively
+                    //         so a future code path can't cause a silent panic.
+                    let hash = match asset.hash.as_ref() {
+                        Some(h) => h.clone(),
+                        None => return,
+                    };
+                    let _ = app.emit("sync-progress", &asset.path);
+                    match client.upload_asset(&asset.path, &device_id, &hash).await {
+                        Ok(remote_id) => {
+                            let _ = db::update_sync_state(&pool, &asset.path, &hash, asset.mtime, asset.size as i64, "SYNCED", Some(&remote_id)).await;
+                            success_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                         }
-                        failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        Err(e) => {
+                            log_to_ui(&app, "ERROR", &format!("Upload failed for {}: {}", asset.path, e));
+                            if let Err(error) = db::mark_sync_failed(&pool, &asset.path, asset.mtime, asset.size as i64).await {
+                                log_to_ui(&app, "ERROR", &format!("Could not persist failure for {}: {}", asset.path, error));
+                            }
+                            failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
                     }
+                    let done = completed_bytes.fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst) + asset.size;
+                    let pct = ((done as f64 / total_bytes as f64 * 100.0) as u32).min(100);
+                    let _ = app.emit("sync-progress-percent", pct);
                 }
-                let done = completed_bytes.fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst) + asset.size;
-                let pct = ((done as f64 / total_bytes as f64 * 100.0) as u32).min(100);
-                let _ = app.emit("sync-progress-percent", pct);
-            }
-        })
-        .buffer_unordered(3)
-        .collect::<Vec<_>>()
-        .await;
+            })
+            .buffer_unordered(3)
+            .collect::<Vec<_>>()
+            .await;
+    }
 
     let uploaded = success_count.load(std::sync::atomic::Ordering::SeqCst);
     let failed = failure_count.load(std::sync::atomic::Ordering::SeqCst);
@@ -566,6 +574,48 @@ async fn run_sync_pipeline(
         uploaded,
         failed,
     })
+}
+
+async fn check_assets_exist_with_backoff(
+    client: &sync::ImmichClient,
+    hashes: Vec<String>,
+    app: &tauri::AppHandle,
+) -> Result<Vec<String>, String> {
+    for attempt in 1..=BULK_CHECK_MAX_ATTEMPTS {
+        match client.check_assets_exist(hashes.clone()).await {
+            Ok(existing) => return Ok(existing),
+            Err(error) if !error.is_retryable() => {
+                let message = format!("Bulk check cannot be retried; aborting sync: {}", error);
+                log_to_ui(app, "ERROR", &message);
+                return Err(message);
+            }
+            Err(error) if attempt == BULK_CHECK_MAX_ATTEMPTS => {
+                let message = format!(
+                    "Bulk check failed after {} attempts; aborting sync: {}",
+                    attempt, error
+                );
+                log_to_ui(app, "ERROR", &message);
+                return Err(message);
+            }
+            Err(error) => {
+                let delay = BULK_CHECK_INITIAL_BACKOFF * (1 << (attempt - 1));
+                log_to_ui(
+                    app,
+                    "WARN",
+                    &format!(
+                        "Bulk check attempt {}/{} failed: {}. Retrying in {} seconds.",
+                        attempt,
+                        BULK_CHECK_MAX_ATTEMPTS,
+                        error,
+                        delay.as_secs()
+                    ),
+                );
+                tokio::time::sleep(delay).await;
+            }
+        }
+    }
+
+    unreachable!("the final bulk-check attempt always returns")
 }
 
 #[tauri::command]
@@ -687,15 +737,18 @@ pub fn run() {
                         if !scan_result.files.is_empty() || !scan_result.failures.is_empty() {
                             if let Some(client) = create_authenticated_client(&handle_sync, creds) {
                                 let coordinator = handle_sync.state::<SyncCoordinator>().0.clone();
-                                let _ = run_sync_pipeline(
-                                    handle_sync,
+                                if let Err(error) = run_sync_pipeline(
+                                    handle_sync.clone(),
                                     pool,
                                     client,
                                     scan_result,
                                     true,
                                     coordinator,
                                 )
-                                .await;
+                                .await
+                                {
+                                    emit_sync_error(&handle_sync, &error);
+                                }
                             }
                         }
                     }
@@ -786,7 +839,7 @@ pub fn run() {
                         if let Ok(Some(creds)) = auth::get_credentials() {
                             if let Some(client) = create_authenticated_client(&handle_task, creds) {
                                 let coordinator = handle_task.state::<SyncCoordinator>().0.clone();
-                                let _ = run_sync_pipeline(
+                                if let Err(error) = run_sync_pipeline(
                                     handle_task.clone(),
                                     pool_inner,
                                     client,
@@ -794,7 +847,10 @@ pub fn run() {
                                     true,
                                     coordinator,
                                 )
-                                .await;
+                                .await
+                                {
+                                    emit_sync_error(&handle_task, &error);
+                                }
                             }
                         }
                     }
