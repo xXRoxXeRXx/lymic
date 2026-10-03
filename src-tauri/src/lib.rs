@@ -51,7 +51,9 @@ fn backend_translations(locale: &str) -> &'static BackendTranslations {
 
 const BULK_CHECK_MAX_ATTEMPTS: usize = 3;
 const BULK_CHECK_INITIAL_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1);
+const MAX_STABLE_HASH_ATTEMPTS: usize = 3;
 const _: () = assert!(BULK_CHECK_MAX_ATTEMPTS > 0);
+const _: () = assert!(MAX_STABLE_HASH_ATTEMPTS > 0);
 
 #[derive(serde::Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -211,11 +213,31 @@ fn overlapping_folder_paths(paths: Vec<PathBuf>) -> (Vec<PathBuf>, Vec<(PathBuf,
 fn metadata_mtime(metadata: &std::fs::Metadata) -> i64 {
     metadata
         .modified()
-        .or_else(|_| metadata.created())
         .ok()
         .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
         .and_then(|duration| i64::try_from(duration.as_nanos()).ok())
         .unwrap_or(0)
+}
+
+fn file_version(path: &str) -> std::io::Result<(u64, i64)> {
+    let metadata = std::fs::metadata(path)?;
+    Ok((metadata.len(), metadata_mtime(&metadata)))
+}
+
+fn calculate_stable_hash(path: &str) -> std::io::Result<(String, u64, i64)> {
+    // Refresh the scan snapshot before hashing to avoid a redundant hash when it is stale.
+    let mut version = file_version(path)?;
+
+    for _ in 0..MAX_STABLE_HASH_ATTEMPTS {
+        let hash = sync::calculate_hash(path)?;
+        let current_version = file_version(path)?;
+        if current_version == version {
+            return Ok((hash, current_version.0, current_version.1));
+        }
+        version = current_version;
+    }
+
+    Err(std::io::Error::other("File changed while hashing"))
 }
 
 fn scan_folder_for_media(path: &std::path::Path) -> ScanResult {
@@ -674,19 +696,19 @@ async fn run_sync_pipeline(
                     _ => db::get_cached_hash(&pool, &path, mtime, size as i64).await,
                 };
 
-                let hash = if let Some(h) = cached {
-                    h
+                let (hash, size, mtime) = if let Some(h) = cached {
+                    (h, size, mtime)
                 } else {
-                    // SHA-1 is blocking CPU+I/O — run it off the async executor.
+                    // SHA-1 and the post-hash metadata check are blocking I/O.
                     let path_for_hash = path.clone();
-                    match tokio::task::spawn_blocking(move || sync::calculate_hash(&path_for_hash))
+                    match tokio::task::spawn_blocking(move || calculate_stable_hash(&path_for_hash))
                         .await
                     {
-                        Ok(Ok(h)) => {
+                        Ok(Ok((hash, size, mtime))) => {
                             if let Err(error) = db::update_sync_state(
                                 &pool,
                                 &path,
-                                &h,
+                                &hash,
                                 mtime,
                                 size as i64,
                                 "PENDING",
@@ -707,7 +729,7 @@ async fn run_sync_pipeline(
                                     .fetch_add(size, std::sync::atomic::Ordering::Relaxed);
                                 return None;
                             }
-                            h
+                            (hash, size, mtime)
                         }
                         Ok(Err(error)) => {
                             log_to_ui(
@@ -1462,6 +1484,45 @@ mod tests {
         assert_eq!(result.files.len(), 1);
         assert_eq!(result.overlapping_folders.len(), 1);
         assert!(!result.files[0].path.starts_with(r"\\?\"));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stable_hash_uses_the_hashed_file_version() {
+        let root = temporary_directory();
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("photo.jpg");
+        std::fs::write(&path, b"test image").unwrap();
+
+        let path_string = path.to_string_lossy().to_string();
+        let (hash, hashed_size, hashed_mtime) = calculate_stable_hash(&path_string).unwrap();
+
+        assert_eq!(hash, sync::calculate_hash(&path_string).unwrap());
+        assert_eq!(
+            (hashed_size, hashed_mtime),
+            file_version(&path_string).unwrap()
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stable_hash_uses_current_version_when_file_changes_after_scan() {
+        let root = temporary_directory();
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("photo.jpg");
+        std::fs::write(&path, b"old").unwrap();
+
+        let path_string = path.to_string_lossy().to_string();
+        let (old_size, _) = file_version(&path_string).unwrap();
+        std::fs::write(&path, b"updated image content").unwrap();
+
+        let (hash, size, mtime) = calculate_stable_hash(&path_string).unwrap();
+
+        assert_eq!(hash, sync::calculate_hash(&path_string).unwrap());
+        assert_eq!((size, mtime), file_version(&path_string).unwrap());
+        assert_ne!(size, old_size);
 
         std::fs::remove_dir_all(root).unwrap();
     }
