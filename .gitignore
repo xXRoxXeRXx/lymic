@@ -24,3 +24,4 @@ Thumbs.db
 # App Data
 immich_sync.db
 .agents
+.kilo/

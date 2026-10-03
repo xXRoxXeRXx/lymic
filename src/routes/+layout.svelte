@@ -1,6 +1,6 @@
 <script>
   import "../app.css";
-  import "$lib/i18n";
+  import "#lib/i18n/index.js";
   import { waitLocale } from "svelte-i18n";
 </script>
 

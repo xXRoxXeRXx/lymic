@@ -11,8 +11,8 @@
     ChevronRight, ExternalLink, Minus, Activity, Power, Globe
   } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
-  import hero from "$lib/assets/hero.png";
-  import logo from "$lib/assets/logo.png";
+  import hero from "#lib/assets/hero.png";
+  import logo from "#lib/assets/logo.png";
 
   // --- State ---
   let isAuthenticated = $state(false);
