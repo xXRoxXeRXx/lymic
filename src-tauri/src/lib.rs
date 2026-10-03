@@ -4,6 +4,8 @@ mod sync;
 mod watcher;
 
 use futures::{StreamExt, TryStreamExt};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::menu::{Menu, MenuItem, MenuItemKind};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -74,6 +76,104 @@ struct FileFailure {
 struct ScanResult {
     files: Vec<Asset>,
     failures: Vec<FileFailure>,
+    overlapping_folders: Vec<(PathBuf, PathBuf)>,
+}
+
+fn normalize_folder_path(path: &Path) -> PathBuf {
+    let absolute_path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    };
+
+    // canonicalize resolves aliases and symbolic links for available folders. Offline folders
+    // remain supported, so use an absolute lexical path until they become available.
+    let mut normalized_path = PathBuf::new();
+    for component in absolute_path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized_path.pop();
+            }
+            component => normalized_path.push(component.as_os_str()),
+        }
+    }
+
+    let canonical_path = std::fs::canonicalize(&normalized_path).unwrap_or(normalized_path);
+    remove_windows_verbatim_prefix(canonical_path)
+}
+
+#[cfg(windows)]
+fn remove_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
+    let path_string = path.to_string_lossy();
+    if let Some(unc_path) = path_string.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{}", unc_path))
+    } else if let Some(disk_path) = path_string.strip_prefix(r"\\?\") {
+        if disk_path
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphabetic)
+            && disk_path.as_bytes().get(1) == Some(&b':')
+        {
+            PathBuf::from(disk_path)
+        } else {
+            path
+        }
+    } else {
+        path
+    }
+}
+
+#[cfg(not(windows))]
+fn remove_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
+    path
+}
+
+fn path_component_eq(left: std::path::Component<'_>, right: std::path::Component<'_>) -> bool {
+    #[cfg(windows)]
+    {
+        left.as_os_str().to_string_lossy().to_lowercase()
+            == right.as_os_str().to_string_lossy().to_lowercase()
+    }
+
+    #[cfg(not(windows))]
+    {
+        left == right
+    }
+}
+
+fn path_is_within(path: &Path, parent: &Path) -> bool {
+    let mut path_components = path.components();
+    parent
+        .components()
+        .all(|parent_component| match path_components.next() {
+            Some(path_component) => path_component_eq(path_component, parent_component),
+            None => false,
+        })
+}
+
+fn overlapping_folder_paths(paths: Vec<PathBuf>) -> (Vec<PathBuf>, Vec<(PathBuf, PathBuf)>) {
+    let mut paths = paths
+        .into_iter()
+        .map(|path| normalize_folder_path(&path))
+        .collect::<Vec<_>>();
+    paths.sort_by_key(|path| path.components().count());
+
+    let mut folders = Vec::new();
+    let mut overlaps = Vec::new();
+    for path in paths {
+        if let Some(parent) = folders
+            .iter()
+            .find(|folder: &&PathBuf| path_is_within(&path, folder))
+        {
+            overlaps.push((path, parent.clone()));
+        } else {
+            folders.push(path);
+        }
+    }
+    (folders, overlaps)
 }
 
 fn metadata_mtime(metadata: &std::fs::Metadata) -> i64 {
@@ -117,11 +217,18 @@ fn scan_folder_for_media(path: &std::path::Path) -> ScanResult {
 async fn scan_folders_for_media(paths: Vec<std::path::PathBuf>) -> Result<ScanResult, String> {
     tokio::task::spawn_blocking(move || {
         let mut result = ScanResult::default();
+        let (paths, overlapping_folders) = overlapping_folder_paths(paths);
+        let mut seen_files = HashSet::new();
         for path in paths {
             let scan_result = scan_folder_for_media(&path);
-            result.files.extend(scan_result.files);
+            for asset in scan_result.files {
+                if seen_files.insert(PathBuf::from(&asset.path)) {
+                    result.files.push(asset);
+                }
+            }
             result.failures.extend(scan_result.failures);
         }
+        result.overlapping_folders = overlapping_folders;
         result
     })
     .await
@@ -196,6 +303,20 @@ fn log_to_ui(app: &tauri::AppHandle, level: &str, message: &str) {
     let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
     let log_line = format!("[{}] [{}] {}", timestamp, level, message);
     let _ = app.emit("log-message", log_line);
+}
+
+fn log_overlapping_folders(app: &tauri::AppHandle, scan_result: &ScanResult) {
+    for (folder, parent) in &scan_result.overlapping_folders {
+        log_to_ui(
+            app,
+            "WARN",
+            &format!(
+                "Skipping overlapping watched folder '{}' because '{}' is already scanned.",
+                folder.display(),
+                parent.display()
+            ),
+        );
+    }
 }
 
 fn emit_sync_error(app: &tauri::AppHandle, error: &str) {
@@ -298,11 +419,59 @@ async fn add_folder(
     watcher: tauri::State<'_, tokio::sync::Mutex<watcher::WatcherState>>,
     path: String,
 ) -> Result<i64, String> {
-    let id = db::add_folder(pool.inner(), &path)
+    let folders = db::get_folders(pool.inner())
+        .await
+        .map_err(|error| error.to_string())?;
+    let path_for_normalization = PathBuf::from(&path);
+    let existing_paths = folders
+        .into_iter()
+        .map(|folder| PathBuf::from(folder.path))
+        .collect::<Vec<_>>();
+    let (normalized_path, conflict) = tokio::task::spawn_blocking(move || {
+        let normalized_path = normalize_folder_path(&path_for_normalization);
+        let conflict = existing_paths
+            .into_iter()
+            .map(|path| normalize_folder_path(&path))
+            .find_map(|existing_path| {
+                let is_duplicate = path_is_within(&normalized_path, &existing_path)
+                    && path_is_within(&existing_path, &normalized_path);
+                if is_duplicate
+                    || path_is_within(&normalized_path, &existing_path)
+                    || path_is_within(&existing_path, &normalized_path)
+                {
+                    Some((existing_path, is_duplicate))
+                } else {
+                    None
+                }
+            });
+        (normalized_path, conflict)
+    })
+    .await
+    .map_err(|error| format!("Could not normalize folder '{}': {}", path, error))?;
+    let normalized_path_string = normalized_path.to_string_lossy().to_string();
+
+    if let Some((existing_path, is_duplicate)) = conflict {
+        let message = if is_duplicate {
+            format!(
+                "Folder '{}' is already being watched.",
+                normalized_path.display()
+            )
+        } else {
+            format!(
+                "Folder '{}' overlaps with already watched folder '{}'. Remove one of the folders before adding it.",
+                normalized_path.display(),
+                existing_path.display()
+            )
+        };
+        return Err(message);
+    }
+
+    let id = db::add_folder(pool.inner(), &normalized_path_string)
         .await
         .map_err(|e| e.to_string())?;
 
-    let path_for_check = std::path::PathBuf::from(&path);
+    let path = normalized_path_string;
+    let path_for_check = PathBuf::from(&path);
     let is_available = match tokio::task::spawn_blocking(move || path_for_check.exists()).await {
         Ok(is_available) => is_available,
         Err(error) => {
@@ -335,14 +504,13 @@ async fn add_folder(
         let pool_inner = pool.inner().clone();
         let path_clone = path.clone();
         tauri::async_runtime::spawn(async move {
-            let scan_result =
-                match scan_folders_for_media(vec![std::path::PathBuf::from(path_clone)]).await {
-                    Ok(result) => result,
-                    Err(error) => {
-                        log_to_ui(&app, "ERROR", &error);
-                        return;
-                    }
-                };
+            let scan_result = match scan_folders_for_media(vec![PathBuf::from(path_clone)]).await {
+                Ok(result) => result,
+                Err(error) => {
+                    log_to_ui(&app, "ERROR", &error);
+                    return;
+                }
+            };
             sync_scan_result_if_authenticated(app, pool_inner, scan_result).await;
         });
     }
@@ -416,7 +584,9 @@ async fn run_sync_pipeline(
         }
     };
     let _ = app.emit("sync-started", ());
-    let ScanResult { files, failures } = scan_result;
+    let ScanResult {
+        files, failures, ..
+    } = scan_result;
     let total_files = files.len();
     let total_bytes: u64 = files.iter().map(|asset| asset.size).sum();
     let completed_bytes = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -738,6 +908,7 @@ async fn sync_scan_result_if_authenticated(
     pool: sqlx::SqlitePool,
     scan_result: ScanResult,
 ) {
+    log_overlapping_folders(&app, &scan_result);
     if scan_result.files.is_empty() && scan_result.failures.is_empty() {
         return;
     }
@@ -794,6 +965,7 @@ async fn start_sync(
             .map(|folder| std::path::PathBuf::from(folder.path))
             .collect();
         let scan_result = scan_folders_for_media(folder_paths).await?;
+        log_overlapping_folders(&app, &scan_result);
 
         run_sync_pipeline(
             app,
@@ -1038,6 +1210,7 @@ pub fn run() {
                                     .collect();
                                 match scan_folders_for_media(folder_paths).await {
                                     Ok(scan_result) => {
+                                        log_overlapping_folders(&handle_task, &scan_result);
                                         for asset in scan_result.files {
                                             files_buffer.insert(asset.path.clone(), asset);
                                         }
@@ -1171,4 +1344,49 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temporary_directory() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "lymic-scan-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    #[tokio::test]
+    async fn overlapping_folders_scan_each_media_file_once() {
+        let root = temporary_directory();
+        let child = root.join("Vacation");
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::write(child.join("photo.jpg"), b"test image").unwrap();
+
+        let result = scan_folders_for_media(vec![root.clone(), child])
+            .await
+            .unwrap();
+
+        assert_eq!(result.files.len(), 1);
+        assert_eq!(result.overlapping_folders.len(), 1);
+        assert!(!result.files[0].path.starts_with(r"\\?\"));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn removes_verbatim_prefix_and_compares_paths_case_insensitively() {
+        let parent = remove_windows_verbatim_prefix(PathBuf::from(r"\\?\C:\Fotos"));
+        let child = PathBuf::from(r"c:\fotos\Urlaub");
+
+        assert_eq!(parent, PathBuf::from(r"C:\Fotos"));
+        assert!(path_is_within(&child, &parent));
+        assert!(path_is_within(&parent, &PathBuf::from(r"c:\FOTOS")));
+    }
 }
