@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose, Engine as _};
 use reqwest::{Client, Response, StatusCode};
+use serde::Deserialize;
 use serde_json::json;
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
@@ -44,6 +45,11 @@ pub struct ImmichClient {
     client: Client,
     server_url: Url,
     api_key: String,
+}
+
+#[derive(Deserialize)]
+struct UploadResponse {
+    id: String,
 }
 
 #[derive(Debug)]
@@ -246,9 +252,7 @@ impl ImmichClient {
 
         if response.status().is_success() {
             let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
-            let data: serde_json::Value = serde_json::from_slice(&body)
-                .map_err(|e| format!("Invalid upload response: {}", e))?;
-            Ok(data["id"].as_str().unwrap_or("").to_string())
+            parse_upload_response(&body)
         } else {
             Err(format!(
                 "Upload failed: {}",
@@ -346,6 +350,15 @@ async fn read_response_body_limited(
     Ok(body)
 }
 
+fn parse_upload_response(body: &[u8]) -> Result<String, String> {
+    let payload: UploadResponse =
+        serde_json::from_slice(body).map_err(|e| format!("Invalid upload response: {}", e))?;
+    if payload.id.trim().is_empty() {
+        return Err("Server response contains no asset id".to_string());
+    }
+    Ok(payload.id)
+}
+
 fn parse_bulk_check_response(
     data: &serde_json::Value,
     requested_hashes: &[String],
@@ -409,8 +422,8 @@ fn parse_bulk_check_response(
 #[cfg(test)]
 mod tests {
     use super::{
-        bulk_check_status_error, parse_bulk_check_response, read_error_body_capped,
-        read_response_body_limited, ImmichClient, MAX_ERROR_RESPONSE_BYTES,
+        bulk_check_status_error, parse_bulk_check_response, parse_upload_response,
+        read_error_body_capped, read_response_body_limited, ImmichClient, MAX_ERROR_RESPONSE_BYTES,
     };
     use reqwest::{Client, Response, StatusCode};
     use serde_json::json;
@@ -510,6 +523,24 @@ mod tests {
             json!({ "results": [{ "id": "first", "action": "ignore" }, { "id": "second", "action": "accept" }] }),
         ] {
             assert!(parse_bulk_check_response(&invalid, &hashes).is_err());
+        }
+    }
+
+    #[test]
+    fn upload_response_requires_non_empty_id() {
+        assert_eq!(
+            parse_upload_response(br#"{"id":"test-uuid-123"}"#).unwrap(),
+            "test-uuid-123"
+        );
+
+        for invalid in [
+            br#"{"id":""}"#.as_slice(),
+            br#"{"id":"   "}"#.as_slice(),
+            br#"{"status":"ok"}"#.as_slice(),
+            br#"{"id":123}"#.as_slice(),
+            br#"invalid json"#.as_slice(),
+        ] {
+            assert!(parse_upload_response(invalid).is_err());
         }
     }
 
