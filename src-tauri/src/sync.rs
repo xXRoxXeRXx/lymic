@@ -473,8 +473,51 @@ mod tests {
     };
     use reqwest::{Client, Response, StatusCode};
     use serde_json::json;
+    use std::path::PathBuf;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+    use url::Url;
+
+    async fn read_http_request(stream: &mut tokio::net::TcpStream) -> Vec<u8> {
+        let mut request = Vec::new();
+        let mut chunk = [0; 4096];
+        let header_end = loop {
+            let read = stream.read(&mut chunk).await.unwrap();
+            assert_ne!(read, 0, "mock server received an incomplete request");
+            request.extend_from_slice(&chunk[..read]);
+            if let Some(position) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                break position + 4;
+            }
+        };
+        let headers = std::str::from_utf8(&request[..header_end]).unwrap();
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("content-length: ")
+                    .or_else(|| line.strip_prefix("Content-Length: "))
+            })
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or_default();
+        while request.len() < header_end + content_length {
+            let read = stream.read(&mut chunk).await.unwrap();
+            assert_ne!(read, 0, "mock server received an incomplete request body");
+            request.extend_from_slice(&chunk[..read]);
+        }
+        request
+    }
+
+    fn temporary_file(contents: &[u8]) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "lymic-sync-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, contents).unwrap();
+        path
+    }
 
     async fn test_response(headers: &str, body: Vec<u8>) -> Response {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -545,6 +588,95 @@ mod tests {
                 expected_endpoint
             );
         }
+    }
+
+    #[tokio::test]
+    async fn mock_immich_handles_bulk_check_and_upload() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::channel(2);
+
+        tokio::spawn(async move {
+            for response in [
+                r#"{"results":[{"id":"already-there","action":"reject","reason":"duplicate"},{"id":"new-file","action":"accept"}]}"#,
+                r#"{"id":"uploaded-asset"}"#,
+            ] {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let request = read_http_request(&mut stream).await;
+                requests_tx.send(request).await.unwrap();
+                stream
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                            response.len(),
+                            response
+                        )
+                        .as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+            }
+        });
+
+        // Direct construction keeps the production HTTPS-only constructor intact while the
+        // in-process mock uses plain HTTP.
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        let existing = client
+            .check_assets_exist(vec!["already-there".to_string(), "new-file".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(existing, vec!["already-there"]);
+
+        let asset_path = temporary_file(b"image data");
+        assert_eq!(
+            client
+                .upload_asset(asset_path.to_str().unwrap(), "new-file")
+                .await
+                .unwrap(),
+            "uploaded-asset"
+        );
+        std::fs::remove_file(asset_path).unwrap();
+
+        let bulk_request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(bulk_request.starts_with("POST /api/assets/bulk-upload-check HTTP/1.1"));
+        assert!(bulk_request.contains("x-api-key: test-key"));
+        assert!(bulk_request.contains(r#""id":"already-there""#));
+        assert!(bulk_request.contains(r#""checksum":"new-file""#));
+
+        let upload_request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(upload_request.starts_with("POST /api/assets HTTP/1.1"));
+        assert!(upload_request.contains("x-immich-checksum: new-file"));
+        assert!(upload_request.contains("name=\"assetData\""));
+    }
+
+    #[tokio::test]
+    async fn mock_immich_rejects_malformed_bulk_response() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut stream).await;
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+                .await
+                .unwrap();
+        });
+
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        let error = client
+            .check_assets_exist(vec!["file".to_string()])
+            .await
+            .unwrap_err();
+        assert!(error.is_retryable());
+        assert!(error.to_string().contains("missing results array"));
     }
 
     #[test]
