@@ -81,25 +81,20 @@ pub async fn get_cached_hash(
     path: &str,
     mtime: i64,
     size: i64,
-) -> Option<String> {
-    let result = sqlx::query(
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query(
         "SELECT file_hash FROM sync_state
          WHERE local_path = ? AND last_modified = ? AND size = ?
-           AND status = 'SYNCED' AND file_hash != ''",
+            AND status = 'SYNCED' AND file_hash != ''",
     )
     .bind(path)
     .bind(mtime)
     .bind(size)
     .fetch_optional(pool)
-    .await;
+    .await?;
 
-    match result {
-        Ok(Some(row)) => {
-            use sqlx::Row;
-            Some(row.get(0))
-        }
-        _ => None,
-    }
+    use sqlx::Row;
+    Ok(row.map(|row| row.get(0)))
 }
 
 #[cfg(test)]
@@ -141,9 +136,22 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            get_cached_hash(&pool, "photo.jpg", 1_700_000_000_200_000_000, 123).await,
-            None
+            get_cached_hash(&pool, "photo.jpg", 1_700_000_000_200_000_000, 123)
+                .await
+                .unwrap(),
+            None,
         );
+    }
+
+    #[tokio::test]
+    async fn cached_hash_propagates_query_errors() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+
+        assert!(get_cached_hash(&pool, "photo.jpg", 42, 123).await.is_err());
     }
 
     #[tokio::test]
@@ -172,7 +180,10 @@ mod tests {
             .unwrap();
         mark_sync_failed(&pool, "photo.jpg", 42, 123).await.unwrap();
 
-        assert_eq!(get_cached_hash(&pool, "photo.jpg", 42, 123).await, None);
+        assert_eq!(
+            get_cached_hash(&pool, "photo.jpg", 42, 123).await.unwrap(),
+            None
+        );
 
         use sqlx::Row;
         let row = sqlx::query("SELECT file_hash, status FROM sync_state WHERE local_path = ?")

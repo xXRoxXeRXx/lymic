@@ -693,7 +693,19 @@ async fn run_sync_pipeline(
                 // Attempt cache hit only when we have a reliable mtime.
                 let cached = match mtime {
                     0 => None,
-                    _ => db::get_cached_hash(&pool, &path, mtime, size as i64).await,
+                    _ => match db::get_cached_hash(&pool, &path, mtime, size as i64).await {
+                        Ok(cached) => cached,
+                        Err(error) => {
+                            log_to_ui(
+                                &app,
+                                "ERROR",
+                                &format!("Could not load cached hash for {}: {}", path, error),
+                            );
+                            failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
+                            return None;
+                        }
+                    },
                 };
 
                 let (hash, size, mtime) = if let Some(h) = cached {
@@ -1098,14 +1110,14 @@ pub fn run() {
 
             // Watch existing folders
             let mut watcher = watcher::WatcherState::new(watcher);
-            if let Ok(folders) = tauri::async_runtime::block_on(db::get_folders(&pool)) {
-                for folder in folders {
-                    // surface deferred-watch state at startup.
-                    match watcher::watch_path(&mut watcher, &folder.path) {
-                        Ok(watcher::WatchRegistration::PathUnavailable) => eprintln!("[WARN] Folder '{}' offline at startup; watching deferred.", folder.path),
-                        Err(e)   => eprintln!("[WARN] Could not watch '{}': {}", folder.path, e),
-                        Ok(_) => {}
-                    }
+            let folders = tauri::async_runtime::block_on(db::get_folders(&pool))
+                .map_err(|e| format!("Failed to load watched folders: {}", e))?;
+            for folder in folders {
+                // surface deferred-watch state at startup.
+                match watcher::watch_path(&mut watcher, &folder.path) {
+                    Ok(watcher::WatchRegistration::PathUnavailable) => eprintln!("[WARN] Folder '{}' offline at startup; watching deferred.", folder.path),
+                    Err(e)   => eprintln!("[WARN] Could not watch '{}': {}", folder.path, e),
+                    Ok(_) => {}
                 }
             }
 
@@ -1222,24 +1234,37 @@ pub fn run() {
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
                 let pool = handle_sync.state::<sqlx::SqlitePool>().inner().clone();
-                if let Ok(folders) = db::get_folders(&pool).await {
-                        for folder in &folders {
-                            log_to_ui(&handle_sync, "INFO", &format!("Scanning folder: {}", folder.path));
-                        }
-                        let folder_paths = folders
-                            .into_iter()
-                            .map(|folder| std::path::PathBuf::from(folder.path))
-                            .collect();
-                        let scan_result = match scan_folders_for_media(folder_paths).await {
-                            Ok(result) => result,
-                            Err(error) => {
-                                log_to_ui(&handle_sync, "ERROR", &error);
-                                return;
-                            }
-                        };
-
-                    sync_scan_result_if_authenticated(handle_sync.clone(), pool, scan_result).await;
+                let folders = match db::get_folders(&pool).await {
+                    Ok(folders) => folders,
+                    Err(error) => {
+                        log_to_ui(
+                            &handle_sync,
+                            "ERROR",
+                            &format!("Could not load watched folders for startup sync: {}", error),
+                        );
+                        return;
+                    }
+                };
+                for folder in &folders {
+                    log_to_ui(
+                        &handle_sync,
+                        "INFO",
+                        &format!("Scanning folder: {}", folder.path),
+                    );
                 }
+                let folder_paths = folders
+                    .into_iter()
+                    .map(|folder| std::path::PathBuf::from(folder.path))
+                    .collect();
+                let scan_result = match scan_folders_for_media(folder_paths).await {
+                    Ok(result) => result,
+                    Err(error) => {
+                        log_to_ui(&handle_sync, "ERROR", &error);
+                        return;
+                    }
+                };
+
+                sync_scan_result_if_authenticated(handle_sync.clone(), pool, scan_result).await;
             });
 
             // Background Task to handle Watcher Events (Batched + debounced)
