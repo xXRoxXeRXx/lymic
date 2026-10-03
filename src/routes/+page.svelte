@@ -25,9 +25,10 @@
   let lastSync = $state("Noch nie");
   let progress = $state(0);
   let currentFile = $state("");
-  let watchedFolders = $state<any[]>([]);
+  let watchedFolders = $state<WatchedFolder[]>([]);
   let isAutostartEnabled = $state(false);
   let logs = $state<LogEntry[]>([]);
+  let actionError = $state("");
   let componentMounted = false;
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
   
@@ -60,7 +61,28 @@
     failed: number;
   }
 
+  interface WatchedFolder {
+    id: number;
+    path: string;
+    recursive: boolean;
+    target_album_id: string | null;
+  }
+
   let logCounter = 0;
+
+  function formatError(error: unknown): string {
+    if (typeof error === "string") return error;
+    if (error instanceof Error) return error.message;
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "message" in error &&
+      typeof error.message === "string"
+    ) {
+      return error.message;
+    }
+    return $t("unknown_error");
+  }
 
   function parseLog(raw: string): LogEntry {
     const timeMatch = raw.match(/\[(\d{2}:\d{2}:\d{2})\]/);
@@ -131,9 +153,9 @@
 
     (async () => {
       try {
-        isAuthenticated = await invoke("get_auth_status");
+        isAuthenticated = await invoke<boolean>("get_auth_status");
         if (isAuthenticated) {
-          serverUrl = await invoke("get_server_url");
+          serverUrl = await invoke<string>("get_server_url");
         }
         await refreshFolders();
         isAutostartEnabled = await isEnabled();
@@ -192,31 +214,47 @@
   // Log errors instead of silently swallowing them.
   async function refreshFolders() {
     try {
-      watchedFolders = await invoke("get_folders");
+      watchedFolders = await invoke<WatchedFolder[]>("get_folders");
     } catch (e) {
       console.error("Failed to load folders", e);
+      actionError = formatError(e);
     }
   }
 
   async function handleAddFolder() {
+    actionError = "";
     try {
       const selected = await open({ directory: true, multiple: false, title: $t('select_folder') });
       if (selected && typeof selected === "string") {
-        await invoke("add_folder", { path: selected });
+        await invoke<number>("add_folder", { path: selected });
         await refreshFolders();
       }
-    } catch {}
+    } catch (e) {
+      console.error("Failed to add folder", e);
+      actionError = formatError(e);
+    }
   }
 
   async function handleRemoveFolder(id: number) {
-    try { await invoke("remove_folder", { id }); await refreshFolders(); } catch {}
+    actionError = "";
+    try {
+      await invoke<void>("remove_folder", { id });
+      await refreshFolders();
+    } catch (e) {
+      console.error("Failed to remove folder", e);
+      actionError = formatError(e);
+    }
   }
 
   async function toggleAutostart() {
+    actionError = "";
     try {
       if (isAutostartEnabled) await disable(); else await enable();
       isAutostartEnabled = await isEnabled();
-    } catch {}
+    } catch (e) {
+      console.error("Failed to update autostart", e);
+      actionError = formatError(e);
+    }
   }
 
   async function handleLogin() {
@@ -224,11 +262,10 @@
     isLoggingIn = true;
     loginError = "";
     try {
-      await invoke("login", { serverUrl, apiKey });
+      await invoke<void>("login", { serverUrl, apiKey });
       isAuthenticated = true;
     } catch (e) {
-      // Tauri invoke errors are objects, not strings — direct cast produced "[object Object]".
-      loginError = typeof e === "string" ? e : (e as any)?.message ?? "Unbekannter Fehler";
+      loginError = formatError(e);
     } finally {
       isLoggingIn = false;
     }
@@ -238,12 +275,15 @@
   // Previously invoke("logout") was fire-and-forget; on failure credentials stayed in keyring
   // while the UI showed the login screen.
   async function handleLogout() {
+    actionError = "";
     try {
-      await invoke("logout");
+      await invoke<void>("logout");
+      isAuthenticated = false;
+      apiKey = "";
+      currentView = "dashboard";
     } catch (e) {
       console.error("Logout failed", e);
-    } finally {
-      isAuthenticated = false;
+      actionError = formatError(e);
     }
   }
 </script>
@@ -299,6 +339,20 @@
     </header>
 
     <main class="flex-1 overflow-y-auto p-10 flex flex-col {!isAuthenticated ? 'justify-center' : 'space-y-10'}">
+      {#if isAuthenticated && actionError}
+        <div class="p-4 bg-red-50 text-red-600 text-xs rounded-xl flex items-center gap-3" role="alert">
+          <AlertCircle class="w-4 h-4 shrink-0" />
+          <span>{actionError}</span>
+          <button
+            type="button"
+            class="ml-auto p-1 rounded hover:bg-red-100 transition-colors"
+            aria-label="Fehlermeldung schließen"
+            onclick={() => actionError = ""}
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+      {/if}
       
       <!-- ===== LOGIN VIEW ===== -->
       {#if !isAuthenticated}
