@@ -28,6 +28,8 @@
   let watchedFolders = $state<any[]>([]);
   let isAutostartEnabled = $state(false);
   let logs = $state<LogEntry[]>([]);
+  let componentMounted = false;
+  let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
   
   // Initialize locale
   const savedLocale = typeof localStorage !== 'undefined' ? localStorage.getItem('lymic-locale') : null;
@@ -50,6 +52,12 @@
     level: "info" | "success" | "error" | "warn";
     message: string;
     raw: string;
+  }
+
+  interface SyncSummary {
+    processed: number;
+    uploaded: number;
+    failed: number;
   }
 
   let logCounter = 0;
@@ -75,38 +83,34 @@
   // all 5 listeners were permanently leaking on unmount.
   onMount(() => {
     let unlisteners: (() => void)[] = [];
-    let isMounted = true;
+    componentMounted = true;
 
     async function setupListeners() {
       const listeners = await Promise.all([
         listen("sync-progress", (event) => {
-          if (!isMounted) return;
+          if (!componentMounted) return;
           syncStatus = "syncing";
           currentFile = (event.payload as string).split(/[/\\]/).pop() || "";
         }),
         listen("sync-progress-percent", (event) => {
-          if (!isMounted) return;
+          if (!componentMounted) return;
           progress = event.payload as number;
         }),
         listen("trigger-sync", () => {
-          if (!isMounted) return;
+          if (!componentMounted) return;
           handleStartSync();
         }),
         listen("log-message", (event) => {
-          if (!isMounted) return;
+          if (!componentMounted) return;
           const entry = parseLog(event.payload as string);
           logs = [entry, ...logs].slice(0, 50);
         }),
         listen("sync-idle", () => {
-          if (!isMounted) return;
-          syncStatus = "idle";
-          progress = 100;
-          lastSync = new Date().toLocaleTimeString($locale === 'de' ? 'de-DE' : 'en-US', { hour: "2-digit", minute: "2-digit" });
-          setTimeout(() => { if (isMounted) progress = 0; }, 2000);
+          finishSync();
         }),
       ]);
 
-      if (!isMounted) {
+      if (!componentMounted) {
         listeners.forEach(un => un());
       } else {
         unlisteners = listeners;
@@ -122,7 +126,7 @@
         await refreshFolders();
         isAutostartEnabled = await isEnabled();
         
-        if (isMounted) {
+        if (componentMounted) {
           await setupListeners();
         }
       } catch (e) {
@@ -131,23 +135,42 @@
     })();
 
     return () => {
-      isMounted = false;
+      componentMounted = false;
+      if (progressResetTimer) clearTimeout(progressResetTimer);
       unlisteners.forEach(fn => fn());
     };
   });
 
-  // Removed syncStatus = "idle" / lastSync update here.
-  // The sync-idle event is now the sole source of truth for completion state,
-  // preventing the progress bar from disappearing before the backend finishes.
+  function finishSync(summary?: SyncSummary) {
+    if (!componentMounted) return;
+    if (summary && summary.failed > 0) {
+      syncStatus = "error";
+      progress = 0;
+      return;
+    }
+    syncStatus = "idle";
+    progress = 100;
+    lastSync = new Date().toLocaleTimeString($locale === 'de' ? 'de-DE' : 'en-US', { hour: "2-digit", minute: "2-digit" });
+    if (progressResetTimer) clearTimeout(progressResetTimer);
+    progressResetTimer = setTimeout(() => {
+      if (componentMounted) progress = 0;
+      progressResetTimer = undefined;
+    }, 2000);
+  }
+
   async function handleStartSync() {
     if (syncStatus === "syncing") {
       console.warn("Sync already in progress, ignoring trigger.");
       return;
     }
+    if (progressResetTimer) clearTimeout(progressResetTimer);
+    progressResetTimer = undefined;
     syncStatus = "syncing";
     progress = 0;
     try {
-      await invoke("start_sync");
+      const summary = await invoke<SyncSummary>("start_sync");
+      // The command response is reliable even when an event is missed.
+      finishSync(summary);
     } catch (e) {
       console.error("Sync failed", e);
       syncStatus = "error";
@@ -323,11 +346,11 @@
           <div class="flex items-center justify-between">
             <div class="space-y-1">
               <div class="flex items-center gap-2">
-                 <div class="w-2 h-2 rounded-full {syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : 'bg-emerald-500'}"></div>
+                  <div class="w-2 h-2 rounded-full {syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500'}"></div>
                  <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{$t('status')}</span>
               </div>
               <h3 class="text-3xl font-bold text-slate-900">
-                {syncStatus === 'syncing' ? $t('sync_running') : $t('all_up_to_date')}
+                 {syncStatus === 'syncing' ? $t('sync_running') : syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
               </h3>
             </div>
             <button

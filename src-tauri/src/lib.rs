@@ -15,6 +15,23 @@ struct SyncCoordinator(std::sync::Arc<tokio::sync::Mutex<()>>);
 struct LocaleState(std::sync::Mutex<String>);
 struct TrayMenuState(Menu<tauri::Wry>);
 
+#[derive(serde::Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct SyncSummary {
+    processed: usize,
+    uploaded: usize,
+    failed: usize,
+}
+
+// Emits completion when a sync scope exits, including early returns and errors.
+struct SyncIdleEmitter(tauri::AppHandle);
+
+impl Drop for SyncIdleEmitter {
+    fn drop(&mut self) {
+        let _ = self.0.emit("sync-idle", ());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Supported media file extensions for sync (mirrors start_sync scan filter).
 // Defined once and reused in both start_sync and the watcher path.
@@ -349,7 +366,9 @@ async fn run_sync_pipeline(
     scan_result: ScanResult,
     is_auto: bool,
     coordinator: std::sync::Arc<tokio::sync::Mutex<()>>,
-) -> Result<(), String> {
+) -> Result<SyncSummary, String> {
+    // Auto-sync has no command response, so it reports completion through an event.
+    let _idle_emitter = is_auto.then(|| SyncIdleEmitter(app.clone()));
     // All triggers share this lock, preventing concurrent hashing, checks, and uploads.
     let _sync_guard = match coordinator.try_lock() {
         Ok(guard) => guard,
@@ -542,8 +561,11 @@ async fn run_sync_pipeline(
         );
     }
     
-    let _ = app.emit("sync-idle", ());
-    Ok(())
+    Ok(SyncSummary {
+        processed,
+        uploaded,
+        failed,
+    })
 }
 
 #[tauri::command]
@@ -552,11 +574,11 @@ async fn start_sync(
     pool: tauri::State<'_, sqlx::SqlitePool>,
     sync_state: tauri::State<'_, SyncState>,
     sync_coordinator: tauri::State<'_, SyncCoordinator>,
-) -> Result<(), String> {
+) -> Result<SyncSummary, String> {
     // Attempt to set sync_state to true. If it was already true, return early.
     if sync_state.0.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
         log_to_ui(&app, "WARN", "Manual sync already in progress. Ignoring request.");
-        return Ok(());
+        return Err("Sync already in progress".to_string());
     }
 
     log_to_ui(&app, "INFO", "Starting manual synchronization...");

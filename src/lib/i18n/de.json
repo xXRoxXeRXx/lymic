@@ -10,6 +10,7 @@
   "connect": "Verbinde...",
   "status": "Status",
   "sync_running": "Synchronisierung läuft",
+  "sync_completed_with_errors": "Synchronisierung mit Fehlern beendet",
   "all_up_to_date": "Alles aktuell",
   "sync_now": "Jetzt synchronisieren",
   "syncing": "Synchronisiere...",
