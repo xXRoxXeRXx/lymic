@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import "@fontsource/open-sans/400.css";
+@import "@fontsource/open-sans/500.css";
+@import "@fontsource/open-sans/600.css";
+@import "@fontsource/open-sans/700.css";
 
 @layer base {
   :root {
@@ -12,7 +16,7 @@
   html, body {
     background: #F1F5F9;
     color: rgb(var(--text-main));
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Open Sans', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     margin: 0;
     overscroll-behavior: none;
