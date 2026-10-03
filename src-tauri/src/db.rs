@@ -1,5 +1,9 @@
-use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+    SqlitePool,
+};
 use std::fs;
+use std::time::Duration;
 use tauri::AppHandle;
 use tauri::Manager;
 
@@ -12,34 +16,19 @@ pub async fn init(app_handle: &AppHandle) -> Result<SqlitePool, Box<dyn std::err
 
     let options = SqliteConnectOptions::new()
         .filename(db_path)
-        .create_if_missing(true);
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .busy_timeout(Duration::from_secs(5));
 
-    let pool = SqlitePool::connect_with(options).await?;
+    // SQLite permits one writer at a time; WAL keeps readers responsive while writes wait.
+    let pool = SqlitePoolOptions::new()
+        .max_connections(4)
+        .min_connections(1)
+        .acquire_timeout(Duration::from_secs(10))
+        .connect_with(options)
+        .await?;
 
-    // Create tables if they don't exist
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS watched_folders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            path TEXT NOT NULL UNIQUE,
-            recursive BOOLEAN NOT NULL DEFAULT 1,
-            target_album_id TEXT
-        )",
-    )
-    .execute(&pool)
-    .await?;
-
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS sync_state (
-            local_path TEXT PRIMARY KEY,
-            file_hash TEXT NOT NULL,
-            last_modified INTEGER NOT NULL,
-            size INTEGER NOT NULL,
-            status TEXT NOT NULL,
-            remote_id TEXT
-        )",
-    )
-    .execute(&pool)
-    .await?;
+    sqlx::migrate!("./migrations").run(&pool).await?;
 
     Ok(pool)
 }
@@ -103,25 +92,29 @@ mod tests {
     use sqlx::sqlite::SqlitePoolOptions;
 
     #[tokio::test]
+    async fn initial_migration_creates_schema() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        add_folder(&pool, "C:/photos").await.unwrap();
+        update_sync_state(&pool, "photo.jpg", "hash", 42, 123, "SYNCED", None)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn cached_hash_misses_when_mtime_differs_within_a_second() {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
             .await
             .unwrap();
-        sqlx::query(
-            "CREATE TABLE sync_state (
-                local_path TEXT PRIMARY KEY,
-                file_hash TEXT NOT NULL,
-                last_modified INTEGER NOT NULL,
-                size INTEGER NOT NULL,
-                status TEXT NOT NULL,
-                remote_id TEXT
-            )",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
         update_sync_state(
             &pool,
@@ -161,19 +154,7 @@ mod tests {
             .connect("sqlite::memory:")
             .await
             .unwrap();
-        sqlx::query(
-            "CREATE TABLE sync_state (
-                local_path TEXT PRIMARY KEY,
-                file_hash TEXT NOT NULL,
-                last_modified INTEGER NOT NULL,
-                size INTEGER NOT NULL,
-                status TEXT NOT NULL,
-                remote_id TEXT
-            )",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
         update_sync_state(&pool, "photo.jpg", "old-hash", 42, 123, "SYNCED", None)
             .await
