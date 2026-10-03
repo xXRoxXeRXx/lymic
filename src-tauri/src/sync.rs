@@ -1,5 +1,5 @@
 use base64::{engine::general_purpose, Engine as _};
-use reqwest::{Client, StatusCode};
+use reqwest::{Client, Response, StatusCode};
 use serde_json::json;
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
@@ -8,6 +8,9 @@ use std::fs::File;
 use std::io::{self, Read};
 use tokio_util::io::ReaderStream;
 use url::Url;
+
+const MAX_ERROR_RESPONSE_BYTES: usize = 8 * 1024;
+const MAX_SUCCESS_RESPONSE_BYTES: usize = 1024 * 1024;
 
 /// Calculate the SHA-1 hash of a file, returned as standard base64.
 ///
@@ -119,7 +122,10 @@ impl ImmichClient {
             .map_err(|_| "Connection failed".to_string())?;
 
         if !response.status().is_success() {
-            return Err(format!("Server returned error: {}", response.status()));
+            return Err(format!(
+                "Server returned error: {}",
+                response_status_error(response).await
+            ));
         }
 
         Ok(())
@@ -151,12 +157,13 @@ impl ImmichClient {
             .map_err(|_| BulkCheckError::Retryable("Check request failed".to_string()))?;
 
         if !response.status().is_success() {
-            return Err(bulk_check_status_error(response.status()));
+            return Err(bulk_check_response_error(response).await);
         }
 
-        let data: serde_json::Value = response
-            .json()
+        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES)
             .await
+            .map_err(|e| BulkCheckError::Retryable(format!("Invalid bulk-check response: {}", e)))?;
+        let data: serde_json::Value = serde_json::from_slice(&body)
             .map_err(|e| BulkCheckError::Retryable(format!("Invalid bulk-check response: {}", e)))?;
 
         parse_bulk_check_response(&data, &hashes).map_err(BulkCheckError::Retryable)
@@ -237,12 +244,12 @@ impl ImmichClient {
             .map_err(|_| "Network error during upload".to_string())?;
 
         if response.status().is_success() {
-            let data: serde_json::Value =
-                response.json().await.map_err(|e| e.to_string())?;
+            let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
+            let data: serde_json::Value = serde_json::from_slice(&body)
+                .map_err(|e| format!("Invalid upload response: {}", e))?;
             Ok(data["id"].as_str().unwrap_or("").to_string())
         } else {
-            let status = response.status();
-            Err(format!("Upload failed: {}", status))
+            Err(format!("Upload failed: {}", response_status_error(response).await))
         }
     }
 }
@@ -254,6 +261,71 @@ fn bulk_check_status_error(status: StatusCode) -> BulkCheckError {
     } else {
         BulkCheckError::Retryable(message)
     }
+}
+
+async fn bulk_check_response_error(response: Response) -> BulkCheckError {
+    let status = response.status();
+    let detail = response_error_detail(response).await;
+    match bulk_check_status_error(status) {
+        BulkCheckError::Retryable(message) => BulkCheckError::Retryable(format!("{}{}", message, detail)),
+        BulkCheckError::NonRetryable(message) => {
+            BulkCheckError::NonRetryable(format!("{}{}", message, detail))
+        }
+    }
+}
+
+async fn response_status_error(response: Response) -> String {
+    let status = response.status();
+    format!("{}{}", status, response_error_detail(response).await)
+}
+
+async fn response_error_detail(response: Response) -> String {
+    read_error_body_capped(response, MAX_ERROR_RESPONSE_BYTES).await
+}
+
+async fn read_error_body_capped(mut response: Response, max_bytes: usize) -> String {
+    let mut body = Vec::with_capacity(max_bytes);
+    let mut truncated = false;
+
+    while let Ok(Some(chunk)) = response.chunk().await {
+        let remaining = max_bytes.saturating_sub(body.len());
+        if chunk.len() > remaining {
+            body.extend_from_slice(&chunk[..remaining]);
+            truncated = true;
+            break;
+        }
+        body.extend_from_slice(&chunk);
+    }
+
+    let text = String::from_utf8_lossy(&body)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    match (text.is_empty(), truncated) {
+        (true, false) => String::new(),
+        (true, true) => ": [truncated]".to_string(),
+        (false, false) => format!(": {}", text),
+        (false, true) => format!(": {}... [truncated]", text),
+    }
+}
+
+async fn read_response_body_limited(mut response: Response, max_bytes: usize) -> Result<Vec<u8>, String> {
+    if response.content_length().is_some_and(|length| length > max_bytes as u64) {
+        return Err(format!("response body exceeds {} KiB limit", max_bytes / 1024));
+    }
+
+    let capacity = response
+        .content_length()
+        .unwrap_or_default()
+        .min(max_bytes as u64) as usize;
+    let mut body = Vec::with_capacity(capacity);
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        if chunk.len() > max_bytes.saturating_sub(body.len()) {
+            return Err(format!("response body exceeds {} KiB limit", max_bytes / 1024));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 fn parse_bulk_check_response(
@@ -313,9 +385,34 @@ fn parse_bulk_check_response(
 
 #[cfg(test)]
 mod tests {
-    use super::{bulk_check_status_error, parse_bulk_check_response, ImmichClient};
-    use reqwest::StatusCode;
+    use super::{
+        bulk_check_status_error, parse_bulk_check_response, read_error_body_capped,
+        read_response_body_limited, ImmichClient, MAX_ERROR_RESPONSE_BYTES,
+    };
+    use reqwest::{Client, Response, StatusCode};
     use serde_json::json;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    async fn test_response(headers: &str, body: Vec<u8>) -> Response {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let headers = headers.to_string();
+
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0; 1024];
+            let _ = stream.read(&mut request).await.unwrap();
+            stream.write_all(headers.as_bytes()).await.unwrap();
+            stream.write_all(&body).await.unwrap();
+        });
+
+        Client::new()
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .unwrap()
+    }
 
     #[test]
     fn rejects_insecure_or_sensitive_server_urls() {
@@ -383,6 +480,62 @@ mod tests {
         assert!(!bulk_check_status_error(StatusCode::UNAUTHORIZED).is_retryable());
         assert!(!bulk_check_status_error(StatusCode::FORBIDDEN).is_retryable());
         assert!(bulk_check_status_error(StatusCode::INTERNAL_SERVER_ERROR).is_retryable());
+    }
+
+    #[tokio::test]
+    async fn response_body_limit_accepts_exact_content_length() {
+        let response = test_response(
+            "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\n",
+            b"test".to_vec(),
+        )
+        .await;
+
+        assert_eq!(read_response_body_limited(response, 4).await.unwrap(), b"test");
+    }
+
+    #[tokio::test]
+    async fn response_body_limit_rejects_oversized_content_length() {
+        let response = test_response(
+            "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\n",
+            b"tests".to_vec(),
+        )
+        .await;
+
+        assert!(read_response_body_limited(response, 4)
+            .await
+            .unwrap_err()
+            .contains("exceeds"));
+    }
+
+    #[tokio::test]
+    async fn response_body_limit_rejects_oversized_body_without_content_length() {
+        let response = test_response(
+            "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n",
+            b"tests".to_vec(),
+        )
+        .await;
+
+        assert!(read_response_body_limited(response, 4)
+            .await
+            .unwrap_err()
+            .contains("exceeds"));
+    }
+
+    #[tokio::test]
+    async fn error_body_is_capped_and_marked_as_truncated() {
+        let body = vec![b'x'; MAX_ERROR_RESPONSE_BYTES + 1];
+        let response = test_response(
+            &format!(
+                "HTTP/1.1 500 Internal Server Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            ),
+            body,
+        )
+        .await;
+
+        let detail = read_error_body_capped(response, MAX_ERROR_RESPONSE_BYTES).await;
+        assert!(detail.ends_with("... [truncated]"));
+        assert_eq!(detail.len(), MAX_ERROR_RESPONSE_BYTES + ": ".len() + "... [truncated]".len());
     }
 }
 
