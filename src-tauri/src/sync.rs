@@ -5,6 +5,7 @@ use sha1::{Digest, Sha1};
 use std::fs::File;
 use std::io::{self, Read};
 use tokio_util::io::ReaderStream;
+use url::Url;
 
 /// Calculate the SHA-1 hash of a file, returned as standard base64.
 ///
@@ -36,31 +37,70 @@ pub struct SyncAsset {
 
 pub struct ImmichClient {
     client: Client,
-    server_url: String,
+    server_url: Url,
     api_key: String,
 }
 
 impl ImmichClient {
-    pub fn new(server_url: String, api_key: String) -> Self {
-        let mut base_url = server_url.trim_end_matches('/').to_string();
-        if !base_url.ends_with("/api") {
-            base_url.push_str("/api");
+    pub fn new(server_url: String, api_key: String) -> Result<Self, String> {
+        let mut base_url = Url::parse(server_url.trim())
+            .map_err(|_| "Invalid server URL".to_string())?;
+
+        if base_url.scheme() != "https" {
+            return Err("Only HTTPS server URLs are supported".to_string());
         }
-        Self {
-            client: Client::new(),
+        if base_url.host().is_none() {
+            return Err("Server URL must include a host".to_string());
+        }
+        if !base_url.username().is_empty()
+            || base_url.password().is_some()
+            || base_url.query().is_some()
+            || base_url.fragment().is_some()
+        {
+            return Err("Server URL must not contain credentials, query, or fragment".to_string());
+        }
+
+        let path = base_url.path().trim_end_matches('/');
+        let api_path = if path.ends_with("/api") {
+            format!("{}/", path)
+        } else if path.is_empty() {
+            "/api/".to_string()
+        } else {
+            format!("{}/api/", path)
+        };
+        base_url.set_path(&api_path);
+
+        Ok(Self {
+            // Reject redirects so an HTTPS endpoint cannot downgrade an API-key request to HTTP.
+            client: Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(|_| "Failed to initialize HTTP client".to_string())?,
             server_url: base_url,
             api_key,
+        })
+    }
+
+    fn endpoint_url(&self, path: &str) -> Url {
+        self.server_url
+            .join(path.trim_start_matches('/'))
+            .expect("validated base URL must support relative endpoint paths")
+    }
+
+    pub async fn validate_connection(&self) -> Result<(), String> {
+        let response = self
+            .client
+            .get(self.endpoint_url("server/config"))
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|_| "Connection failed".to_string())?;
+
+        if !response.status().is_success() {
+            return Err(format!("Server returned error: {}", response.status()));
         }
-    }
 
-    /// connection test) without creating a new Client::new() each time.
-    pub fn http_client(&self) -> &Client {
-        &self.client
-    }
-
-    /// Return the normalised server URL (with /api suffix).
-    pub fn base_url(&self) -> &str {
-        &self.server_url
+        Ok(())
     }
 
 
@@ -68,7 +108,7 @@ impl ImmichClient {
         if hashes.is_empty() {
             return Ok(Vec::new());
         }
-        let url = format!("{}/assets/bulk-upload-check", self.server_url);
+        let url = self.endpoint_url("assets/bulk-upload-check");
         
         // Correct DTO: { "assets": [ { "id": "...", "checksum": "..." } ] }
         let assets_items: Vec<serde_json::Value> = hashes
@@ -78,17 +118,16 @@ impl ImmichClient {
 
         let response = self
             .client
-            .post(&url)
+            .post(url)
             .header("x-api-key", &self.api_key)
             .json(&json!({ "assets": assets_items }))
             .send()
             .await
-            .map_err(|e| format!("Check request failed: {}", e))?;
+            .map_err(|_| "Check request failed".to_string())?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let err_text = response.text().await.unwrap_or_default();
-            return Err(format!("Server error during bulk check ({}): {}", status, err_text));
+            return Err(format!("Server error during bulk check ({})", status));
         }
 
         let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
@@ -119,7 +158,7 @@ impl ImmichClient {
         device_id: &str,
         precomputed_hash: &str,
     ) -> Result<String, String> {
-        let url = format!("{}/assets", self.server_url);
+        let url = self.endpoint_url("assets");
         let path_buf = std::path::PathBuf::from(path);
         let file_name = path_buf
             .file_name()
@@ -177,14 +216,14 @@ impl ImmichClient {
 
         let response = self
             .client
-            .post(&url)
+            .post(url)
             .header("x-api-key", &self.api_key)
             .header("x-immich-checksum", precomputed_hash)
             .timeout(std::time::Duration::from_secs(300))
             .multipart(form)
             .send()
             .await
-            .map_err(|e| format!("Network error: {}", e))?;
+            .map_err(|_| "Network error during upload".to_string())?;
 
         if response.status().is_success() {
             let data: serde_json::Value =
@@ -192,14 +231,48 @@ impl ImmichClient {
             Ok(data["id"].as_str().unwrap_or("").to_string())
         } else {
             let status = response.status();
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_default()
-                .chars()
-                .take(200)
-                .collect::<String>();
-            Err(format!("Upload failed: {} — {}", status, error_text))
+            Err(format!("Upload failed: {}", status))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ImmichClient;
+
+    #[test]
+    fn rejects_insecure_or_sensitive_server_urls() {
+        for server_url in [
+            "http://immich.example",
+            "https://user:password@immich.example",
+            "https://immich.example/?token=secret",
+            "https://immich.example/#fragment",
+        ] {
+            assert!(ImmichClient::new(server_url.to_string(), "key".to_string()).is_err());
+        }
+    }
+
+    #[test]
+    fn normalizes_secure_server_urls() {
+        let cases = [
+            ("https://immich.example", "https://immich.example/api/server/config"),
+            ("https://immich.example/", "https://immich.example/api/server/config"),
+            ("https://immich.example/api", "https://immich.example/api/server/config"),
+            ("https://immich.example/api/", "https://immich.example/api/server/config"),
+            (
+                "https://immich.example/custom/path",
+                "https://immich.example/custom/path/api/server/config",
+            ),
+            (
+                "https://immich.example:8443",
+                "https://immich.example:8443/api/server/config",
+            ),
+        ];
+
+        for (server_url, expected_endpoint) in cases {
+            let client = ImmichClient::new(server_url.to_string(), "key".to_string())
+                .expect("HTTPS URL should be accepted");
+            assert_eq!(client.endpoint_url("/server/config").as_str(), expected_endpoint);
         }
     }
 }

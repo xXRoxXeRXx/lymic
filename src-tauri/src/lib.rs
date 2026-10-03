@@ -180,31 +180,32 @@ fn log_to_ui(app: &tauri::AppHandle, level: &str, message: &str) {
     let _ = app.emit("log-message", log_line);
 }
 
-// Login reuses ImmichClient's pooled reqwest::Client instead of
-//         creating a one-off Client::new() that bypasses connection pooling.
-// (security): api_key is intentionally kept out of all log/error
-//         messages below. reqwest error Display does not include headers,
-//         so the key is not leaked through map_err strings either.
+fn create_authenticated_client(
+    app: &tauri::AppHandle,
+    credentials: auth::AuthConfig,
+) -> Option<std::sync::Arc<sync::ImmichClient>> {
+    match sync::ImmichClient::new(credentials.server_url, credentials.api_key) {
+        Ok(client) => Some(std::sync::Arc::new(client)),
+        Err(error) => {
+            log_to_ui(
+                app,
+                "ERROR",
+                &format!("Invalid server configuration: {}", error),
+            );
+            None
+        }
+    }
+}
+
+// (security): api_key is intentionally kept out of all log and error messages below.
 #[tauri::command]
 async fn login(app: tauri::AppHandle, server_url: String, api_key: String) -> Result<(), String> {
-    log_to_ui(&app, "INFO", &format!("Attempting to connect to {}", server_url));
+    log_to_ui(&app, "INFO", "Attempting to connect to server");
 
     // Build a temporary ImmichClient purely to reuse its URL normalisation and
     // pooled reqwest Client. The client is discarded after the connection test.
-    let temp_client = sync::ImmichClient::new(server_url.clone(), api_key.clone());
-    let url = format!("{}/server/config", temp_client.base_url());
-
-    let response = temp_client
-        .http_client()
-        .get(&url)
-        .header("x-api-key", &api_key)
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("Server returned error: {}", response.status()));
-    }
+    let temp_client = sync::ImmichClient::new(server_url.clone(), api_key.clone())?;
+    temp_client.validate_connection().await?;
 
     auth::store_credentials(&server_url, &api_key)
 }
@@ -289,8 +290,17 @@ async fn add_folder(
             }
         };
         if let Ok(Some(creds)) = auth::get_credentials() {
-            let client = std::sync::Arc::new(sync::ImmichClient::new(creds.server_url, creds.api_key));
-            let _ = run_sync_pipeline(app, pool_inner, client, scan_result, true, coordinator).await;
+            if let Some(client) = create_authenticated_client(&app, creds) {
+                let _ = run_sync_pipeline(
+                    app,
+                    pool_inner,
+                    client,
+                    scan_result,
+                    true,
+                    coordinator,
+                )
+                .await;
+            }
         }
     });
 
@@ -555,7 +565,8 @@ async fn start_sync(
     let result = async {
         let folders = db::get_folders(pool.inner()).await.map_err(|e| e.to_string())?;
         let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-        let client = std::sync::Arc::new(sync::ImmichClient::new(credentials.server_url, credentials.api_key));
+        let client = create_authenticated_client(&app, credentials)
+            .ok_or("Invalid server configuration")?;
 
         for folder in &folders {
             log_to_ui(&app, "INFO", &format!("Scanning folder: {}", folder.path));
@@ -653,9 +664,18 @@ pub fn run() {
                         };
                         
                         if !scan_result.files.is_empty() || !scan_result.failures.is_empty() {
-                            let client = std::sync::Arc::new(sync::ImmichClient::new(creds.server_url, creds.api_key));
-                            let coordinator = handle_sync.state::<SyncCoordinator>().0.clone();
-                            let _ = run_sync_pipeline(handle_sync, pool, client, scan_result, true, coordinator).await;
+                            if let Some(client) = create_authenticated_client(&handle_sync, creds) {
+                                let coordinator = handle_sync.state::<SyncCoordinator>().0.clone();
+                                let _ = run_sync_pipeline(
+                                    handle_sync,
+                                    pool,
+                                    client,
+                                    scan_result,
+                                    true,
+                                    coordinator,
+                                )
+                                .await;
+                            }
                         }
                     }
                 }
@@ -743,19 +763,18 @@ pub fn run() {
                         let pool_inner = pool.inner().clone();
 
                         if let Ok(Some(creds)) = auth::get_credentials() {
-                            let client = std::sync::Arc::new(sync::ImmichClient::new(
-                                creds.server_url,
-                                creds.api_key,
-                            ));
-                            let coordinator = handle_task.state::<SyncCoordinator>().0.clone();
-                            let _ = run_sync_pipeline(
-                                handle_task.clone(),
-                                pool_inner,
-                                client,
-                                scan_result,
-                                true,
-                                coordinator,
-                            ).await;
+                            if let Some(client) = create_authenticated_client(&handle_task, creds) {
+                                let coordinator = handle_task.state::<SyncCoordinator>().0.clone();
+                                let _ = run_sync_pipeline(
+                                    handle_task.clone(),
+                                    pool_inner,
+                                    client,
+                                    scan_result,
+                                    true,
+                                    coordinator,
+                                )
+                                .await;
+                            }
                         }
                     }
                 }
