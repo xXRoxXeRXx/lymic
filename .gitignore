@@ -2,7 +2,6 @@
 /target/
 /C:/temp_rust_build/
 **/*.rs.bk
-Cargo.lock
 
 # Node / JS
 node_modules/
