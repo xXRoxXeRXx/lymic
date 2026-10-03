@@ -659,7 +659,7 @@ async fn run_sync_pipeline(
                         .await
                     {
                         Ok(Ok(h)) => {
-                            let _ = db::update_sync_state(
+                            if let Err(error) = db::update_sync_state(
                                 &pool,
                                 &path,
                                 &h,
@@ -668,7 +668,21 @@ async fn run_sync_pipeline(
                                 "PENDING",
                                 None,
                             )
-                            .await;
+                            .await
+                            {
+                                log_to_ui(
+                                    &app,
+                                    "ERROR",
+                                    &format!(
+                                        "Could not persist pending sync state for {}: {}",
+                                        path, error
+                                    ),
+                                );
+                                failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                completed_bytes
+                                    .fetch_add(size, std::sync::atomic::Ordering::Relaxed);
+                                return None;
+                            }
                             h
                         }
                         Ok(Err(error)) => {
@@ -730,6 +744,7 @@ async fn run_sync_pipeline(
             let pool = pool.clone();
             let app = app.clone();
             let completed_bytes = completed_bytes.clone();
+            let failure_count = failure_count.clone();
             async move {
                 let hashes: Vec<String> = chunk.iter().filter_map(|a| a.hash.clone()).collect();
                 let existing_hashes =
@@ -739,7 +754,7 @@ async fn run_sync_pipeline(
                 for asset in chunk {
                     if let Some(hash) = &asset.hash {
                         if existing_hashes.contains(hash) {
-                            let _ = db::update_sync_state(
+                            if let Err(error) = db::update_sync_state(
                                 &pool,
                                 &asset.path,
                                 hash,
@@ -748,7 +763,18 @@ async fn run_sync_pipeline(
                                 "SYNCED",
                                 None,
                             )
-                            .await;
+                            .await
+                            {
+                                log_to_ui(
+                                    &app,
+                                    "ERROR",
+                                    &format!(
+                                        "Could not persist synced state for {}: {}",
+                                        asset.path, error
+                                    ),
+                                );
+                                failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            }
                             completed_bytes
                                 .fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst);
                         } else {
@@ -783,7 +809,7 @@ async fn run_sync_pipeline(
                     let _ = app.emit("sync-progress", &asset.path);
                     match client.upload_asset(&asset.path, &device_id, &hash).await {
                         Ok(remote_id) => {
-                            let _ = db::update_sync_state(
+                            if let Err(error) = db::update_sync_state(
                                 &pool,
                                 &asset.path,
                                 &hash,
@@ -792,8 +818,21 @@ async fn run_sync_pipeline(
                                 "SYNCED",
                                 Some(&remote_id),
                             )
-                            .await;
-                            success_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            .await
+                            {
+                                log_to_ui(
+                                    &app,
+                                    "ERROR",
+                                    &format!(
+                                        "Upload completed but could not persist synced state for {}: {}",
+                                        asset.path, error
+                                    ),
+                                );
+                                failure_count
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            } else {
+                                success_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            }
                         }
                         Err(e) => {
                             log_to_ui(
