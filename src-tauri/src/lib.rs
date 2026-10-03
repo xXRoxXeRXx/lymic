@@ -11,6 +11,7 @@ use tauri_plugin_notification::NotificationExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 struct SyncState(AtomicBool);
+struct SyncCoordinator(std::sync::Arc<tokio::sync::Mutex<()>>);
 struct LocaleState(std::sync::Mutex<String>);
 struct TrayMenuState(Menu<tauri::Wry>);
 
@@ -141,6 +142,7 @@ async fn add_folder(
     app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
     watcher: tauri::State<'_, tokio::sync::Mutex<notify::RecommendedWatcher>>,
+    sync_coordinator: tauri::State<'_, SyncCoordinator>,
     path: String,
 ) -> Result<i64, String> {
     let id = db::add_folder(pool.inner(), &path)
@@ -157,12 +159,13 @@ async fn add_folder(
 
     // Auto-sync the new folder immediately in background
     let pool_inner = pool.inner().clone();
+    let coordinator = sync_coordinator.0.clone();
     let path_clone = path.clone();
     tauri::async_runtime::spawn(async move {
         let files = scan_folder_for_media(std::path::Path::new(&path_clone));
         if let Ok(Some(creds)) = auth::get_credentials() {
             let client = std::sync::Arc::new(sync::ImmichClient::new(creds.server_url, creds.api_key));
-            let _ = run_sync_pipeline(app, pool_inner, client, files, true).await;
+            let _ = run_sync_pipeline(app, pool_inner, client, files, true, coordinator).await;
         }
     });
 
@@ -210,7 +213,22 @@ async fn run_sync_pipeline(
     client: std::sync::Arc<sync::ImmichClient>,
     files: Vec<(String, u64)>,
     is_auto: bool,
+    coordinator: std::sync::Arc<tokio::sync::Mutex<()>>,
 ) -> Result<(), String> {
+    // All triggers share this lock, preventing concurrent hashing, checks, and uploads.
+    let _sync_guard = match coordinator.try_lock() {
+        Ok(guard) => guard,
+        Err(_) => {
+            if !is_auto {
+                log_to_ui(
+                    &app,
+                    "INFO",
+                    "Sync queued, waiting for running synchronization.",
+                );
+            }
+            coordinator.lock().await
+        }
+    };
     let total_files = files.len();
     let total_bytes: u64 = files.iter().map(|(_, s)| *s).sum();
     let completed_bytes = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -380,6 +398,7 @@ async fn start_sync(
     app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
     sync_state: tauri::State<'_, SyncState>,
+    sync_coordinator: tauri::State<'_, SyncCoordinator>,
 ) -> Result<(), String> {
     // Attempt to set sync_state to true. If it was already true, return early.
     if sync_state.0.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
@@ -401,7 +420,14 @@ async fn start_sync(
             all_files.extend(scan_folder_for_media(std::path::Path::new(&folder.path)));
         }
 
-        run_sync_pipeline(app, pool.inner().clone(), client, all_files, false).await
+        run_sync_pipeline(
+            app,
+            pool.inner().clone(),
+            client,
+            all_files,
+            false,
+            sync_coordinator.0.clone(),
+        ).await
     }.await;
 
     sync_state.0.store(false, Ordering::SeqCst);
@@ -418,7 +444,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let handle = app.handle().clone();
-            let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
             // Initialize Watcher
             let watcher = watcher::create_watcher(tx).map_err(|e| e.to_string())?;
@@ -445,6 +471,7 @@ pub fn run() {
             // tokio::sync::Mutex so async commands use .lock().await
             handle.manage(tokio::sync::Mutex::new(watcher));
             handle.manage(SyncState(AtomicBool::new(false)));
+            handle.manage(SyncCoordinator(std::sync::Arc::new(tokio::sync::Mutex::new(()))));
             handle.manage(LocaleState(std::sync::Mutex::new("de".to_string())));
 
             // Auto-sync on startup
@@ -463,7 +490,8 @@ pub fn run() {
                         
                         if !all_files.is_empty() {
                             let client = std::sync::Arc::new(sync::ImmichClient::new(creds.server_url, creds.api_key));
-                            let _ = run_sync_pipeline(handle_sync, pool, client, all_files, true).await;
+                            let coordinator = handle_sync.state::<SyncCoordinator>().0.clone();
+                            let _ = run_sync_pipeline(handle_sync, pool, client, all_files, true, coordinator).await;
                         }
                     }
                 }
@@ -525,7 +553,15 @@ pub fn run() {
                                 creds.server_url,
                                 creds.api_key,
                             ));
-                            let _ = run_sync_pipeline(handle_task.clone(), pool_inner, client, files, true).await;
+                            let coordinator = handle_task.state::<SyncCoordinator>().0.clone();
+                            let _ = run_sync_pipeline(
+                                handle_task.clone(),
+                                pool_inner,
+                                client,
+                                files,
+                                true,
+                                coordinator,
+                            ).await;
                         }
                     }
                 }

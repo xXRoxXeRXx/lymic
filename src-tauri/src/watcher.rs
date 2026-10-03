@@ -2,15 +2,15 @@ use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watche
 use std::path::Path;
 use tokio::sync::mpsc;
 
-pub fn create_watcher(tx: mpsc::Sender<Event>) -> notify::Result<RecommendedWatcher> {
+pub fn create_watcher(tx: mpsc::UnboundedSender<Event>) -> notify::Result<RecommendedWatcher> {
     let watcher = RecommendedWatcher::new(
         move |res: notify::Result<Event>| {
             if let Ok(event) = res {
                 match event.kind {
                     EventKind::Create(_) | EventKind::Modify(_) => {
-                        // blocking_send stalls the OS notify thread under backpressure;
-                        //         try_send drops the event gracefully instead.
-                        let _ = tx.try_send(event);
+                        // The receiver batches and deduplicates events. An unbounded channel
+                        // prevents filesystem changes from being silently lost under load.
+                        let _ = tx.send(event);
                     }
                     _ => {}
                 }
