@@ -295,18 +295,30 @@ fn update_locale(
 async fn add_folder(
     app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
-    watcher: tauri::State<'_, tokio::sync::Mutex<notify::RecommendedWatcher>>,
-    sync_coordinator: tauri::State<'_, SyncCoordinator>,
+    watcher: tauri::State<'_, tokio::sync::Mutex<watcher::WatcherState>>,
     path: String,
 ) -> Result<i64, String> {
     let id = db::add_folder(pool.inner(), &path)
         .await
         .map_err(|e| e.to_string())?;
 
+    let path_for_check = std::path::PathBuf::from(&path);
+    let is_available = match tokio::task::spawn_blocking(move || path_for_check.exists()).await {
+        Ok(is_available) => is_available,
+        Err(error) => {
+            log_to_ui(
+                &app,
+                "WARN",
+                &format!("Could not check folder '{}': {}", path, error),
+            );
+            false
+        }
+    };
+
     let mut w = watcher.lock().await;
     // warn when the path doesn't exist (e.g. offline drive).
-    match watcher::watch_path(&mut w, &path) {
-        Ok(false) => log_to_ui(
+    match w.reconcile_path(&path, is_available) {
+        Ok(watcher::WatchRegistration::PathUnavailable) => log_to_ui(
             &app,
             "WARN",
             &format!(
@@ -315,39 +327,25 @@ async fn add_folder(
             ),
         ),
         Err(e) => log_to_ui(&app, "WARN", &format!("Could not watch '{}': {}", path, e)),
-        Ok(true) => {}
+        Ok(_) => {}
     }
 
-    // Auto-sync the new folder immediately in background
-    let pool_inner = pool.inner().clone();
-    let coordinator = sync_coordinator.0.clone();
-    let path_clone = path.clone();
-    tauri::async_runtime::spawn(async move {
-        let scan_result =
-            match scan_folders_for_media(vec![std::path::PathBuf::from(path_clone)]).await {
-                Ok(result) => result,
-                Err(error) => {
-                    log_to_ui(&app, "ERROR", &error);
-                    return;
-                }
-            };
-        if let Ok(Some(creds)) = auth::get_credentials() {
-            if let Some(client) = create_authenticated_client(&app, creds) {
-                if let Err(error) = run_sync_pipeline(
-                    app.clone(),
-                    pool_inner,
-                    client,
-                    scan_result,
-                    true,
-                    coordinator,
-                )
-                .await
-                {
-                    emit_sync_error(&app, &error);
-                }
-            }
-        }
-    });
+    // An offline folder will be scanned when the deferred-watch task registers it.
+    if is_available {
+        let pool_inner = pool.inner().clone();
+        let path_clone = path.clone();
+        tauri::async_runtime::spawn(async move {
+            let scan_result =
+                match scan_folders_for_media(vec![std::path::PathBuf::from(path_clone)]).await {
+                    Ok(result) => result,
+                    Err(error) => {
+                        log_to_ui(&app, "ERROR", &error);
+                        return;
+                    }
+                };
+            sync_scan_result_if_authenticated(app, pool_inner, scan_result).await;
+        });
+    }
 
     Ok(id)
 }
@@ -365,7 +363,7 @@ async fn get_folders(
 async fn remove_folder(
     app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
-    watcher: tauri::State<'_, tokio::sync::Mutex<notify::RecommendedWatcher>>,
+    watcher: tauri::State<'_, tokio::sync::Mutex<watcher::WatcherState>>,
     id: i64,
 ) -> Result<(), String> {
     let folders = db::get_folders(pool.inner())
@@ -735,6 +733,27 @@ async fn check_assets_exist_with_backoff(
     unreachable!("the final bulk-check attempt always returns")
 }
 
+async fn sync_scan_result_if_authenticated(
+    app: tauri::AppHandle,
+    pool: sqlx::SqlitePool,
+    scan_result: ScanResult,
+) {
+    if scan_result.files.is_empty() && scan_result.failures.is_empty() {
+        return;
+    }
+
+    if let Ok(Some(credentials)) = auth::get_credentials() {
+        if let Some(client) = create_authenticated_client(&app, credentials) {
+            let coordinator = app.state::<SyncCoordinator>().0.clone();
+            if let Err(error) =
+                run_sync_pipeline(app.clone(), pool, client, scan_result, true, coordinator).await
+            {
+                emit_sync_error(&app, &error);
+            }
+        }
+    }
+}
+
 #[tauri::command]
 async fn start_sync(
     app: tauri::AppHandle,
@@ -819,14 +838,14 @@ pub fn run() {
                 .map_err(|e| format!("Failed to initialize database: {}", e))?;
 
             // Watch existing folders
-            let mut watcher = watcher;
+            let mut watcher = watcher::WatcherState::new(watcher);
             if let Ok(folders) = tauri::async_runtime::block_on(db::get_folders(&pool)) {
                 for folder in folders {
                     // surface deferred-watch state at startup.
                     match watcher::watch_path(&mut watcher, &folder.path) {
-                        Ok(false) => eprintln!("[WARN] Folder '{}' offline at startup; watching deferred.", folder.path),
+                        Ok(watcher::WatchRegistration::PathUnavailable) => eprintln!("[WARN] Folder '{}' offline at startup; watching deferred.", folder.path),
                         Err(e)   => eprintln!("[WARN] Could not watch '{}': {}", folder.path, e),
-                        Ok(true) => {}
+                        Ok(_) => {}
                     }
                 }
             }
@@ -838,15 +857,113 @@ pub fn run() {
             handle.manage(SyncCoordinator(std::sync::Arc::new(tokio::sync::Mutex::new(()))));
             handle.manage(LocaleState(std::sync::Mutex::new("de".to_string())));
 
+            // Missing folders are persisted so removable and network storage can be
+            // selected while offline. Retry them periodically once they become available.
+            let handle_deferred_watches = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let mut retry_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+                retry_interval.tick().await;
+
+                loop {
+                    retry_interval.tick().await;
+
+                    let pool = handle_deferred_watches.state::<sqlx::SqlitePool>().inner().clone();
+                    let folders = match db::get_folders(&pool).await {
+                        Ok(folders) => folders,
+                        Err(error) => {
+                            log_to_ui(
+                                &handle_deferred_watches,
+                                "ERROR",
+                                &format!("Could not load deferred watched folders: {}", error),
+                            );
+                            continue;
+                        }
+                    };
+
+                    let available_paths = match tokio::task::spawn_blocking(move || {
+                        folders
+                            .into_iter()
+                            .map(|folder| {
+                                let path = std::path::PathBuf::from(folder.path);
+                                let is_available = path.exists();
+                                (path, is_available)
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .await
+                    {
+                        Ok(paths) => paths,
+                        Err(error) => {
+                            log_to_ui(
+                                &handle_deferred_watches,
+                                "ERROR",
+                                &format!("Could not check deferred watched folders: {}", error),
+                            );
+                            continue;
+                        }
+                    };
+
+                    let registered_paths = {
+                        let watcher = handle_deferred_watches
+                            .state::<tokio::sync::Mutex<watcher::WatcherState>>();
+                        let mut watcher = watcher.lock().await;
+                        available_paths
+                            .into_iter()
+                            .filter_map(|(path, is_available)| match watcher.reconcile_path(
+                                &path,
+                                is_available,
+                            ) {
+                                Ok(watcher::WatchRegistration::Registered) => Some(path),
+                                Ok(_) => None,
+                                Err(error) => {
+                                    log_to_ui(
+                                        &handle_deferred_watches,
+                                        "WARN",
+                                        &format!("Could not watch '{}': {}", path.display(), error),
+                                    );
+                                    None
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    };
+
+                    if registered_paths.is_empty() {
+                        continue;
+                    }
+
+                    for path in &registered_paths {
+                        log_to_ui(
+                            &handle_deferred_watches,
+                            "INFO",
+                            &format!("Folder '{}' is available; watching enabled.", path.display()),
+                        );
+                    }
+
+                    let scan_result = match scan_folders_for_media(registered_paths.clone()).await {
+                        Ok(scan_result) => scan_result,
+                        Err(error) => {
+                            log_to_ui(&handle_deferred_watches, "ERROR", &error);
+                            continue;
+                        }
+                    };
+
+                    sync_scan_result_if_authenticated(
+                        handle_deferred_watches.clone(),
+                        pool,
+                        scan_result,
+                    )
+                    .await;
+                }
+            });
+
             // Auto-sync on startup
             let handle_sync = handle.clone();
             tauri::async_runtime::spawn(async move {
                 // Give the UI a small delay to ensure it's ready for events
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-                if let Ok(Some(creds)) = auth::get_credentials() {
-                    let pool = handle_sync.state::<sqlx::SqlitePool>().inner().clone();
-                    if let Ok(folders) = db::get_folders(&pool).await {
+                let pool = handle_sync.state::<sqlx::SqlitePool>().inner().clone();
+                if let Ok(folders) = db::get_folders(&pool).await {
                         for folder in &folders {
                             log_to_ui(&handle_sync, "INFO", &format!("Scanning folder: {}", folder.path));
                         }
@@ -862,24 +979,7 @@ pub fn run() {
                             }
                         };
 
-                        if !scan_result.files.is_empty() || !scan_result.failures.is_empty() {
-                            if let Some(client) = create_authenticated_client(&handle_sync, creds) {
-                                let coordinator = handle_sync.state::<SyncCoordinator>().0.clone();
-                                if let Err(error) = run_sync_pipeline(
-                                    handle_sync.clone(),
-                                    pool,
-                                    client,
-                                    scan_result,
-                                    true,
-                                    coordinator,
-                                )
-                                .await
-                                {
-                                    emit_sync_error(&handle_sync, &error);
-                                }
-                            }
-                        }
-                    }
+                    sync_scan_result_if_authenticated(handle_sync.clone(), pool, scan_result).await;
                 }
             });
 
