@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-10-04
+
+### Fixed
+- **Immich bulk check payload bounding**:
+  - Limited the chunk size for batch duplicate checks to 100 units (`BULK_CHECK_CHUNK_SIZE`), ensuring requests stay within Immich server body size limits and preventing bulk sync errors during large synchronizations.
+- **Unix platform test compatibility**:
+  - Corrected database file lock simulation in unit tests on Unix environments by toggling permissions rather than relying on Windows-exclusive share locks.
+- **macOS system tray compiler warning**:
+  - Eliminated unused variable warning for the system tray handle on macOS targets.
+
 ## [0.11.0] - 2026-10-04
 
 ### Added
