@@ -17,7 +17,13 @@ type WatchedFolder = {
   target_album_id: string | null;
 };
 
+type FailedSyncEntry = {
+  localPath: string;
+  failureReason: string;
+};
+
 let watchedFolders: WatchedFolder[] = [];
+let failedSyncs: FailedSyncEntry[] = [];
 let triggerSync: (() => void) | undefined;
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
@@ -40,6 +46,8 @@ function renderAuthenticatedPage() {
         return Promise.resolve("Meyer");
       case "get_folders":
         return Promise.resolve(watchedFolders);
+      case "get_failed_syncs":
+        return Promise.resolve(failedSyncs);
       case "update_locale":
         return Promise.resolve();
       default:
@@ -53,6 +61,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.setItem("lymic-locale", "en");
   watchedFolders = [];
+  failedSyncs = [];
   triggerSync = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
     if (event === "trigger-sync") triggerSync = handler;
@@ -91,6 +100,7 @@ describe("sync dashboard", () => {
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
       if (command === "get_current_user_name") return Promise.resolve("Meyer");
       if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
       return Promise.resolve();
     });
 
@@ -117,6 +127,7 @@ describe("sync dashboard", () => {
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
       if (command === "get_current_user_name") return Promise.resolve("Meyer");
       if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
       return Promise.resolve();
     });
 
@@ -125,6 +136,60 @@ describe("sync dashboard", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Sync Now" })).toBeDisabled();
     });
+  });
+
+  it("shows persisted failure details and retries them", async () => {
+    failedSyncs = [{ localPath: "C:/photos/failed.jpg", failureReason: "Upload rejected" }];
+    renderAuthenticatedPage();
+
+    const detailsButton = await screen.findByRole("button", { name: "1 failed file(s)" });
+    expect(screen.getByText("Sync completed with errors")).toBeInTheDocument();
+    expect(detailsButton).toHaveAttribute("aria-controls", "failed-sync-details-list");
+    await fireEvent.click(detailsButton);
+    expect(screen.getByLabelText("Failed sync details")).toHaveAttribute("id", "failed-sync-details-list");
+    expect(screen.getByText("C:/photos/failed.jpg")).toBeInTheDocument();
+    expect(screen.getByText("Upload rejected")).toBeInTheDocument();
+
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "retry_failed_syncs") {
+        failedSyncs = [];
+        return Promise.resolve({ processed: 1, uploaded: 1, failed: 0 });
+      }
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
+      return Promise.resolve();
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Retry failed files" }));
+
+    await waitFor(() => {
+      expect(tauri.invoke).toHaveBeenCalledWith("retry_failed_syncs");
+      expect(screen.getByText("All up to date")).toBeInTheDocument();
+      expect(screen.queryByText("C:/photos/failed.jpg")).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps error status when failures remain after a clean sync", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    failedSyncs = [{ localPath: "C:/photos/failed.jpg", failureReason: "Upload rejected" }];
+    renderAuthenticatedPage();
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "start_sync") return Promise.resolve({ processed: 1, uploaded: 1, failed: 0 });
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
+      return Promise.resolve();
+    });
+
+    await screen.findByText("photos");
+    await fireEvent.click(await screen.findByRole("button", { name: "Sync Now" }));
+
+    await waitFor(() => expect(screen.getByText("Sync completed with errors")).toBeInTheDocument());
   });
 });
 
@@ -158,6 +223,7 @@ describe("logout", () => {
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
       if (command === "get_folders") return Promise.resolve([]);
+      if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
       return Promise.resolve();
     });
 

@@ -28,6 +28,8 @@
   let progress = $state(0);
   let currentFile = $state("");
   let watchedFolders = $state<WatchedFolder[]>([]);
+  let failedSyncs = $state<FailedSyncEntry[]>([]);
+  let showFailedSyncs = $state(false);
   let isAutostartEnabled = $state(false);
   let logs = $state<LogEntry[]>([]);
   let actionError = $state("");
@@ -73,6 +75,11 @@
     path: string;
     recursive: boolean;
     target_album_id: string | null;
+  }
+
+  interface FailedSyncEntry {
+    localPath: string;
+    failureReason: string;
   }
 
   let logCounter = 0;
@@ -147,7 +154,7 @@
           logs = [entry, ...logs].slice(0, 50);
         }),
         listen("sync-idle", () => {
-          finishSync();
+          void finishSync();
         }),
       ]);
 
@@ -168,6 +175,7 @@
           } catch (e) {
             console.warn("Failed to load current user", e);
           }
+          await refreshFailedSyncs();
         }
         await refreshFolders();
         isAutostartEnabled = await isEnabled();
@@ -197,9 +205,11 @@
     };
   });
 
-  function finishSync(summary?: SyncSummary) {
+  async function finishSync(summary?: SyncSummary) {
     if (!componentMounted) return;
-    if (syncStatus === "error" || (summary && summary.failed > 0)) {
+    await refreshFailedSyncs();
+    if (!componentMounted) return;
+    if (syncStatus === "error" || (summary && summary.failed > 0) || failedSyncs.length > 0) {
       syncStatus = "error";
       progress = 0;
       return;
@@ -230,9 +240,39 @@
     try {
       const summary = await invoke<SyncSummary>("start_sync");
       // The command response is reliable even when an event is missed.
-      finishSync(summary);
+      await finishSync(summary);
     } catch (e) {
       console.error("Sync failed", e);
+      syncStatus = "error";
+    }
+  }
+
+  async function refreshFailedSyncs() {
+    try {
+      failedSyncs = await invoke<FailedSyncEntry[]>("get_failed_syncs");
+      if (failedSyncs.length > 0 && syncStatus === "idle") {
+        syncStatus = "error";
+      }
+    } catch (e) {
+      console.error("Failed to load sync failures", e);
+      actionError = formatError(e);
+    }
+  }
+
+  async function handleRetryFailedSyncs() {
+    if (syncStatus === "syncing" || failedSyncs.length === 0) return;
+    actionError = "";
+    if (progressResetTimer) clearTimeout(progressResetTimer);
+    progressResetTimer = undefined;
+    syncStatus = "syncing";
+    progress = 0;
+    try {
+      const summary = await invoke<SyncSummary>("retry_failed_syncs");
+      await finishSync(summary);
+    } catch (e) {
+      console.error("Failed to retry sync failures", e);
+      actionError = formatError(e);
+      await refreshFailedSyncs();
       syncStatus = "error";
     }
   }
@@ -290,6 +330,7 @@
     try {
       await invoke<void>("login", { serverUrl, apiKey });
       isAuthenticated = true;
+      await refreshFailedSyncs();
       try {
         currentUserName = await invoke<string>("get_current_user_name");
       } catch (e) {
@@ -319,6 +360,8 @@
       isAuthenticated = false;
       apiKey = "";
       currentUserName = "";
+      failedSyncs = [];
+      showFailedSyncs = false;
       currentView = "dashboard";
     } catch (e) {
       console.error("Logout failed", e);
@@ -492,6 +535,42 @@
                 <p class="text-xs font-bold text-slate-300 uppercase tracking-wider">{$t('server')}</p>
                 <p class="font-semibold text-slate-600 truncate max-w-[150px]">{serverUrl.replace(/https?:\/\//, '')}</p>
               </div>
+            </div>
+          {/if}
+
+          {#if failedSyncs.length > 0}
+            <div class="border-t border-red-100 pt-5 space-y-4">
+              <div class="flex items-center justify-between gap-4">
+                <button
+                  type="button"
+                  class="flex items-center gap-2 text-sm font-bold text-red-700 hover:text-red-800"
+                  aria-expanded={showFailedSyncs}
+                  aria-controls="failed-sync-details-list"
+                  onclick={() => showFailedSyncs = !showFailedSyncs}
+                >
+                  <AlertCircle class="w-4 h-4" />
+                  {$t('failed_sync_count', { values: { count: failedSyncs.length } })}
+                  <ChevronRight class="w-4 h-4 transition-transform {showFailedSyncs ? 'rotate-90' : ''}" />
+                </button>
+                <button
+                  type="button"
+                  class="text-xs font-bold text-blue-600 hover:text-blue-700 disabled:text-slate-300"
+                  onclick={handleRetryFailedSyncs}
+                  disabled={syncStatus === 'syncing'}
+                >
+                  {$t('retry_failed_syncs')}
+                </button>
+              </div>
+              {#if showFailedSyncs}
+                <div id="failed-sync-details-list" class="max-h-48 overflow-y-auto space-y-3 pr-2" aria-label={$t('failed_sync_details')}>
+                  {#each failedSyncs as failedSync}
+                    <div class="rounded-lg bg-red-50 p-3 text-xs">
+                      <p class="break-all font-mono text-red-800">{failedSync.localPath}</p>
+                      <p class="mt-1 text-red-600">{failedSync.failureReason || $t('failure_details_unavailable')}</p>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
             </div>
           {/if}
         </section>

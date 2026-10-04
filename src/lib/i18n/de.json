@@ -45,5 +45,9 @@
   "tray_show": "Einstellungen",
   "tray_sync": "Jetzt synchronisieren",
   "notification_complete_title": "{} Abgeschlossen",
-  "notification_complete_body": "{processed} Dateien verarbeitet. {uploaded} neue Uploads. {failed} Fehler."
+  "notification_complete_body": "{processed} Dateien verarbeitet. {uploaded} neue Uploads. {failed} Fehler.",
+  "failed_sync_count": "{count} fehlgeschlagene Datei(en)",
+  "failed_sync_details": "Details fehlgeschlagener Synchronisierungen",
+  "failure_details_unavailable": "Fehlerdetails sind nicht verfügbar.",
+  "retry_failed_syncs": "Fehlgeschlagene Dateien wiederholen"
 }

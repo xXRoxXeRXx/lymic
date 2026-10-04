@@ -865,7 +865,7 @@ async fn run_sync_pipeline(
             "ERROR",
             &format!("{}: {}", failure.path, failure.error),
         );
-        if let Err(error) = db::mark_sync_failed(&pool, &failure.path, 0, 0).await {
+        if let Err(error) = db::mark_sync_failed(&pool, &failure.path, 0, 0, &failure.error).await {
             log_to_ui(
                 &app,
                 "ERROR",
@@ -986,7 +986,7 @@ async fn run_sync_pipeline(
                                 &format!("Hashing failed for {}: {}", path, error),
                             );
                             if let Err(error) =
-                                db::mark_sync_failed(&pool, &path, mtime, size as i64).await
+                                db::mark_sync_failed(&pool, &path, mtime, size as i64, &error.to_string()).await
                             {
                                 log_to_ui(
                                     &app,
@@ -1018,7 +1018,7 @@ async fn run_sync_pipeline(
                                 &format!("Hashing task failed for {}: {}", path, error),
                             );
                             if let Err(error) =
-                                db::mark_sync_failed(&pool, &path, mtime, size as i64).await
+                                db::mark_sync_failed(&pool, &path, mtime, size as i64, &error.to_string()).await
                             {
                                 log_to_ui(
                                     &app,
@@ -1199,6 +1199,7 @@ async fn run_sync_pipeline(
                                 &asset.path,
                                 asset.mtime,
                                 asset.size as i64,
+                                &e.to_string(),
                             )
                             .await
                             {
@@ -1409,6 +1410,53 @@ async fn sync_scan_result_if_authenticated(
     }
 }
 
+async fn prepare_failed_sync_retry(paths: Vec<String>) -> Result<ScanResult, String> {
+    tokio::task::spawn_blocking(move || {
+        let mut result = ScanResult::default();
+        for path in paths {
+            let path_buf = PathBuf::from(&path);
+            if !is_media_file(&path_buf) {
+                result.failures.push(FileFailure {
+                    path,
+                    error: "Path is no longer a supported media file.".to_string(),
+                });
+                continue;
+            }
+
+            match std::fs::metadata(&path_buf) {
+                Ok(metadata) if metadata.is_file() => match std::fs::File::open(&path_buf) {
+                    Ok(_) => result.files.push(Asset {
+                        path,
+                        size: metadata.len(),
+                        mtime: metadata_mtime(&metadata),
+                    }),
+                    Err(error) => result.failures.push(FileFailure {
+                        path,
+                        error: format!("Could not open file for retry: {}", error),
+                    }),
+                },
+                Ok(_) => result.failures.push(FileFailure {
+                    path,
+                    error: "Path is no longer a regular file.".to_string(),
+                }),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    result.failures.push(FileFailure {
+                        path,
+                        error: "File no longer exists.".to_string(),
+                    })
+                }
+                Err(error) => result.failures.push(FileFailure {
+                    path,
+                    error: format!("Could not read file metadata for retry: {}", error),
+                }),
+            }
+        }
+        result
+    })
+    .await
+    .map_err(|error| format!("Failed to prepare retry: {}", error))
+}
+
 #[tauri::command]
 async fn start_sync(
     app: tauri::AppHandle,
@@ -1484,6 +1532,80 @@ async fn start_sync(
                 None,
                 "manual_sync",
                 "Manual synchronization aborted",
+                json!({ "failure_reason": audit_safe_error(error, None, None) }),
+            ),
+        );
+    }
+    result
+}
+
+#[tauri::command]
+async fn get_failed_syncs(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<Vec<db::FailedSyncEntry>, String> {
+    db::get_failed_syncs(pool.inner())
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn retry_failed_syncs(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    sync_state: tauri::State<'_, SyncState>,
+    sync_coordinator: tauri::State<'_, SyncCoordinator>,
+) -> Result<SyncSummary, String> {
+    if sync_state
+        .0
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Err("Sync already in progress".to_string());
+    }
+
+    let command_operation_id = audit::AuditEvent::operation_id();
+    let result = async {
+        let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
+        let audit_context = SyncAuditContext::from_credentials(
+            &credentials.server_url,
+            &credentials.api_key,
+            "retry_failed_syncs",
+        );
+        let client =
+            create_authenticated_client(&app, credentials).ok_or("Invalid server configuration")?;
+        let failed_paths = db::get_failed_syncs(pool.inner())
+            .await
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .map(|entry| entry.local_path)
+            .collect();
+        let scan_result = prepare_failed_sync_retry(failed_paths).await?;
+
+        run_sync_pipeline(
+            app.clone(),
+            pool.inner().clone(),
+            client,
+            scan_result,
+            false,
+            sync_coordinator.0.clone(),
+            audit_context,
+        )
+        .await
+    }
+    .await;
+
+    sync_state.0.store(false, Ordering::SeqCst);
+    if let Err(error) = &result {
+        audit_event(
+            &app,
+            audit::AuditEvent::new(
+                &command_operation_id,
+                "sync.retry_aborted",
+                audit::Outcome::Failure,
+                audit::Severity::Error,
+                None,
+                "retry_failed_syncs",
+                "Failed synchronization retry aborted",
                 json!({ "failure_reason": audit_safe_error(error, None, None) }),
             ),
         );
@@ -1996,6 +2118,8 @@ pub fn run() {
             get_folders,
             remove_folder,
             start_sync,
+            get_failed_syncs,
+            retry_failed_syncs,
             update_locale,
             get_database_recovery_notice
         ])
@@ -2099,6 +2223,46 @@ mod tests {
         assert_eq!(result.files.len(), 1);
         assert_eq!(result.overlapping_folders.len(), 1);
         assert!(!result.files[0].path.starts_with(r"\\?\"));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn retry_preparation_keeps_invalid_paths_as_failures() {
+        let root = temporary_directory();
+        std::fs::create_dir_all(&root).unwrap();
+        let media_path = root.join("photo.jpg");
+        let unsupported_path = root.join("notes.txt");
+        let directory_path = root.join("directory.jpg");
+        let missing_path = root.join("missing.jpg");
+        std::fs::write(&media_path, b"test image").unwrap();
+        std::fs::write(&unsupported_path, b"not media").unwrap();
+        std::fs::create_dir_all(&directory_path).unwrap();
+
+        let result = prepare_failed_sync_retry(vec![
+            media_path.to_string_lossy().to_string(),
+            unsupported_path.to_string_lossy().to_string(),
+            directory_path.to_string_lossy().to_string(),
+            missing_path.to_string_lossy().to_string(),
+        ])
+        .await
+        .unwrap();
+
+        assert_eq!(result.files.len(), 1);
+        assert_eq!(result.files[0].path, media_path.to_string_lossy());
+        assert_eq!(result.failures.len(), 3);
+        assert!(result
+            .failures
+            .iter()
+            .any(|failure| failure.error == "Path is no longer a supported media file."));
+        assert!(result
+            .failures
+            .iter()
+            .any(|failure| failure.error == "Path is no longer a regular file."));
+        assert!(result
+            .failures
+            .iter()
+            .any(|failure| failure.error == "File no longer exists."));
 
         std::fs::remove_dir_all(root).unwrap();
     }

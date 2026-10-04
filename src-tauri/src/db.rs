@@ -24,6 +24,13 @@ pub struct DbInitResult {
     pub status: DatabaseStatus,
 }
 
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FailedSyncEntry {
+    pub local_path: String,
+    pub failure_reason: String,
+}
+
 #[derive(Debug)]
 pub(crate) enum InitFailure {
     Corrupt(String),
@@ -364,8 +371,9 @@ pub async fn update_sync_state(
             file_hash = excluded.file_hash,
             last_modified = excluded.last_modified,
             size = excluded.size,
-            status = excluded.status,
-            remote_id = excluded.remote_id",
+             status = excluded.status,
+             remote_id = excluded.remote_id,
+             failure_reason = CASE WHEN excluded.status = 'SYNCED' THEN NULL ELSE sync_state.failure_reason END",
     )
     .bind(path)
     .bind(hash)
@@ -383,23 +391,45 @@ pub async fn mark_sync_failed(
     path: &str,
     mtime: i64,
     size: i64,
+    failure_reason: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO sync_state (local_path, file_hash, last_modified, size, status, remote_id)
-         VALUES (?, '', ?, ?, 'FAILED', NULL)
+        "INSERT INTO sync_state (local_path, file_hash, last_modified, size, status, remote_id, failure_reason)
+         VALUES (?, '', ?, ?, 'FAILED', NULL, ?)
          ON CONFLICT(local_path) DO UPDATE SET
-            file_hash = excluded.file_hash,
-            last_modified = excluded.last_modified,
-            size = excluded.size,
-            status = excluded.status,
-            remote_id = NULL",
+             file_hash = excluded.file_hash,
+             last_modified = excluded.last_modified,
+             size = excluded.size,
+             status = excluded.status,
+             remote_id = NULL,
+             failure_reason = excluded.failure_reason",
     )
     .bind(path)
     .bind(mtime)
     .bind(size)
+    .bind(failure_reason)
     .execute(pool)
     .await?;
     Ok(())
+}
+
+pub async fn get_failed_syncs(pool: &SqlitePool) -> Result<Vec<FailedSyncEntry>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT local_path, COALESCE(NULLIF(failure_reason, ''), 'Failure details are unavailable; retry to obtain details.') AS failure_reason
+         FROM sync_state
+         WHERE status = 'FAILED' OR (failure_reason IS NOT NULL AND failure_reason != '')
+         ORDER BY local_path ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| FailedSyncEntry {
+            local_path: row.get("local_path"),
+            failure_reason: row.get("failure_reason"),
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -475,7 +505,9 @@ mod tests {
         update_sync_state(&pool, "photo.jpg", "old-hash", 42, 123, "SYNCED", None)
             .await
             .unwrap();
-        mark_sync_failed(&pool, "photo.jpg", 42, 123).await.unwrap();
+        mark_sync_failed(&pool, "photo.jpg", 42, 123, "Upload rejected")
+            .await
+            .unwrap();
 
         assert_eq!(
             get_cached_hash(&pool, "photo.jpg", 42, 123).await.unwrap(),
@@ -489,6 +521,70 @@ mod tests {
             .unwrap();
         assert_eq!(row.get::<String, _>("file_hash"), "");
         assert_eq!(row.get::<String, _>("status"), "FAILED");
+    }
+
+    #[tokio::test]
+    async fn failed_sync_entries_persist_update_and_clear_on_success() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        mark_sync_failed(&pool, "b.jpg", 1, 2, "First error")
+            .await
+            .unwrap();
+        mark_sync_failed(&pool, "a.jpg", 3, 4, "Other error")
+            .await
+            .unwrap();
+        mark_sync_failed(&pool, "b.jpg", 5, 6, "Updated error")
+            .await
+            .unwrap();
+
+        let failures = get_failed_syncs(&pool).await.unwrap();
+        assert_eq!(failures.len(), 2);
+        assert_eq!(failures[0].local_path, "a.jpg");
+        assert_eq!(failures[1].failure_reason, "Updated error");
+
+        update_sync_state(&pool, "b.jpg", "hash", 5, 6, "PENDING", None)
+            .await
+            .unwrap();
+        assert_eq!(get_failed_syncs(&pool).await.unwrap().len(), 2);
+
+        update_sync_state(&pool, "b.jpg", "hash", 5, 6, "SYNCED", None)
+            .await
+            .unwrap();
+        let failures = get_failed_syncs(&pool).await.unwrap();
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].local_path, "a.jpg");
+    }
+
+    #[tokio::test]
+    async fn failed_sync_entries_include_legacy_rows_without_a_reason() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO sync_state (local_path, file_hash, last_modified, size, status, remote_id, failure_reason)
+             VALUES (?, '', 0, 0, 'FAILED', NULL, NULL)",
+        )
+        .bind("legacy.jpg")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let failures = get_failed_syncs(&pool).await.unwrap();
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].local_path, "legacy.jpg");
+        assert_eq!(
+            failures[0].failure_reason,
+            "Failure details are unavailable; retry to obtain details."
+        );
     }
 
     #[tokio::test]

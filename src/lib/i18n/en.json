@@ -45,5 +45,9 @@
   "tray_show": "Show Window",
   "tray_sync": "Sync Now",
   "notification_complete_title": "{} Complete",
-  "notification_complete_body": "Processed {processed} files. {uploaded} new uploads. {failed} errors."
+  "notification_complete_body": "Processed {processed} files. {uploaded} new uploads. {failed} errors.",
+  "failed_sync_count": "{count} failed file(s)",
+  "failed_sync_details": "Failed sync details",
+  "failure_details_unavailable": "Failure details are unavailable.",
+  "retry_failed_syncs": "Retry failed files"
 }
