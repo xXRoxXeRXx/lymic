@@ -41,7 +41,7 @@ pub(crate) fn setup(app: &tauri::App, has_folders: bool) -> Result<(), Box<dyn s
             }
             _ => {}
         })
-        .on_tray_icon_event(|tray, event| {
+        .on_tray_icon_event(|_tray, event| {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
@@ -49,7 +49,7 @@ pub(crate) fn setup(app: &tauri::App, has_folders: bool) -> Result<(), Box<dyn s
             } = event
             {
                 #[cfg(not(target_os = "macos"))]
-                show_main_window(tray.app_handle());
+                show_main_window(_tray.app_handle());
             }
         });
     #[cfg(target_os = "macos")]
