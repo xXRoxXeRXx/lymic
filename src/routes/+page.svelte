@@ -171,6 +171,16 @@
         }
         await refreshFolders();
         isAutostartEnabled = await isEnabled();
+
+        try {
+          const recoveryNotice = await invoke<string | null>("get_database_recovery_notice");
+          if (recoveryNotice && componentMounted) {
+            const entry = parseLog(`[WARN] ${recoveryNotice}`);
+            logs = [entry, ...logs].slice(0, 50);
+          }
+        } catch (e) {
+          console.warn("Failed to check database recovery notice", e);
+        }
         
         if (componentMounted) {
           await setupListeners();

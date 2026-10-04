@@ -19,6 +19,7 @@ use tauri_plugin_notification::NotificationExt;
 struct SyncState(AtomicBool);
 struct SyncCoordinator(std::sync::Arc<tokio::sync::Mutex<()>>);
 struct LocaleState(std::sync::Mutex<String>);
+struct DatabaseRecoveryNotice(std::sync::Mutex<Option<String>>);
 struct TrayMenuState(Menu<tauri::Wry>);
 
 fn set_tray_sync_enabled(app: &tauri::AppHandle, enabled: bool) {
@@ -536,6 +537,13 @@ async fn get_current_user_name() -> Result<String, String> {
     let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
     let client = sync::ImmichClient::new(credentials.server_url, credentials.api_key)?;
     client.current_user().await
+}
+
+#[tauri::command]
+fn get_database_recovery_notice(
+    state: tauri::State<'_, DatabaseRecoveryNotice>,
+) -> Option<String> {
+    state.0.lock().ok().and_then(|mut guard| guard.take())
 }
 
 #[tauri::command]
@@ -1504,10 +1512,50 @@ pub fn run() {
             )
                 .map_err(|e| e.to_string())?;
 
-            // if DB init fails, return Err from setup() so the app exits
-            //         cleanly instead of silently continuing without managed state.
-            let pool = tauri::async_runtime::block_on(db::init(&handle))
+            // If DB init fails completely (e.g. disk full), return Err from setup() so app exits cleanly.
+            // When database corruption is detected, db::init automatically quarantines and repairs it.
+            let db_init = tauri::async_runtime::block_on(db::init(&handle))
                 .map_err(|e| format!("Failed to initialize database: {}", e))?;
+            let pool = db_init.pool;
+
+            let mut recovery_notice = None;
+            if let db::DatabaseStatus::Repaired {
+                ref backup_path,
+                salvaged_folders,
+                ref reason,
+            } = db_init.status
+            {
+                let notice = format!(
+                    "Database corruption detected ({}). Quarantined backup to '{}' and restored {} folder(s).",
+                    reason,
+                    backup_path.display(),
+                    salvaged_folders
+                );
+                send_notification(
+                    &handle,
+                    "Lymic - Database Repaired",
+                    &notice,
+                    "WARN",
+                );
+                audit_event(
+                    &handle,
+                    audit::AuditEvent::new(
+                        audit::AuditEvent::operation_id(),
+                        "database.repaired",
+                        audit::Outcome::Success,
+                        audit::Severity::Warn,
+                        None,
+                        "startup",
+                        "Database corruption detected and repaired",
+                        json!({
+                            "backup_path": backup_path.to_string_lossy(),
+                            "salvaged_folders": salvaged_folders,
+                            "reason": reason,
+                        }),
+                    ),
+                );
+                recovery_notice = Some(notice);
+            }
 
             // Watch existing folders
             let mut watcher = watcher::WatcherState::new(watcher);
@@ -1576,6 +1624,7 @@ pub fn run() {
             handle.manage(SyncState(AtomicBool::new(false)));
             handle.manage(SyncCoordinator(std::sync::Arc::new(tokio::sync::Mutex::new(()))));
             handle.manage(LocaleState(std::sync::Mutex::new("en".to_string())));
+            handle.manage(DatabaseRecoveryNotice(std::sync::Mutex::new(recovery_notice)));
             audit_event(
                 &handle,
                 audit::AuditEvent::new(
@@ -1944,7 +1993,8 @@ pub fn run() {
             get_folders,
             remove_folder,
             start_sync,
-            update_locale
+            update_locale,
+            get_database_recovery_notice
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
