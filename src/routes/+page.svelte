@@ -19,6 +19,7 @@
   let isAuthenticated = $state(false);
   let currentView = $state("dashboard");
   let serverUrl = $state("");
+  let currentUserName = $state("");
   let apiKey = $state("");
   let isLoggingIn = $state(false);
   let loginError = $state("");
@@ -162,6 +163,11 @@
         isAuthenticated = await invoke<boolean>("get_auth_status");
         if (isAuthenticated) {
           serverUrl = await invoke<string>("get_server_url");
+          try {
+            currentUserName = await invoke<string>("get_current_user_name");
+          } catch (e) {
+            console.warn("Failed to load current user", e);
+          }
         }
         await refreshFolders();
         isAutostartEnabled = await isEnabled();
@@ -270,6 +276,12 @@
     try {
       await invoke<void>("login", { serverUrl, apiKey });
       isAuthenticated = true;
+      try {
+        currentUserName = await invoke<string>("get_current_user_name");
+      } catch (e) {
+        // The credentials are valid even if the optional account label cannot load.
+        console.warn("Failed to load current user", e);
+      }
     } catch (e) {
       loginError = formatError(e);
     } finally {
@@ -286,6 +298,7 @@
       await invoke<void>("logout");
       isAuthenticated = false;
       apiKey = "";
+      currentUserName = "";
       currentView = "dashboard";
     } catch (e) {
       console.error("Logout failed", e);
@@ -557,6 +570,12 @@
             <div class="p-8 flex items-center justify-between">
               <div class="space-y-1">
                 <p class="font-bold text-slate-900">{$t('account')}</p>
+                {#if currentUserName}
+                  <p class="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <User class="w-4 h-4 text-slate-400" />
+                    {$t('logged_in_as')} {currentUserName}
+                  </p>
+                {/if}
                 <p class="text-xs text-slate-500">{$t('logged_in_at')} {serverUrl}</p>
               </div>
               <!-- Was fire-and-forget inline onclick; now uses async handleLogout -->

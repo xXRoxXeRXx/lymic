@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Page from "./+page.svelte";
 
 const tauri = vi.hoisted(() => ({
@@ -25,6 +25,8 @@ function renderAuthenticatedPage() {
         return Promise.resolve(true);
       case "get_server_url":
         return Promise.resolve("https://immich.example");
+      case "get_current_user_name":
+        return Promise.resolve("Meyer");
       case "get_folders":
         return Promise.resolve([]);
       case "update_locale":
@@ -43,6 +45,10 @@ beforeEach(() => {
   tauri.isEnabled.mockResolvedValue(false);
 });
 
+afterEach(() => {
+  cleanup();
+});
+
 describe("sync dashboard", () => {
   it("returns to idle when an empty sync result is received", async () => {
     renderAuthenticatedPage();
@@ -52,6 +58,7 @@ describe("sync dashboard", () => {
       }
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
       if (command === "get_folders") return Promise.resolve([]);
       return Promise.resolve();
     });
@@ -86,5 +93,16 @@ describe("logout", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Keyring unavailable");
     expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
     expect(tauri.invoke).toHaveBeenCalledWith("logout");
+  });
+});
+
+describe("account settings", () => {
+  it("shows the authenticated user name", async () => {
+    renderAuthenticatedPage();
+    await screen.findByText("Dashboard", { selector: "h1" });
+
+    await fireEvent.click(document.querySelector("header button")!);
+
+    expect(await screen.findByText("Logged in as Meyer")).toBeInTheDocument();
   });
 });

@@ -515,6 +515,13 @@ async fn get_server_url() -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn get_current_user_name() -> Result<String, String> {
+    let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
+    let client = sync::ImmichClient::new(credentials.server_url, credentials.api_key)?;
+    client.current_user().await
+}
+
+#[tauri::command]
 fn update_locale(
     app: tauri::AppHandle,
     state: tauri::State<'_, LocaleState>,
@@ -1898,6 +1905,7 @@ pub fn run() {
             logout,
             get_auth_status,
             get_server_url,
+            get_current_user_name,
             add_folder,
             get_folders,
             remove_folder,

@@ -67,6 +67,14 @@ struct UploadResponse {
     id: String,
 }
 
+#[derive(Deserialize)]
+struct CurrentUserResponse {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    email: String,
+}
+
 #[derive(Debug)]
 pub enum BulkCheckError {
     Retryable(String),
@@ -134,6 +142,10 @@ impl ImmichClient {
     }
 
     pub async fn validate_connection(&self) -> Result<(), String> {
+        self.current_user().await.map(|_| ())
+    }
+
+    pub async fn current_user(&self) -> Result<String, String> {
         let response = self
             .client
             // This is Immich's authenticated "current user" endpoint.  Do not use
@@ -152,7 +164,21 @@ impl ImmichClient {
             ));
         }
 
-        Ok(())
+        let user: CurrentUserResponse = response
+            .json()
+            .await
+            .map_err(|_| "Invalid current-user response".to_string())?;
+        let display_name = if user.name.trim().is_empty() {
+            user.email.trim()
+        } else {
+            user.name.trim()
+        };
+
+        if display_name.is_empty() {
+            Err("Current user response did not include a name".to_string())
+        } else {
+            Ok(display_name.to_string())
+        }
     }
 
     pub async fn check_assets_exist(
@@ -701,7 +727,7 @@ mod tests {
             let request = read_http_request(&mut stream).await;
             requests_tx.send(request).await.unwrap();
             stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 31\r\nConnection: close\r\n\r\n{\"name\":\"Test User\",\"email\":\"\"}")
                 .await
                 .unwrap();
         });

@@ -25,6 +25,7 @@
   "autostart_subtitle": "Lymic beim Systemstart automatisch öffnen.",
   "account": "Account",
   "logged_in_at": "Angemeldet bei",
+  "logged_in_as": "Angemeldet als",
   "logout": "Abmelden",
   "select_folder": "Ordner auswählen",
   "never": "Noch nie",
