@@ -28,6 +28,8 @@
   "autostart_disable": "Disable autostart",
   "language": "Language",
   "language_subtitle": "Choose your preferred language.",
+  "upload_parallelism": "Parallel uploads",
+  "upload_parallelism_subtitle": "Choose how many files can upload at the same time.",
   "dismiss_error": "Dismiss error",
   "account": "Account",
   "logged_in_at": "Logged in at",

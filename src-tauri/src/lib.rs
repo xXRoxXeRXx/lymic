@@ -996,6 +996,7 @@ async fn run_sync_pipeline(
             coordinator.lock().await
         }
     };
+    let upload_parallelism = load_upload_parallelism(&pool).await?;
     let _ = app.emit("sync-started", ());
     audit_event(
         &app,
@@ -1209,7 +1210,8 @@ async fn run_sync_pipeline(
     hashed_units
         .map_ok(|units| futures::stream::iter(units.into_iter().map(Ok::<_, String>)))
         .try_flatten()
-        .try_for_each_concurrent(3, |unit| {
+        // The limit is loaded once per sync so an active run remains stable.
+        .try_for_each_concurrent(upload_parallelism, |unit| {
             let client = client.clone();
             let pool = pool.clone();
             let app = app.clone();
@@ -1361,6 +1363,12 @@ async fn run_sync_pipeline(
     }
     audit_event(&app, audit_context.event("sync.completed", if failed == 0 { audit::Outcome::Success } else { audit::Outcome::Failure }, if failed == 0 { audit::Severity::Info } else { audit::Severity::Warn }, "Synchronization completed", json!({ "processed": summary.processed, "uploaded": summary.uploaded, "failed": summary.failed })));
     Ok(summary)
+}
+
+async fn load_upload_parallelism(pool: &sqlx::SqlitePool) -> Result<usize, String> {
+    db::get_upload_parallelism(pool)
+        .await
+        .map_err(|error| format!("Could not load upload parallelism: {}", error))
 }
 
 async fn check_assets_exist_with_backoff(
@@ -1617,6 +1625,19 @@ async fn get_failed_syncs(
     db::get_failed_syncs(pool.inner())
         .await
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn get_upload_parallelism(pool: tauri::State<'_, sqlx::SqlitePool>) -> Result<usize, String> {
+    load_upload_parallelism(pool.inner()).await
+}
+
+#[tauri::command]
+async fn set_upload_parallelism(
+    upload_parallelism: usize,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<(), String> {
+    db::set_upload_parallelism(pool.inner(), upload_parallelism).await
 }
 
 #[tauri::command]
@@ -2191,6 +2212,8 @@ pub fn run() {
             start_sync,
             get_failed_syncs,
             retry_failed_syncs,
+            get_upload_parallelism,
+            set_upload_parallelism,
             update_locale,
             get_database_recovery_notice
         ])
@@ -2262,9 +2285,13 @@ mod tests {
 
     #[tokio::test]
     async fn sync_folder_guard_rejects_an_empty_database() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
-            .connect("sqlite::memory:")
+            .connect(&format!(
+                "sqlite:file:{}?mode=memory&cache=private",
+                database_name
+            ))
             .await
             .unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
@@ -2278,6 +2305,24 @@ mod tests {
         db::add_folder(&pool, "C:/photos").await.unwrap();
         let folders = db::get_folders(&pool).await.unwrap();
         assert!(ensure_sync_has_folders(&folders).is_ok());
+    }
+
+    #[tokio::test]
+    async fn pipeline_upload_parallelism_loader_uses_the_configured_value() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{}?mode=memory&cache=private",
+                database_name
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        assert_eq!(load_upload_parallelism(&pool).await.unwrap(), 3);
+        db::set_upload_parallelism(&pool, 8).await.unwrap();
+        assert_eq!(load_upload_parallelism(&pool).await.unwrap(), 8);
     }
 
     #[tokio::test]

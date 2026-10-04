@@ -33,6 +33,8 @@
   let isAutostartEnabled = $state(false);
   let logs = $state<LogEntry[]>([]);
   let actionError = $state("");
+  let uploadParallelism = $state(3);
+  let isSavingUploadParallelism = $state(false);
   let componentMounted = false;
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
   
@@ -179,6 +181,12 @@
         }
         await refreshFolders();
         isAutostartEnabled = await isEnabled();
+        try {
+          uploadParallelism = await invoke<number>("get_upload_parallelism");
+        } catch (e) {
+          console.error("Failed to load upload parallelism", e);
+          actionError = formatError(e);
+        }
 
         try {
           const recoveryNotice = await invoke<string | null>("get_database_recovery_notice");
@@ -320,6 +328,25 @@
     } catch (e) {
       console.error("Failed to update autostart", e);
       actionError = formatError(e);
+    }
+  }
+
+  async function handleUploadParallelismChange(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    const nextValue = Number(select.value);
+    const previousValue = uploadParallelism;
+    actionError = "";
+    isSavingUploadParallelism = true;
+
+    try {
+      await invoke<void>("set_upload_parallelism", { uploadParallelism: nextValue });
+      uploadParallelism = nextValue;
+    } catch (e) {
+      console.error("Failed to update upload parallelism", e);
+      actionError = formatError(e);
+      select.value = String(previousValue);
+    } finally {
+      isSavingUploadParallelism = false;
     }
   }
 
@@ -675,6 +702,24 @@
                   DE
                 </button>
               </div>
+            </div>
+
+            <div class="p-8 flex items-center justify-between gap-6 border-b border-black/5">
+              <div class="space-y-1">
+                <label for="upload-parallelism" class="font-bold text-slate-900">{$t('upload_parallelism')}</label>
+                <p class="text-xs text-slate-500">{$t('upload_parallelism_subtitle')}</p>
+              </div>
+              <select
+                id="upload-parallelism"
+                class="glass-input !w-auto !py-2 text-sm font-semibold"
+                value={uploadParallelism}
+                onchange={handleUploadParallelismChange}
+                disabled={isSavingUploadParallelism}
+              >
+                {#each [1, 2, 3, 4, 5, 6, 7, 8] as value}
+                  <option value={value}>{value}</option>
+                {/each}
+              </select>
             </div>
 
             <div class="p-8 flex items-center justify-between">

@@ -8,6 +8,10 @@ use std::time::Duration;
 use tauri::AppHandle;
 use tauri::Manager;
 
+pub const DEFAULT_UPLOAD_PARALLELISM: usize = 3;
+const MIN_UPLOAD_PARALLELISM: usize = 1;
+const MAX_UPLOAD_PARALLELISM: usize = 8;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DatabaseStatus {
     Ready,
@@ -327,6 +331,45 @@ pub async fn get_folders(pool: &SqlitePool) -> Result<Vec<WatchedFolder>, sqlx::
     .await
 }
 
+pub fn validate_upload_parallelism(value: i64) -> Option<usize> {
+    let value = usize::try_from(value).ok()?;
+    (MIN_UPLOAD_PARALLELISM..=MAX_UPLOAD_PARALLELISM)
+        .contains(&value)
+        .then_some(value)
+}
+
+pub async fn get_upload_parallelism(pool: &SqlitePool) -> Result<usize, sqlx::Error> {
+    let value = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM app_settings WHERE key = 'upload_parallelism'",
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(value
+        .and_then(|value| value.parse::<i64>().ok())
+        .and_then(validate_upload_parallelism)
+        .unwrap_or(DEFAULT_UPLOAD_PARALLELISM))
+}
+
+pub async fn set_upload_parallelism(pool: &SqlitePool, value: usize) -> Result<(), String> {
+    if !(MIN_UPLOAD_PARALLELISM..=MAX_UPLOAD_PARALLELISM).contains(&value) {
+        return Err(format!(
+            "Upload parallelism must be between {} and {}.",
+            MIN_UPLOAD_PARALLELISM, MAX_UPLOAD_PARALLELISM
+        ));
+    }
+
+    sqlx::query(
+        "INSERT INTO app_settings (key, value) VALUES ('upload_parallelism', ?) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(value.to_string())
+    .execute(pool)
+    .await
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 pub async fn remove_folder(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM watched_folders WHERE id = ?")
         .bind(id)
@@ -437,13 +480,21 @@ mod tests {
     use super::*;
     use sqlx::sqlite::SqlitePoolOptions;
 
+    async fn test_pool() -> SqlitePool {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{}?mode=memory&cache=private",
+                database_name
+            ))
+            .await
+            .unwrap()
+    }
+
     #[tokio::test]
     async fn initial_migration_creates_schema() {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
+        let pool = test_pool().await;
 
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
@@ -454,12 +505,50 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cached_hash_misses_when_mtime_differs_within_a_second() {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
+    async fn upload_parallelism_defaults_persists_and_validates_range() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        assert_eq!(
+            get_upload_parallelism(&pool).await.unwrap(),
+            DEFAULT_UPLOAD_PARALLELISM
+        );
+
+        set_upload_parallelism(&pool, 6).await.unwrap();
+        assert_eq!(get_upload_parallelism(&pool).await.unwrap(), 6);
+        assert!(set_upload_parallelism(&pool, 0).await.is_err());
+        assert!(set_upload_parallelism(&pool, 9).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn invalid_stored_upload_parallelism_uses_default() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        sqlx::query(
+            "UPDATE app_settings SET value = 'not-a-number' WHERE key = 'upload_parallelism'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            get_upload_parallelism(&pool).await.unwrap(),
+            DEFAULT_UPLOAD_PARALLELISM
+        );
+
+        sqlx::query("UPDATE app_settings SET value = '0' WHERE key = 'upload_parallelism'")
+            .execute(&pool)
             .await
             .unwrap();
+        assert_eq!(
+            get_upload_parallelism(&pool).await.unwrap(),
+            DEFAULT_UPLOAD_PARALLELISM
+        );
+    }
+
+    #[tokio::test]
+    async fn cached_hash_misses_when_mtime_differs_within_a_second() {
+        let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
         update_sync_state(
@@ -484,22 +573,14 @@ mod tests {
 
     #[tokio::test]
     async fn cached_hash_propagates_query_errors() {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
+        let pool = test_pool().await;
 
         assert!(get_cached_hash(&pool, "photo.jpg", 42, 123).await.is_err());
     }
 
     #[tokio::test]
     async fn failed_state_clears_hash_and_is_never_cached() {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
+        let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
         update_sync_state(&pool, "photo.jpg", "old-hash", 42, 123, "SYNCED", None)
@@ -525,11 +606,7 @@ mod tests {
 
     #[tokio::test]
     async fn failed_sync_entries_persist_update_and_clear_on_success() {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
+        let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
         mark_sync_failed(&pool, "b.jpg", 1, 2, "First error")
@@ -562,11 +639,7 @@ mod tests {
 
     #[tokio::test]
     async fn failed_sync_entries_include_legacy_rows_without_a_reason() {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
+        let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
         sqlx::query(

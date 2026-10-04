@@ -24,6 +24,7 @@ type FailedSyncEntry = {
 
 let watchedFolders: WatchedFolder[] = [];
 let failedSyncs: FailedSyncEntry[] = [];
+let uploadParallelism = 3;
 let triggerSync: (() => void) | undefined;
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
@@ -48,6 +49,8 @@ function renderAuthenticatedPage() {
         return Promise.resolve(watchedFolders);
       case "get_failed_syncs":
         return Promise.resolve(failedSyncs);
+      case "get_upload_parallelism":
+        return Promise.resolve(uploadParallelism);
       case "update_locale":
         return Promise.resolve();
       default:
@@ -62,6 +65,7 @@ beforeEach(() => {
   localStorage.setItem("lymic-locale", "en");
   watchedFolders = [];
   failedSyncs = [];
+  uploadParallelism = 3;
   triggerSync = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
     if (event === "trigger-sync") triggerSync = handler;
@@ -262,5 +266,67 @@ describe("settings", () => {
       expect(screen.getByText("Wähle deine bevorzugte Sprache.")).toBeInTheDocument();
       expect(tauri.invoke).toHaveBeenCalledWith("update_locale", { locale: "de" });
     });
+  });
+
+  it("loads and saves upload parallelism", async () => {
+    uploadParallelism = 6;
+    renderAuthenticatedPage();
+    await screen.findByText("Dashboard", { selector: "h1" });
+
+    await fireEvent.click(document.querySelector("header button")!);
+
+    const select = await screen.findByLabelText("Parallel uploads");
+    await waitFor(() => expect(select).toHaveValue("6"));
+
+    let resolveSave: (() => void) | undefined;
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "set_upload_parallelism") {
+        return new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        });
+      }
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
+      if (command === "get_upload_parallelism") return Promise.resolve(uploadParallelism);
+      return Promise.resolve();
+    });
+
+    await fireEvent.change(select, { target: { value: "5" } });
+    expect(select).toBeDisabled();
+    resolveSave?.();
+
+    await waitFor(() => {
+      expect(tauri.invoke).toHaveBeenCalledWith("set_upload_parallelism", { uploadParallelism: 5 });
+      expect(select).toHaveValue("5");
+      expect(select).toBeEnabled();
+    });
+  });
+
+  it("shows an error and restores upload parallelism when saving fails", async () => {
+    uploadParallelism = 4;
+    renderAuthenticatedPage();
+    await screen.findByText("Dashboard", { selector: "h1" });
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "set_upload_parallelism") return Promise.reject(new Error("Database unavailable"));
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
+      if (command === "get_upload_parallelism") return Promise.resolve(uploadParallelism);
+      return Promise.resolve();
+    });
+
+    await fireEvent.click(document.querySelector("header button")!);
+    const select = await screen.findByLabelText("Parallel uploads");
+    await waitFor(() => expect(select).toHaveValue("4"));
+
+    await fireEvent.change(select, { target: { value: "7" } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Database unavailable");
+    expect(select).toHaveValue("4");
   });
 });
