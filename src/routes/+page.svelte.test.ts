@@ -26,6 +26,8 @@ let watchedFolders: WatchedFolder[] = [];
 let failedSyncs: FailedSyncEntry[] = [];
 let uploadParallelism = 3;
 let triggerSync: (() => void) | undefined;
+let systemThemeIsDark = false;
+let colorSchemeListeners = new Set<(event: MediaQueryListEvent) => void>();
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: tauri.listen }));
@@ -62,6 +64,20 @@ function renderAuthenticatedPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
+  systemThemeIsDark = false;
+  colorSchemeListeners = new Set();
+  vi.stubGlobal("matchMedia", vi.fn().mockImplementation(() => ({
+    matches: systemThemeIsDark,
+    media: "(prefers-color-scheme: dark)",
+    onchange: null,
+    addEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => colorSchemeListeners.add(listener),
+    removeEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => colorSchemeListeners.delete(listener),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })));
   localStorage.setItem("lymic-locale", "en");
   watchedFolders = [];
   failedSyncs = [];
@@ -77,6 +93,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe("sync dashboard", () => {
@@ -268,6 +285,19 @@ describe("settings", () => {
     });
   });
 
+  it("sets and persists an explicit theme preference", async () => {
+    renderAuthenticatedPage();
+    await screen.findByText("Dashboard", { selector: "h1" });
+
+    await fireEvent.click(document.querySelector("header button")!);
+    const darkButton = await screen.findByRole("button", { name: "Dark" });
+    await fireEvent.click(darkButton);
+
+    expect(darkButton).toHaveAttribute("aria-pressed", "true");
+    expect(localStorage.getItem("lymic-theme")).toBe("dark");
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+  });
+
   it("loads and saves upload parallelism", async () => {
     uploadParallelism = 6;
     renderAuthenticatedPage();
@@ -328,5 +358,42 @@ describe("settings", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Database unavailable");
     expect(select).toHaveValue("4");
+  });
+});
+
+describe("theme preference", () => {
+  it("applies a saved preference when rendering", () => {
+    localStorage.setItem("lymic-theme", "dark");
+
+    render(Page);
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+  });
+
+  it("removes an invalid preference and falls back to the system theme", () => {
+    localStorage.setItem("lymic-theme", "sepia");
+
+    render(Page);
+
+    expect(localStorage.getItem("lymic-theme")).toBeNull();
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
+  it("responds to system changes only while using the system preference", async () => {
+    systemThemeIsDark = true;
+    renderAuthenticatedPage();
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    systemThemeIsDark = false;
+    colorSchemeListeners.forEach((listener) => listener({ matches: false } as MediaQueryListEvent));
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+
+    await screen.findByText("Dashboard", { selector: "h1" });
+    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(await screen.findByRole("button", { name: "Dark" }));
+    systemThemeIsDark = false;
+    colorSchemeListeners.forEach((listener) => listener({ matches: false } as MediaQueryListEvent));
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
   });
 });

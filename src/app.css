@@ -4,13 +4,24 @@
 @import "@fontsource/open-sans/600.css";
 @import "@fontsource/open-sans/700.css";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @layer base {
   :root {
+    color-scheme: light;
     --primary: 37 99 235;
     --text-main: 15 23 42;
     --text-muted: 100 116 139;
     --glass-bg: rgba(255, 255, 255, 0.7);
     --glass-border: rgba(255, 255, 255, 0.5);
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --text-main: 241 245 249;
+    --text-muted: 148 163 184;
+    --glass-bg: rgba(15, 23, 42, 0.78);
+    --glass-border: rgba(148, 163, 184, 0.2);
   }
 
   html, body {
@@ -24,6 +35,11 @@
     width: 100%;
     user-select: none;
     -webkit-user-select: none;
+  }
+
+  :root[data-theme="dark"],
+  :root[data-theme="dark"] body {
+    background: #020617;
   }
 
   input, textarea, [contenteditable="true"], .selectable {
@@ -58,6 +74,11 @@
     transform: translateY(-2px);
   }
 
+  :root[data-theme="dark"] .glass-pane:hover {
+    background: rgba(30, 41, 59, 0.9);
+    border-color: rgba(96, 165, 250, 0.35);
+  }
+
   /* Clean Button */
   .btn-action {
     background: #0f172a;
@@ -77,6 +98,15 @@
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   }
 
+  :root[data-theme="dark"] .btn-action {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  :root[data-theme="dark"] .btn-action:hover {
+    background: #f8fafc;
+  }
+
   /* Progress Bar */
   .glass-progress {
     width: 100%;
@@ -84,6 +114,10 @@
     background: rgba(0, 0, 0, 0.05);
     border-radius: 100px;
     overflow: hidden;
+  }
+
+  :root[data-theme="dark"] .glass-progress {
+    background: rgba(148, 163, 184, 0.2);
   }
 
   .glass-progress-fill {
@@ -104,10 +138,24 @@
     transition: all 0.2s ease;
   }
 
+  :root[data-theme="dark"] .glass-input {
+    color: #e2e8f0;
+    background: rgba(15, 23, 42, 0.7);
+    border-color: rgba(148, 163, 184, 0.25);
+  }
+
+  :root[data-theme="dark"] .glass-input::placeholder {
+    color: #64748b;
+  }
+
   .glass-input:focus {
     background: white;
     border-color: #2563eb;
     box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+  }
+
+  :root[data-theme="dark"] .glass-input:focus {
+    background: rgba(15, 23, 42, 0.95);
   }
 }
 

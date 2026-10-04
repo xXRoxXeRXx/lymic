@@ -8,7 +8,7 @@
     Settings as SettingsIcon, FolderPlus, Folder,
     Trash2, ArrowLeft, Cloud, CloudUpload,
     AlertCircle, Info, RefreshCw, Clock, X, User,
-    ChevronRight, ExternalLink, Minus, Activity, Power, Globe
+    ChevronRight, ExternalLink, Minus, Activity, Power, Globe, Monitor, Sun, Moon
   } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import { isSupportedLocale } from "../lib/i18n";
@@ -37,6 +37,39 @@
   let isSavingUploadParallelism = $state(false);
   let componentMounted = false;
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
+
+  type ThemePreference = "system" | "light" | "dark";
+  const themeStorageKey = "lymic-theme";
+
+  function isThemePreference(value: string | null): value is ThemePreference {
+    return value === "system" || value === "light" || value === "dark";
+  }
+
+  const savedTheme = typeof localStorage !== "undefined" ? localStorage.getItem(themeStorageKey) : null;
+  let themePreference = $state<ThemePreference>("system");
+  if (isThemePreference(savedTheme)) {
+    themePreference = savedTheme;
+  } else if (savedTheme) {
+    localStorage.removeItem(themeStorageKey);
+  }
+
+  function applyTheme() {
+    const systemThemeIsDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const effectiveTheme = themePreference === "system"
+      ? (systemThemeIsDark ? "dark" : "light")
+      : themePreference;
+    document.documentElement.dataset.theme = effectiveTheme;
+  }
+
+  function setThemePreference(preference: ThemePreference) {
+    themePreference = preference;
+    localStorage.setItem(themeStorageKey, preference);
+    applyTheme();
+  }
+
+  if (typeof window !== "undefined") {
+    applyTheme();
+  }
   
   // Initialize locale
   const savedLocale = typeof localStorage !== 'undefined' ? localStorage.getItem('lymic-locale') : null;
@@ -121,6 +154,11 @@
   // all event listeners were permanently leaking on unmount.
   onMount(() => {
     let unlisteners: (() => void)[] = [];
+    const colorSchemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleColorSchemeChange = () => {
+      if (themePreference === "system") applyTheme();
+    };
+    colorSchemeQuery.addEventListener("change", handleColorSchemeChange);
     componentMounted = true;
 
     async function setupListeners() {
@@ -210,6 +248,7 @@
       componentMounted = false;
       if (progressResetTimer) clearTimeout(progressResetTimer);
       unlisteners.forEach(fn => fn());
+      colorSchemeQuery.removeEventListener("change", handleColorSchemeChange);
     };
   });
 
@@ -397,7 +436,7 @@
   }
 </script>
 
-<div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-[#F1F5F9]">
+<div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-[#F1F5F9] dark:bg-slate-950">
   
   <!-- Left Side: Hero Image (Permanent) -->
   <aside class="w-[38%] h-full shrink-0 relative overflow-hidden">
@@ -430,17 +469,17 @@
       {#if isAuthenticated}
         <div class="flex items-center gap-4">
           <!-- h2 → h1 for correct heading hierarchy in the content column -->
-          <h1 class="text-xl font-bold text-slate-800">
+          <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100">
             {currentView === "dashboard" ? $t('dashboard') : $t('settings')}
           </h1>
         </div>
         <div class="flex items-center gap-2">
-          <button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/50 transition-colors"
+          <button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/50 dark:hover:bg-white/10 transition-colors"
                   onclick={() => currentView = currentView === "settings" ? "dashboard" : "settings"}>
             {#if currentView === "settings"}
-              <X class="w-5 h-5 text-slate-900" />
+              <X class="w-5 h-5 text-slate-900 dark:text-slate-100" />
             {:else}
-              <SettingsIcon class="w-5 h-5 text-slate-400" />
+              <SettingsIcon class="w-5 h-5 text-slate-400 dark:text-slate-400" />
             {/if}
           </button>
         </div>
@@ -449,12 +488,12 @@
 
     <main class="flex-1 overflow-y-auto p-10 flex flex-col {!isAuthenticated ? 'justify-center' : 'space-y-10'}">
       {#if isAuthenticated && actionError}
-        <div class="p-4 bg-red-50 text-red-600 text-xs rounded-xl flex items-center gap-3" role="alert">
+        <div class="p-4 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
           <AlertCircle class="w-4 h-4 shrink-0" />
           <span>{actionError}</span>
           <button
             type="button"
-            class="ml-auto p-1 rounded hover:bg-red-100 transition-colors"
+            class="ml-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
             aria-label={$t('dismiss_error')}
             onclick={() => actionError = ""}
           >
@@ -468,15 +507,15 @@
         <div class="max-w-md w-full mx-auto space-y-10 animate-in">
           <div class="text-center space-y-4">
             <!-- h2 → h1; the aside's h1 is in a separate sectioning element -->
-            <h1 class="text-3xl font-bold text-slate-900">{$t('login')}</h1>
-            <p class="text-slate-500 text-sm">{$t('login_subtitle')}</p>
+            <h1 class="text-3xl font-bold text-slate-900 dark:text-slate-100">{$t('login')}</h1>
+            <p class="text-slate-500 dark:text-slate-400 text-sm">{$t('login_subtitle')}</p>
           </div>
 
           <div class="glass-pane space-y-8">
             <div class="space-y-6">
               <!-- Added for/id association so labels activate their inputs on click -->
               <div class="space-y-2">
-                <label for="server-url" class="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">{$t('server_url')}</label>
+                <label for="server-url" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider ml-1">{$t('server_url')}</label>
                 <input
                   id="server-url"
                   type="text"
@@ -486,7 +525,7 @@
                 />
               </div>
               <div class="space-y-2">
-                <label for="api-key" class="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">{$t('api_key')}</label>
+                <label for="api-key" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider ml-1">{$t('api_key')}</label>
                 <input
                   id="api-key"
                   type="password"
@@ -498,7 +537,7 @@
             </div>
 
             {#if loginError}
-              <div class="p-4 bg-red-50 text-red-600 text-xs rounded-xl flex items-center gap-3">
+              <div class="p-4 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3">
                 <AlertCircle class="w-4 h-4" />
                 <span>{loginError}</span>
               </div>
@@ -522,9 +561,9 @@
             <div class="space-y-1">
               <div class="flex items-center gap-2">
                   <div class="w-2 h-2 rounded-full {syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500'}"></div>
-                 <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{$t('status')}</span>
+                  <span class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('status')}</span>
               </div>
-              <h3 class="text-3xl font-bold text-slate-900">
+              <h3 class="text-3xl font-bold text-slate-900 dark:text-slate-100">
                  {syncStatus === 'syncing' ? $t('sync_running') : syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
               </h3>
             </div>
@@ -547,30 +586,30 @@
               <div class="glass-progress">
                 <div class="glass-progress-fill" style="width: {progress}%;"></div>
               </div>
-              <div class="flex justify-between text-xs font-medium text-slate-400">
+              <div class="flex justify-between text-xs font-medium text-slate-400 dark:text-slate-400">
                 <span>{progress}% {$t('completed')}</span>
                 <span class="truncate max-w-[250px]">{currentFile}</span>
               </div>
             </div>
           {:else}
-            <div class="flex gap-10 pt-2 border-t border-black/5">
+            <div class="flex gap-10 pt-2 border-t border-black/5 dark:border-white/10">
               <div class="space-y-1">
-                <p class="text-xs font-bold text-slate-300 uppercase tracking-wider">{$t('last_sync')}</p>
-                <p class="font-semibold text-slate-600">{lastSync === 'Noch nie' ? $t('never') : lastSync}</p>
+                <p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('last_sync')}</p>
+                <p class="font-semibold text-slate-600 dark:text-slate-300">{lastSync === 'Noch nie' ? $t('never') : lastSync}</p>
               </div>
               <div class="space-y-1">
-                <p class="text-xs font-bold text-slate-300 uppercase tracking-wider">{$t('server')}</p>
-                <p class="font-semibold text-slate-600 truncate max-w-[150px]">{serverUrl.replace(/https?:\/\//, '')}</p>
+                <p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('server')}</p>
+                <p class="font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[150px]">{serverUrl.replace(/https?:\/\//, '')}</p>
               </div>
             </div>
           {/if}
 
           {#if failedSyncs.length > 0}
-            <div class="border-t border-red-100 pt-5 space-y-4">
+            <div class="border-t border-red-100 dark:border-red-900/60 pt-5 space-y-4">
               <div class="flex items-center justify-between gap-4">
                 <button
                   type="button"
-                  class="flex items-center gap-2 text-sm font-bold text-red-700 hover:text-red-800"
+                  class="flex items-center gap-2 text-sm font-bold text-red-700 dark:text-red-300 hover:text-red-800 dark:hover:text-red-200"
                   aria-expanded={showFailedSyncs}
                   aria-controls="failed-sync-details-list"
                   onclick={() => showFailedSyncs = !showFailedSyncs}
@@ -581,7 +620,7 @@
                 </button>
                 <button
                   type="button"
-                  class="text-xs font-bold text-blue-600 hover:text-blue-700 disabled:text-slate-300"
+                  class="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:text-slate-300 dark:disabled:text-slate-600"
                   onclick={handleRetryFailedSyncs}
                   disabled={syncStatus === 'syncing'}
                 >
@@ -591,9 +630,9 @@
               {#if showFailedSyncs}
                 <div id="failed-sync-details-list" class="max-h-48 overflow-y-auto space-y-3 pr-2" aria-label={$t('failed_sync_details')}>
                   {#each failedSyncs as failedSync}
-                    <div class="rounded-lg bg-red-50 p-3 text-xs">
-                      <p class="break-all font-mono text-red-800">{failedSync.localPath}</p>
-                      <p class="mt-1 text-red-600">{failedSync.failureReason || $t('failure_details_unavailable')}</p>
+                    <div class="rounded-lg bg-red-50 dark:bg-red-950/50 p-3 text-xs">
+                      <p class="break-all font-mono text-red-800 dark:text-red-200">{failedSync.localPath}</p>
+                      <p class="mt-1 text-red-600 dark:text-red-300">{failedSync.failureReason || $t('failure_details_unavailable')}</p>
                     </div>
                   {/each}
                 </div>
@@ -608,7 +647,7 @@
           <!-- Folder Management -->
           <div class="space-y-6 animate-in" style="animation-delay: 100ms">
             <div class="flex items-center justify-between px-2">
-              <h4 class="text-sm font-bold text-slate-800 uppercase tracking-widest">{$t('synced_folders')}</h4>
+              <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-widest">{$t('synced_folders')}</h4>
               <button class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors" 
                       onclick={handleAddFolder}>
                 <FolderPlus class="w-4 h-4" />
@@ -619,16 +658,16 @@
               {#each watchedFolders as folder}
                 <div class="glass-pane !p-4 flex items-center justify-between group">
                   <div class="flex items-center gap-4 min-w-0">
-                    <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                    <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/50 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                       <Folder class="w-5 h-5" />
                     </div>
                     <div class="min-w-0">
-                      <p class="text-sm font-bold text-slate-900 truncate">{folder.path.split(/[/\\]/).pop()}</p>
-                      <p class="text-[10px] font-mono text-slate-400 truncate">{folder.path}</p>
+                      <p class="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{folder.path.split(/[/\\]/).pop()}</p>
+                      <p class="text-[10px] font-mono text-slate-400 dark:text-slate-400 truncate">{folder.path}</p>
                     </div>
                   </div>
                   <button
-                    class="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                    class="p-2 text-slate-300 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                     aria-label={`${$t('remove_folder')}: ${folder.path}`}
                     onclick={() => handleRemoveFolder(folder.id)}
                   >
@@ -638,7 +677,7 @@
               {/each}
               {#if watchedFolders.length === 0}
                   <div class="glass-pane !p-12 text-center border-dashed border-2">
-                    <p class="text-sm text-slate-400 italic">{$t('no_folders')}</p>
+                    <p class="text-sm text-slate-400 dark:text-slate-400 italic">{$t('no_folders')}</p>
                   </div>
               {/if}
             </div>
@@ -646,16 +685,16 @@
 
           <!-- Activity Log -->
           <div class="space-y-6 animate-in" style="animation-delay: 200ms">
-             <h4 class="text-sm font-bold text-slate-800 uppercase tracking-widest px-2">{$t('activity_log')}</h4>
+             <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-widest px-2">{$t('activity_log')}</h4>
              <!-- Was slicing to 10 in the template while storing 50 in state — now shows all stored entries -->
              <div class="glass-pane !p-6 h-full max-h-[400px] overflow-y-auto space-y-4 selectable">
                {#if logs.length === 0}
-                 <p class="text-xs text-slate-300 italic">{$t('no_activity')}</p>
+                  <p class="text-xs text-slate-400 dark:text-slate-400 italic">{$t('no_activity')}</p>
                {:else}
                  {#each logs as log}
                    <div class="flex items-start gap-4 text-[11px] leading-relaxed group">
-                     <span class="text-slate-300 font-mono w-14 shrink-0">{log.time.split(':').slice(0,2).join(':')}</span>
-                     <span class="text-slate-500 group-hover:text-slate-900 transition-colors">{log.message}</span>
+                      <span class="text-slate-400 dark:text-slate-400 font-mono w-14 shrink-0">{log.time.split(':').slice(0,2).join(':')}</span>
+                      <span class="text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors">{log.message}</span>
                    </div>
                  {/each}
                {/if}
@@ -668,13 +707,13 @@
         <div class="space-y-10 animate-in">
           
           <div class="glass-pane space-y-2 !p-0 overflow-hidden">
-            <div class="p-8 flex items-center justify-between border-b border-black/5">
+            <div class="p-8 flex items-center justify-between border-b border-black/5 dark:border-white/10">
               <div class="space-y-1">
-                <p class="font-bold text-slate-900">{$t('autostart')}</p>
-                <p class="text-xs text-slate-500">{$t('autostart_subtitle')}</p>
+                <p class="font-bold text-slate-900 dark:text-slate-100">{$t('autostart')}</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">{$t('autostart_subtitle')}</p>
               </div>
               <button
-                class="w-12 h-6 border rounded-full relative transition-all {isAutostartEnabled ? 'bg-blue-600 border-blue-600' : 'bg-slate-200 border-slate-200'}"
+                class="w-12 h-6 border rounded-full relative transition-all {isAutostartEnabled ? 'bg-blue-600 border-blue-600' : 'bg-slate-200 dark:bg-slate-700 border-slate-200 dark:border-slate-700'}"
                 onclick={toggleAutostart}
                 aria-label={isAutostartEnabled ? $t('autostart_disable') : $t('autostart_enable')}
                 aria-pressed={isAutostartEnabled}
@@ -683,20 +722,20 @@
               </button>
             </div>
 
-            <div class="p-8 flex items-center justify-between border-b border-black/5">
+            <div class="p-8 flex items-center justify-between border-b border-black/5 dark:border-white/10">
               <div class="space-y-1">
-                <p class="font-bold text-slate-900">{$t('language')}</p>
-                <p class="text-xs text-slate-500">{$t('language_subtitle')}</p>
+                <p class="font-bold text-slate-900 dark:text-slate-100">{$t('language')}</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">{$t('language_subtitle')}</p>
               </div>
               <div class="flex gap-2">
                 <button 
-                  class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'en' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
+                  class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'en' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}"
                   onclick={() => $locale = 'en'}
                   aria-pressed={$locale === 'en'}>
                   EN
                 </button>
                 <button 
-                  class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'de' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
+                  class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'de' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}"
                   onclick={() => $locale = 'de'}
                   aria-pressed={$locale === 'de'}>
                   DE
@@ -704,10 +743,49 @@
               </div>
             </div>
 
-            <div class="p-8 flex items-center justify-between gap-6 border-b border-black/5">
+            <div class="p-8 flex items-center justify-between gap-6 border-b border-black/5 dark:border-white/10">
               <div class="space-y-1">
-                <label for="upload-parallelism" class="font-bold text-slate-900">{$t('upload_parallelism')}</label>
-                <p class="text-xs text-slate-500">{$t('upload_parallelism_subtitle')}</p>
+                <p class="font-bold text-slate-900 dark:text-slate-100">{$t('appearance')}</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">{$t('appearance_subtitle')}</p>
+              </div>
+              <div class="flex gap-2" role="group" aria-label={$t('appearance')}>
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded-lg text-xs font-bold transition-colors {themePreference === 'system' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                  aria-pressed={themePreference === 'system'}
+                  title={$t('theme_system')}
+                  onclick={() => setThemePreference('system')}
+                >
+                  <Monitor class="w-4 h-4" />
+                  <span class="sr-only">{$t('theme_system')}</span>
+                </button>
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded-lg text-xs font-bold transition-colors {themePreference === 'light' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                  aria-pressed={themePreference === 'light'}
+                  title={$t('theme_light')}
+                  onclick={() => setThemePreference('light')}
+                >
+                  <Sun class="w-4 h-4" />
+                  <span class="sr-only">{$t('theme_light')}</span>
+                </button>
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded-lg text-xs font-bold transition-colors {themePreference === 'dark' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                  aria-pressed={themePreference === 'dark'}
+                  title={$t('theme_dark')}
+                  onclick={() => setThemePreference('dark')}
+                >
+                  <Moon class="w-4 h-4" />
+                  <span class="sr-only">{$t('theme_dark')}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="p-8 flex items-center justify-between gap-6 border-b border-black/5 dark:border-white/10">
+              <div class="space-y-1">
+                <label for="upload-parallelism" class="font-bold text-slate-900 dark:text-slate-100">{$t('upload_parallelism')}</label>
+                <p class="text-xs text-slate-500 dark:text-slate-400">{$t('upload_parallelism_subtitle')}</p>
               </div>
               <select
                 id="upload-parallelism"
@@ -724,17 +802,17 @@
 
             <div class="p-8 flex items-center justify-between">
               <div class="space-y-1">
-                <p class="font-bold text-slate-900">{$t('account')}</p>
+                <p class="font-bold text-slate-900 dark:text-slate-100">{$t('account')}</p>
                 {#if currentUserName}
-                  <p class="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                    <User class="w-4 h-4 text-slate-400" />
+                  <p class="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                    <User class="w-4 h-4 text-slate-400 dark:text-slate-400" />
                     {$t('logged_in_as')} {currentUserName}
                   </p>
                 {/if}
-                <p class="text-xs text-slate-500">{$t('logged_in_at')} {serverUrl}</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">{$t('logged_in_at')} {serverUrl}</p>
               </div>
               <!-- Was fire-and-forget inline onclick; now uses async handleLogout -->
-              <button class="text-xs font-bold text-red-500 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors" 
+              <button class="text-xs font-bold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 px-4 py-2 rounded-lg transition-colors"
                       onclick={handleLogout}>
                 {$t('logout')}
               </button>
@@ -746,7 +824,7 @@
     </main>
 
     <!-- Global Footer -->
-    <footer class="h-16 px-10 border-t border-black/5 flex items-center justify-end text-[10px] font-bold text-slate-400 uppercase tracking-widest shrink-0">
+    <footer class="h-16 px-10 border-t border-black/5 dark:border-white/10 flex items-center justify-end text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-widest shrink-0">
       <span>Lymic - Unofficial Immich Desktop Client</span>
       <span class="ml-2">v0.10.0</span>
     </footer>
