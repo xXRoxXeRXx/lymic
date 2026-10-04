@@ -17,7 +17,12 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 struct SyncState(AtomicBool);
-struct SyncCoordinator(std::sync::Arc<tokio::sync::Mutex<()>>);
+struct SyncCoordinator(std::sync::Arc<SyncCoordinatorInner>);
+struct SyncCoordinatorInner {
+    lock: tokio::sync::Mutex<()>,
+    paused: AtomicBool,
+    resume: tokio::sync::Notify,
+}
 struct LocaleState(std::sync::Mutex<String>);
 struct DatabaseRecoveryNotice(std::sync::Mutex<Option<String>>);
 struct TrayMenuState(Menu<tauri::Wry>);
@@ -82,15 +87,6 @@ struct SyncSummary {
     processed: usize,
     uploaded: usize,
     failed: usize,
-}
-
-// Emits completion when a sync scope exits, including early returns and errors.
-struct SyncIdleEmitter(tauri::AppHandle);
-
-impl Drop for SyncIdleEmitter {
-    fn drop(&mut self) {
-        let _ = self.0.emit("sync-idle", ());
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -979,11 +975,31 @@ async fn run_sync_pipeline(
     client: std::sync::Arc<sync::ImmichClient>,
     scan_result: ScanResult,
     is_auto: bool,
-    coordinator: std::sync::Arc<tokio::sync::Mutex<()>>,
+    coordinator: std::sync::Arc<SyncCoordinatorInner>,
     audit_context: SyncAuditContext,
 ) -> Result<SyncSummary, String> {
-    let _idle_emitter = is_auto.then(|| SyncIdleEmitter(app.clone()));
-    let _sync_guard = match coordinator.try_lock() {
+    // Scans are merely producers. The durable queue is the sole source used by the
+    // runner, including after recovery, so no completed item is re-scanned to resume.
+    let queue_assets: Vec<_> = scan_result
+        .files
+        .iter()
+        .map(|asset| db::QueueAsset {
+            path: &asset.path,
+            size: asset.size as i64,
+            mtime: asset.mtime,
+        })
+        .collect();
+    let queue_failures: Vec<_> = scan_result
+        .failures
+        .iter()
+        .map(|failure| (failure.path.clone(), failure.error.clone()))
+        .collect();
+    let snapshot = db::enqueue_sync_assets(&pool, &queue_assets, &queue_failures)
+        .await
+        .map_err(|error| format!("Could not persist sync queue: {}", error))?;
+    let _ = app.emit("sync-progress-snapshot", &snapshot);
+
+    let _sync_guard = match coordinator.lock.try_lock() {
         Ok(guard) => guard,
         Err(_) => {
             if !is_auto {
@@ -993,10 +1009,9 @@ async fn run_sync_pipeline(
                     "Sync queued, waiting for running synchronization.",
                 );
             }
-            coordinator.lock().await
+            coordinator.lock.lock().await
         }
     };
-    let upload_parallelism = load_upload_parallelism(&pool).await?;
     let _ = app.emit("sync-started", ());
     audit_event(
         &app,
@@ -1008,6 +1023,140 @@ async fn run_sync_pipeline(
             json!({ "automatic": is_auto }),
         ),
     );
+    let mut totals = SyncSummary {
+        failed: snapshot.failed.max(0) as usize,
+        ..Default::default()
+    };
+    loop {
+        // A currently executing process_sync_block is deliberately allowed to finish.
+        // This boundary is reached before fetching each following persistent block.
+        while coordinator.paused.load(Ordering::SeqCst) {
+            let snapshot = db::set_sync_status(&pool, "PAUSED")
+                .await
+                .map_err(|error| format!("Could not persist paused sync: {}", error))?;
+            let _ = app.emit("sync-paused", &snapshot);
+            audit_event(
+                &app,
+                audit_context.event(
+                    "sync.paused",
+                    audit::Outcome::Info,
+                    audit::Severity::Info,
+                    "Synchronization paused",
+                    json!({}),
+                ),
+            );
+            coordinator.resume.notified().await;
+            if !coordinator.paused.load(Ordering::SeqCst) {
+                let snapshot = db::set_sync_status(&pool, "RUNNING")
+                    .await
+                    .map_err(|error| format!("Could not resume sync: {}", error))?;
+                let _ = app.emit("sync-resumed", &snapshot);
+                audit_event(
+                    &app,
+                    audit_context.event(
+                        "sync.resumed",
+                        audit::Outcome::Info,
+                        audit::Severity::Info,
+                        "Synchronization resumed",
+                        json!({}),
+                    ),
+                );
+            }
+        }
+        let queued = db::next_sync_queue_block(&pool, 500)
+            .await
+            .map_err(|error| format!("Could not load sync queue: {}", error))?;
+        if queued.is_empty() {
+            let snapshot = db::complete_sync_job_if_finished(&pool)
+                .await
+                .map_err(|error| format!("Could not complete sync job: {}", error))?
+                .unwrap_or(
+                    db::get_sync_snapshot(&pool)
+                        .await
+                        .map_err(|error| error.to_string())?,
+                );
+            let _ = app.emit("sync-progress-snapshot", &snapshot);
+            if is_auto {
+                let _ = app.emit("sync-idle", ());
+            }
+            if !is_auto || totals.uploaded > 0 || totals.failed > 0 {
+                let locale = app
+                    .state::<LocaleState>()
+                    .0
+                    .lock()
+                    .map(|locale| locale.clone())
+                    .unwrap_or_else(|_| "en".to_string());
+                let translations = backend_translations(&locale);
+                let title = translations.notification_complete_title.replacen(
+                    "{}",
+                    if is_auto { "Auto-sync" } else { "Sync" },
+                    1,
+                );
+                let body = translations
+                    .notification_complete_body
+                    .replace("{processed}", &totals.processed.to_string())
+                    .replace("{uploaded}", &totals.uploaded.to_string())
+                    .replace("{failed}", &totals.failed.to_string());
+                send_notification(&app, &title, &body, "INFO");
+            }
+            audit_event(&app, audit_context.event("sync.completed", if totals.failed == 0 { audit::Outcome::Success } else { audit::Outcome::Failure }, if totals.failed == 0 { audit::Severity::Info } else { audit::Severity::Warn }, "Synchronization completed", json!({ "processed": totals.processed, "uploaded": totals.uploaded, "failed": totals.failed })));
+            return Ok(totals);
+        }
+        let queued_paths: Vec<_> = queued
+            .iter()
+            .map(|asset| (asset.local_path.clone(), asset.last_modified, asset.size))
+            .collect();
+        let block = ScanResult {
+            files: queued
+                .into_iter()
+                .map(|asset| Asset {
+                    path: asset.local_path,
+                    size: asset.size as u64,
+                    mtime: asset.last_modified,
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let result = process_sync_block(
+            app.clone(),
+            pool.clone(),
+            client.clone(),
+            block,
+            audit_context.clone(),
+        )
+        .await?;
+        totals.processed += result.processed;
+        totals.uploaded += result.uploaded;
+        totals.failed += result.failed;
+        let mut queue_results = Vec::with_capacity(queued_paths.len());
+        for (path, mtime, size) in queued_paths {
+            let status = if db::get_cached_hash(&pool, &path, mtime, size)
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+            {
+                "SYNCED"
+            } else {
+                "FAILED"
+            };
+            queue_results.push((path, status.to_string()));
+        }
+        let snapshot = db::finalize_queued_block(&pool, &queue_results)
+            .await
+            .map_err(|error| format!("Could not persist queue block: {}", error))?;
+        let _ = app.emit("sync-progress-snapshot", &snapshot);
+    }
+}
+
+async fn process_sync_block(
+    app: tauri::AppHandle,
+    pool: sqlx::SqlitePool,
+    client: std::sync::Arc<sync::ImmichClient>,
+    scan_result: ScanResult,
+    audit_context: SyncAuditContext,
+) -> Result<SyncSummary, String> {
+    let upload_parallelism = load_upload_parallelism(&pool).await?;
     let ScanResult {
         files, failures, ..
     } = scan_result;
@@ -1031,7 +1180,7 @@ async fn run_sync_pipeline(
         "INFO",
         &format!(
             "{}: Starting pipeline for {} files ({:.2} MB)",
-            if is_auto { "Auto-sync" } else { "Sync" },
+            "Sync",
             total_files,
             total_bytes as f64 / 1024.0 / 1024.0
         ),
@@ -1341,27 +1490,6 @@ async fn run_sync_pipeline(
         uploaded,
         failed,
     };
-    if !is_auto || uploaded > 0 || failed > 0 {
-        let locale = app
-            .state::<LocaleState>()
-            .0
-            .lock()
-            .map(|locale| locale.clone())
-            .unwrap_or_else(|_| "en".to_string());
-        let translations = backend_translations(&locale);
-        let title = translations.notification_complete_title.replacen(
-            "{}",
-            if is_auto { "Auto-sync" } else { "Sync" },
-            1,
-        );
-        let body = translations
-            .notification_complete_body
-            .replace("{processed}", &summary.processed.to_string())
-            .replace("{uploaded}", &summary.uploaded.to_string())
-            .replace("{failed}", &summary.failed.to_string());
-        send_notification(&app, &title, &body, "INFO");
-    }
-    audit_event(&app, audit_context.event("sync.completed", if failed == 0 { audit::Outcome::Success } else { audit::Outcome::Failure }, if failed == 0 { audit::Severity::Info } else { audit::Severity::Warn }, "Synchronization completed", json!({ "processed": summary.processed, "uploaded": summary.uploaded, "failed": summary.failed })));
     Ok(summary)
 }
 
@@ -1464,6 +1592,41 @@ async fn sync_scan_result_if_authenticated(
         return;
     }
 
+    // Persist before scheduling the runner. This keeps the watcher receiver free to
+    // keep draining events while another run is active or the queue is paused.
+    let assets: Vec<_> = scan_result
+        .files
+        .iter()
+        .map(|asset| db::QueueAsset {
+            path: &asset.path,
+            size: asset.size as i64,
+            mtime: asset.mtime,
+        })
+        .collect();
+    let failures: Vec<_> = scan_result
+        .failures
+        .iter()
+        .map(|failure| (failure.path.clone(), failure.error.clone()))
+        .collect();
+    match db::enqueue_sync_assets(&pool, &assets, &failures).await {
+        Ok(snapshot) => {
+            let _ = app.emit("sync-progress-snapshot", &snapshot);
+        }
+        Err(error) => {
+            emit_sync_error(
+                &app,
+                &format!("Could not persist automatic sync queue: {}", error),
+            );
+            return;
+        }
+    }
+
+    let coordinator = app.state::<SyncCoordinator>().0.clone();
+    // A restored pause permits scans to add work but must never start the runner.
+    if coordinator.paused.load(Ordering::SeqCst) {
+        return;
+    }
+
     if let Ok(Some(credentials)) = auth::get_credentials() {
         let audit_context = SyncAuditContext::from_credentials(
             &credentials.server_url,
@@ -1471,20 +1634,22 @@ async fn sync_scan_result_if_authenticated(
             source,
         );
         if let Some(client) = create_authenticated_client(&app, credentials) {
-            let coordinator = app.state::<SyncCoordinator>().0.clone();
-            if let Err(error) = run_sync_pipeline(
-                app.clone(),
-                pool,
-                client,
-                scan_result,
-                true,
-                coordinator,
-                audit_context,
-            )
-            .await
-            {
-                emit_sync_error(&app, &error);
-            }
+            let app_for_runner = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = run_sync_pipeline(
+                    app_for_runner.clone(),
+                    pool,
+                    client,
+                    ScanResult::default(),
+                    true,
+                    coordinator,
+                    audit_context,
+                )
+                .await
+                {
+                    emit_sync_error(&app_for_runner, &error);
+                }
+            });
         }
     }
 }
@@ -1619,6 +1784,104 @@ async fn start_sync(
 }
 
 #[tauri::command]
+async fn get_sync_status(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<db::SyncSnapshot, String> {
+    db::get_sync_snapshot(pool.inner())
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn pause_sync(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    sync_coordinator: tauri::State<'_, SyncCoordinator>,
+) -> Result<db::SyncSnapshot, String> {
+    sync_coordinator.0.paused.store(true, Ordering::SeqCst);
+    // A runner changes this to PAUSED at its next safe block boundary. Persisting it
+    // immediately also makes a close/crash between request and boundary safe.
+    let snapshot = db::set_sync_status(pool.inner(), "PAUSED")
+        .await
+        .map_err(|error| error.to_string())?;
+    let _ = app.emit("sync-paused", &snapshot);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+async fn resume_sync(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    sync_coordinator: tauri::State<'_, SyncCoordinator>,
+) -> Result<db::SyncSnapshot, String> {
+    let snapshot = db::get_sync_snapshot(pool.inner())
+        .await
+        .map_err(|error| error.to_string())?;
+    if snapshot.status != "PAUSED" {
+        return Ok(snapshot);
+    }
+    sync_coordinator.0.paused.store(false, Ordering::SeqCst);
+    let snapshot = db::set_sync_status(pool.inner(), "RUNNING")
+        .await
+        .map_err(|error| error.to_string())?;
+    sync_coordinator.0.resume.notify_waiters();
+    let _ = app.emit("sync-resumed", &snapshot);
+
+    // If no in-memory runner owns the lock, this is recovered work. Rebuild the
+    // scan result from the persisted queue rather than rescanning watched folders.
+    if let Ok(guard) = sync_coordinator.0.lock.try_lock() {
+        drop(guard);
+        let queued = db::next_sync_queue_block(pool.inner(), 100_000)
+            .await
+            .map_err(|error| error.to_string())?;
+        if !queued.is_empty() {
+            let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
+            let audit_context = SyncAuditContext::from_credentials(
+                &credentials.server_url,
+                &credentials.api_key,
+                "resume_sync",
+            );
+            let client = create_authenticated_client(&app, credentials)
+                .ok_or("Invalid server configuration")?;
+            audit_event(
+                &app,
+                audit_context.event(
+                    "sync.resumed",
+                    audit::Outcome::Info,
+                    audit::Severity::Info,
+                    "Synchronization resumed",
+                    json!({}),
+                ),
+            );
+            let app_for_runner = app.clone();
+            let pool_for_runner = pool.inner().clone();
+            let coordinator = sync_coordinator.0.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = run_sync_pipeline(
+                    app_for_runner.clone(),
+                    pool_for_runner,
+                    client,
+                    ScanResult::default(),
+                    true,
+                    coordinator,
+                    audit_context,
+                )
+                .await
+                {
+                    emit_sync_error(&app_for_runner, &error);
+                }
+            });
+        } else {
+            return db::complete_sync_job_if_finished(pool.inner())
+                .await
+                .map_err(|error| error.to_string())?
+                .ok_or_else(|| "Sync queue is still processing.".to_string());
+        }
+    }
+    Ok(snapshot)
+}
+
+#[tauri::command]
 async fn get_failed_syncs(
     pool: tauri::State<'_, sqlx::SqlitePool>,
 ) -> Result<Vec<db::FailedSyncEntry>, String> {
@@ -1734,6 +1997,8 @@ pub fn run() {
             let db_init = tauri::async_runtime::block_on(db::init(&handle))
                 .map_err(|e| format!("Failed to initialize database: {}", e))?;
             let pool = db_init.pool;
+            let recovered_sync = tauri::async_runtime::block_on(db::recover_sync_job(&pool))
+                .map_err(|error| format!("Failed to recover sync queue: {}", error))?;
 
             let mut recovery_notice = None;
             if let db::DatabaseStatus::Repaired {
@@ -1839,7 +2104,11 @@ pub fn run() {
             // tokio::sync::Mutex so async commands use .lock().await
             handle.manage(tokio::sync::Mutex::new(watcher));
             handle.manage(SyncState(AtomicBool::new(false)));
-            handle.manage(SyncCoordinator(std::sync::Arc::new(tokio::sync::Mutex::new(()))));
+            handle.manage(SyncCoordinator(std::sync::Arc::new(SyncCoordinatorInner {
+                lock: tokio::sync::Mutex::new(()),
+                paused: AtomicBool::new(recovered_sync.status == "PAUSED"),
+                resume: tokio::sync::Notify::new(),
+            })));
             handle.manage(LocaleState(std::sync::Mutex::new("en".to_string())));
             handle.manage(DatabaseRecoveryNotice(std::sync::Mutex::new(recovery_notice)));
             audit_event(
@@ -2103,30 +2372,13 @@ pub fn run() {
 
                         let pool = handle_task.state::<sqlx::SqlitePool>();
                         let pool_inner = pool.inner().clone();
-
-                        if let Ok(Some(creds)) = auth::get_credentials() {
-                            let audit_context = SyncAuditContext::from_credentials(
-                                &creds.server_url,
-                                &creds.api_key,
-                                "watcher_sync",
-                            );
-                            if let Some(client) = create_authenticated_client(&handle_task, creds) {
-                                let coordinator = handle_task.state::<SyncCoordinator>().0.clone();
-                                if let Err(error) = run_sync_pipeline(
-                                    handle_task.clone(),
-                                    pool_inner,
-                                    client,
-                                    scan_result,
-                                    true,
-                                    coordinator,
-                                    audit_context,
-                                )
-                                .await
-                                {
-                                    emit_sync_error(&handle_task, &error);
-                                }
-                            }
-                        }
+                        sync_scan_result_if_authenticated(
+                            handle_task.clone(),
+                            pool_inner,
+                            scan_result,
+                            "watcher_sync",
+                        )
+                        .await;
                     }
                 }
             });
@@ -2210,6 +2462,9 @@ pub fn run() {
             get_folders,
             remove_folder,
             start_sync,
+            pause_sync,
+            resume_sync,
+            get_sync_status,
             get_failed_syncs,
             retry_failed_syncs,
             get_upload_parallelism,

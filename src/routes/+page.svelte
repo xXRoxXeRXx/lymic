@@ -23,7 +23,7 @@
   let apiKey = $state("");
   let isLoggingIn = $state(false);
   let loginError = $state("");
-  let syncStatus = $state<"idle" | "syncing" | "error">("idle");
+  let syncStatus = $state<"idle" | "syncing" | "paused" | "error">("idle");
   let lastSync = $state("Noch nie");
   let progress = $state(0);
   let currentFile = $state("");
@@ -37,6 +37,7 @@
   let isSavingUploadParallelism = $state(false);
   let componentMounted = false;
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
+  let isSyncActionPending = $state(false);
 
   type ThemePreference = "system" | "light" | "dark";
   const themeStorageKey = "lymic-theme";
@@ -105,6 +106,14 @@
     failed: number;
   }
 
+  interface SyncSnapshot {
+    status: "RUNNING" | "PAUSED" | "IDLE";
+    total: number;
+    succeeded: number;
+    failed: number;
+    currentPath: string | null;
+  }
+
   interface WatchedFolder {
     id: number;
     path: string;
@@ -149,6 +158,13 @@
     return { id: ++logCounter, time, level, message, raw };
   }
 
+  function applySyncSnapshot(snapshot: SyncSnapshot | null | undefined) {
+    if (!snapshot) return;
+    syncStatus = snapshot.status === "PAUSED" ? "paused" : snapshot.status === "RUNNING" ? "syncing" : snapshot.failed > 0 ? "error" : "idle";
+    progress = snapshot.total === 0 ? 0 : Math.min(100, Math.round(((snapshot.succeeded + snapshot.failed) / snapshot.total) * 100));
+    if (snapshot.currentPath) currentFile = snapshot.currentPath.split(/[/\\]/).pop() || "";
+  }
+
   // Store unlisteners outside the async IIFE so onMount can return them synchronously.
   // Previously the cleanup was returned from the IIFE (a Promise), which Svelte ignores —
   // all event listeners were permanently leaking on unmount.
@@ -178,6 +194,15 @@
           progressResetTimer = undefined;
           syncStatus = "syncing";
           progress = 0;
+        }),
+        listen("sync-progress-snapshot", (event) => {
+          if (componentMounted) applySyncSnapshot(event.payload as SyncSnapshot);
+        }),
+        listen("sync-paused", (event) => {
+          if (componentMounted) applySyncSnapshot(event.payload as SyncSnapshot);
+        }),
+        listen("sync-resumed", (event) => {
+          if (componentMounted) applySyncSnapshot(event.payload as SyncSnapshot);
         }),
         listen("sync-error", () => {
           if (!componentMounted) return;
@@ -217,7 +242,12 @@
           }
           await refreshFailedSyncs();
         }
-        await refreshFolders();
+          await refreshFolders();
+          try {
+            applySyncSnapshot(await invoke<SyncSnapshot>("get_sync_status"));
+          } catch (e) {
+            console.warn("Failed to load sync status", e);
+          }
         isAutostartEnabled = await isEnabled();
         try {
           uploadParallelism = await invoke<number>("get_upload_parallelism");
@@ -272,7 +302,7 @@
   }
 
   async function handleStartSync() {
-    if (syncStatus === "syncing") {
+    if (syncStatus === "syncing" || isSyncActionPending) {
       console.warn("Sync already in progress, ignoring trigger.");
       return;
     }
@@ -292,6 +322,23 @@
       console.error("Sync failed", e);
       syncStatus = "error";
     }
+  }
+
+  async function handleSyncAction() {
+    if (isSyncActionPending) return;
+    if (syncStatus === "syncing" || syncStatus === "paused") {
+      isSyncActionPending = true;
+      try {
+        const command = syncStatus === "syncing" ? "pause_sync" : "resume_sync";
+        applySyncSnapshot(await invoke<SyncSnapshot>(command));
+      } catch (e) {
+        actionError = formatError(e);
+      } finally {
+        isSyncActionPending = false;
+      }
+      return;
+    }
+    await handleStartSync();
   }
 
   async function refreshFailedSyncs() {
@@ -560,28 +607,28 @@
           <div class="flex items-center justify-between">
             <div class="space-y-1">
               <div class="flex items-center gap-2">
-                  <div class="w-2 h-2 rounded-full {syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500'}"></div>
+                  <div class="w-2 h-2 rounded-full {syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : syncStatus === 'paused' ? 'bg-amber-500' : syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500'}"></div>
                   <span class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('status')}</span>
               </div>
               <h3 class="text-3xl font-bold text-slate-900 dark:text-slate-100">
-                 {syncStatus === 'syncing' ? $t('sync_running') : syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
+                  {syncStatus === 'syncing' ? $t('sync_running') : syncStatus === 'paused' ? $t('sync_paused') : syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
               </h3>
             </div>
             <button
               class="btn-action"
-              onclick={handleStartSync}
-              disabled={syncStatus === 'syncing' || watchedFolders.length === 0}
+              onclick={handleSyncAction}
+              disabled={isSyncActionPending || ((syncStatus !== 'syncing' && syncStatus !== 'paused') && watchedFolders.length === 0)}
               title={watchedFolders.length === 0 ? $t('sync_requires_folder') : undefined}
               aria-describedby={watchedFolders.length === 0 ? 'sync-requires-folder' : undefined}
             >
-              {syncStatus === 'syncing' ? $t('syncing') : $t('sync_now')}
+              {syncStatus === 'syncing' ? $t('pause_sync') : syncStatus === 'paused' ? $t('resume_sync') : $t('sync_now')}
             </button>
             {#if watchedFolders.length === 0}
               <span id="sync-requires-folder" class="sr-only">{$t('sync_requires_folder')}</span>
             {/if}
           </div>
 
-          {#if syncStatus === 'syncing'}
+          {#if syncStatus === 'syncing' || syncStatus === 'paused'}
             <div class="space-y-3">
               <div class="glass-progress">
                 <div class="glass-progress-fill" style="width: {progress}%;"></div>
@@ -590,6 +637,9 @@
                 <span>{progress}% {$t('completed')}</span>
                 <span class="truncate max-w-[250px]">{currentFile}</span>
               </div>
+              {#if syncStatus === 'paused'}
+                <p class="text-xs text-amber-600 dark:text-amber-400">{$t('sync_paused_hint')}</p>
+              {/if}
             </div>
           {:else}
             <div class="flex gap-10 pt-2 border-t border-black/5 dark:border-white/10">

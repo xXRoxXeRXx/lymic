@@ -26,6 +26,8 @@ let watchedFolders: WatchedFolder[] = [];
 let failedSyncs: FailedSyncEntry[] = [];
 let uploadParallelism = 3;
 let triggerSync: (() => void) | undefined;
+let syncPaused: ((event: { payload: unknown }) => void) | undefined;
+let syncResumed: ((event: { payload: unknown }) => void) | undefined;
 let systemThemeIsDark = false;
 let colorSchemeListeners = new Set<(event: MediaQueryListEvent) => void>();
 
@@ -53,6 +55,8 @@ function renderAuthenticatedPage() {
         return Promise.resolve(failedSyncs);
       case "get_upload_parallelism":
         return Promise.resolve(uploadParallelism);
+      case "get_sync_status":
+        return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
       case "update_locale":
         return Promise.resolve();
       default:
@@ -83,8 +87,12 @@ beforeEach(() => {
   failedSyncs = [];
   uploadParallelism = 3;
   triggerSync = undefined;
+  syncPaused = undefined;
+  syncResumed = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
     if (event === "trigger-sync") triggerSync = handler;
+    if (event === "sync-paused") syncPaused = handler as (event: { payload: unknown }) => void;
+    if (event === "sync-resumed") syncResumed = handler as (event: { payload: unknown }) => void;
     return Promise.resolve(() => {});
   });
   tauri.isEnabled.mockResolvedValue(false);
@@ -97,6 +105,43 @@ afterEach(() => {
 });
 
 describe("sync dashboard", () => {
+  it("restores a paused queue and resumes it without starting a new scan", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_sync_status") {
+        return Promise.resolve({ status: "PAUSED", total: 4, succeeded: 1, failed: 0, currentPath: "C:/photos/two.jpg" });
+      }
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve([]);
+      if (command === "get_upload_parallelism") return Promise.resolve(3);
+      if (command === "resume_sync") return Promise.resolve({ status: "RUNNING", total: 4, succeeded: 1, failed: 0, currentPath: "C:/photos/two.jpg" });
+      return Promise.resolve();
+    });
+    render(Page);
+
+    const resume = await screen.findByRole("button", { name: "Resume" });
+    expect(screen.getByText("Sync paused")).toBeInTheDocument();
+    expect(screen.getByText("25% completed")).toBeInTheDocument();
+    await fireEvent.click(resume);
+
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("resume_sync"));
+    expect(tauri.invoke).not.toHaveBeenCalledWith("start_sync");
+  });
+
+  it("changes sync controls from pause to resume when events arrive", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    renderAuthenticatedPage();
+    await waitFor(() => expect(syncPaused).toBeTypeOf("function"));
+    syncPaused?.({ payload: { status: "PAUSED", total: 2, succeeded: 0, failed: 0, currentPath: "C:/photos/one.jpg" } });
+
+    expect(await screen.findByRole("button", { name: "Resume" })).toBeEnabled();
+    syncResumed?.({ payload: { status: "RUNNING", total: 2, succeeded: 0, failed: 0, currentPath: "C:/photos/one.jpg" } });
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeEnabled();
+  });
+
   it("does not start sync without a watched folder", async () => {
     renderAuthenticatedPage();
 

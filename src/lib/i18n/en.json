@@ -56,5 +56,9 @@
   "failed_sync_count": "{count} failed file(s)",
   "failed_sync_details": "Failed sync details",
   "failure_details_unavailable": "Failure details are unavailable.",
-  "retry_failed_syncs": "Retry failed files"
+  "retry_failed_syncs": "Retry failed files",
+  "sync_paused": "Sync paused",
+  "pause_sync": "Pause",
+  "resume_sync": "Resume",
+  "sync_paused_hint": "Your queued files will resume from where they stopped."
 }

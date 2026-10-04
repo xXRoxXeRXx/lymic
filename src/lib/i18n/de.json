@@ -56,5 +56,9 @@
   "failed_sync_count": "{count} fehlgeschlagene Datei(en)",
   "failed_sync_details": "Details fehlgeschlagener Synchronisierungen",
   "failure_details_unavailable": "Fehlerdetails sind nicht verfügbar.",
-  "retry_failed_syncs": "Fehlgeschlagene Dateien wiederholen"
+  "retry_failed_syncs": "Fehlgeschlagene Dateien wiederholen",
+  "sync_paused": "Synchronisierung pausiert",
+  "pause_sync": "Pausieren",
+  "resume_sync": "Fortsetzen",
+  "sync_paused_hint": "Eingereihte Dateien werden an der letzten Stelle fortgesetzt."
 }

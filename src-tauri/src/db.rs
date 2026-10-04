@@ -35,6 +35,30 @@ pub struct FailedSyncEntry {
     pub failure_reason: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncSnapshot {
+    pub status: String,
+    pub total: i64,
+    pub succeeded: i64,
+    pub failed: i64,
+    pub current_path: Option<String>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct QueuedAsset {
+    pub local_path: String,
+    pub size: i64,
+    pub last_modified: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueueAsset<'a> {
+    pub path: &'a str,
+    pub size: i64,
+    pub mtime: i64,
+}
+
 #[derive(Debug)]
 pub(crate) enum InitFailure {
     Corrupt(String),
@@ -290,6 +314,172 @@ pub async fn init(
     init_at_path(&db_path).await
 }
 
+pub async fn recover_sync_job(pool: &SqlitePool) -> Result<SyncSnapshot, sqlx::Error> {
+    // A process cannot safely know whether an in-flight HTTP upload completed. Recovery
+    // therefore always requires explicit user confirmation before processing resumes.
+    sqlx::query("UPDATE sync_jobs SET status = 'PAUSED' WHERE id = 1 AND status = 'RUNNING'")
+        .execute(pool)
+        .await?;
+    get_sync_snapshot(pool).await
+}
+
+pub async fn get_sync_snapshot(pool: &SqlitePool) -> Result<SyncSnapshot, sqlx::Error> {
+    sqlx::query_as::<_, SyncSnapshot>(
+        "SELECT status, total_count AS total, success_count AS succeeded, failure_count AS failed, current_path
+         FROM sync_jobs WHERE id = 1",
+    )
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn enqueue_sync_assets(
+    pool: &SqlitePool,
+    assets: &[QueueAsset<'_>],
+    failures: &[(String, String)],
+) -> Result<SyncSnapshot, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let status: String = sqlx::query_scalar("SELECT status FROM sync_jobs WHERE id = 1")
+        .fetch_one(&mut *tx)
+        .await?;
+    if status == "IDLE" && (!assets.is_empty() || !failures.is_empty()) {
+        sqlx::query("UPDATE sync_jobs SET status = 'RUNNING', next_sequence = 1, total_count = 0, success_count = 0, failure_count = 0, current_path = NULL WHERE id = 1")
+            .execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM sync_queue WHERE job_id = 1")
+            .execute(&mut *tx)
+            .await?;
+    }
+    for asset in assets {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND local_path = ?)",
+        )
+        .bind(asset.path)
+        .fetch_one(&mut *tx)
+        .await?;
+        let next: i64 = sqlx::query_scalar("SELECT next_sequence FROM sync_jobs WHERE id = 1")
+            .fetch_one(&mut *tx)
+            .await?;
+        sqlx::query(
+            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status)
+             VALUES (1, ?, ?, ?, ?, 'PENDING')
+             ON CONFLICT(job_id, local_path) DO UPDATE SET
+               size = excluded.size, last_modified = excluded.last_modified,
+               status = CASE WHEN sync_queue.status = 'SYNCED' THEN 'SYNCED' ELSE 'PENDING' END,
+               failure_reason = NULL",
+        )
+        .bind(next)
+        .bind(asset.path)
+        .bind(asset.size)
+        .bind(asset.mtime)
+        .execute(&mut *tx)
+        .await?;
+        if !exists {
+            sqlx::query("UPDATE sync_jobs SET next_sequence = next_sequence + 1 WHERE id = 1")
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+    for (path, reason) in failures {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND local_path = ?)",
+        )
+        .bind(path)
+        .fetch_one(&mut *tx)
+        .await?;
+        let next: i64 = sqlx::query_scalar("SELECT next_sequence FROM sync_jobs WHERE id = 1")
+            .fetch_one(&mut *tx)
+            .await?;
+        sqlx::query(
+            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, failure_reason)
+             VALUES (1, ?, ?, 0, 0, 'FAILED', ?)
+             ON CONFLICT(job_id, local_path) DO UPDATE SET status = 'FAILED', failure_reason = excluded.failure_reason",
+        ).bind(next).bind(path).bind(reason).execute(&mut *tx).await?;
+        if !exists {
+            sqlx::query("UPDATE sync_jobs SET next_sequence = next_sequence + 1 WHERE id = 1")
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+    sqlx::query("UPDATE sync_jobs SET total_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1), success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED') WHERE id = 1")
+        .execute(&mut *tx).await?;
+    let snapshot = sqlx::query_as::<_, SyncSnapshot>("SELECT status, total_count AS total, success_count AS succeeded, failure_count AS failed, current_path FROM sync_jobs WHERE id = 1")
+        .fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(snapshot)
+}
+
+pub async fn next_sync_queue_block(
+    pool: &SqlitePool,
+    limit: i64,
+) -> Result<Vec<QueuedAsset>, sqlx::Error> {
+    sqlx::query_as::<_, QueuedAsset>(
+        "SELECT local_path, size, last_modified FROM sync_queue
+         WHERE job_id = 1 AND status = 'PENDING' ORDER BY sequence LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn set_sync_status(pool: &SqlitePool, status: &str) -> Result<SyncSnapshot, sqlx::Error> {
+    sqlx::query("UPDATE sync_jobs SET status = ?, current_path = CASE WHEN ? = 'IDLE' THEN NULL ELSE current_path END WHERE id = 1")
+        .bind(status).bind(status).execute(pool).await?;
+    get_sync_snapshot(pool).await
+}
+
+pub async fn finalize_queued_block(
+    pool: &SqlitePool,
+    results: &[(String, String)],
+) -> Result<SyncSnapshot, sqlx::Error> {
+    debug_assert!(!results.is_empty());
+    let mut tx = pool.begin().await?;
+    let mut query = sqlx::QueryBuilder::new("UPDATE sync_queue SET status = CASE local_path ");
+    for (path, status) in results {
+        query
+            .push("WHEN ")
+            .push_bind(path)
+            .push(" THEN ")
+            .push_bind(status)
+            .push(' ');
+    }
+    query.push("END, failure_reason = NULL WHERE job_id = 1 AND local_path IN (");
+    {
+        let mut separated = query.separated(", ");
+        for (path, _) in results {
+            separated.push_bind(path);
+        }
+    }
+    query.push(')');
+    query.build().execute(&mut *tx).await?;
+    let current_path = &results.last().expect("non-empty results").0;
+    snapshot_after_queue_update(tx, current_path).await
+}
+
+async fn snapshot_after_queue_update(
+    mut tx: sqlx::Transaction<'_, sqlx::Sqlite>,
+    current_path: &str,
+) -> Result<SyncSnapshot, sqlx::Error> {
+    sqlx::query("UPDATE sync_jobs SET success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED'), current_path = ? WHERE id = 1")
+        .bind(current_path).execute(&mut *tx).await?;
+    let snapshot = sqlx::query_as::<_, SyncSnapshot>("SELECT status, total_count AS total, success_count AS succeeded, failure_count AS failed, current_path FROM sync_jobs WHERE id = 1")
+        .fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(snapshot)
+}
+
+pub async fn complete_sync_job_if_finished(
+    pool: &SqlitePool,
+) -> Result<Option<SyncSnapshot>, sqlx::Error> {
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'PENDING'",
+    )
+    .fetch_one(pool)
+    .await?;
+    if pending != 0 {
+        return Ok(None);
+    }
+    Some(set_sync_status(pool, "IDLE").await).transpose()
+}
+
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]
 pub struct WatchedFolder {
     pub id: i64,
@@ -502,6 +692,108 @@ mod tests {
         update_sync_state(&pool, "photo.jpg", "hash", 42, 123, "SYNCED", None)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn running_queue_is_recovered_as_paused() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        sqlx::query("UPDATE sync_jobs SET status = 'RUNNING' WHERE id = 1")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let snapshot = recover_sync_job(&pool).await.unwrap();
+        assert_eq!(snapshot.status, "PAUSED");
+    }
+
+    #[tokio::test]
+    async fn queue_deduplicates_paths_and_preserves_order() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let assets = [
+            QueueAsset {
+                path: "b.jpg",
+                size: 2,
+                mtime: 2,
+            },
+            QueueAsset {
+                path: "a.jpg",
+                size: 1,
+                mtime: 1,
+            },
+        ];
+        enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+        let changed = [QueueAsset {
+            path: "b.jpg",
+            size: 3,
+            mtime: 3,
+        }];
+        let snapshot = enqueue_sync_assets(&pool, &changed, &[]).await.unwrap();
+
+        assert_eq!(snapshot.total, 2);
+        let queued = next_sync_queue_block(&pool, 10).await.unwrap();
+        assert_eq!(
+            queued
+                .iter()
+                .map(|asset| asset.local_path.as_str())
+                .collect::<Vec<_>>(),
+            ["b.jpg", "a.jpg"]
+        );
+        assert_eq!(queued[0].size, 3);
+    }
+
+    #[tokio::test]
+    async fn paused_queue_accepts_new_items_without_resuming() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        set_sync_status(&pool, "PAUSED").await.unwrap();
+        let assets = [QueueAsset {
+            path: "later.jpg",
+            size: 7,
+            mtime: 9,
+        }];
+
+        let snapshot = enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+        assert_eq!(snapshot.status, "PAUSED");
+        assert_eq!(snapshot.total, 1);
+        assert_eq!(
+            next_sync_queue_block(&pool, 1).await.unwrap()[0].local_path,
+            "later.jpg"
+        );
+    }
+
+    #[tokio::test]
+    async fn completion_waits_for_all_queue_items() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let assets = [
+            QueueAsset {
+                path: "one.jpg",
+                size: 1,
+                mtime: 1,
+            },
+            QueueAsset {
+                path: "two.jpg",
+                size: 2,
+                mtime: 2,
+            },
+        ];
+        enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+        finalize_queued_block(&pool, &[("one.jpg".to_string(), "SYNCED".to_string())])
+            .await
+            .unwrap();
+        assert!(complete_sync_job_if_finished(&pool)
+            .await
+            .unwrap()
+            .is_none());
+        finalize_queued_block(&pool, &[("two.jpg".to_string(), "FAILED".to_string())])
+            .await
+            .unwrap();
+        let snapshot = complete_sync_job_if_finished(&pool).await.unwrap().unwrap();
+        assert_eq!(snapshot.status, "IDLE");
+        assert_eq!(snapshot.succeeded, 1);
+        assert_eq!(snapshot.failed, 1);
     }
 
     #[tokio::test]
