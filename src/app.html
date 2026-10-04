@@ -8,6 +8,23 @@
     <title>Lymic</title>
 
     %sveltekit.head%
+    <script>
+      document.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+      });
+
+      document.addEventListener("dragstart", (event) => {
+        if (event.target && event.target.tagName === "IMG") {
+          event.preventDefault();
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") {
+          event.preventDefault();
+        }
+      });
+    </script>
   </head>
   <body data-sveltekit-preload-data="hover">
     <div style="display: contents">%sveltekit.body%</div>

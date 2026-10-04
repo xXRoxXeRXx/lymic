@@ -542,7 +542,7 @@
           <div class="space-y-6 animate-in" style="animation-delay: 200ms">
              <h4 class="text-sm font-bold text-slate-800 uppercase tracking-widest px-2">{$t('activity_log')}</h4>
              <!-- Was slicing to 10 in the template while storing 50 in state — now shows all stored entries -->
-             <div class="glass-pane !p-6 h-full max-h-[400px] overflow-y-auto space-y-4">
+             <div class="glass-pane !p-6 h-full max-h-[400px] overflow-y-auto space-y-4 selectable">
                {#if logs.length === 0}
                  <p class="text-xs text-slate-300 italic">{$t('no_activity')}</p>
                {:else}

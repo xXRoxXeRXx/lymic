@@ -2,6 +2,12 @@
   import "../app.css";
   import "#lib/i18n/index.js";
   import { waitLocale } from "svelte-i18n";
+  import { onMount } from "svelte";
+  import { setupBrowserInteractions } from "#lib/prevent-browser-defaults.js";
+
+  onMount(() => {
+    return setupBrowserInteractions();
+  });
 </script>
 
 {#await waitLocale()}

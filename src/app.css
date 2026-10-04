@@ -22,6 +22,19 @@
     overscroll-behavior: none;
     height: 100%;
     width: 100%;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  input, textarea, [contenteditable="true"], .selectable {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  img {
+    -webkit-user-drag: none;
+    user-select: none;
+    -webkit-user-select: none;
   }
 }
 
