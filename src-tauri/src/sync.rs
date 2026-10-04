@@ -221,8 +221,13 @@ impl ImmichClient {
         parse_bulk_check_response(&data, &hashes).map_err(BulkCheckError::Retryable)
     }
 
-    /// Upload a single asset.
-    pub async fn upload_asset(&self, path: &str, precomputed_hash: &str) -> Result<String, String> {
+    /// Upload an image with an optional, already verified live-photo video.
+    pub async fn upload_asset_with_live_photo(
+        &self,
+        path: &str,
+        precomputed_hash: &str,
+        live_photo_path: Option<&str>,
+    ) -> Result<String, String> {
         let url = self.endpoint_url("assets");
         let path_buf = std::path::PathBuf::from(path);
         let file_name = path_buf
@@ -257,10 +262,47 @@ impl ImmichClient {
         )
         .file_name(file_name);
 
+        // Validate and open the companion before constructing the request so a pair cannot
+        // accidentally degrade into an image-only upload when its video is unreadable.
+        let live_photo_part = if let Some(live_photo_path) = live_photo_path {
+            let live_photo_metadata = std::fs::metadata(live_photo_path).map_err(|e| {
+                format!(
+                    "Cannot read live photo video metadata for {}: {}",
+                    live_photo_path, e
+                )
+            })?;
+            if !live_photo_metadata.is_file() {
+                return Err(format!(
+                    "Live photo video is not a regular file: {}",
+                    live_photo_path
+                ));
+            }
+            let live_photo_file = tokio::fs::File::open(live_photo_path)
+                .await
+                .map_err(|e| format!("Cannot open live photo video {}: {}", live_photo_path, e))?;
+            let live_photo_name = std::path::Path::new(live_photo_path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("live-photo.mov")
+                .to_string();
+            Some(
+                reqwest::multipart::Part::stream_with_length(
+                    reqwest::Body::wrap_stream(ReaderStream::new(live_photo_file)),
+                    live_photo_metadata.len(),
+                )
+                .file_name(live_photo_name),
+            )
+        } else {
+            None
+        };
+
         let mut form = reqwest::multipart::Form::new()
             .text("fileCreatedAt", created_at_iso)
             .text("fileModifiedAt", modified_at_iso)
             .part("assetData", asset_part);
+        if let Some(live_photo_part) = live_photo_part {
+            form = form.part("livePhotoData", live_photo_part);
+        }
 
         let sidecar_path = path_buf.with_extension("xmp");
         let sidecar_file = match tokio::fs::File::open(&sidecar_path).await {
@@ -688,7 +730,7 @@ mod tests {
         let asset_path = temporary_file(b"image data");
         assert_eq!(
             client
-                .upload_asset(asset_path.to_str().unwrap(), "new-file")
+                .upload_asset_with_live_photo(asset_path.to_str().unwrap(), "new-file", None)
                 .await
                 .unwrap(),
             "uploaded-asset"
@@ -714,6 +756,52 @@ mod tests {
         assert!(upload_request.starts_with("POST /api/assets HTTP/1.1"));
         assert!(upload_request.contains("x-immich-checksum: new-file"));
         assert!(upload_request.contains("name=\"assetData\""));
+        assert!(!upload_request.contains("name=\"livePhotoData\""));
+    }
+
+    #[tokio::test]
+    async fn pair_upload_streams_image_and_live_photo_parts() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            requests_tx
+                .send(read_http_request(&mut stream).await)
+                .await
+                .unwrap();
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 15\r\nConnection: close\r\n\r\n{\"id\":\"paired\"}").await.unwrap();
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        let image = temporary_file(b"image data");
+        let video = temporary_file(b"video data");
+        let sidecar = image.with_extension("xmp");
+        std::fs::write(&sidecar, b"sidecar data").unwrap();
+        assert_eq!(
+            client
+                .upload_asset_with_live_photo(
+                    image.to_str().unwrap(),
+                    "image-hash",
+                    Some(video.to_str().unwrap())
+                )
+                .await
+                .unwrap(),
+            "paired"
+        );
+        let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(request.contains("x-immich-checksum: image-hash"));
+        assert!(request.contains("name=\"assetData\""));
+        assert!(request.contains("name=\"livePhotoData\""));
+        assert!(request.contains("name=\"sidecarData\""));
+        assert!(request.contains(image.file_name().unwrap().to_str().unwrap()));
+        assert!(request.contains(video.file_name().unwrap().to_str().unwrap()));
+        std::fs::remove_file(image).unwrap();
+        std::fs::remove_file(video).unwrap();
+        std::fs::remove_file(sidecar).unwrap();
     }
 
     #[tokio::test]

@@ -7,7 +7,7 @@ mod watcher;
 use audit::{audit_event, audit_safe_error, upload_details, SyncAuditContext};
 use futures::{StreamExt, TryStreamExt};
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
@@ -106,6 +106,10 @@ const MEDIA_EXTENSIONS: &[&str] = &[
     "raf", "raw", "rw2", "rwl", "sr2", "srf", "srw", "svg", "tif", "tiff", "ts", "vob", "webm",
     "webp", "wmv", "x3f",
 ];
+const LIVE_PHOTO_IMAGE_EXTENSIONS: &[&str] = &["heic", "heif"];
+const LIVE_PHOTO_VIDEO_EXTENSIONS: &[&str] = &["mov"];
+const MOTION_PHOTO_IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg"];
+const MOTION_PHOTO_VIDEO_EXTENSIONS: &[&str] = &["mp4"];
 
 fn is_media_file(path: &std::path::Path) -> bool {
     // eq_ignore_ascii_case avoids a heap allocation per file.
@@ -119,11 +123,166 @@ fn is_media_file(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Asset {
     path: String,
     size: u64,
     mtime: i64,
+}
+
+#[derive(Debug)]
+struct UploadUnit {
+    image: Asset,
+    live_photo_video: Option<Asset>,
+}
+
+#[derive(Debug)]
+struct HashedUploadUnit {
+    image: sync::SyncAsset,
+    live_photo_video: Option<sync::SyncAsset>,
+}
+
+impl UploadUnit {
+    fn assets(&self) -> impl Iterator<Item = &Asset> {
+        std::iter::once(&self.image).chain(self.live_photo_video.iter())
+    }
+}
+
+impl HashedUploadUnit {
+    fn assets(&self) -> impl Iterator<Item = &sync::SyncAsset> {
+        std::iter::once(&self.image).chain(self.live_photo_video.iter())
+    }
+
+    fn byte_size(&self) -> u64 {
+        self.assets().map(|asset| asset.size).sum()
+    }
+}
+
+fn has_extension(path: &Path, extensions: &[&str]) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            extensions
+                .iter()
+                .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+        })
+}
+
+fn live_photo_kind(path: &Path) -> Option<bool> {
+    if has_extension(path, LIVE_PHOTO_IMAGE_EXTENSIONS)
+        || has_extension(path, MOTION_PHOTO_IMAGE_EXTENSIONS)
+    {
+        Some(true)
+    } else if has_extension(path, LIVE_PHOTO_VIDEO_EXTENSIONS)
+        || has_extension(path, MOTION_PHOTO_VIDEO_EXTENSIONS)
+    {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+fn is_allowed_live_photo_pair(image: &Path, video: &Path) -> bool {
+    (has_extension(image, LIVE_PHOTO_IMAGE_EXTENSIONS)
+        && has_extension(video, LIVE_PHOTO_VIDEO_EXTENSIONS))
+        || (has_extension(image, MOTION_PHOTO_IMAGE_EXTENSIONS)
+            && has_extension(video, MOTION_PHOTO_VIDEO_EXTENSIONS))
+}
+
+fn upload_units_from_assets(assets: Vec<Asset>) -> Vec<UploadUnit> {
+    let mut groups: BTreeMap<(PathBuf, String), Vec<Asset>> = BTreeMap::new();
+    for asset in assets {
+        let path = Path::new(&asset.path);
+        let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+            groups
+                .entry((PathBuf::from(&asset.path), String::new()))
+                .or_default()
+                .push(asset);
+            continue;
+        };
+        groups
+            .entry((
+                path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
+                stem.to_string(),
+            ))
+            .or_default()
+            .push(asset);
+    }
+
+    let mut units = Vec::new();
+    for mut group in groups.into_values() {
+        let image_indexes: Vec<_> = group
+            .iter()
+            .enumerate()
+            .filter_map(|(index, asset)| {
+                live_photo_kind(Path::new(&asset.path))
+                    .filter(|is_image| *is_image)
+                    .map(|_| index)
+            })
+            .collect();
+        let video_indexes: Vec<_> = group
+            .iter()
+            .enumerate()
+            .filter_map(|(index, asset)| {
+                live_photo_kind(Path::new(&asset.path))
+                    .filter(|is_image| !*is_image)
+                    .map(|_| index)
+            })
+            .collect();
+        if group.len() == 2
+            && image_indexes.len() == 1
+            && video_indexes.len() == 1
+            && is_allowed_live_photo_pair(
+                Path::new(&group[image_indexes[0]].path),
+                Path::new(&group[video_indexes[0]].path),
+            )
+        {
+            let video = group.swap_remove(video_indexes[0]);
+            let image_index = image_indexes[0] - usize::from(video_indexes[0] < image_indexes[0]);
+            let image = group.swap_remove(image_index);
+            units.push(UploadUnit {
+                image,
+                live_photo_video: Some(video),
+            });
+        }
+        units.extend(group.into_iter().map(|image| UploadUnit {
+            image,
+            live_photo_video: None,
+        }));
+    }
+    units
+}
+
+fn live_photo_sibling_paths(path: &Path) -> Vec<PathBuf> {
+    let Some(parent) = path.parent() else {
+        return Vec::new();
+    };
+    let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+        return Vec::new();
+    };
+    let extensions = if has_extension(path, LIVE_PHOTO_IMAGE_EXTENSIONS) {
+        LIVE_PHOTO_VIDEO_EXTENSIONS
+    } else if has_extension(path, MOTION_PHOTO_IMAGE_EXTENSIONS) {
+        MOTION_PHOTO_VIDEO_EXTENSIONS
+    } else if has_extension(path, LIVE_PHOTO_VIDEO_EXTENSIONS) {
+        LIVE_PHOTO_IMAGE_EXTENSIONS
+    } else if has_extension(path, MOTION_PHOTO_VIDEO_EXTENSIONS) {
+        MOTION_PHOTO_IMAGE_EXTENSIONS
+    } else {
+        return Vec::new();
+    };
+    std::fs::read_dir(parent)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|candidate| {
+            candidate.is_file()
+                && candidate.file_stem().and_then(|value| value.to_str()) == Some(stem)
+                && has_extension(candidate, extensions)
+        })
+        .collect()
 }
 
 #[derive(Debug)]
@@ -356,6 +515,7 @@ async fn add_event_paths(
             if path.is_dir() {
                 directories.push(path);
             } else if is_media_file(&path) {
+                files.extend(live_photo_sibling_paths(&path));
                 files.push(path);
             }
         }
@@ -822,9 +982,7 @@ async fn run_sync_pipeline(
     coordinator: std::sync::Arc<tokio::sync::Mutex<()>>,
     audit_context: SyncAuditContext,
 ) -> Result<SyncSummary, String> {
-    // Auto-sync has no command response, so it reports completion through an event.
     let _idle_emitter = is_auto.then(|| SyncIdleEmitter(app.clone()));
-    // All triggers share this lock, preventing concurrent hashing, checks, and uploads.
     let _sync_guard = match coordinator.try_lock() {
         Ok(guard) => guard,
         Err(_) => {
@@ -854,212 +1012,138 @@ async fn run_sync_pipeline(
     } = scan_result;
     let total_files = files.len();
     let total_bytes: u64 = files.iter().map(|asset| asset.size).sum();
+    let scan_failure_count = failures.len();
     let completed_bytes = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let success_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let scan_failure_count = failures.len();
-    let failure_count =
-        std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(scan_failure_count));
+    let failure_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(failures.len()));
     for failure in failures {
         log_to_ui(
             &app,
             "ERROR",
             &format!("{}: {}", failure.path, failure.error),
         );
-        if let Err(error) = db::mark_sync_failed(&pool, &failure.path, 0, 0, &failure.error).await {
-            log_to_ui(
-                &app,
-                "ERROR",
-                &format!("Could not persist failure for {}: {}", failure.path, error),
-            );
-        }
+        let _ = db::mark_sync_failed(&pool, &failure.path, 0, 0, &failure.error).await;
     }
-
-    let prefix = if is_auto { "Auto-sync" } else { "Sync" };
+    let units = upload_units_from_assets(files);
     log_to_ui(
         &app,
         "INFO",
         &format!(
             "{}: Starting pipeline for {} files ({:.2} MB)",
-            prefix,
+            if is_auto { "Auto-sync" } else { "Sync" },
             total_files,
             total_bytes as f64 / 1024.0 / 1024.0
         ),
     );
 
-    // Pipeline Stage 1: Parallel Hashing (Concurrency = 4)
-    let hashed_stream = futures::stream::iter(files)
-        .map(|asset| {
+    // Each unit contains at most two assets, so 250 units keeps a bulk request at
+    // or below 500 hashes while keeping live-photo pairs together.
+    let hashed_units = futures::stream::iter(units)
+        .map(|unit| {
             let pool = pool.clone();
             let app = app.clone();
             let completed_bytes = completed_bytes.clone();
             let failure_count = failure_count.clone();
             let audit_context = audit_context.clone();
             async move {
-                let Asset { path, size, mtime } = asset;
-
-                // Attempt cache hit only when we have a reliable mtime.
-                let cached = match mtime {
-                    0 => None,
-                    _ => match db::get_cached_hash(&pool, &path, mtime, size as i64).await {
-                        Ok(cached) => cached,
-                        Err(error) => {
-                            log_to_ui(
-                                &app,
-                                "ERROR",
-                                &format!("Could not load cached hash for {}: {}", path, error),
-                            );
-                            failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
-                            audit_event(
-                                &app,
-                                audit_context.event(
-                                    "db.cache_lookup.failed",
-                                    audit::Outcome::Failure,
-                                    audit::Severity::Error,
-                                    "Cached checksum lookup failed",
-                                    json!({
-                                        "local_path": path,
-                                        "failure_reason": audit_context.safe_error(&error.to_string()),
-                                    }),
-                                ),
-                            );
-                            return None;
-                        }
-                    },
-                };
-
-                // The persistent cache stores only Immich's SHA-1. Recompute the complete
-                // checksum set so upload audit records always contain all three values.
-                let (checksums, size, mtime) = {
-                    let path_for_hash = path.clone();
-                    match tokio::task::spawn_blocking(move || calculate_stable_checksums(&path_for_hash))
-                        .await
-                    {
-                        Ok(Ok((checksums, size, mtime))) => {
-                            let hash = &checksums.sha1_base64;
-                            if cached.as_deref() == Some(hash) {
-                                return Some(sync::SyncAsset { path, size, checksums: Some(checksums), mtime });
+                let result: Result<HashedUploadUnit, String> = async {
+                    let mut hashed = Vec::new();
+                    let assets: Vec<Asset> = unit.assets().cloned().collect();
+                    for asset in &assets {
+                        let cached = if asset.mtime == 0 {
+                            Ok(None)
+                        } else {
+                            db::get_cached_hash(&pool, &asset.path, asset.mtime, asset.size as i64)
+                                .await
+                        };
+                        let cached = match cached {
+                            Ok(value) => value,
+                            Err(error) => {
+                                return Err(format!(
+                                    "Could not load cached hash for {}: {}",
+                                    asset.path, error
+                                ))
                             }
-                            if let Err(error) = db::update_sync_state(
+                        };
+                        let path = asset.path.clone();
+                        let (checksums, size, mtime) =
+                            tokio::task::spawn_blocking(move || calculate_stable_checksums(&path))
+                                .await
+                                .map_err(|error| format!("Hashing task failed: {}", error))?
+                                .map_err(|error| format!("Hashing failed: {}", error))?;
+                        if cached.as_deref() != Some(&checksums.sha1_base64) {
+                            db::update_sync_state(
                                 &pool,
-                                &path,
-                                hash,
+                                &asset.path,
+                                &checksums.sha1_base64,
                                 mtime,
                                 size as i64,
                                 "PENDING",
                                 None,
                             )
                             .await
-                            {
-                                log_to_ui(
-                                    &app,
-                                    "ERROR",
-                                    &format!(
-                                        "Could not persist pending sync state for {}: {}",
-                                        path, error
-                                    ),
-                                );
-                                failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                completed_bytes
-                                    .fetch_add(size, std::sync::atomic::Ordering::Relaxed);
-                                audit_event(
-                                    &app,
-                                    audit_context.event(
-                                        "db.sync_state.failed",
-                                        audit::Outcome::Failure,
-                                        audit::Severity::Error,
-                                        "Could not persist pending sync state",
-                                        json!({
-                                            "local_path": path,
-                                            "failure_reason": audit_context.safe_error(&error.to_string()),
-                                        }),
-                                    ),
-                                );
-                                return None;
-                            }
-                            (checksums, size, mtime)
+                            .map_err(|error| {
+                                format!(
+                                    "Could not persist pending sync state for {}: {}",
+                                    asset.path, error
+                                )
+                            })?;
                         }
-                        Ok(Err(error)) => {
-                            log_to_ui(
-                                &app,
-                                "ERROR",
-                                &format!("Hashing failed for {}: {}", path, error),
-                            );
-                            if let Err(error) =
-                                db::mark_sync_failed(&pool, &path, mtime, size as i64, &error.to_string()).await
-                            {
-                                log_to_ui(
-                                    &app,
-                                    "ERROR",
-                                    &format!("Could not persist failure for {}: {}", path, error),
-                                );
-                            }
-                            failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
-                            audit_event(
-                                &app,
-                                audit_context.event(
-                                    "file.hash.failed",
-                                    audit::Outcome::Failure,
-                                    audit::Severity::Error,
-                                    "File hashing failed",
-                                    json!({
-                                        "local_path": path,
-                                        "failure_reason": audit_context.safe_error(&error.to_string()),
-                                    }),
-                                ),
-                            );
-                            return None;
-                        }
-                        Err(error) => {
-                            log_to_ui(
-                                &app,
-                                "ERROR",
-                                &format!("Hashing task failed for {}: {}", path, error),
-                            );
-                            if let Err(error) =
-                                db::mark_sync_failed(&pool, &path, mtime, size as i64, &error.to_string()).await
-                            {
-                                log_to_ui(
-                                    &app,
-                                    "ERROR",
-                                    &format!("Could not persist failure for {}: {}", path, error),
-                                );
-                            }
-                            failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
-                            audit_event(
-                                &app,
-                                audit_context.event(
-                                    "file.hash.failed",
-                                    audit::Outcome::Failure,
-                                    audit::Severity::Error,
-                                    "File hashing task failed",
-                                    json!({
-                                        "local_path": path,
-                                        "failure_reason": audit_context.safe_error(&error.to_string()),
-                                    }),
-                                ),
-                            );
-                            return None;
-                        }
+                        hashed.push(sync::SyncAsset {
+                            path: asset.path.clone(),
+                            size,
+                            mtime,
+                            checksums: Some(checksums),
+                        });
                     }
-                };
-                Some(sync::SyncAsset {
-                    path,
-                    size,
-                    checksums: Some(checksums),
-                    mtime,
-                })
+                    Ok(HashedUploadUnit {
+                        image: hashed.remove(0),
+                        live_photo_video: hashed.pop(),
+                    })
+                }
+                .await;
+                match result {
+                    Ok(unit) => Some(unit),
+                    Err(error) => {
+                        for asset in unit.assets() {
+                            let _ = db::mark_sync_failed(
+                                &pool,
+                                &asset.path,
+                                asset.mtime,
+                                asset.size as i64,
+                                &error,
+                            )
+                            .await;
+                        }
+                log_to_ui(&app, "ERROR", &error);
+                audit_event(
+                    &app,
+                    audit_context.event(
+                        "file.hash.failed",
+                        audit::Outcome::Failure,
+                        audit::Severity::Error,
+                        "File hashing failed",
+                        json!({
+                            "local_paths": unit.assets().map(|asset| asset.path.clone()).collect::<Vec<_>>(),
+                            "failure_reason": audit_context.safe_error(&error),
+                        }),
+                    ),
+                );
+                        failure_count
+                            .fetch_add(unit.assets().count(), std::sync::atomic::Ordering::Relaxed);
+                        completed_bytes.fetch_add(
+                            unit.assets().map(|asset| asset.size).sum(),
+                            std::sync::atomic::Ordering::SeqCst,
+                        );
+                        None
+                    }
+                }
             }
         })
         .buffer_unordered(4)
-        .filter_map(|x| async { x });
-
-    // Pipeline Stage 2: Buffered Bulk Check (Batch = 500)
-    let checked_batches = hashed_stream
-        .chunks(500)
-        .map(|chunk| {
+        .filter_map(|unit| async { unit })
+        .chunks(250)
+        .then(|chunk| {
             let client = client.clone();
             let pool = pool.clone();
             let app = app.clone();
@@ -1067,228 +1151,215 @@ async fn run_sync_pipeline(
             let failure_count = failure_count.clone();
             let audit_context = audit_context.clone();
             async move {
-                let hashes: Vec<String> = chunk
+                let hashes = chunk
                     .iter()
-                    .filter_map(|a| {
-                        a.checksums
+                    .flat_map(|unit| unit.assets())
+                    .filter_map(|asset| {
+                        asset
+                            .checksums
                             .as_ref()
                             .map(|checksums| checksums.sha1_base64.clone())
                     })
                     .collect();
-                let existing_hashes =
+                let existing =
                     check_assets_exist_with_backoff(&client, hashes, &app, &audit_context).await?;
+                let mut upload_units = Vec::new();
+                for unit in chunk {
+                    let accepted: Vec<_> = unit
+                        .assets()
+                        .filter(|asset| {
+                            !existing.contains(&asset.checksums.as_ref().unwrap().sha1_base64)
+                        })
+                        .cloned()
+                        .collect();
+                    for asset in unit
+                        .assets()
+                        .filter(|asset| {
+                            existing.contains(&asset.checksums.as_ref().unwrap().sha1_base64)
+                        })
+                    {
+                        let hash = &asset.checksums.as_ref().unwrap().sha1_base64;
+                        if db::update_sync_state(
+                            &pool,
+                            &asset.path,
+                            hash,
+                            asset.mtime,
+                            asset.size as i64,
+                            "SYNCED",
+                            None,
+                        )
+                        .await
+                        .is_err()
+                        {
+                            failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        completed_bytes.fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst);
+                    }
+                    if let Some(image) = accepted.first() {
+                        upload_units.push(HashedUploadUnit {
+                            image: image.clone(),
+                            live_photo_video: accepted.get(1).cloned(),
+                        });
+                    }
+                }
+                Ok::<_, String>(upload_units)
+            }
+        });
 
-                let mut to_upload = Vec::new();
-                for asset in chunk {
-                    if let Some(checksums) = &asset.checksums {
-                        let hash = &checksums.sha1_base64;
-                        if existing_hashes.contains(hash) {
-                            if let Err(error) = db::update_sync_state(
+    hashed_units
+        .map_ok(|units| futures::stream::iter(units.into_iter().map(Ok::<_, String>)))
+        .try_flatten()
+        .try_for_each_concurrent(3, |unit| {
+            let client = client.clone();
+            let pool = pool.clone();
+            let app = app.clone();
+            let completed_bytes = completed_bytes.clone();
+            let success_count = success_count.clone();
+            let failure_count = failure_count.clone();
+            let audit_context = audit_context.clone();
+            async move {
+                let image_hash = unit.image.checksums.as_ref().unwrap().sha1_base64.clone();
+                let video_path = unit
+                    .live_photo_video
+                    .as_ref()
+                    .map(|asset| asset.path.as_str());
+                let operation_id = audit::AuditEvent::operation_id();
+                let started =
+                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+                let mut details = upload_details(
+                    &unit.image,
+                    unit.image.checksums.as_ref().unwrap(),
+                    &operation_id,
+                    &started,
+                    None,
+                    None,
+                    None,
+                );
+                if let Some(video) = &unit.live_photo_video {
+                    details["live_photo_local_path"] = json!(video.path);
+                }
+                audit_event(
+                    &app,
+                    audit_context.event(
+                        "file.upload.started",
+                        audit::Outcome::Started,
+                        audit::Severity::Info,
+                        "Upload started",
+                        details,
+                    ),
+                );
+                let _ = app.emit("sync-progress", &unit.image.path);
+                let result = client
+                    .upload_asset_with_live_photo(&unit.image.path, &image_hash, video_path)
+                    .await;
+                match result {
+                    Ok(remote_id) => {
+                        let mut persisted = true;
+                        for asset in unit.assets() {
+                            let hash = &asset.checksums.as_ref().unwrap().sha1_base64;
+                            let remote = if asset.path == unit.image.path {
+                                Some(remote_id.as_str())
+                            } else {
+                                None
+                            };
+                            if db::update_sync_state(
                                 &pool,
                                 &asset.path,
                                 hash,
                                 asset.mtime,
                                 asset.size as i64,
                                 "SYNCED",
-                                None,
+                                remote,
                             )
                             .await
+                            .is_err()
                             {
-                                log_to_ui(
-                                    &app,
-                                    "ERROR",
-                                    &format!(
-                                        "Could not persist synced state for {}: {}",
-                                        asset.path, error
-                                    ),
-                                );
-                                failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                persisted = false;
                             }
-                            completed_bytes
-                                .fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst);
-                        } else {
-                            to_upload.push(asset);
                         }
+                        if persisted {
+                            success_count.fetch_add(
+                                unit.assets().count(),
+                                std::sync::atomic::Ordering::SeqCst,
+                            );
+                        } else {
+                            for asset in unit.assets() {
+                                let _ = db::mark_sync_failed(&pool, &asset.path, asset.mtime, asset.size as i64, "Upload completed but sync state could not be persisted atomically").await;
+                            }
+                            failure_count.fetch_add(
+                                unit.assets().count(),
+                                std::sync::atomic::Ordering::Relaxed,
+                            );
+                        }
+                        let mut details = upload_details(&unit.image, unit.image.checksums.as_ref().unwrap(), &operation_id, &started, Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)), Some(&remote_id), None);
+                        if let Some(video) = &unit.live_photo_video { details["live_photo_local_path"] = json!(video.path); }
+                        audit_event(&app, audit_context.event("file.upload.completed", audit::Outcome::Success, audit::Severity::Info, "Upload completed", details));
+                    }
+                    Err(error) => {
+                        log_to_ui(
+                            &app,
+                            "ERROR",
+                            &format!("Upload failed for {}: {}", unit.image.path, error),
+                        );
+                        for asset in unit.assets() {
+                            let _ = db::mark_sync_failed(
+                                &pool,
+                                &asset.path,
+                                asset.mtime,
+                                asset.size as i64,
+                                &error,
+                            )
+                            .await;
+                        }
+                        failure_count
+                            .fetch_add(unit.assets().count(), std::sync::atomic::Ordering::Relaxed);
+                        let mut details = upload_details(&unit.image, unit.image.checksums.as_ref().unwrap(), &operation_id, &started, Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)), None, Some(audit_context.safe_error(&error)));
+                        if let Some(video) = &unit.live_photo_video { details["live_photo_local_path"] = json!(video.path); }
+                        audit_event(&app, audit_context.event("file.upload.completed", audit::Outcome::Failure, audit::Severity::Error, "Upload failed", details));
                     }
                 }
-                Ok::<_, String>(to_upload)
+                let done = completed_bytes
+                    .fetch_add(unit.byte_size(), std::sync::atomic::Ordering::SeqCst)
+                    + unit.byte_size();
+                let pct = if total_bytes == 0 {
+                    100
+                } else {
+                    ((done as f64 / total_bytes as f64 * 100.0) as u32).min(100)
+                };
+                let _ = app.emit("sync-progress-percent", pct);
+                Ok::<_, String>(())
             }
         })
-        .buffered(1); // One bulk check at a time to keep it orderly
-
-    // Pipeline Stage 3: Concurrent Upload (Concurrency = 3)
-    futures::pin_mut!(checked_batches);
-    while let Some(to_upload) = checked_batches.try_next().await? {
-        futures::stream::iter(to_upload)
-            .map(|asset| {
-                let client = client.clone();
-                let app = app.clone();
-                let pool = pool.clone();
-                let completed_bytes = completed_bytes.clone();
-                let success_count = success_count.clone();
-                let failure_count = failure_count.clone();
-                let audit_context = audit_context.clone();
-                async move {
-                    // Stage 1 guarantees hash is Some; guard defensively
-                    //         so a future code path can't cause a silent panic.
-                    let checksums = match asset.checksums.as_ref() {
-                        Some(checksums) => checksums.clone(),
-                        None => return,
-                    };
-                    let hash = checksums.sha1_base64.clone();
-                    let file_operation_id = audit::AuditEvent::operation_id();
-                    let upload_started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
-                    let details = upload_details(&asset, &checksums, &file_operation_id, &upload_started_at, None, None, None);
-                    audit_event(
-                        &app,
-                        audit_context.event(
-                            "file.upload.started",
-                            audit::Outcome::Started,
-                            audit::Severity::Info,
-                            "Upload started",
-                            details,
-                        ),
-                    );
-                    let _ = app.emit("sync-progress", &asset.path);
-                    match client.upload_asset(&asset.path, &hash).await {
-                        Ok(remote_id) => {
-                            if let Err(error) = db::update_sync_state(
-                                &pool,
-                                &asset.path,
-                                &hash,
-                                asset.mtime,
-                                asset.size as i64,
-                                "SYNCED",
-                                Some(&remote_id),
-                            )
-                            .await
-                            {
-                                log_to_ui(
-                                    &app,
-                                    "ERROR",
-                                    &format!(
-                                        "Upload completed but could not persist synced state for {}: {}",
-                                        asset.path, error
-                                    ),
-                                );
-                                failure_count
-                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            } else {
-                                success_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                            }
-                            let details = upload_details(&asset, &checksums, &file_operation_id, &upload_started_at, Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)), Some(&remote_id), None);
-                            audit_event(
-                                &app,
-                                audit_context.event(
-                                    "file.upload.completed",
-                                    audit::Outcome::Success,
-                                    audit::Severity::Info,
-                                    "Upload completed",
-                                    details,
-                                ),
-                            );
-                        }
-                        Err(e) => {
-                            log_to_ui(
-                                &app,
-                                "ERROR",
-                                &format!("Upload failed for {}: {}", asset.path, e),
-                            );
-                            if let Err(error) = db::mark_sync_failed(
-                                &pool,
-                                &asset.path,
-                                asset.mtime,
-                                asset.size as i64,
-                                &e.to_string(),
-                            )
-                            .await
-                            {
-                                log_to_ui(
-                                    &app,
-                                    "ERROR",
-                                    &format!(
-                                        "Could not persist failure for {}: {}",
-                                        asset.path, error
-                                    ),
-                                );
-                            }
-                            failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            let details = upload_details(&asset, &checksums, &file_operation_id, &upload_started_at, Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)), None, Some(audit_context.safe_error(&e)));
-                            audit_event(
-                                &app,
-                                audit_context.event(
-                                    "file.upload.completed",
-                                    audit::Outcome::Failure,
-                                    audit::Severity::Error,
-                                    "Upload failed",
-                                    details,
-                                ),
-                            );
-                        }
-                    }
-                    let done = completed_bytes
-                        .fetch_add(asset.size, std::sync::atomic::Ordering::SeqCst)
-                        + asset.size;
-                    let pct = ((done as f64 / total_bytes as f64 * 100.0) as u32).min(100);
-                    let _ = app.emit("sync-progress-percent", pct);
-                }
-            })
-            .buffer_unordered(3)
-            .collect::<Vec<_>>()
-            .await;
-    }
+        .await?;
 
     let uploaded = success_count.load(std::sync::atomic::Ordering::SeqCst);
     let failed = failure_count.load(std::sync::atomic::Ordering::SeqCst);
-    let processed = total_files.saturating_sub(failed.saturating_sub(scan_failure_count));
-    if !is_auto || uploaded > 0 || failed > 0 {
-        let locale_state = app.state::<LocaleState>();
-        let locale = locale_state
-            .0
-            .lock()
-            .map(|l| l.clone())
-            .unwrap_or_else(|_| "en".to_string());
-
-        let translations = backend_translations(&locale);
-        let title = translations
-            .notification_complete_title
-            .replacen("{}", prefix, 1);
-        let body = translations
-            .notification_complete_body
-            .replace("{processed}", &processed.to_string())
-            .replace("{uploaded}", &uploaded.to_string())
-            .replace("{failed}", &failed.to_string());
-
-        send_notification(&app, &title, &body, "INFO");
-    }
-
     let summary = SyncSummary {
-        processed,
+        processed: total_files.saturating_sub(failed.saturating_sub(scan_failure_count)),
         uploaded,
         failed,
     };
-    audit_event(
-        &app,
-        audit_context.event(
-            "sync.completed",
-            if summary.failed == 0 {
-                audit::Outcome::Success
-            } else {
-                audit::Outcome::Failure
-            },
-            if summary.failed == 0 {
-                audit::Severity::Info
-            } else {
-                audit::Severity::Warn
-            },
-            "Synchronization completed",
-            json!({
-                "processed": summary.processed,
-                "uploaded": summary.uploaded,
-                "failed": summary.failed,
-            }),
-        ),
-    );
+    if !is_auto || uploaded > 0 || failed > 0 {
+        let locale = app
+            .state::<LocaleState>()
+            .0
+            .lock()
+            .map(|locale| locale.clone())
+            .unwrap_or_else(|_| "en".to_string());
+        let translations = backend_translations(&locale);
+        let title = translations.notification_complete_title.replacen(
+            "{}",
+            if is_auto { "Auto-sync" } else { "Sync" },
+            1,
+        );
+        let body = translations
+            .notification_complete_body
+            .replace("{processed}", &summary.processed.to_string())
+            .replace("{uploaded}", &summary.uploaded.to_string())
+            .replace("{failed}", &summary.failed.to_string());
+        send_notification(&app, &title, &body, "INFO");
+    }
+    audit_event(&app, audit_context.event("sync.completed", if failed == 0 { audit::Outcome::Success } else { audit::Outcome::Failure }, if failed == 0 { audit::Severity::Info } else { audit::Severity::Warn }, "Synchronization completed", json!({ "processed": summary.processed, "uploaded": summary.uploaded, "failed": summary.failed })));
     Ok(summary)
 }
 
@@ -2281,6 +2352,63 @@ mod tests {
 
         assert!(!is_media_file(std::path::Path::new("asset.xmp")));
         assert!(!is_media_file(std::path::Path::new("asset.txt")));
+    }
+
+    fn scan_asset(path: &str) -> Asset {
+        Asset {
+            path: path.to_string(),
+            size: 1,
+            mtime: 1,
+        }
+    }
+
+    #[test]
+    fn groups_only_canonical_live_and_motion_photo_pairs() {
+        let units = upload_units_from_assets(vec![
+            scan_asset("C:/photos/IMG_1234.HEIC"),
+            scan_asset("C:/photos/IMG_1234.mov"),
+            scan_asset("C:/photos/PXL_1234.JpG"),
+            scan_asset("C:/photos/PXL_1234.MP4"),
+        ]);
+        assert_eq!(units.len(), 2);
+        assert!(units.iter().all(|unit| unit.live_photo_video.is_some()));
+        assert!(units
+            .iter()
+            .any(|unit| unit.image.path.ends_with("IMG_1234.HEIC")
+                && unit
+                    .live_photo_video
+                    .as_ref()
+                    .unwrap()
+                    .path
+                    .ends_with("IMG_1234.mov")));
+    }
+
+    #[test]
+    fn leaves_ambiguous_and_noncanonical_candidates_as_singles() {
+        let units = upload_units_from_assets(vec![
+            scan_asset("C:/one/IMG_1.HEIC"),
+            scan_asset("C:/two/IMG_1.MOV"),
+            scan_asset("C:/one/IMG_2.HEIC"),
+            scan_asset("C:/one/IMG_2.MP4"),
+            scan_asset("C:/one/IMG_3.HEIC"),
+            scan_asset("C:/one/IMG_3.MOV"),
+            scan_asset("C:/one/IMG_3.mov"),
+        ]);
+        assert_eq!(units.len(), 7);
+        assert!(units.iter().all(|unit| unit.live_photo_video.is_none()));
+    }
+
+    #[test]
+    fn finds_existing_live_photo_sibling_for_watcher_path() {
+        let root = temporary_directory();
+        std::fs::create_dir_all(&root).unwrap();
+        let image = root.join("IMG_1.HEIC");
+        let video = root.join("IMG_1.Mov");
+        std::fs::write(&image, b"image").unwrap();
+        std::fs::write(&video, b"video").unwrap();
+        assert_eq!(live_photo_sibling_paths(&image), vec![video.clone()]);
+        assert!(live_photo_sibling_paths(&root.join("other.jpg")).is_empty());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
