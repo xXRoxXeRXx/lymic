@@ -1,8 +1,10 @@
 use base64::{engine::general_purpose, Engine as _};
+use md5::Md5;
 use reqwest::{Client, Response, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
 use sha1::{Digest, Sha1};
+use sha2::Sha256;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
@@ -15,31 +17,42 @@ const MAX_ERROR_RESPONSE_BYTES: usize = 8 * 1024;
 const MAX_SUCCESS_RESPONSE_BYTES: usize = 1024 * 1024;
 const MAX_SIDECAR_BYTES: u64 = 10 * 1024 * 1024;
 
-/// Calculate the SHA-1 hash of a file, returned as standard base64.
-///
-/// Immich's bulk-upload-check endpoint and x-immich-checksum header both
-/// expect SHA-1 encoded as standard base64 (RFC 4648 §4), which is what
-/// `general_purpose::STANDARD.encode` produces. (Documented)
-pub fn calculate_hash(path: &str) -> io::Result<String> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Checksums {
+    pub sha1_base64: String,
+    pub md5_hex: String,
+    pub sha256_hex: String,
+}
+
+/// Calculate every checksum required by the upload protocol and audit record
+/// in one streaming pass. Immich continues to receive SHA-1/base64.
+pub fn calculate_checksums(path: &str) -> io::Result<Checksums> {
     let mut file = File::open(path)?;
-    let mut hasher = Sha1::new();
+    let mut sha1 = Sha1::new();
+    let mut md5 = Md5::new();
+    let mut sha256 = Sha256::new();
     let mut buffer = [0u8; 8192];
     loop {
         let n = file.read(&mut buffer)?;
         if n == 0 {
             break;
         }
-        hasher.update(&buffer[..n]);
+        sha1.update(&buffer[..n]);
+        md5.update(&buffer[..n]);
+        sha256.update(&buffer[..n]);
     }
-    let result = hasher.finalize();
-    Ok(general_purpose::STANDARD.encode(result))
+    Ok(Checksums {
+        sha1_base64: general_purpose::STANDARD.encode(sha1.finalize()),
+        md5_hex: format!("{:x}", md5.finalize()),
+        sha256_hex: format!("{:x}", sha256.finalize()),
+    })
 }
 
 #[derive(Debug, Clone)]
 pub struct SyncAsset {
     pub path: String,
     pub size: u64,
-    pub hash: Option<String>,
+    pub checksums: Option<Checksums>,
     pub mtime: i64,
 }
 
@@ -467,10 +480,11 @@ fn parse_bulk_check_response(
 #[cfg(test)]
 mod tests {
     use super::{
-        bulk_check_status_error, parse_bulk_check_response, parse_upload_response,
-        read_error_body_capped, read_response_body_limited, validate_sidecar_size, ImmichClient,
-        MAX_ERROR_RESPONSE_BYTES, MAX_SIDECAR_BYTES,
+        bulk_check_status_error, calculate_checksums, parse_bulk_check_response,
+        parse_upload_response, read_error_body_capped, read_response_body_limited,
+        validate_sidecar_size, ImmichClient, MAX_ERROR_RESPONSE_BYTES, MAX_SIDECAR_BYTES,
     };
+    use crate::audit::{report_audit, AuditError};
     use reqwest::{Client, Response, StatusCode};
     use serde_json::json;
     use std::path::PathBuf;
@@ -590,6 +604,20 @@ mod tests {
         }
     }
 
+    #[test]
+    fn calculates_all_upload_and_audit_checksums_in_one_pass() {
+        let path = temporary_file(b"abc");
+        let checksums = calculate_checksums(path.to_str().unwrap()).unwrap();
+        // SHA-1 is stored in standard base64 for Immich; MD5/SHA-256 are lowercase hex.
+        assert_eq!(checksums.sha1_base64, "qZk+NkcGgWq6PiVxeFDCbJzQ2J0=");
+        assert_eq!(checksums.md5_hex, "900150983cd24fb0d6963f7d28e17f72");
+        assert_eq!(
+            checksums.sha256_hex,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
     #[tokio::test]
     async fn mock_immich_handles_bulk_check_and_upload() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -640,6 +668,15 @@ mod tests {
             "uploaded-asset"
         );
         std::fs::remove_file(asset_path).unwrap();
+
+        // Audit reporting is best effort: an audit failure must not prevent a
+        // completed upload, and its UI-facing reporter still receives the error.
+        let mut audit_ui_messages = Vec::new();
+        report_audit(Err(AuditError::OversizedRecord), |message| {
+            audit_ui_messages.push(message.to_string())
+        });
+        assert_eq!(audit_ui_messages.len(), 1);
+        assert!(audit_ui_messages[0].contains("Audit logging failed"));
 
         let bulk_request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
         assert!(bulk_request.starts_with("POST /api/assets/bulk-upload-check HTTP/1.1"));

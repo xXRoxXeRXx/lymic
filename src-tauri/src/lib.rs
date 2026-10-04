@@ -1,9 +1,12 @@
+mod audit;
 mod auth;
 mod db;
 mod sync;
 mod watcher;
 
+use audit::{audit_event, audit_safe_error, upload_details, SyncAuditContext};
 use futures::{StreamExt, TryStreamExt};
+use serde_json::json;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -224,15 +227,15 @@ fn file_version(path: &str) -> std::io::Result<(u64, i64)> {
     Ok((metadata.len(), metadata_mtime(&metadata)))
 }
 
-fn calculate_stable_hash(path: &str) -> std::io::Result<(String, u64, i64)> {
+fn calculate_stable_checksums(path: &str) -> std::io::Result<(sync::Checksums, u64, i64)> {
     // Refresh the scan snapshot before hashing to avoid a redundant hash when it is stale.
     let mut version = file_version(path)?;
 
     for _ in 0..MAX_STABLE_HASH_ATTEMPTS {
-        let hash = sync::calculate_hash(path)?;
+        let checksums = sync::calculate_checksums(path)?;
         let current_version = file_version(path)?;
         if current_version == version {
-            return Ok((hash, current_version.0, current_version.1));
+            return Ok((checksums, current_version.0, current_version.1));
         }
         version = current_version;
     }
@@ -409,18 +412,92 @@ fn create_authenticated_client(
 #[tauri::command]
 async fn login(app: tauri::AppHandle, server_url: String, api_key: String) -> Result<(), String> {
     log_to_ui(&app, "INFO", "Attempting to connect to server");
+    let operation_id = audit::AuditEvent::operation_id();
+    let actor_id = Some(audit::actor_id(&server_url, &api_key));
+    audit_event(
+        &app,
+        audit::AuditEvent::new(
+            &operation_id,
+            "auth.login",
+            audit::Outcome::Started,
+            audit::Severity::Info,
+            actor_id.clone(),
+            "command",
+            "Login started",
+            json!({}),
+        ),
+    );
 
     // Build a temporary ImmichClient purely to reuse its URL normalisation and
     // pooled reqwest Client. The client is discarded after the connection test.
-    let temp_client = sync::ImmichClient::new(server_url.clone(), api_key.clone())?;
-    temp_client.validate_connection().await?;
-
-    auth::store_credentials(&server_url, &api_key)
+    let result = async {
+        let temp_client = sync::ImmichClient::new(server_url.clone(), api_key.clone())?;
+        temp_client.validate_connection().await?;
+        auth::store_credentials(&server_url, &api_key)
+    }
+    .await;
+    audit_event(
+        &app,
+        audit::AuditEvent::new(
+            &operation_id,
+            "auth.login",
+            if result.is_ok() {
+                audit::Outcome::Success
+            } else {
+                audit::Outcome::Failure
+            },
+            if result.is_ok() {
+                audit::Severity::Info
+            } else {
+                audit::Severity::Error
+            },
+            actor_id,
+            "command",
+            if result.is_ok() {
+                "Login completed"
+            } else {
+                "Login failed"
+            },
+            json!({ "failure_reason": result.as_ref().err().map(|error| audit_safe_error(error, Some(&server_url), Some(&api_key))) }),
+        ),
+    );
+    result
 }
 
 #[tauri::command]
-async fn logout() -> Result<(), String> {
-    auth::delete_credentials()
+async fn logout(app: tauri::AppHandle) -> Result<(), String> {
+    let operation_id = audit::AuditEvent::operation_id();
+    let actor_id = auth::get_credentials()
+        .ok()
+        .flatten()
+        .map(|credentials| audit::actor_id(&credentials.server_url, &credentials.api_key));
+    let result = auth::delete_credentials();
+    audit_event(
+        &app,
+        audit::AuditEvent::new(
+            operation_id,
+            "auth.logout",
+            if result.is_ok() {
+                audit::Outcome::Success
+            } else {
+                audit::Outcome::Failure
+            },
+            if result.is_ok() {
+                audit::Severity::Info
+            } else {
+                audit::Severity::Error
+            },
+            actor_id,
+            "command",
+            if result.is_ok() {
+                "Logout completed"
+            } else {
+                "Logout failed"
+            },
+            json!({ "failure_reason": result.as_ref().err().map(|error| audit_safe_error(error, None, None)) }),
+        ),
+    );
+    result
 }
 
 #[tauri::command]
@@ -584,18 +661,33 @@ async fn add_folder(
     if is_available {
         let pool_inner = pool.inner().clone();
         let path_clone = path.clone();
+        let app_for_scan = app.clone();
         tauri::async_runtime::spawn(async move {
             let scan_result = match scan_folders_for_media(vec![PathBuf::from(path_clone)]).await {
                 Ok(result) => result,
                 Err(error) => {
-                    log_to_ui(&app, "ERROR", &error);
+                    log_to_ui(&app_for_scan, "ERROR", &error);
                     return;
                 }
             };
-            sync_scan_result_if_authenticated(app, pool_inner, scan_result).await;
+            sync_scan_result_if_authenticated(app_for_scan, pool_inner, scan_result, "folder_add")
+                .await;
         });
     }
 
+    audit_event(
+        &app,
+        audit::AuditEvent::new(
+            audit::AuditEvent::operation_id(),
+            "folder.added",
+            audit::Outcome::Success,
+            audit::Severity::Info,
+            None,
+            "command",
+            "Watched folder added",
+            json!({ "folder_id": id, "local_path": path }),
+        ),
+    );
     Ok(id)
 }
 
@@ -656,6 +748,19 @@ async fn remove_folder(
             .await
             .map_err(|e| e.to_string())?;
     }
+    audit_event(
+        &app,
+        audit::AuditEvent::new(
+            audit::AuditEvent::operation_id(),
+            "folder.removed",
+            audit::Outcome::Success,
+            audit::Severity::Info,
+            None,
+            "command",
+            "Watched folder removed",
+            json!({ "folder_id": id }),
+        ),
+    );
     Ok(())
 }
 
@@ -666,6 +771,7 @@ async fn run_sync_pipeline(
     scan_result: ScanResult,
     is_auto: bool,
     coordinator: std::sync::Arc<tokio::sync::Mutex<()>>,
+    audit_context: SyncAuditContext,
 ) -> Result<SyncSummary, String> {
     // Auto-sync has no command response, so it reports completion through an event.
     let _idle_emitter = is_auto.then(|| SyncIdleEmitter(app.clone()));
@@ -684,6 +790,16 @@ async fn run_sync_pipeline(
         }
     };
     let _ = app.emit("sync-started", ());
+    audit_event(
+        &app,
+        audit_context.event(
+            "sync.started",
+            audit::Outcome::Started,
+            audit::Severity::Info,
+            "Synchronization started",
+            json!({ "automatic": is_auto }),
+        ),
+    );
     let ScanResult {
         files, failures, ..
     } = scan_result;
@@ -728,6 +844,7 @@ async fn run_sync_pipeline(
             let app = app.clone();
             let completed_bytes = completed_bytes.clone();
             let failure_count = failure_count.clone();
+            let audit_context = audit_context.clone();
             async move {
                 let Asset { path, size, mtime } = asset;
 
@@ -744,24 +861,40 @@ async fn run_sync_pipeline(
                             );
                             failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
+                            audit_event(
+                                &app,
+                                audit_context.event(
+                                    "db.cache_lookup.failed",
+                                    audit::Outcome::Failure,
+                                    audit::Severity::Error,
+                                    "Cached checksum lookup failed",
+                                    json!({
+                                        "local_path": path,
+                                        "failure_reason": audit_context.safe_error(&error.to_string()),
+                                    }),
+                                ),
+                            );
                             return None;
                         }
                     },
                 };
 
-                let (hash, size, mtime) = if let Some(h) = cached {
-                    (h, size, mtime)
-                } else {
-                    // SHA-1 and the post-hash metadata check are blocking I/O.
+                // The persistent cache stores only Immich's SHA-1. Recompute the complete
+                // checksum set so upload audit records always contain all three values.
+                let (checksums, size, mtime) = {
                     let path_for_hash = path.clone();
-                    match tokio::task::spawn_blocking(move || calculate_stable_hash(&path_for_hash))
+                    match tokio::task::spawn_blocking(move || calculate_stable_checksums(&path_for_hash))
                         .await
                     {
-                        Ok(Ok((hash, size, mtime))) => {
+                        Ok(Ok((checksums, size, mtime))) => {
+                            let hash = &checksums.sha1_base64;
+                            if cached.as_deref() == Some(hash) {
+                                return Some(sync::SyncAsset { path, size, checksums: Some(checksums), mtime });
+                            }
                             if let Err(error) = db::update_sync_state(
                                 &pool,
                                 &path,
-                                &hash,
+                                hash,
                                 mtime,
                                 size as i64,
                                 "PENDING",
@@ -780,9 +913,22 @@ async fn run_sync_pipeline(
                                 failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 completed_bytes
                                     .fetch_add(size, std::sync::atomic::Ordering::Relaxed);
+                                audit_event(
+                                    &app,
+                                    audit_context.event(
+                                        "db.sync_state.failed",
+                                        audit::Outcome::Failure,
+                                        audit::Severity::Error,
+                                        "Could not persist pending sync state",
+                                        json!({
+                                            "local_path": path,
+                                            "failure_reason": audit_context.safe_error(&error.to_string()),
+                                        }),
+                                    ),
+                                );
                                 return None;
                             }
-                            (hash, size, mtime)
+                            (checksums, size, mtime)
                         }
                         Ok(Err(error)) => {
                             log_to_ui(
@@ -801,6 +947,19 @@ async fn run_sync_pipeline(
                             }
                             failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
+                            audit_event(
+                                &app,
+                                audit_context.event(
+                                    "file.hash.failed",
+                                    audit::Outcome::Failure,
+                                    audit::Severity::Error,
+                                    "File hashing failed",
+                                    json!({
+                                        "local_path": path,
+                                        "failure_reason": audit_context.safe_error(&error.to_string()),
+                                    }),
+                                ),
+                            );
                             return None;
                         }
                         Err(error) => {
@@ -820,6 +979,19 @@ async fn run_sync_pipeline(
                             }
                             failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             completed_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
+                            audit_event(
+                                &app,
+                                audit_context.event(
+                                    "file.hash.failed",
+                                    audit::Outcome::Failure,
+                                    audit::Severity::Error,
+                                    "File hashing task failed",
+                                    json!({
+                                        "local_path": path,
+                                        "failure_reason": audit_context.safe_error(&error.to_string()),
+                                    }),
+                                ),
+                            );
                             return None;
                         }
                     }
@@ -827,7 +999,7 @@ async fn run_sync_pipeline(
                 Some(sync::SyncAsset {
                     path,
                     size,
-                    hash: Some(hash),
+                    checksums: Some(checksums),
                     mtime,
                 })
             }
@@ -844,14 +1016,23 @@ async fn run_sync_pipeline(
             let app = app.clone();
             let completed_bytes = completed_bytes.clone();
             let failure_count = failure_count.clone();
+            let audit_context = audit_context.clone();
             async move {
-                let hashes: Vec<String> = chunk.iter().filter_map(|a| a.hash.clone()).collect();
+                let hashes: Vec<String> = chunk
+                    .iter()
+                    .filter_map(|a| {
+                        a.checksums
+                            .as_ref()
+                            .map(|checksums| checksums.sha1_base64.clone())
+                    })
+                    .collect();
                 let existing_hashes =
-                    check_assets_exist_with_backoff(&client, hashes, &app).await?;
+                    check_assets_exist_with_backoff(&client, hashes, &app, &audit_context).await?;
 
                 let mut to_upload = Vec::new();
                 for asset in chunk {
-                    if let Some(hash) = &asset.hash {
+                    if let Some(checksums) = &asset.checksums {
+                        let hash = &checksums.sha1_base64;
                         if existing_hashes.contains(hash) {
                             if let Err(error) = db::update_sync_state(
                                 &pool,
@@ -897,13 +1078,28 @@ async fn run_sync_pipeline(
                 let completed_bytes = completed_bytes.clone();
                 let success_count = success_count.clone();
                 let failure_count = failure_count.clone();
+                let audit_context = audit_context.clone();
                 async move {
                     // Stage 1 guarantees hash is Some; guard defensively
                     //         so a future code path can't cause a silent panic.
-                    let hash = match asset.hash.as_ref() {
-                        Some(h) => h.clone(),
+                    let checksums = match asset.checksums.as_ref() {
+                        Some(checksums) => checksums.clone(),
                         None => return,
                     };
+                    let hash = checksums.sha1_base64.clone();
+                    let file_operation_id = audit::AuditEvent::operation_id();
+                    let upload_started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+                    let details = upload_details(&asset, &checksums, &file_operation_id, &upload_started_at, None, None, None);
+                    audit_event(
+                        &app,
+                        audit_context.event(
+                            "file.upload.started",
+                            audit::Outcome::Started,
+                            audit::Severity::Info,
+                            "Upload started",
+                            details,
+                        ),
+                    );
                     let _ = app.emit("sync-progress", &asset.path);
                     match client.upload_asset(&asset.path, &hash).await {
                         Ok(remote_id) => {
@@ -931,6 +1127,17 @@ async fn run_sync_pipeline(
                             } else {
                                 success_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                             }
+                            let details = upload_details(&asset, &checksums, &file_operation_id, &upload_started_at, Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)), Some(&remote_id), None);
+                            audit_event(
+                                &app,
+                                audit_context.event(
+                                    "file.upload.completed",
+                                    audit::Outcome::Success,
+                                    audit::Severity::Info,
+                                    "Upload completed",
+                                    details,
+                                ),
+                            );
                         }
                         Err(e) => {
                             log_to_ui(
@@ -956,6 +1163,17 @@ async fn run_sync_pipeline(
                                 );
                             }
                             failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let details = upload_details(&asset, &checksums, &file_operation_id, &upload_started_at, Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)), None, Some(audit_context.safe_error(&e)));
+                            audit_event(
+                                &app,
+                                audit_context.event(
+                                    "file.upload.completed",
+                                    audit::Outcome::Failure,
+                                    audit::Severity::Error,
+                                    "Upload failed",
+                                    details,
+                                ),
+                            );
                         }
                     }
                     let done = completed_bytes
@@ -994,17 +1212,41 @@ async fn run_sync_pipeline(
         send_notification(&app, &title, &body, "INFO");
     }
 
-    Ok(SyncSummary {
+    let summary = SyncSummary {
         processed,
         uploaded,
         failed,
-    })
+    };
+    audit_event(
+        &app,
+        audit_context.event(
+            "sync.completed",
+            if summary.failed == 0 {
+                audit::Outcome::Success
+            } else {
+                audit::Outcome::Failure
+            },
+            if summary.failed == 0 {
+                audit::Severity::Info
+            } else {
+                audit::Severity::Warn
+            },
+            "Synchronization completed",
+            json!({
+                "processed": summary.processed,
+                "uploaded": summary.uploaded,
+                "failed": summary.failed,
+            }),
+        ),
+    );
+    Ok(summary)
 }
 
 async fn check_assets_exist_with_backoff(
     client: &sync::ImmichClient,
     hashes: Vec<String>,
     app: &tauri::AppHandle,
+    audit_context: &SyncAuditContext,
 ) -> Result<Vec<String>, String> {
     for attempt in 1..=BULK_CHECK_MAX_ATTEMPTS {
         match client.check_assets_exist(hashes.clone()).await {
@@ -1012,6 +1254,19 @@ async fn check_assets_exist_with_backoff(
             Err(error) if !error.is_retryable() => {
                 let message = format!("Bulk check cannot be retried; aborting sync: {}", error);
                 log_to_ui(app, "ERROR", &message);
+                audit_event(
+                    app,
+                    audit_context.event(
+                        "file.bulk_check.failed",
+                        audit::Outcome::Failure,
+                        audit::Severity::Error,
+                        "Bulk check cannot be retried",
+                        json!({
+                            "failure_reason": audit_context.safe_error(&error.to_string()),
+                            "attempt": attempt,
+                        }),
+                    ),
+                );
                 return Err(message);
             }
             Err(error) if attempt == BULK_CHECK_MAX_ATTEMPTS => {
@@ -1020,6 +1275,19 @@ async fn check_assets_exist_with_backoff(
                     attempt, error
                 );
                 log_to_ui(app, "ERROR", &message);
+                audit_event(
+                    app,
+                    audit_context.event(
+                        "file.bulk_check.failed",
+                        audit::Outcome::Failure,
+                        audit::Severity::Error,
+                        "Bulk check failed",
+                        json!({
+                            "failure_reason": audit_context.safe_error(&error.to_string()),
+                            "attempt": attempt,
+                        }),
+                    ),
+                );
                 return Err(message);
             }
             Err(error) => {
@@ -1035,6 +1303,19 @@ async fn check_assets_exist_with_backoff(
                         delay.as_secs()
                     ),
                 );
+                audit_event(
+                    app,
+                    audit_context.event(
+                        "file.bulk_check.failed",
+                        audit::Outcome::Info,
+                        audit::Severity::Warn,
+                        "Bulk check retry scheduled",
+                        json!({
+                            "failure_reason": audit_context.safe_error(&error.to_string()),
+                            "attempt": attempt,
+                        }),
+                    ),
+                );
                 tokio::time::sleep(delay).await;
             }
         }
@@ -1047,6 +1328,7 @@ async fn sync_scan_result_if_authenticated(
     app: tauri::AppHandle,
     pool: sqlx::SqlitePool,
     scan_result: ScanResult,
+    source: &'static str,
 ) {
     log_overlapping_folders(&app, &scan_result);
     if scan_result.files.is_empty() && scan_result.failures.is_empty() {
@@ -1054,10 +1336,23 @@ async fn sync_scan_result_if_authenticated(
     }
 
     if let Ok(Some(credentials)) = auth::get_credentials() {
+        let audit_context = SyncAuditContext::from_credentials(
+            &credentials.server_url,
+            &credentials.api_key,
+            source,
+        );
         if let Some(client) = create_authenticated_client(&app, credentials) {
             let coordinator = app.state::<SyncCoordinator>().0.clone();
-            if let Err(error) =
-                run_sync_pipeline(app.clone(), pool, client, scan_result, true, coordinator).await
+            if let Err(error) = run_sync_pipeline(
+                app.clone(),
+                pool,
+                client,
+                scan_result,
+                true,
+                coordinator,
+                audit_context,
+            )
+            .await
             {
                 emit_sync_error(&app, &error);
             }
@@ -1072,6 +1367,7 @@ async fn start_sync(
     sync_state: tauri::State<'_, SyncState>,
     sync_coordinator: tauri::State<'_, SyncCoordinator>,
 ) -> Result<SyncSummary, String> {
+    let command_operation_id = audit::AuditEvent::operation_id();
     // Attempt to set sync_state to true. If it was already true, return early.
     if sync_state
         .0
@@ -1094,6 +1390,11 @@ async fn start_sync(
             .await
             .map_err(|e| e.to_string())?;
         let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
+        let audit_context = SyncAuditContext::from_credentials(
+            &credentials.server_url,
+            &credentials.api_key,
+            "manual_sync",
+        );
         let client =
             create_authenticated_client(&app, credentials).ok_or("Invalid server configuration")?;
 
@@ -1108,18 +1409,34 @@ async fn start_sync(
         log_overlapping_folders(&app, &scan_result);
 
         run_sync_pipeline(
-            app,
+            app.clone(),
             pool.inner().clone(),
             client,
             scan_result,
             false,
             sync_coordinator.0.clone(),
+            audit_context,
         )
         .await
     }
     .await;
 
     sync_state.0.store(false, Ordering::SeqCst);
+    if let Err(error) = &result {
+        audit_event(
+            &app,
+            audit::AuditEvent::new(
+                &command_operation_id,
+                "sync.aborted",
+                audit::Outcome::Failure,
+                audit::Severity::Error,
+                None,
+                "manual_sync",
+                "Manual synchronization aborted",
+                json!({ "failure_reason": audit_safe_error(error, None, None) }),
+            ),
+        );
+    }
     result
 }
 
@@ -1131,6 +1448,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let handle = app.handle().clone();
+            let audit_logger = audit::AuditLogger::initialize(&handle)
+                .map_err(|error| format!("Failed to initialize audit logger: {}", error))?;
+            handle.manage(std::sync::Arc::new(audit_logger));
             const WATCH_EVENT_QUEUE_CAPACITY: usize = 4_096;
             let (tx, mut rx) = tokio::sync::mpsc::channel(WATCH_EVENT_QUEUE_CAPACITY);
             let rescan_requested = std::sync::Arc::new(AtomicBool::new(false));
@@ -1156,9 +1476,56 @@ pub fn run() {
             for folder in folders {
                 // surface deferred-watch state at startup.
                 match watcher::watch_path(&mut watcher, &folder.path) {
-                    Ok(watcher::WatchRegistration::PathUnavailable) => eprintln!("[WARN] Folder '{}' offline at startup; watching deferred.", folder.path),
-                    Err(e)   => eprintln!("[WARN] Could not watch '{}': {}", folder.path, e),
-                    Ok(_) => {}
+                    Ok(watcher::WatchRegistration::PathUnavailable) => {
+                        log_to_ui(&handle, "WARN", &format!("Folder '{}' offline at startup; watching deferred.", folder.path));
+                        audit_event(
+                            &handle,
+                            audit::AuditEvent::new(
+                                audit::AuditEvent::operation_id(),
+                                "watcher.registration",
+                                audit::Outcome::Skipped,
+                                audit::Severity::Warn,
+                                None,
+                                "startup",
+                                "Watched folder is unavailable",
+                                json!({ "local_path": folder.path }),
+                            ),
+                        );
+                    }
+                    Err(e) => {
+                        log_to_ui(&handle, "WARN", &format!("Could not watch '{}': {}", folder.path, e));
+                        audit_event(
+                            &handle,
+                            audit::AuditEvent::new(
+                                audit::AuditEvent::operation_id(),
+                                "watcher.registration",
+                                audit::Outcome::Failure,
+                                audit::Severity::Warn,
+                                None,
+                                "startup",
+                                "Watcher registration failed",
+                                json!({
+                                    "local_path": folder.path,
+                                    "failure_reason": audit_safe_error(&e.to_string(), None, None),
+                                }),
+                            ),
+                        );
+                    }
+                    Ok(_) => {
+                        audit_event(
+                            &handle,
+                            audit::AuditEvent::new(
+                                audit::AuditEvent::operation_id(),
+                                "watcher.registration",
+                                audit::Outcome::Success,
+                                audit::Severity::Info,
+                                None,
+                                "startup",
+                                "Watcher registered",
+                                json!({ "local_path": folder.path }),
+                            ),
+                        );
+                    }
                 }
             }
 
@@ -1168,6 +1535,19 @@ pub fn run() {
             handle.manage(SyncState(AtomicBool::new(false)));
             handle.manage(SyncCoordinator(std::sync::Arc::new(tokio::sync::Mutex::new(()))));
             handle.manage(LocaleState(std::sync::Mutex::new("en".to_string())));
+            audit_event(
+                &handle,
+                audit::AuditEvent::new(
+                    audit::AuditEvent::operation_id(),
+                    "app.started",
+                    audit::Outcome::Success,
+                    audit::Severity::Info,
+                    None,
+                    "startup",
+                    "Application started",
+                    json!({}),
+                ),
+            );
 
             // Missing folders are persisted so removable and network storage can be
             // selected while offline. Retry them periodically once they become available.
@@ -1249,6 +1629,19 @@ pub fn run() {
                             "INFO",
                             &format!("Folder '{}' is available; watching enabled.", path.display()),
                         );
+                        audit_event(
+                            &handle_deferred_watches,
+                            audit::AuditEvent::new(
+                                audit::AuditEvent::operation_id(),
+                                "watcher.reconciliation",
+                                audit::Outcome::Success,
+                                audit::Severity::Info,
+                                None,
+                                "deferred_folder",
+                                "Watcher registration reconciled",
+                                json!({ "local_path": path }),
+                            ),
+                        );
                     }
 
                     let scan_result = match scan_folders_for_media(registered_paths.clone()).await {
@@ -1263,6 +1656,7 @@ pub fn run() {
                         handle_deferred_watches.clone(),
                         pool,
                         scan_result,
+                        "deferred_folder",
                     )
                     .await;
                 }
@@ -1305,7 +1699,7 @@ pub fn run() {
                     }
                 };
 
-                sync_scan_result_if_authenticated(handle_sync.clone(), pool, scan_result).await;
+                sync_scan_result_if_authenticated(handle_sync.clone(), pool, scan_result, "startup_sync").await;
             });
 
             // Background Task to handle Watcher Events (Batched + debounced)
@@ -1350,6 +1744,19 @@ pub fn run() {
                             "WARN",
                             "File watcher event queue overflowed; reconciling all watched folders.",
                         );
+                        audit_event(
+                            &handle_task,
+                            audit::AuditEvent::new(
+                                audit::AuditEvent::operation_id(),
+                                "watcher.rescan",
+                                audit::Outcome::Started,
+                                audit::Severity::Warn,
+                                None,
+                                "watcher",
+                                "Watcher queue overflow triggered rescan",
+                                json!({}),
+                            ),
+                        );
                         // The full folder scan is a superset of buffered paths, so discard
                         // them to avoid duplicate work after an event-stream loss.
                         files_buffer.clear();
@@ -1391,6 +1798,11 @@ pub fn run() {
                         let pool_inner = pool.inner().clone();
 
                         if let Ok(Some(creds)) = auth::get_credentials() {
+                            let audit_context = SyncAuditContext::from_credentials(
+                                &creds.server_url,
+                                &creds.api_key,
+                                "watcher_sync",
+                            );
                             if let Some(client) = create_authenticated_client(&handle_task, creds) {
                                 let coordinator = handle_task.state::<SyncCoordinator>().0.clone();
                                 if let Err(error) = run_sync_pipeline(
@@ -1400,6 +1812,7 @@ pub fn run() {
                                     scan_result,
                                     true,
                                     coordinator,
+                                    audit_context,
                                 )
                                 .await
                                 {
@@ -1496,8 +1909,28 @@ pub fn run() {
                 api.prevent_close();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(logger) = app
+                    .try_state::<std::sync::Arc<audit::AuditLogger>>()
+                    .map(|state| state.inner().clone())
+                {
+                    let _ = logger.append(audit::AuditEvent::new(
+                        audit::AuditEvent::operation_id(),
+                        "app.shutdown",
+                        audit::Outcome::Success,
+                        audit::Severity::Info,
+                        None,
+                        "shutdown",
+                        "Application stopped",
+                        json!({}),
+                    ));
+                    let _ = logger.flush();
+                }
+            }
+        });
 }
 
 #[cfg(test)]
@@ -1555,16 +1988,17 @@ mod tests {
     }
 
     #[test]
-    fn stable_hash_uses_the_hashed_file_version() {
+    fn stable_checksums_use_the_hashed_file_version() {
         let root = temporary_directory();
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("photo.jpg");
         std::fs::write(&path, b"test image").unwrap();
 
         let path_string = path.to_string_lossy().to_string();
-        let (hash, hashed_size, hashed_mtime) = calculate_stable_hash(&path_string).unwrap();
+        let (checksums, hashed_size, hashed_mtime) =
+            calculate_stable_checksums(&path_string).unwrap();
 
-        assert_eq!(hash, sync::calculate_hash(&path_string).unwrap());
+        assert_eq!(checksums, sync::calculate_checksums(&path_string).unwrap());
         assert_eq!(
             (hashed_size, hashed_mtime),
             file_version(&path_string).unwrap()
@@ -1574,7 +2008,7 @@ mod tests {
     }
 
     #[test]
-    fn stable_hash_uses_current_version_when_file_changes_after_scan() {
+    fn stable_checksums_use_current_version_when_file_changes_after_scan() {
         let root = temporary_directory();
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("photo.jpg");
@@ -1584,13 +2018,43 @@ mod tests {
         let (old_size, _) = file_version(&path_string).unwrap();
         std::fs::write(&path, b"updated image content").unwrap();
 
-        let (hash, size, mtime) = calculate_stable_hash(&path_string).unwrap();
+        let (checksums, size, mtime) = calculate_stable_checksums(&path_string).unwrap();
 
-        assert_eq!(hash, sync::calculate_hash(&path_string).unwrap());
+        assert_eq!(checksums, sync::calculate_checksums(&path_string).unwrap());
         assert_eq!((size, mtime), file_version(&path_string).unwrap());
         assert_ne!(size, old_size);
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn upload_audit_details_include_all_required_checksums() {
+        let asset = sync::SyncAsset {
+            path: "C:/media/photo.jpg".to_string(),
+            size: 123,
+            checksums: None,
+            mtime: 0,
+        };
+        let checksums = sync::Checksums {
+            md5_hex: "a".repeat(32),
+            sha256_hex: "b".repeat(64),
+            sha1_base64: "c2hhMQ==".to_string(),
+        };
+        let details = upload_details(
+            &asset,
+            &checksums,
+            "file-operation",
+            "2026-10-04T00:00:00.000000000Z",
+            Some("2026-10-04T00:00:01.000000000Z".to_string()),
+            Some("remote-id"),
+            None,
+        );
+        assert_eq!(details["file_size_bytes"], 123);
+        assert_eq!(details["checksums"]["md5"], checksums.md5_hex);
+        assert_eq!(details["checksums"]["sha256"], checksums.sha256_hex);
+        assert_eq!(details["checksums"]["sha1_base64"], checksums.sha1_base64);
+        assert_eq!(details["remote_asset_id"], "remote-id");
+        assert!(details.get("failure_reason").is_none());
     }
 
     #[cfg(windows)]

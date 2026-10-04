@@ -2610,11 +2610,13 @@ dependencies = [
  "chrono",
  "futures",
  "keyring",
+ "md-5",
  "notify",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha1",
+ "sha2",
  "sqlx",
  "tauri",
  "tauri-build",
@@ -2624,6 +2626,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "url",
+ "uuid",
  "walkdir",
 ]
 
