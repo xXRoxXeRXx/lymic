@@ -2,31 +2,33 @@
   <img src="lymic.png" width="200" alt="Lymic Logo">
 </p>
 
-# Lymic - Cross platform desktop client for Immich
+# Lymic — Desktop upload client for Immich
 
 [![License](https://img.shields.io/github/license/xXRoxXeRXx/lymic?style=for-the-badge)](LICENSE)
 [![Built with Tauri](https://img.shields.io/badge/Built%20with-Tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
 [![SvelteKit](https://img.shields.io/badge/Frontend-SvelteKit-%23FF3E00.svg?style=for-the-badge&logo=svelte&logoColor=white)](https://kit.svelte.dev/)
 
-**Lymic** is a high-performance, cross-platform desktop synchronization client for [Immich](https://immich.app/). Effortlessly keep your local media library in sync with your personal Immich server — with a focus on speed, reliability, and a premium user experience.
+**Lymic** is an unofficial, cross-platform desktop client for uploading and synchronizing local media with [Immich](https://immich.app/). It watches selected local folders, detects supported media, avoids uploading assets that already exist on Immich, and streams missing files from disk.
+
+> Lymic is an upload-oriented client, not a two-way filesystem mirror. It does not download remote assets, mirror remote deletions, rename local files, or manage albums as part of its normal synchronization workflow.
 
 ![Lymic Screenshot](lymic_screen.png)
 
 ---
 
-## ✨ Features
+## Features
 
-- **🚀 High Performance**: Intelligent, metadata-based hash caching skips redundant processing for massive libraries.
-- **⚡ Real-time Watcher**: Instantly detects new or modified files in your watched folders and starts background synchronization.
-- **📦 Large File Support**: Optimized streaming uploads ensure that multi-gigabyte 4K videos are handled without high memory consumption.
-- **🎨 Premium UI**: Clean, modern interface with real-time progress reporting and full system tray integration.
-- **🔒 Secure**: Credentials are safely stored in your system's native keyring (Keychain, Credential Manager, or Secret Service).
-- **🔄 Smart Deduplication**: Leverages Immich's bulk-upload-check API to verify assets before transmitting data.
-- **📂 Folder Management**: Easily add or remove multiple watched folders from your local filesystem.
+- **Efficient synchronization** — Metadata-aware hash caching avoids rehashing unchanged files, while Immich bulk checks prevent unnecessary transfers.
+- **Folder watching** — Recursively monitors watched folders, handles changes with a debounce, and rescans after watcher overflow.
+- **Large-file support** — Streams multipart uploads directly from disk without retaining full files in memory.
+- **Durable queue** — Persists synchronization work, pause state, progress, and failures locally; failed items can be retried.
+- **Secure credentials** — Stores API keys in the platform-native keyring (Keychain, Credential Manager, or Secret Service).
+- **Desktop experience** — Provides real-time status, progress, system-tray controls, notifications, optional autostart, light/dark themes, and English/German UI.
+- **Media-aware uploads** — Supports broad, extension-based media detection, recognized live-photo/motion pairs, and optional XMP sidecars.
 
 ---
 
-## 🛠️ Tech Stack
+## Technology
 
 | Layer | Technology |
 |---|---|
@@ -39,11 +41,11 @@
 
 ---
 
-## 🚀 Getting Started
+## Getting started
 
 ### Download
 
-The easiest way to get started is to download the latest installer for your operating system from the [Releases](https://github.com/xXRoxXeRXx/immich-desktop-sync/releases) page.
+Download the latest installer for your operating system from the [Lymic releases](https://github.com/xXRoxXeRXx/lymic/releases) page.
 
 > [!IMPORTANT]
 > **macOS Users:** Since this is an open-source project without a paid Apple Developer certificate, macOS will block the app as "unidentified" or "damaged".
@@ -92,9 +94,11 @@ The easiest way to get started is to download the latest installer for your oper
 
 ---
 
-## 🔑 Immich API Configuration
+## Connect to Immich
 
-To use Lymic, generate an API Key in your Immich web interface under **Account Settings → API Keys**.
+Generate an API key in the Immich web interface under **Account Settings → API Keys**, then enter the server URL and key in Lymic.
+
+The server URL must use **HTTPS** and must not include embedded credentials, a query string, or a fragment. Redirects are intentionally disabled, so configure your reverse proxy to expose the final HTTPS endpoint directly.
 
 ### Required Permissions (Scopes)
 
@@ -104,33 +108,37 @@ To use Lymic, generate an API Key in your Immich web interface under **Account S
 | `asset.read` | Verify whether a file already exists before uploading |
 | `server_info.read` | Validate the connection and check server compatibility |
 
-> [!TIP]
-> Lymic adheres to the principle of least privilege. It currently **does not** require `asset.delete` or `album.write` permissions unless you are using specific experimental features.
+Lymic normally does not require `asset.delete` or `album.write` permissions. Sign-in validates the authenticated user, so ensure the key and installed Immich version allow that account lookup.
 
 ---
 
-## ⚙️ How it Works
+## How synchronization works
 
-1. **Scan** — The app scans your watched folders for media files (`jpg`, `mp4`, `heic`, etc.).
-2. **Hash** — A SHA-1 hash is calculated for each file. Results are cached in a local SQLite database alongside file metadata (mtime/size) so unchanged files are never re-hashed.
-3. **Verify** — Before uploading, Lymic checks the Immich server in chunks of 500 to determine which assets already exist.
-4. **Stream** — Missing assets are streamed directly from disk to the API, keeping memory usage low even for large video files.
+1. **Discover** — Lymic recursively scans watched folders at startup and when a folder is added. Filesystem events trigger later incremental work.
+2. **Classify and hash** — It detects supported media, live-photo/motion pairs, and optional XMP sidecars, then streams content hashes. Hashes are cached in SQLite alongside file metadata.
+3. **Check** — Assets are checked against Immich in batches; existing assets are skipped.
+4. **Queue and upload** — Missing assets are written to the durable queue and streamed to Immich with configurable parallelism.
+5. **Record** — Completion and failure details are persisted and shown in the UI. Paused work can resume safely after a restart.
+
+Duplicate and overlapping watched folders are rejected. Temporarily unavailable folders remain configured and are retried. Closing the main window hides Lymic to the system tray; use the tray menu to quit.
+
+For complete synchronization behavior, supported pairing rules, security details, local-data retention, architecture, development checks, release workflow, and troubleshooting, see the **[full project documentation](docs/README.md)**.
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ---
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 **Lymic is an unofficial community project and is not affiliated with, maintained, or endorsed by the official Immich team.** Use it at your own risk. Always keep backups of your precious media.
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the [MIT License](LICENSE).
 
