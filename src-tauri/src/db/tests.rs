@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
     Row, SqlitePool,
@@ -666,7 +668,7 @@ pub async fn get_failed_syncs(pool: &SqlitePool) -> Result<Vec<FailedSyncEntry>,
 }
 
 #[cfg(test)]
-mod tests {
+mod database_tests {
     use super::*;
     use sqlx::sqlite::SqlitePoolOptions;
 

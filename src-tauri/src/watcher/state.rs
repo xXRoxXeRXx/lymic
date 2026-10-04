@@ -1,57 +1,6 @@
-use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use tokio::sync::mpsc;
-use tokio::sync::Notify;
-
-pub(crate) fn send_or_request_rescan<T>(
-    tx: &mpsc::Sender<T>,
-    message: T,
-    rescan_requested: &AtomicBool,
-    rescan_notify: &Notify,
-) {
-    if tx.try_send(message).is_err() {
-        request_rescan(rescan_requested, rescan_notify);
-    }
-}
-
-pub(crate) fn request_rescan(rescan_requested: &AtomicBool, rescan_notify: &Notify) {
-    rescan_requested.store(true, Ordering::Release);
-    // Notify retains a permit when the receiver is idle, so a late overflow
-    // cannot leave a dirty flag without a future reconciliation trigger.
-    rescan_notify.notify_one();
-}
-
-pub fn create_watcher(
-    tx: mpsc::Sender<Event>,
-    rescan_requested: Arc<AtomicBool>,
-    rescan_notify: Arc<Notify>,
-) -> notify::Result<RecommendedWatcher> {
-    let watcher = RecommendedWatcher::new(
-        move |res: notify::Result<Event>| {
-            match res {
-                Ok(event) => match event.kind {
-                    EventKind::Create(_) | EventKind::Modify(_) => {
-                        // A full queue means individual paths are no longer trustworthy. The
-                        // receiver will reconcile every watched folder after draining its batch.
-                        send_or_request_rescan(&tx, event, &rescan_requested, &rescan_notify);
-                    }
-                    _ => {}
-                },
-                Err(_) => {
-                    // notify itself can report an overflow or backend error. Reconcile rather
-                    // than silently accepting a potentially incomplete event stream.
-                    request_rescan(&rescan_requested, &rescan_notify);
-                }
-            }
-        },
-        Config::default(),
-    )?;
-
-    Ok(watcher)
-}
 
 pub struct WatcherState {
     watcher: RecommendedWatcher,
@@ -127,6 +76,10 @@ pub fn unwatch_path(watcher: &mut WatcherState, path: &str) -> notify::Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::watcher::create_watcher;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+    use tokio::sync::{mpsc, Notify};
 
     fn test_watcher() -> WatcherState {
         let (tx, _rx) = mpsc::channel(1);
@@ -153,28 +106,10 @@ mod tests {
         path
     }
 
-    #[tokio::test]
-    async fn full_channel_requests_a_rescan() {
-        let (tx, _rx) = mpsc::channel(1);
-        let dirty = AtomicBool::new(false);
-        let notify = Notify::new();
-
-        tx.try_send(1).unwrap();
-        send_or_request_rescan(&tx, 2, &dirty, &notify);
-
-        assert!(dirty.load(Ordering::Acquire));
-        assert!(
-            tokio::time::timeout(std::time::Duration::ZERO, notify.notified())
-                .await
-                .is_ok()
-        );
-    }
-
     #[test]
     fn registers_existing_directory_once() {
         let path = temporary_directory();
         let mut watcher = test_watcher();
-
         assert_eq!(
             watcher.watch_path(path.to_str().unwrap()).unwrap(),
             WatchRegistration::Registered
@@ -183,7 +118,6 @@ mod tests {
             watcher.watch_path(path.to_str().unwrap()).unwrap(),
             WatchRegistration::AlreadyWatched
         );
-
         std::fs::remove_dir(path).unwrap();
     }
 
@@ -192,7 +126,6 @@ mod tests {
         let path =
             std::env::temp_dir().join(format!("lymic-watcher-missing-{}", std::process::id()));
         let mut watcher = test_watcher();
-
         assert_eq!(
             watcher.watch_path(path.to_str().unwrap()).unwrap(),
             WatchRegistration::PathUnavailable
@@ -212,12 +145,10 @@ mod tests {
         ));
         std::fs::write(&path, "not a directory").unwrap();
         let mut watcher = test_watcher();
-
         assert_eq!(
             watcher.watch_path(path.to_str().unwrap()).unwrap(),
             WatchRegistration::PathUnavailable
         );
-
         std::fs::remove_file(path).unwrap();
     }
 
@@ -226,7 +157,6 @@ mod tests {
         let path = temporary_directory();
         let path_string = path.to_str().unwrap();
         let mut watcher = test_watcher();
-
         assert_eq!(
             watcher.watch_path(path_string).unwrap(),
             WatchRegistration::Registered
@@ -236,7 +166,6 @@ mod tests {
             watcher.watch_path(path_string).unwrap(),
             WatchRegistration::Registered
         );
-
         std::fs::remove_dir(path).unwrap();
     }
 
@@ -245,7 +174,6 @@ mod tests {
         let path = temporary_directory();
         let path_string = path.to_str().unwrap().to_owned();
         let mut watcher = test_watcher();
-
         assert_eq!(
             watcher.reconcile_path(&path_string, true).unwrap(),
             WatchRegistration::Registered
@@ -260,7 +188,6 @@ mod tests {
             watcher.reconcile_path(&path_string, true).unwrap(),
             WatchRegistration::Registered
         );
-
         std::fs::remove_dir(path).unwrap();
     }
 }
