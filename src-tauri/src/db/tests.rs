@@ -1108,7 +1108,7 @@ mod database_tests {
         result.pool.close().await;
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // 2. Open an exclusive file lock simulating another process holding it exclusively
+        // 2. Simulate locked/inaccessible database holding it exclusively
         #[cfg(windows)]
         let lock_file = {
             use std::os::windows::fs::OpenOptionsExt;
@@ -1119,6 +1119,11 @@ mod database_tests {
                 .open(&db_path)
                 .unwrap()
         };
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&db_path, std::fs::Permissions::from_mode(0o000)).unwrap();
+        }
 
         // 3. Try to init_at_path while locked
         let attempt = init_at_path(&db_path).await;
@@ -1138,6 +1143,11 @@ mod database_tests {
 
         #[cfg(windows)]
         drop(lock_file);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&db_path, std::fs::Permissions::from_mode(0o644));
+        }
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
