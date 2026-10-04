@@ -7,6 +7,7 @@ const tauri = vi.hoisted(() => ({
   invoke: vi.fn(),
   listen: vi.fn(),
   isEnabled: vi.fn(),
+  confirm: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
@@ -16,7 +17,7 @@ vi.mock("@tauri-apps/plugin-autostart", () => ({
   disable: vi.fn(),
   isEnabled: tauri.isEnabled,
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), confirm: tauri.confirm }));
 
 function renderAuthenticatedPage() {
   tauri.invoke.mockImplementation((command: string) => {
@@ -43,6 +44,7 @@ beforeEach(() => {
   localStorage.setItem("lymic-locale", "en");
   tauri.listen.mockResolvedValue(() => {});
   tauri.isEnabled.mockResolvedValue(false);
+  tauri.confirm.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -74,6 +76,24 @@ describe("sync dashboard", () => {
 });
 
 describe("logout", () => {
+  it("does not log out when the confirmation is cancelled", async () => {
+    renderAuthenticatedPage();
+    await screen.findByText("Dashboard", { selector: "h1" });
+
+    await fireEvent.click(document.querySelector("header button")!);
+    const logoutButton = await screen.findByRole("button", { name: "Logout" });
+    tauri.confirm.mockResolvedValue(false);
+
+    await fireEvent.click(logoutButton);
+
+    expect(tauri.confirm).toHaveBeenCalledWith("Do you really want to log out?", {
+      title: "Logout",
+      kind: "warning",
+    });
+    expect(tauri.invoke).not.toHaveBeenCalledWith("logout");
+    expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
+  });
+
   it("keeps the authenticated view and displays an error when logout fails", async () => {
     renderAuthenticatedPage();
     await screen.findByText("Dashboard", { selector: "h1" });

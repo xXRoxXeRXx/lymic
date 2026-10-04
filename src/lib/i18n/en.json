@@ -27,6 +27,7 @@
   "logged_in_at": "Logged in at",
   "logged_in_as": "Logged in as",
   "logout": "Logout",
+  "logout_confirmation": "Do you really want to log out?",
   "select_folder": "Select Folder",
   "never": "Never",
   "hero_tagline": "Immich Desktop Client",

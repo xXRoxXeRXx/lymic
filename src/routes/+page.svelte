@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { open } from "@tauri-apps/plugin-dialog";
+  import { confirm, open } from "@tauri-apps/plugin-dialog";
   import { listen } from "@tauri-apps/api/event";
   import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
   import {
@@ -293,6 +293,12 @@
   // Previously invoke("logout") was fire-and-forget; on failure credentials stayed in keyring
   // while the UI showed the login screen.
   async function handleLogout() {
+    const shouldLogout = await confirm($t("logout_confirmation"), {
+      title: $t("logout"),
+      kind: "warning",
+    });
+    if (!shouldLogout) return;
+
     actionError = "";
     try {
       await invoke<void>("logout");

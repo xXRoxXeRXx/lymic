@@ -27,6 +27,7 @@
   "logged_in_at": "Angemeldet bei",
   "logged_in_as": "Angemeldet als",
   "logout": "Abmelden",
+  "logout_confirmation": "Möchtest du dich wirklich abmelden?",
   "select_folder": "Ordner auswählen",
   "never": "Noch nie",
   "hero_tagline": "Immich Desktop Client",
