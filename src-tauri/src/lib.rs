@@ -94,12 +94,17 @@ impl Drop for SyncIdleEmitter {
 }
 
 // ---------------------------------------------------------------------------
-// Supported media file extensions for sync (mirrors start_sync scan filter).
-// Defined once and reused in both start_sync and the watcher path.
+// Supported Immich image and video extensions for sync. Defined once and reused
+// in both start_sync and the watcher path. Keep this aligned with Immich's
+// server/src/utils/mime-types.ts getSupportedFileExtensions().
 // ---------------------------------------------------------------------------
-// removed redundant `as &[&str]` cast.
 const MEDIA_EXTENSIONS: &[&str] = &[
-    "jpg", "jpeg", "png", "gif", "heic", "heif", "mp4", "mov", "avi",
+    "3fr", "3gp", "3gpp", "ari", "arw", "avif", "avi", "bmp", "cap", "cin", "cr2", "cr3", "crw",
+    "dcr", "dng", "erf", "fff", "flv", "gif", "heic", "heif", "hif", "iiq", "insp", "jfif", "jp2",
+    "jpe", "jpeg", "jpg", "jxl", "k25", "kdc", "m2t", "m2ts", "m4v", "mkv", "mov", "mp4", "mpe",
+    "mpeg", "mpg", "mpo", "mrw", "mts", "mxf", "nef", "nrw", "orf", "ori", "pef", "png", "psd",
+    "raf", "raw", "rw2", "rwl", "sr2", "srf", "srw", "svg", "tif", "tiff", "ts", "vob", "webm",
+    "webp", "wmv", "x3f",
 ];
 
 fn is_media_file(path: &std::path::Path) -> bool {
@@ -2098,6 +2103,22 @@ mod tests {
         assert!(!result.files[0].path.starts_with(r"\\?\"));
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recognizes_all_immich_supported_asset_extensions() {
+        for extension in MEDIA_EXTENSIONS {
+            assert!(is_media_file(std::path::Path::new(&format!(
+                "asset.{extension}"
+            ))));
+            assert!(is_media_file(std::path::Path::new(&format!(
+                "asset.{}",
+                extension.to_uppercase()
+            ))));
+        }
+
+        assert!(!is_media_file(std::path::Path::new("asset.xmp")));
+        assert!(!is_media_file(std::path::Path::new("asset.txt")));
     }
 
     #[test]
