@@ -876,7 +876,7 @@
     <!-- Global Footer -->
     <footer class="h-16 px-10 border-t border-black/5 dark:border-white/10 flex items-center justify-end text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-widest shrink-0">
       <span>Lymic - Unofficial Immich Desktop Client</span>
-      <span class="ml-2">v0.10.0</span>
+      <span class="ml-2">v0.11.0</span>
     </footer>
 
   </div>
