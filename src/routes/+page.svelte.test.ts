@@ -169,7 +169,7 @@ describe("logout", () => {
   });
 });
 
-describe("account settings", () => {
+describe("settings", () => {
   it("shows the authenticated user name", async () => {
     renderAuthenticatedPage();
     await screen.findByText("Dashboard", { selector: "h1" });
@@ -177,5 +177,24 @@ describe("account settings", () => {
     await fireEvent.click(document.querySelector("header button")!);
 
     expect(await screen.findByText("Logged in as Meyer")).toBeInTheDocument();
+  });
+
+  it("displays language settings and switches language", async () => {
+    renderAuthenticatedPage();
+    await screen.findByText("Dashboard", { selector: "h1" });
+
+    await fireEvent.click(document.querySelector("header button")!);
+
+    expect(await screen.findByText("Language")).toBeInTheDocument();
+    expect(screen.getByText("Choose your preferred language.")).toBeInTheDocument();
+
+    const deButton = screen.getByRole("button", { name: "DE" });
+    await fireEvent.click(deButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("Sprache")).toBeInTheDocument();
+      expect(screen.getByText("Wähle deine bevorzugte Sprache.")).toBeInTheDocument();
+      expect(tauri.invoke).toHaveBeenCalledWith("update_locale", { locale: "de" });
+    });
   });
 });

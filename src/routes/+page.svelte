@@ -385,7 +385,7 @@
           <button
             type="button"
             class="ml-auto p-1 rounded hover:bg-red-100 transition-colors"
-            aria-label="Fehlermeldung schließen"
+            aria-label={$t('dismiss_error')}
             onclick={() => actionError = ""}
           >
             <X class="w-4 h-4" />
@@ -570,7 +570,7 @@
               <button
                 class="w-12 h-6 border rounded-full relative transition-all {isAutostartEnabled ? 'bg-blue-600 border-blue-600' : 'bg-slate-200 border-slate-200'}"
                 onclick={toggleAutostart}
-                aria-label={isAutostartEnabled ? 'Autostart deaktivieren' : 'Autostart aktivieren'}
+                aria-label={isAutostartEnabled ? $t('autostart_disable') : $t('autostart_enable')}
                 aria-pressed={isAutostartEnabled}
               >
                 <div class="absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all {isAutostartEnabled ? 'translate-x-6' : 'translate-x-0'}"></div>
@@ -579,18 +579,20 @@
 
             <div class="p-8 flex items-center justify-between border-b border-black/5">
               <div class="space-y-1">
-                <p class="font-bold text-slate-900">Language / Sprache</p>
-                <p class="text-xs text-slate-500">Choose your preferred language.</p>
+                <p class="font-bold text-slate-900">{$t('language')}</p>
+                <p class="text-xs text-slate-500">{$t('language_subtitle')}</p>
               </div>
               <div class="flex gap-2">
                 <button 
                   class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'en' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
-                  onclick={() => $locale = 'en'}>
+                  onclick={() => $locale = 'en'}
+                  aria-pressed={$locale === 'en'}>
                   EN
                 </button>
                 <button 
                   class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'de' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
-                  onclick={() => $locale = 'de'}>
+                  onclick={() => $locale = 'de'}
+                  aria-pressed={$locale === 'de'}>
                   DE
                 </button>
               </div>
