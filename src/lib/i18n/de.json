@@ -35,7 +35,7 @@
   "hero_title_line_2": "Sicher in Immich",
   "unknown_error": "Unbekannter Fehler",
   "tray_quit": "Beenden",
-  "tray_show": "Fenster anzeigen",
+  "tray_show": "Einstellungen",
   "tray_sync": "Jetzt synchronisieren",
   "notification_complete_title": "{} Abgeschlossen",
   "notification_complete_body": "{processed} Dateien verarbeitet. {uploaded} neue Uploads. {failed} Fehler."
