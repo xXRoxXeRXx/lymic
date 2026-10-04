@@ -21,6 +21,23 @@ struct SyncCoordinator(std::sync::Arc<tokio::sync::Mutex<()>>);
 struct LocaleState(std::sync::Mutex<String>);
 struct TrayMenuState(Menu<tauri::Wry>);
 
+fn set_tray_sync_enabled(app: &tauri::AppHandle, enabled: bool) {
+    let Some(tray_menu) = app.try_state::<TrayMenuState>() else {
+        return;
+    };
+
+    if let Some(MenuItemKind::MenuItem(item)) = tray_menu.0.get("sync") {
+        let _ = item.set_enabled(enabled);
+    }
+}
+
+fn ensure_sync_has_folders(folders: &[db::WatchedFolder]) -> Result<(), String> {
+    if folders.is_empty() {
+        return Err("Add at least one folder before starting a sync.".to_string());
+    }
+    Ok(())
+}
+
 #[derive(serde::Deserialize)]
 struct BackendTranslations {
     tray_quit: String,
@@ -653,6 +670,9 @@ async fn add_folder(
         }
     };
 
+    // The persisted folder is the source of truth, even when its watcher is deferred.
+    set_tray_sync_enabled(&app, true);
+
     if registration == watcher::WatchRegistration::PathUnavailable {
         log_to_ui(
             &app,
@@ -754,6 +774,17 @@ async fn remove_folder(
         db::remove_folder(pool.inner(), id)
             .await
             .map_err(|e| e.to_string())?;
+    }
+    match db::get_folders(pool.inner()).await {
+        Ok(folders) => set_tray_sync_enabled(&app, !folders.is_empty()),
+        Err(error) => log_to_ui(
+            &app,
+            "ERROR",
+            &format!(
+                "Folder was removed, but could not refresh tray sync availability: {}",
+                error
+            ),
+        ),
     }
     audit_event(
         &app,
@@ -1374,6 +1405,11 @@ async fn start_sync(
     sync_state: tauri::State<'_, SyncState>,
     sync_coordinator: tauri::State<'_, SyncCoordinator>,
 ) -> Result<SyncSummary, String> {
+    let folders = db::get_folders(pool.inner())
+        .await
+        .map_err(|e| e.to_string())?;
+    ensure_sync_has_folders(&folders)?;
+
     let command_operation_id = audit::AuditEvent::operation_id();
     // Attempt to set sync_state to true. If it was already true, return early.
     if sync_state
@@ -1393,9 +1429,6 @@ async fn start_sync(
 
     // Ensure we reset the state when we're done, even if we fail.
     let result = async {
-        let folders = db::get_folders(pool.inner())
-            .await
-            .map_err(|e| e.to_string())?;
         let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
         let audit_context = SyncAuditContext::from_credentials(
             &credentials.server_url,
@@ -1480,6 +1513,7 @@ pub fn run() {
             let mut watcher = watcher::WatcherState::new(watcher);
             let folders = tauri::async_runtime::block_on(db::get_folders(&pool))
                 .map_err(|e| format!("Failed to load watched folders: {}", e))?;
+            let has_folders = !folders.is_empty();
             for folder in folders {
                 // surface deferred-watch state at startup.
                 match watcher::watch_path(&mut watcher, &folder.path) {
@@ -1836,7 +1870,7 @@ pub fn run() {
             let translations = backend_translations("en");
             let quit_i = MenuItem::with_id(app, "quit", &translations.tray_quit, true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", &translations.tray_show, true, None::<&str>)?;
-            let sync_i = MenuItem::with_id(app, "sync", &translations.tray_sync, true, None::<&str>)?;
+            let sync_i = MenuItem::with_id(app, "sync", &translations.tray_sync, has_folders, None::<&str>)?;
             let menu_items: &[&dyn tauri::menu::IsMenuItem<tauri::Wry>] = &[
                 &sync_i,
                 &show_i,
@@ -1976,6 +2010,26 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ))
+    }
+
+    #[tokio::test]
+    async fn sync_folder_guard_rejects_an_empty_database() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let folders = db::get_folders(&pool).await.unwrap();
+        assert_eq!(
+            ensure_sync_has_folders(&folders),
+            Err("Add at least one folder before starting a sync.".to_string())
+        );
+
+        db::add_folder(&pool, "C:/photos").await.unwrap();
+        let folders = db::get_folders(&pool).await.unwrap();
+        assert!(ensure_sync_has_folders(&folders).is_ok());
     }
 
     #[tokio::test]

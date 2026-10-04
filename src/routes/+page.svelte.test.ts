@@ -10,6 +10,16 @@ const tauri = vi.hoisted(() => ({
   confirm: vi.fn(),
 }));
 
+type WatchedFolder = {
+  id: number;
+  path: string;
+  recursive: boolean;
+  target_album_id: string | null;
+};
+
+let watchedFolders: WatchedFolder[] = [];
+let triggerSync: (() => void) | undefined;
+
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: tauri.listen }));
 vi.mock("@tauri-apps/plugin-autostart", () => ({
@@ -29,7 +39,7 @@ function renderAuthenticatedPage() {
       case "get_current_user_name":
         return Promise.resolve("Meyer");
       case "get_folders":
-        return Promise.resolve([]);
+        return Promise.resolve(watchedFolders);
       case "update_locale":
         return Promise.resolve();
       default:
@@ -42,7 +52,12 @@ function renderAuthenticatedPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.setItem("lymic-locale", "en");
-  tauri.listen.mockResolvedValue(() => {});
+  watchedFolders = [];
+  triggerSync = undefined;
+  tauri.listen.mockImplementation((event: string, handler: () => void) => {
+    if (event === "trigger-sync") triggerSync = handler;
+    return Promise.resolve(() => {});
+  });
   tauri.isEnabled.mockResolvedValue(false);
   tauri.confirm.mockResolvedValue(true);
 });
@@ -52,7 +67,21 @@ afterEach(() => {
 });
 
 describe("sync dashboard", () => {
+  it("does not start sync without a watched folder", async () => {
+    renderAuthenticatedPage();
+
+    const syncButton = await screen.findByRole("button", { name: "Sync Now" });
+    expect(syncButton).toBeDisabled();
+
+    await fireEvent.click(syncButton);
+    await waitFor(() => expect(triggerSync).toBeTypeOf("function"));
+    triggerSync?.();
+
+    expect(tauri.invoke).not.toHaveBeenCalledWith("start_sync");
+  });
+
   it("returns to idle when an empty sync result is received", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     renderAuthenticatedPage();
     tauri.invoke.mockImplementation((command: string) => {
       if (command === "start_sync") {
@@ -61,7 +90,7 @@ describe("sync dashboard", () => {
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
       if (command === "get_current_user_name") return Promise.resolve("Meyer");
-      if (command === "get_folders") return Promise.resolve([]);
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
       return Promise.resolve();
     });
 
@@ -71,6 +100,30 @@ describe("sync dashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("All up to date")).toBeInTheDocument();
       expect(syncButton).toBeEnabled();
+    });
+  });
+
+  it("disables sync after the final folder is removed", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    renderAuthenticatedPage();
+
+    await screen.findByText("photos");
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "remove_folder") {
+        watchedFolders = [];
+        return Promise.resolve();
+      }
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
+      return Promise.resolve();
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Remove folder: C:/photos" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Sync Now" })).toBeDisabled();
     });
   });
 });

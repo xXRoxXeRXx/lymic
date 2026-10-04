@@ -209,6 +209,10 @@
       console.warn("Sync already in progress, ignoring trigger.");
       return;
     }
+    if (watchedFolders.length === 0) {
+      console.warn("Sync requires at least one watched folder, ignoring trigger.");
+      return;
+    }
     if (progressResetTimer) clearTimeout(progressResetTimer);
     progressResetTimer = undefined;
     syncStatus = "syncing";
@@ -447,10 +451,15 @@
             <button
               class="btn-action"
               onclick={handleStartSync}
-              disabled={syncStatus === 'syncing'}
+              disabled={syncStatus === 'syncing' || watchedFolders.length === 0}
+              title={watchedFolders.length === 0 ? $t('sync_requires_folder') : undefined}
+              aria-describedby={watchedFolders.length === 0 ? 'sync-requires-folder' : undefined}
             >
               {syncStatus === 'syncing' ? $t('syncing') : $t('sync_now')}
             </button>
+            {#if watchedFolders.length === 0}
+              <span id="sync-requires-folder" class="sr-only">{$t('sync_requires_folder')}</span>
+            {/if}
           </div>
 
           {#if syncStatus === 'syncing'}
@@ -502,7 +511,11 @@
                       <p class="text-[10px] font-mono text-slate-400 truncate">{folder.path}</p>
                     </div>
                   </div>
-                  <button class="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all" onclick={() => handleRemoveFolder(folder.id)}>
+                  <button
+                    class="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                    aria-label={`${$t('remove_folder')}: ${folder.path}`}
+                    onclick={() => handleRemoveFolder(folder.id)}
+                  >
                     <Trash2 class="w-4 h-4" />
                   </button>
                 </div>
