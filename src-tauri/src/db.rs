@@ -86,7 +86,9 @@ async fn verify_and_migrate(pool: &SqlitePool) -> Result<(), InitFailure> {
             None => InitFailure::Other(Box::new(e)),
         })?;
 
-    let status: String = row.try_get(0).map_err(|e| InitFailure::Other(Box::new(e)))?;
+    let status: String = row
+        .try_get(0)
+        .map_err(|e| InitFailure::Other(Box::new(e)))?;
     if !status.eq_ignore_ascii_case("ok") {
         return Err(InitFailure::Corrupt(format!(
             "SQLite quick_check reported corruption: {}",
@@ -496,7 +498,11 @@ mod tests {
         let db_path = temp_dir.join("corrupt_test.db");
 
         // Write non-database invalid data to simulate corrupted SQLite file
-        std::fs::write(&db_path, b"NOT A VALID SQLITE DATABASE FILE - CORRUPTED DATA").unwrap();
+        std::fs::write(
+            &db_path,
+            b"NOT A VALID SQLITE DATABASE FILE - CORRUPTED DATA",
+        )
+        .unwrap();
 
         let result = init_at_path(&db_path).await.unwrap();
         match result.status {
@@ -548,10 +554,11 @@ mod tests {
             .unwrap();
         }
 
-        let sync_rootpage: i64 = sqlx::query_scalar("SELECT rootpage FROM sqlite_master WHERE name = 'sync_state'")
-            .fetch_one(&result1.pool)
-            .await
-            .unwrap();
+        let sync_rootpage: i64 =
+            sqlx::query_scalar("SELECT rootpage FROM sqlite_master WHERE name = 'sync_state'")
+                .fetch_one(&result1.pool)
+                .await
+                .unwrap();
 
         sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
             .execute(&result1.pool)
@@ -719,14 +726,19 @@ mod tests {
         // 1. Create a healthy DB
         let result = init_at_path(&db_path).await.unwrap();
         assert_eq!(result.status, DatabaseStatus::Ready);
-        add_folder(&result.pool, "C:/important_photos").await.unwrap();
+        add_folder(&result.pool, "C:/important_photos")
+            .await
+            .unwrap();
         result.pool.close().await;
 
         // 2. Insert a future migration entry (simulate DB was created by a newer version of the app)
         let options = SqliteConnectOptions::new()
             .filename(&db_path)
             .create_if_missing(false);
-        let pool = SqlitePoolOptions::new().connect_with(options).await.unwrap();
+        let pool = SqlitePoolOptions::new()
+            .connect_with(options)
+            .await
+            .unwrap();
         sqlx::query(
             "INSERT INTO _sqlx_migrations (version, description, installed_on, success, checksum, execution_time)
              VALUES (999999, 'future_migration', CURRENT_TIMESTAMP, 1, X'1234', 10)",

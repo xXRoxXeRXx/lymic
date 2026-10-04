@@ -545,9 +545,7 @@ async fn get_current_user_name() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn get_database_recovery_notice(
-    state: tauri::State<'_, DatabaseRecoveryNotice>,
-) -> Option<String> {
+fn get_database_recovery_notice(state: tauri::State<'_, DatabaseRecoveryNotice>) -> Option<String> {
     state.0.lock().ok().and_then(|mut guard| guard.take())
 }
 
