@@ -136,11 +136,11 @@ impl ImmichClient {
     pub async fn validate_connection(&self) -> Result<(), String> {
         let response = self
             .client
-            // An empty bulk check validates both reachability and the API key without
-            // relying on the deprecated server/config endpoint.
-            .post(self.endpoint_url("assets/bulk-upload-check"))
+            // This is Immich's authenticated "current user" endpoint.  Do not use
+            // bulk-upload-check for login validation: that endpoint can fail because
+            // of upload-service/database issues even while the API key is valid.
+            .get(self.endpoint_url("users/me"))
             .header("x-api-key", &self.api_key)
-            .json(&json!({ "assets": [] }))
             .send()
             .await
             .map_err(|_| "Connection failed".to_string())?;
@@ -688,6 +688,35 @@ mod tests {
         assert!(upload_request.starts_with("POST /api/assets HTTP/1.1"));
         assert!(upload_request.contains("x-immich-checksum: new-file"));
         assert!(upload_request.contains("name=\"assetData\""));
+    }
+
+    #[tokio::test]
+    async fn validates_login_with_current_user_endpoint() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::channel(1);
+
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request = read_http_request(&mut stream).await;
+            requests_tx.send(request).await.unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+                .await
+                .unwrap();
+        });
+
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        client.validate_connection().await.unwrap();
+
+        let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(request.starts_with("GET /api/users/me HTTP/1.1"));
+        assert!(request.contains("x-api-key: test-key"));
+        assert!(!request.contains("bulk-upload-check"));
     }
 
     #[tokio::test]
