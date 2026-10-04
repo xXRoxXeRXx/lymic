@@ -27,6 +27,8 @@ pub(crate) struct SyncSummary {
     pub(crate) failed: usize,
 }
 
+pub(crate) const BULK_CHECK_CHUNK_SIZE: usize = 100;
+
 pub(crate) async fn process_sync_block(
     app: tauri::AppHandle,
     pool: sqlx::SqlitePool,
@@ -64,8 +66,8 @@ pub(crate) async fn process_sync_block(
         ),
     );
 
-    // Each unit contains at most two assets, so 250 units keeps a bulk request at
-    // or below 500 hashes while keeping live-photo pairs together.
+    // Each unit contains at most two assets, so 100 units keeps a bulk request at
+    // around 100 hashes (at most 200) while keeping live-photo pairs together.
     let hashed_units = futures::stream::iter(units)
         .map(|unit| {
             let pool = pool.clone();
@@ -107,7 +109,7 @@ pub(crate) async fn process_sync_block(
         })
         .buffer_unordered(4)
         .filter_map(|unit| async { unit })
-        .chunks(250)
+        .chunks(BULK_CHECK_CHUNK_SIZE)
         .then(|chunk| {
             let client = client.clone();
             let pool = pool.clone();
@@ -251,5 +253,10 @@ mod tests {
         assert_eq!(details["checksums"]["sha1_base64"], checksums.sha1_base64);
         assert_eq!(details["remote_asset_id"], "remote-id");
         assert!(details.get("failure_reason").is_none());
+    }
+
+    #[test]
+    fn bulk_check_chunk_size_is_bounded_to_100() {
+        assert_eq!(BULK_CHECK_CHUNK_SIZE, 100);
     }
 }
