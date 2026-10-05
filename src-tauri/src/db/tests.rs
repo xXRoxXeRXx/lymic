@@ -691,7 +691,7 @@ pub async fn get_failed_syncs(pool: &SqlitePool) -> Result<Vec<FailedSyncEntry>,
 #[cfg(test)]
 mod database_tests {
     use super::*;
-    use crate::db::has_pending_sync_queue_items;
+    use crate::db::{discard_failed_sync_paths, has_pending_sync_queue_items};
     use sqlx::sqlite::SqlitePoolOptions;
 
     async fn test_pool() -> SqlitePool {
@@ -1073,6 +1073,69 @@ mod database_tests {
             failures[0].failure_reason,
             "Failure details are unavailable; retry to obtain details."
         );
+    }
+
+    #[tokio::test]
+    async fn discarding_missing_failed_paths_removes_state_queue_and_updates_job() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let assets = [
+            QueueAsset {
+                path: "missing.jpg",
+                size: 1,
+                mtime: 1,
+            },
+            QueueAsset {
+                path: "retry.jpg",
+                size: 2,
+                mtime: 2,
+            },
+        ];
+        enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+        finalize_queued_block(
+            &pool,
+            &[
+                ("missing.jpg".to_string(), "FAILED".to_string()),
+                ("retry.jpg".to_string(), "FAILED".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+        mark_sync_failed(&pool, "missing.jpg", 1, 1, "Upload failed")
+            .await
+            .unwrap();
+        mark_sync_failed(&pool, "retry.jpg", 2, 2, "Upload failed")
+            .await
+            .unwrap();
+
+        discard_failed_sync_paths(&pool, &["missing.jpg".to_string()])
+            .await
+            .unwrap();
+
+        let failures = get_failed_syncs(&pool).await.unwrap();
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].local_path, "retry.jpg");
+        let queue_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE local_path = 'missing.jpg'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(queue_count, 0);
+        let snapshot = get_sync_snapshot(&pool).await.unwrap();
+        assert_eq!(snapshot.status, "IDLE");
+        assert_eq!(snapshot.total, 1);
+        assert_eq!(snapshot.failed, 1);
+
+        discard_failed_sync_paths(&pool, &[]).await.unwrap();
+        assert_eq!(get_sync_snapshot(&pool).await.unwrap().total, 1);
+
+        discard_failed_sync_paths(&pool, &["retry.jpg".to_string()])
+            .await
+            .unwrap();
+        let snapshot = get_sync_snapshot(&pool).await.unwrap();
+        assert_eq!(snapshot.status, "IDLE");
+        assert_eq!(snapshot.total, 0);
+        assert_eq!(snapshot.failed, 0);
     }
 
     #[tokio::test]

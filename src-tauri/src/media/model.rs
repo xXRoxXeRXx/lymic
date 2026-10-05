@@ -146,6 +146,7 @@ pub(crate) struct FileFailure {
 pub(crate) struct ScanResult {
     pub(crate) files: Vec<Asset>,
     pub(crate) failures: Vec<FileFailure>,
+    pub(crate) discarded_paths: Vec<String>,
     pub(crate) overlapping_folders: Vec<(PathBuf, PathBuf)>,
 }
 

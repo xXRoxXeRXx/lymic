@@ -248,6 +248,9 @@ pub(crate) async fn retry_failed_syncs(
             .map(|entry| entry.local_path)
             .collect();
         let scan_result = prepare_failed_sync_retry(failed_paths).await?;
+        db::discard_failed_sync_paths(pool.inner(), &scan_result.discarded_paths)
+            .await
+            .map_err(|error| error.to_string())?;
 
         run_sync_pipeline(
             app.clone(),

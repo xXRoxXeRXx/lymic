@@ -333,6 +333,33 @@ describe("sync dashboard", () => {
     });
   });
 
+  it("shows all up to date when retry only discards missing files", async () => {
+    failedSyncs = [{ localPath: "C:/photos/missing.jpg", failureReason: "Upload rejected" }];
+    renderAuthenticatedPage();
+
+    await screen.findByRole("button", { name: "1 failed file(s)" });
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "retry_failed_syncs") {
+        failedSyncs = [];
+        return Promise.resolve({ processed: 0, uploaded: 0, failed: 0 });
+      }
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
+      return Promise.resolve();
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Retry failed files" }));
+
+    await waitFor(() => {
+      expect(tauri.invoke).toHaveBeenCalledWith("retry_failed_syncs");
+      expect(screen.getByText("All up to date")).toBeInTheDocument();
+      expect(screen.queryByText("C:/photos/missing.jpg")).not.toBeInTheDocument();
+    });
+  });
+
   it("keeps error status when failures remain after a clean sync", async () => {
     watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     failedSyncs = [{ localPath: "C:/photos/failed.jpg", failureReason: "Upload rejected" }];

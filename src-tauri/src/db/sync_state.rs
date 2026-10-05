@@ -1,4 +1,6 @@
-use sqlx::{Row, SqlitePool};
+use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
+
+const DISCARD_PATH_BATCH_SIZE: usize = 500;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,4 +104,43 @@ pub async fn get_failed_syncs(pool: &SqlitePool) -> Result<Vec<FailedSyncEntry>,
             failure_reason: row.get("failure_reason"),
         })
         .collect())
+}
+
+pub async fn discard_failed_sync_paths(
+    pool: &SqlitePool,
+    paths: &[String],
+) -> Result<(), sqlx::Error> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    let mut tx = pool.begin().await?;
+    for table in ["sync_state", "sync_queue"] {
+        for path_batch in paths.chunks(DISCARD_PATH_BATCH_SIZE) {
+            let mut query = QueryBuilder::<Sqlite>::new(format!("DELETE FROM {table} WHERE "));
+            if table == "sync_queue" {
+                query.push("job_id = 1 AND ");
+            }
+            query.push("local_path IN (");
+            let mut separated = query.separated(", ");
+            for path in path_batch {
+                separated.push_bind(path);
+            }
+            separated.push_unseparated(")");
+            query.build().execute(&mut *tx).await?;
+        }
+    }
+
+    sqlx::query(
+        "UPDATE sync_jobs SET \
+         total_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1), \
+         success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), \
+         failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED'), \
+         status = CASE WHEN NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN 'IDLE' ELSE status END, \
+         current_path = CASE WHEN NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN NULL ELSE current_path END \
+         WHERE id = 1",
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
 }

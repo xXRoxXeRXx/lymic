@@ -159,10 +159,7 @@ pub(crate) async fn prepare_failed_sync_retry(paths: Vec<String>) -> Result<Scan
                     error: "Path is no longer a regular file.".to_string(),
                 }),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    result.failures.push(FileFailure {
-                        path,
-                        error: "File no longer exists.".to_string(),
-                    })
+                    result.discarded_paths.push(path)
                 }
                 Err(error) => result.failures.push(FileFailure {
                     path,
@@ -220,7 +217,11 @@ mod tests {
         .unwrap();
         assert_eq!(result.files.len(), 1);
         assert_eq!(result.files[0].path, media_path.to_string_lossy());
-        assert_eq!(result.failures.len(), 3);
+        assert_eq!(result.failures.len(), 2);
+        assert_eq!(
+            result.discarded_paths,
+            vec![missing_path.to_string_lossy().to_string()]
+        );
         assert!(result
             .failures
             .iter()
@@ -229,10 +230,6 @@ mod tests {
             .failures
             .iter()
             .any(|failure| failure.error == "Path is no longer a regular file."));
-        assert!(result
-            .failures
-            .iter()
-            .any(|failure| failure.error == "File no longer exists."));
         std::fs::remove_dir_all(root).unwrap();
     }
 
