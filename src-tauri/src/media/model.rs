@@ -1,7 +1,5 @@
 use base64::{engine::general_purpose, Engine as _};
-use md5::Md5;
 use sha1::{Digest, Sha1};
-use sha2::Sha256;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{self, Read};
@@ -12,17 +10,12 @@ use super::extensions::{is_allowed_live_photo_pair, live_photo_kind_for_path as 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Checksums {
     pub(crate) sha1_base64: String,
-    pub(crate) md5_hex: String,
-    pub(crate) sha256_hex: String,
 }
 
-/// Calculate every checksum required by the upload protocol and audit record
-/// in one streaming pass. Immich continues to receive SHA-1/base64.
+/// Calculate Immich's required SHA-1/Base64 checksum in one streaming pass.
 pub(crate) fn calculate_checksums(path: &str) -> io::Result<Checksums> {
     let mut file = File::open(path)?;
     let mut sha1 = Sha1::new();
-    let mut md5 = Md5::new();
-    let mut sha256 = Sha256::new();
     let mut buffer = [0u8; 8192];
     loop {
         let n = file.read(&mut buffer)?;
@@ -30,13 +23,9 @@ pub(crate) fn calculate_checksums(path: &str) -> io::Result<Checksums> {
             break;
         }
         sha1.update(&buffer[..n]);
-        md5.update(&buffer[..n]);
-        sha256.update(&buffer[..n]);
     }
     Ok(Checksums {
         sha1_base64: general_purpose::STANDARD.encode(sha1.finalize()),
-        md5_hex: format!("{:x}", md5.finalize()),
-        sha256_hex: format!("{:x}", sha256.finalize()),
     })
 }
 
@@ -209,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn calculates_all_upload_and_audit_checksums_in_one_pass() {
+    fn calculates_immich_sha1_base64_in_one_pass() {
         let path = std::env::temp_dir().join(format!(
             "lymic-checksum-test-{}-{}",
             std::process::id(),
@@ -221,11 +210,6 @@ mod tests {
         std::fs::write(&path, b"abc").unwrap();
         let checksums = calculate_checksums(path.to_str().unwrap()).unwrap();
         assert_eq!(checksums.sha1_base64, "qZk+NkcGgWq6PiVxeFDCbJzQ2J0=");
-        assert_eq!(checksums.md5_hex, "900150983cd24fb0d6963f7d28e17f72");
-        assert_eq!(
-            checksums.sha256_hex,
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
         std::fs::remove_file(path).unwrap();
     }
 }

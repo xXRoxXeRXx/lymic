@@ -18,7 +18,7 @@
 
 ## Features
 
-- **Efficient synchronization** — Metadata-aware hash caching avoids rehashing unchanged files, while Immich bulk checks prevent unnecessary transfers.
+- **Efficient synchronization** — Unchanged files reuse their cached SHA-1/Base64 after a current size-and-mtime check; only changed or uncached files are streamed for hashing, while Immich bulk checks prevent unnecessary transfers.
 - **Folder watching** — Recursively monitors watched folders, handles changes with a debounce, and rescans after watcher overflow.
 - **Large-file support** — Streams multipart uploads directly from disk without retaining full files in memory.
 - **Durable queue** — Persists synchronization work, pause state, progress, and failures locally; failed items can be retried.
@@ -115,9 +115,9 @@ Lymic normally does not require `asset.delete` or `album.write` permissions. Sig
 ## How synchronization works
 
 1. **Discover** — Lymic recursively scans watched folders at startup and when a folder is added. Filesystem events trigger later incremental work.
-2. **Classify and hash** — It detects supported media, live-photo/motion pairs, and optional XMP sidecars, then streams content hashes. Hashes are cached in SQLite alongside file metadata.
-3. **Check** — Assets are checked against Immich in batches; existing assets are skipped.
-4. **Queue and upload** — Missing assets are written to the durable queue and streamed to Immich with configurable parallelism.
+2. **Classify and hash** — It detects supported media, live-photo/motion pairs, and optional XMP sidecars. Files whose current size and mtime match their synchronized cache entry reuse its SHA-1/Base64; changed or uncached files are streamed to calculate it. Hashes are cached in SQLite alongside file metadata.
+3. **Check** — SHA-1/Base64 values are sent to Immich's bulk check in batches; existing assets are skipped.
+4. **Queue and upload** — Missing assets are written to the durable queue and streamed to Immich with configurable parallelism, using SHA-1/Base64 in the `x-immich-checksum` header.
 5. **Record** — Completion and failure details are persisted and shown in the UI. Paused work can resume safely after a restart.
 
 Duplicate and overlapping watched folders are rejected. Temporarily unavailable folders remain configured and are retried. Closing the main window hides Lymic to the system tray; use the tray menu to quit.

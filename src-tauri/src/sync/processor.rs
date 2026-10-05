@@ -7,7 +7,7 @@ use crate::{
     immich::ImmichClient,
     media::{
         model::{upload_units_from_assets, HashedUploadUnit, ScanResult, UploadUnit},
-        scanner::calculate_stable_checksums,
+        scanner::{calculate_stable_checksums, reuse_cached_checksums},
     },
     sync::{retry::check_assets_exist_with_backoff, JobByteProgress, SyncCoordinatorInner},
 };
@@ -235,6 +235,32 @@ async fn hash_unit(
                 db::get_cached_hash(&pool, &asset.path, asset.mtime, asset.size as i64).await
             }
             .map_err(|error| format!("Could not load cached hash for {}: {}", asset.path, error))?;
+            if let Some(cached_sha1_base64) = cached.as_ref() {
+                let path = asset.path.clone();
+                let expected_size = asset.size;
+                let expected_mtime = asset.mtime;
+                let cached_sha1_base64 = cached_sha1_base64.clone();
+                if let Some((checksums, size, mtime)) = tokio::task::spawn_blocking(move || {
+                    reuse_cached_checksums(
+                        &path,
+                        expected_size,
+                        expected_mtime,
+                        &cached_sha1_base64,
+                    )
+                })
+                .await
+                .map_err(|error| format!("Hashing task failed: {}", error))?
+                .map_err(|error| format!("Hashing failed: {}", error))?
+                {
+                    hashed.push(crate::media::model::SyncAsset {
+                        path: asset.path.clone(),
+                        size,
+                        mtime,
+                        checksums: Some(checksums),
+                    });
+                    continue;
+                }
+            }
             let path = asset.path.clone();
             let (checksums, size, mtime) =
                 tokio::task::spawn_blocking(move || calculate_stable_checksums(&path))
@@ -482,7 +508,7 @@ mod tests {
     }
 
     #[test]
-    fn upload_audit_details_include_all_required_checksums() {
+    fn upload_audit_details_include_only_immich_checksum() {
         let asset = crate::media::model::SyncAsset {
             path: "C:/media/photo.jpg".to_string(),
             size: 123,
@@ -490,8 +516,6 @@ mod tests {
             mtime: 0,
         };
         let checksums = crate::media::model::Checksums {
-            md5_hex: "a".repeat(32),
-            sha256_hex: "b".repeat(64),
             sha1_base64: "c2hhMQ==".to_string(),
         };
         let details = upload_details(
@@ -504,9 +528,9 @@ mod tests {
             None,
         );
         assert_eq!(details["file_size_bytes"], 123);
-        assert_eq!(details["checksums"]["md5"], checksums.md5_hex);
-        assert_eq!(details["checksums"]["sha256"], checksums.sha256_hex);
         assert_eq!(details["checksums"]["sha1_base64"], checksums.sha1_base64);
+        assert!(details["checksums"].get("md5").is_none());
+        assert!(details["checksums"].get("sha256").is_none());
         assert_eq!(details["remote_asset_id"], "remote-id");
         assert!(details.get("failure_reason").is_none());
     }

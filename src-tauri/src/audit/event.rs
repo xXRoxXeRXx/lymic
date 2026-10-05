@@ -169,8 +169,6 @@ pub fn upload_details(
         "file_name": Path::new(&asset.path).file_name().and_then(|name| name.to_str()).unwrap_or("file"),
         "file_size_bytes": asset.size,
         "checksums": {
-            "md5": checksums.md5_hex,
-            "sha256": checksums.sha256_hex,
             "sha1_base64": checksums.sha1_base64,
         },
         "upload_started_at": upload_started_at,

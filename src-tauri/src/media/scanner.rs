@@ -21,6 +21,25 @@ pub(crate) fn file_version(path: &str) -> std::io::Result<(u64, i64)> {
     Ok((metadata.len(), metadata_mtime(&metadata)))
 }
 
+pub(crate) fn reuse_cached_checksums(
+    path: &str,
+    expected_size: u64,
+    expected_mtime: i64,
+    cached_sha1_base64: &str,
+) -> std::io::Result<Option<(Checksums, u64, i64)>> {
+    let (size, mtime) = file_version(path)?;
+    if expected_mtime == 0 || mtime == 0 || (size, mtime) != (expected_size, expected_mtime) {
+        return Ok(None);
+    }
+    Ok(Some((
+        Checksums {
+            sha1_base64: cached_sha1_base64.to_string(),
+        },
+        size,
+        mtime,
+    )))
+}
+
 pub(crate) fn calculate_stable_checksums(path: &str) -> std::io::Result<(Checksums, u64, i64)> {
     // Refresh the scan snapshot before hashing to avoid a redundant hash when it is stale.
     let mut version = file_version(path)?;
@@ -244,5 +263,65 @@ mod tests {
         assert_eq!((size, mtime), file_version(&path_string).unwrap());
         assert_ne!(size, old_size);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cached_checksum_is_reused_when_file_metadata_matches() {
+        let root = temporary_directory();
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("photo.jpg");
+        std::fs::write(&path, b"test image").unwrap();
+        let path_string = path.to_string_lossy().to_string();
+        let (size, mtime) = file_version(&path_string).unwrap();
+
+        let reused = reuse_cached_checksums(&path_string, size, mtime, "cached-sha1")
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(reused.0.sha1_base64, "cached-sha1");
+        assert_eq!((reused.1, reused.2), (size, mtime));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cached_checksum_is_not_reused_after_metadata_changes() {
+        let root = temporary_directory();
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("photo.jpg");
+        std::fs::write(&path, b"old").unwrap();
+        let path_string = path.to_string_lossy().to_string();
+        let (size, mtime) = file_version(&path_string).unwrap();
+        std::fs::write(&path, b"updated image content").unwrap();
+
+        assert!(
+            reuse_cached_checksums(&path_string, size, mtime, "cached-sha1")
+                .unwrap()
+                .is_none()
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cached_checksum_is_not_reused_with_an_unknown_expected_mtime() {
+        let root = temporary_directory();
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("photo.jpg");
+        std::fs::write(&path, b"test image").unwrap();
+        let path_string = path.to_string_lossy().to_string();
+        let (size, _) = file_version(&path_string).unwrap();
+
+        assert!(reuse_cached_checksums(&path_string, size, 0, "cached-sha1")
+            .unwrap()
+            .is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cached_checksum_propagates_missing_file_errors() {
+        let path = temporary_directory().join("missing.jpg");
+        let error =
+            reuse_cached_checksums(path.to_str().unwrap(), 0, 1, "cached-sha1").unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
     }
 }

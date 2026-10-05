@@ -13,7 +13,7 @@ Lymic is designed as an **upload-oriented client**, not a two-way filesystem mir
 - Watch multiple local folders recursively for new or modified media.
 - Scan folders at startup and when a folder is added.
 - Debounce filesystem events before processing them.
-- Cache content hashes and file metadata locally to avoid rehashing unchanged files.
+- Cache SHA-1/Base64 values and file metadata locally; reuse a value only after the current size and mtime match, avoiding rehashing unchanged files.
 - Check batches of assets against Immich before uploading to avoid duplicate transfers.
 - Stream multipart uploads from disk, which keeps memory use low for large files.
 - Resume work through a durable local synchronization queue.
@@ -61,8 +61,8 @@ For each configured watched folder, Lymic follows this general flow:
 
 1. **Discover** — Recursively scan the folder for supported media. File-watcher events initiate later incremental work; an event queue overflow causes a full rescan.
 2. **Identify pairs and sidecars** — Associate supported live-photo/motion pairs and optional XMP sidecars where available.
-3. **Hash** — Stream the file to compute the checksums required by Immich. Cached hashes can be reused when the stored file metadata still matches.
-4. **Check** — Send assets to Immich's bulk upload check endpoint in batches. Assets already known to Immich are skipped.
+3. **Hash** — Reuse a cached SHA-1/Base64 only when the current size and mtime match the stored metadata; stream changed or uncached files to calculate SHA-1/Base64.
+4. **Check** — Send SHA-1/Base64 values to Immich's bulk upload check endpoint in batches. Assets already known to Immich are skipped.
 5. **Queue and upload** — Persist required work in the local queue, then stream missing files as multipart uploads with configured concurrency.
 6. **Record results** — Persist completion or failure details, update UI progress, and make failed work available for retry.
 
@@ -138,7 +138,7 @@ Lymic communicates with Immich using these primary endpoints:
 | `POST /api/assets/bulk-upload-check` | Determine which locally discovered assets are already present. |
 | `POST /api/assets` | Upload an asset through streamed multipart form data. |
 
-Requests authenticate with the `x-api-key` header. Upload metadata includes checksums; requests may include an `assetData` file, a live-photo partner as `livePhotoData`, and an XMP sidecar when present.
+Requests authenticate with the `x-api-key` header. The bulk check and upload `x-immich-checksum` header use SHA-1/Base64; requests may include an `assetData` file, a live-photo partner as `livePhotoData`, and an XMP sidecar when present.
 
 ### Tauri IPC and events
 

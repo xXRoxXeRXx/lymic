@@ -32,7 +32,8 @@ impl JobByteProgress {
 
     pub(crate) fn sync_from_snapshot(&self, total_bytes: u64, completed_bytes: u64) {
         self.total_bytes.store(total_bytes, Ordering::SeqCst);
-        self.completed_bytes.store(completed_bytes, Ordering::SeqCst);
+        self.completed_bytes
+            .store(completed_bytes, Ordering::SeqCst);
     }
 
     pub(crate) fn add_bytes(&self, bytes: u64) -> (u64, u64, u32) {
