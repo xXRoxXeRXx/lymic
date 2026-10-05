@@ -45,6 +45,8 @@ pub struct SyncSnapshot {
     pub succeeded: i64,
     pub failed: i64,
     pub current_path: Option<String>,
+    pub total_bytes: i64,
+    pub completed_bytes: i64,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -316,6 +318,11 @@ pub async fn init(
     init_at_path(&db_path).await
 }
 
+const SNAPSHOT_SELECT: &str = "SELECT status, total_count AS total, success_count AS succeeded, failure_count AS failed, current_path, \
+         COALESCE((SELECT SUM(size) FROM sync_queue WHERE job_id = 1), 0) AS total_bytes, \
+         COALESCE((SELECT SUM(size) FROM sync_queue WHERE job_id = 1 AND status IN ('SYNCED', 'FAILED')), 0) AS completed_bytes \
+  FROM sync_jobs WHERE id = 1";
+
 pub async fn recover_sync_job(pool: &SqlitePool) -> Result<SyncSnapshot, sqlx::Error> {
     // A process cannot safely know whether an in-flight HTTP upload completed. Recovery
     // therefore always requires explicit user confirmation before processing resumes.
@@ -326,12 +333,9 @@ pub async fn recover_sync_job(pool: &SqlitePool) -> Result<SyncSnapshot, sqlx::E
 }
 
 pub async fn get_sync_snapshot(pool: &SqlitePool) -> Result<SyncSnapshot, sqlx::Error> {
-    sqlx::query_as::<_, SyncSnapshot>(
-        "SELECT status, total_count AS total, success_count AS succeeded, failure_count AS failed, current_path
-         FROM sync_jobs WHERE id = 1",
-    )
-    .fetch_one(pool)
-    .await
+    sqlx::query_as::<_, SyncSnapshot>(SNAPSHOT_SELECT)
+        .fetch_one(pool)
+        .await
 }
 
 pub async fn enqueue_sync_assets(
@@ -401,12 +405,7 @@ pub async fn enqueue_sync_assets(
                 .await?;
         }
     }
-    sqlx::query("UPDATE sync_jobs SET total_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1), success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED') WHERE id = 1")
-        .execute(&mut *tx).await?;
-    let snapshot = sqlx::query_as::<_, SyncSnapshot>("SELECT status, total_count AS total, success_count AS succeeded, failure_count AS failed, current_path FROM sync_jobs WHERE id = 1")
-        .fetch_one(&mut *tx).await?;
-    tx.commit().await?;
-    Ok(snapshot)
+    update_counts_and_snapshot(tx, true, None).await
 }
 
 pub async fn next_sync_queue_block(
@@ -453,17 +452,39 @@ pub async fn finalize_queued_block(
     query.push(')');
     query.build().execute(&mut *tx).await?;
     let current_path = &results.last().expect("non-empty results").0;
-    snapshot_after_queue_update(tx, current_path).await
+    update_counts_and_snapshot(tx, false, Some(current_path)).await
 }
 
-async fn snapshot_after_queue_update(
+async fn update_counts_and_snapshot(
     mut tx: sqlx::Transaction<'_, sqlx::Sqlite>,
-    current_path: &str,
+    update_total: bool,
+    current_path: Option<&str>,
 ) -> Result<SyncSnapshot, sqlx::Error> {
-    sqlx::query("UPDATE sync_jobs SET success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED'), current_path = ? WHERE id = 1")
-        .bind(current_path).execute(&mut *tx).await?;
-    let snapshot = sqlx::query_as::<_, SyncSnapshot>("SELECT status, total_count AS total, success_count AS succeeded, failure_count AS failed, current_path FROM sync_jobs WHERE id = 1")
-        .fetch_one(&mut *tx).await?;
+    if update_total {
+        sqlx::query(
+            "UPDATE sync_jobs SET \
+             total_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1), \
+             success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), \
+             failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED') \
+             WHERE id = 1",
+        )
+        .execute(&mut *tx)
+        .await?;
+    } else {
+        sqlx::query(
+            "UPDATE sync_jobs SET \
+             success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), \
+             failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED'), \
+             current_path = ? \
+             WHERE id = 1",
+        )
+        .bind(current_path)
+        .execute(&mut *tx)
+        .await?;
+    }
+    let snapshot = sqlx::query_as::<_, SyncSnapshot>(SNAPSHOT_SELECT)
+        .fetch_one(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(snapshot)
 }
@@ -796,6 +817,41 @@ mod database_tests {
         assert_eq!(snapshot.status, "IDLE");
         assert_eq!(snapshot.succeeded, 1);
         assert_eq!(snapshot.failed, 1);
+        assert_eq!(snapshot.total_bytes, 3);
+        assert_eq!(snapshot.completed_bytes, 3);
+    }
+
+    #[tokio::test]
+    async fn queue_tracks_total_and_completed_bytes_accurately() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let assets = [
+            QueueAsset {
+                path: "small.jpg",
+                size: 1_000,
+                mtime: 1,
+            },
+            QueueAsset {
+                path: "large.mov",
+                size: 9_000,
+                mtime: 2,
+            },
+        ];
+        let snapshot = enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+        assert_eq!(snapshot.total_bytes, 10_000);
+        assert_eq!(snapshot.completed_bytes, 0);
+
+        let snapshot = finalize_queued_block(&pool, &[("small.jpg".to_string(), "SYNCED".to_string())])
+            .await
+            .unwrap();
+        assert_eq!(snapshot.total_bytes, 10_000);
+        assert_eq!(snapshot.completed_bytes, 1_000);
+
+        let snapshot = finalize_queued_block(&pool, &[("large.mov".to_string(), "FAILED".to_string())])
+            .await
+            .unwrap();
+        assert_eq!(snapshot.total_bytes, 10_000);
+        assert_eq!(snapshot.completed_bytes, 10_000);
     }
 
     #[tokio::test]

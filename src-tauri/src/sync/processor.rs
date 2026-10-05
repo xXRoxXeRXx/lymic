@@ -9,12 +9,12 @@ use crate::{
         model::{upload_units_from_assets, Asset, HashedUploadUnit, ScanResult},
         scanner::calculate_stable_checksums,
     },
-    sync::retry::check_assets_exist_with_backoff,
+    sync::{retry::check_assets_exist_with_backoff, JobByteProgress},
 };
 use futures::{StreamExt, TryStreamExt};
 use serde_json::json;
 use std::sync::{
-    atomic::{AtomicU64, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
     Arc,
 };
 use tauri::Emitter;
@@ -35,6 +35,7 @@ pub(crate) async fn process_sync_block(
     client: Arc<ImmichClient>,
     scan_result: ScanResult,
     audit_context: SyncAuditContext,
+    progress: JobByteProgress,
 ) -> Result<SyncSummary, String> {
     let upload_parallelism = load_upload_parallelism(&pool).await?;
     let ScanResult {
@@ -43,7 +44,6 @@ pub(crate) async fn process_sync_block(
     let total_files = files.len();
     let total_bytes: u64 = files.iter().map(|asset| asset.size).sum();
     let scan_failure_count = failures.len();
-    let completed_bytes = Arc::new(AtomicU64::new(0));
     let success_count = Arc::new(AtomicUsize::new(0));
     let failure_count = Arc::new(AtomicUsize::new(failures.len()));
     for failure in failures {
@@ -72,7 +72,7 @@ pub(crate) async fn process_sync_block(
         .map(|unit| {
             let pool = pool.clone();
             let app = app.clone();
-            let completed_bytes = completed_bytes.clone();
+            let progress = progress.clone();
             let failure_count = failure_count.clone();
             let audit_context = audit_context.clone();
             async move {
@@ -101,7 +101,8 @@ pub(crate) async fn process_sync_block(
                         log_to_ui(&app, "ERROR", &error);
                         audit_event(&app, audit_context.event("file.hash.failed", audit::Outcome::Failure, audit::Severity::Error, "File hashing failed", json!({ "local_paths": unit.assets().map(|asset| asset.path.clone()).collect::<Vec<_>>(), "failure_reason": audit_context.safe_error(&error) })));
                         failure_count.fetch_add(unit.assets().count(), Ordering::Relaxed);
-                        completed_bytes.fetch_add(unit.assets().map(|asset| asset.size).sum(), Ordering::SeqCst);
+                        let failed_bytes: u64 = unit.assets().map(|asset| asset.size).sum();
+                        progress.advance(&app, failed_bytes);
                         None
                     }
                 }
@@ -114,7 +115,7 @@ pub(crate) async fn process_sync_block(
             let client = client.clone();
             let pool = pool.clone();
             let app = app.clone();
-            let completed_bytes = completed_bytes.clone();
+            let progress = progress.clone();
             let failure_count = failure_count.clone();
             let audit_context = audit_context.clone();
             async move {
@@ -126,7 +127,7 @@ pub(crate) async fn process_sync_block(
                     for asset in unit.assets().filter(|asset| existing.contains(&asset.checksums.as_ref().unwrap().sha1_base64)) {
                         let hash = &asset.checksums.as_ref().unwrap().sha1_base64;
                         if db::update_sync_state(&pool, &asset.path, hash, asset.mtime, asset.size as i64, "SYNCED", None).await.is_err() { failure_count.fetch_add(1, Ordering::Relaxed); }
-                        completed_bytes.fetch_add(asset.size, Ordering::SeqCst);
+                        progress.advance(&app, asset.size);
                     }
                     if let Some(image) = accepted.first() { upload_units.push(HashedUploadUnit { image: image.clone(), live_photo_video: accepted.get(1).cloned() }); }
                 }
@@ -142,7 +143,7 @@ pub(crate) async fn process_sync_block(
             let client = client.clone();
             let pool = pool.clone();
             let app = app.clone();
-            let completed_bytes = completed_bytes.clone();
+            let progress = progress.clone();
             let success_count = success_count.clone();
             let failure_count = failure_count.clone();
             let audit_context = audit_context.clone();
@@ -181,9 +182,7 @@ pub(crate) async fn process_sync_block(
                         audit_event(&app, audit_context.event("file.upload.completed", audit::Outcome::Failure, audit::Severity::Error, "Upload failed", details));
                     }
                 }
-                let done = completed_bytes.fetch_add(unit.byte_size(), Ordering::SeqCst) + unit.byte_size();
-                let pct = if total_bytes == 0 { 100 } else { ((done as f64 / total_bytes as f64 * 100.0) as u32).min(100) };
-                let _ = app.emit("sync-progress-percent", pct);
+                progress.advance(&app, unit.byte_size());
                 Ok::<_, String>(())
             }
         })

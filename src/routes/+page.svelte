@@ -112,6 +112,8 @@
     succeeded: number;
     failed: number;
     currentPath: string | null;
+    totalBytes?: number;
+    completedBytes?: number;
   }
 
   interface WatchedFolder {
@@ -161,7 +163,13 @@
   function applySyncSnapshot(snapshot: SyncSnapshot | null | undefined) {
     if (!snapshot) return;
     syncStatus = snapshot.status === "PAUSED" ? "paused" : snapshot.status === "RUNNING" ? "syncing" : snapshot.failed > 0 ? "error" : "idle";
-    progress = snapshot.total === 0 ? 0 : Math.min(100, Math.round(((snapshot.succeeded + snapshot.failed) / snapshot.total) * 100));
+    if (snapshot.totalBytes && snapshot.totalBytes > 0) {
+      progress = Math.min(100, Math.round(((snapshot.completedBytes ?? 0) / snapshot.totalBytes) * 100));
+    } else if (snapshot.total > 0) {
+      progress = Math.min(100, Math.round(((snapshot.succeeded + snapshot.failed) / snapshot.total) * 100));
+    } else {
+      progress = 0;
+    }
     if (snapshot.currentPath) currentFile = snapshot.currentPath.split(/[/\\]/).pop() || "";
   }
 

@@ -11,7 +11,7 @@ use crate::{
     media::model::{Asset, ScanResult},
     sync::{
         processor::{process_sync_block, SyncSummary},
-        SyncCoordinatorInner,
+        JobByteProgress, SyncCoordinatorInner,
     },
 };
 use serde_json::json;
@@ -78,6 +78,10 @@ pub(crate) async fn run_sync_pipeline(
         failed: snapshot.failed.max(0) as usize,
         ..Default::default()
     };
+    let progress = JobByteProgress::new(
+        snapshot.total_bytes.max(0) as u64,
+        snapshot.completed_bytes.max(0) as u64,
+    );
     loop {
         // A currently executing process_sync_block is deliberately allowed to finish.
         // This boundary is reached before fetching each following persistent block.
@@ -174,6 +178,7 @@ pub(crate) async fn run_sync_pipeline(
             client.clone(),
             block,
             audit_context.clone(),
+            progress.clone(),
         )
         .await?;
         totals.processed += result.processed;
@@ -196,6 +201,10 @@ pub(crate) async fn run_sync_pipeline(
         let snapshot = db::finalize_queued_block(&pool, &queue_results)
             .await
             .map_err(|error| format!("Could not persist queue block: {}", error))?;
+        progress.sync_from_snapshot(
+            snapshot.total_bytes.max(0) as u64,
+            snapshot.completed_bytes.max(0) as u64,
+        );
         let _ = app.emit("sync-progress-snapshot", &snapshot);
     }
 }

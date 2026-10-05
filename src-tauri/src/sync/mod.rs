@@ -5,12 +5,14 @@
 
 pub(crate) mod coordinator;
 pub(crate) mod processor;
+pub(crate) mod progress;
 pub(crate) mod queue_runner;
 pub(crate) mod retry;
 pub(crate) mod service;
 
 pub(crate) use coordinator::{SyncCoordinator, SyncCoordinatorInner, SyncState};
 pub(crate) use processor::{load_upload_parallelism, SyncSummary};
+pub(crate) use progress::JobByteProgress;
 pub(crate) use queue_runner::run_sync_pipeline;
 pub(crate) use retry::prepare_failed_sync_retry;
 pub(crate) use service::{

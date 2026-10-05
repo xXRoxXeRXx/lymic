@@ -28,6 +28,7 @@ let uploadParallelism = 3;
 let triggerSync: (() => void) | undefined;
 let syncPaused: ((event: { payload: unknown }) => void) | undefined;
 let syncResumed: ((event: { payload: unknown }) => void) | undefined;
+let syncProgressSnapshot: ((event: { payload: unknown }) => void) | undefined;
 let systemThemeIsDark = false;
 let colorSchemeListeners = new Set<(event: MediaQueryListEvent) => void>();
 
@@ -89,10 +90,12 @@ beforeEach(() => {
   triggerSync = undefined;
   syncPaused = undefined;
   syncResumed = undefined;
+  syncProgressSnapshot = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
     if (event === "trigger-sync") triggerSync = handler;
     if (event === "sync-paused") syncPaused = handler as (event: { payload: unknown }) => void;
     if (event === "sync-resumed") syncResumed = handler as (event: { payload: unknown }) => void;
+    if (event === "sync-progress-snapshot") syncProgressSnapshot = handler as (event: { payload: unknown }) => void;
     return Promise.resolve(() => {});
   });
   tauri.isEnabled.mockResolvedValue(false);
@@ -129,6 +132,54 @@ describe("sync dashboard", () => {
 
     await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("resume_sync"));
     expect(tauri.invoke).not.toHaveBeenCalledWith("start_sync");
+  });
+
+  it("computes progress preferentially from totalBytes and completedBytes", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_sync_status") {
+        return Promise.resolve({
+          status: "RUNNING",
+          total: 10,
+          succeeded: 1,
+          failed: 0,
+          currentPath: "C:/photos/large.mov",
+          totalBytes: 10_000,
+          completedBytes: 7_500,
+        });
+      }
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve([]);
+      if (command === "get_upload_parallelism") return Promise.resolve(3);
+      return Promise.resolve();
+    });
+    render(Page);
+
+    expect(await screen.findByText("75% completed")).toBeInTheDocument();
+    expect(screen.getByText("large.mov")).toBeInTheDocument();
+  });
+
+  it("updates progress from sync-progress-snapshot with byte fields", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    renderAuthenticatedPage();
+    await waitFor(() => expect(syncProgressSnapshot).toBeTypeOf("function"));
+    syncProgressSnapshot?.({
+      payload: {
+        status: "RUNNING",
+        total: 50,
+        succeeded: 5,
+        failed: 0,
+        currentPath: "C:/photos/clip.mp4",
+        totalBytes: 20_000,
+        completedBytes: 12_000,
+      },
+    });
+
+    expect(await screen.findByText("60% completed")).toBeInTheDocument();
+    expect(screen.getByText("clip.mp4")).toBeInTheDocument();
   });
 
   it("changes sync controls from pause to resume when events arrive", async () => {
