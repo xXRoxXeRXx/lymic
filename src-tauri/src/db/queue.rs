@@ -129,6 +129,14 @@ pub async fn next_sync_queue_block(
     .await
 }
 
+pub async fn has_pending_sync_queue_items(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING')",
+    )
+    .fetch_one(pool)
+    .await
+}
+
 pub async fn set_sync_status(pool: &SqlitePool, status: &str) -> Result<SyncSnapshot, sqlx::Error> {
     sqlx::query("UPDATE sync_jobs SET status = ?, current_path = CASE WHEN ? = 'IDLE' THEN NULL ELSE current_path END WHERE id = 1")
         .bind(status).bind(status).execute(pool).await?;
@@ -200,12 +208,7 @@ async fn update_counts_and_snapshot(
 pub async fn complete_sync_job_if_finished(
     pool: &SqlitePool,
 ) -> Result<Option<SyncSnapshot>, sqlx::Error> {
-    let pending: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'PENDING'",
-    )
-    .fetch_one(pool)
-    .await?;
-    if pending != 0 {
+    if has_pending_sync_queue_items(pool).await? {
         return Ok(None);
     }
     Some(set_sync_status(pool, "IDLE").await).transpose()

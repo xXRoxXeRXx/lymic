@@ -18,7 +18,7 @@ use serde_json::json;
 use std::sync::{atomic::Ordering, Arc};
 use tauri::{Emitter, Manager};
 
-const SYNC_QUEUE_BLOCK_SIZE: i64 = 500;
+const SYNC_QUEUE_BLOCK_SIZE: i64 = 50;
 
 pub(crate) async fn run_sync_pipeline(
     app: tauri::AppHandle,
@@ -48,8 +48,6 @@ pub(crate) async fn run_sync_pipeline(
     let snapshot = db::enqueue_sync_assets(&pool, &queue_assets, &queue_failures)
         .await
         .map_err(|error| format!("Could not persist sync queue: {}", error))?;
-    let _ = app.emit("sync-progress-snapshot", &snapshot);
-
     let _sync_guard = match coordinator.lock.try_lock() {
         Ok(guard) => guard,
         Err(_) => {
@@ -64,6 +62,7 @@ pub(crate) async fn run_sync_pipeline(
         }
     };
     let _ = app.emit("sync-started", ());
+    let _ = app.emit("sync-progress-snapshot", &snapshot);
     audit_event(
         &app,
         audit_context.event(
@@ -83,8 +82,8 @@ pub(crate) async fn run_sync_pipeline(
         snapshot.completed_bytes.max(0) as u64,
     );
     loop {
-        // A currently executing process_sync_block is deliberately allowed to finish.
-        // This boundary is reached before fetching each following persistent block.
+        // The durable queue is materialized in a small window. A pause is observed
+        // before loading another window and inside the processor between new work.
         while coordinator.paused.load(Ordering::SeqCst) {
             let snapshot = db::set_sync_status(&pool, "PAUSED")
                 .await
@@ -157,10 +156,6 @@ pub(crate) async fn run_sync_pipeline(
             audit_event(&app, audit_context.event("sync.completed", if totals.failed == 0 { audit::Outcome::Success } else { audit::Outcome::Failure }, if totals.failed == 0 { audit::Severity::Info } else { audit::Severity::Warn }, "Synchronization completed", json!({ "processed": totals.processed, "uploaded": totals.uploaded, "failed": totals.failed })));
             return Ok(totals);
         }
-        let queued_paths: Vec<_> = queued
-            .iter()
-            .map(|asset| (asset.local_path.clone(), asset.last_modified, asset.size))
-            .collect();
         let block = ScanResult {
             files: queued
                 .into_iter()
@@ -179,32 +174,59 @@ pub(crate) async fn run_sync_pipeline(
             block,
             audit_context.clone(),
             progress.clone(),
+            coordinator.clone(),
         )
         .await?;
         totals.processed += result.processed;
         totals.uploaded += result.uploaded;
         totals.failed += result.failed;
-        let mut queue_results = Vec::with_capacity(queued_paths.len());
-        for (path, mtime, size) in queued_paths {
-            let status = if db::get_cached_hash(&pool, &path, mtime, size)
+        if let Some(queue_results) = terminal_queue_results(&result) {
+            let snapshot = db::finalize_queued_block(&pool, queue_results)
                 .await
-                .ok()
-                .flatten()
-                .is_some()
-            {
-                "SYNCED"
-            } else {
-                "FAILED"
-            };
-            queue_results.push((path, status.to_string()));
+                .map_err(|error| format!("Could not persist queue block: {}", error))?;
+            progress.sync_from_snapshot(
+                snapshot.total_bytes.max(0) as u64,
+                snapshot.completed_bytes.max(0) as u64,
+            );
+            let _ = app.emit("sync-progress-snapshot", &snapshot);
         }
-        let snapshot = db::finalize_queued_block(&pool, &queue_results)
-            .await
-            .map_err(|error| format!("Could not persist queue block: {}", error))?;
-        progress.sync_from_snapshot(
-            snapshot.total_bytes.max(0) as u64,
-            snapshot.completed_bytes.max(0) as u64,
+    }
+}
+
+fn terminal_queue_results(summary: &SyncSummary) -> Option<&[(String, String)]> {
+    (!summary.queue_results.is_empty()).then_some(&summary.queue_results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queue_window_is_limited_to_fifty_items() {
+        assert_eq!(SYNC_QUEUE_BLOCK_SIZE, 50);
+    }
+
+    #[test]
+    fn partial_window_only_finalizes_reported_terminal_results() {
+        let summary = SyncSummary {
+            processed: 2,
+            uploaded: 1,
+            failed: 1,
+            queue_results: vec![
+                ("one.jpg".to_string(), "SYNCED".to_string()),
+                ("two.jpg".to_string(), "FAILED".to_string()),
+            ],
+        };
+
+        assert_eq!(
+            terminal_queue_results(&summary),
+            Some(
+                [
+                    ("one.jpg".to_string(), "SYNCED".to_string()),
+                    ("two.jpg".to_string(), "FAILED".to_string()),
+                ]
+                .as_slice()
+            )
         );
-        let _ = app.emit("sync-progress-snapshot", &snapshot);
     }
 }

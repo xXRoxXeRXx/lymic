@@ -691,6 +691,7 @@ pub async fn get_failed_syncs(pool: &SqlitePool) -> Result<Vec<FailedSyncEntry>,
 #[cfg(test)]
 mod database_tests {
     use super::*;
+    use crate::db::has_pending_sync_queue_items;
     use sqlx::sqlite::SqlitePoolOptions;
 
     async fn test_pool() -> SqlitePool {
@@ -767,6 +768,37 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn queue_pages_after_the_first_window_is_finalized() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let paths: Vec<_> = (0..101).map(|index| format!("{index:03}.jpg")).collect();
+        let assets: Vec<_> = paths
+            .iter()
+            .map(|path| QueueAsset {
+                path,
+                size: 1,
+                mtime: 1,
+            })
+            .collect();
+        enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+
+        let first = next_sync_queue_block(&pool, 50).await.unwrap();
+        assert_eq!(first.len(), 50);
+        assert_eq!(first[0].local_path, "000.jpg");
+        assert_eq!(first[49].local_path, "049.jpg");
+        let first_results: Vec<_> = first
+            .iter()
+            .map(|asset| (asset.local_path.clone(), "SYNCED".to_string()))
+            .collect();
+        finalize_queued_block(&pool, &first_results).await.unwrap();
+
+        let second = next_sync_queue_block(&pool, 50).await.unwrap();
+        assert_eq!(second.len(), 50);
+        assert_eq!(second[0].local_path, "050.jpg");
+        assert_eq!(second[49].local_path, "099.jpg");
+    }
+
+    #[tokio::test]
     async fn paused_queue_accepts_new_items_without_resuming() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
@@ -822,6 +854,37 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn pending_queue_check_distinguishes_open_and_terminal_items() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        assert!(!has_pending_sync_queue_items(&pool).await.unwrap());
+
+        let assets = [
+            QueueAsset {
+                path: "one.jpg",
+                size: 1,
+                mtime: 1,
+            },
+            QueueAsset {
+                path: "two.jpg",
+                size: 1,
+                mtime: 1,
+            },
+        ];
+        enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+        assert!(has_pending_sync_queue_items(&pool).await.unwrap());
+
+        finalize_queued_block(&pool, &[("one.jpg".to_string(), "SYNCED".to_string())])
+            .await
+            .unwrap();
+        assert!(has_pending_sync_queue_items(&pool).await.unwrap());
+        finalize_queued_block(&pool, &[("two.jpg".to_string(), "SYNCED".to_string())])
+            .await
+            .unwrap();
+        assert!(!has_pending_sync_queue_items(&pool).await.unwrap());
+    }
+
+    #[tokio::test]
     async fn queue_tracks_total_and_completed_bytes_accurately() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
@@ -841,15 +904,17 @@ mod database_tests {
         assert_eq!(snapshot.total_bytes, 10_000);
         assert_eq!(snapshot.completed_bytes, 0);
 
-        let snapshot = finalize_queued_block(&pool, &[("small.jpg".to_string(), "SYNCED".to_string())])
-            .await
-            .unwrap();
+        let snapshot =
+            finalize_queued_block(&pool, &[("small.jpg".to_string(), "SYNCED".to_string())])
+                .await
+                .unwrap();
         assert_eq!(snapshot.total_bytes, 10_000);
         assert_eq!(snapshot.completed_bytes, 1_000);
 
-        let snapshot = finalize_queued_block(&pool, &[("large.mov".to_string(), "FAILED".to_string())])
-            .await
-            .unwrap();
+        let snapshot =
+            finalize_queued_block(&pool, &[("large.mov".to_string(), "FAILED".to_string())])
+                .await
+                .unwrap();
         assert_eq!(snapshot.total_bytes, 10_000);
         assert_eq!(snapshot.completed_bytes, 10_000);
     }

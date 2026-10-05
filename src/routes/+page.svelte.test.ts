@@ -26,6 +26,7 @@ let watchedFolders: WatchedFolder[] = [];
 let failedSyncs: FailedSyncEntry[] = [];
 let uploadParallelism = 3;
 let triggerSync: (() => void) | undefined;
+let syncStarted: (() => void) | undefined;
 let syncPaused: ((event: { payload: unknown }) => void) | undefined;
 let syncResumed: ((event: { payload: unknown }) => void) | undefined;
 let syncProgressSnapshot: ((event: { payload: unknown }) => void) | undefined;
@@ -88,11 +89,13 @@ beforeEach(() => {
   failedSyncs = [];
   uploadParallelism = 3;
   triggerSync = undefined;
+  syncStarted = undefined;
   syncPaused = undefined;
   syncResumed = undefined;
   syncProgressSnapshot = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
     if (event === "trigger-sync") triggerSync = handler;
+    if (event === "sync-started") syncStarted = handler;
     if (event === "sync-paused") syncPaused = handler as (event: { payload: unknown }) => void;
     if (event === "sync-resumed") syncResumed = handler as (event: { payload: unknown }) => void;
     if (event === "sync-progress-snapshot") syncProgressSnapshot = handler as (event: { payload: unknown }) => void;
@@ -159,6 +162,7 @@ describe("sync dashboard", () => {
     render(Page);
 
     expect(await screen.findByText("75% completed")).toBeInTheDocument();
+    expect(screen.getByText("Processed: 1 / 10")).toBeInTheDocument();
     expect(screen.getByText("large.mov")).toBeInTheDocument();
   });
 
@@ -179,7 +183,46 @@ describe("sync dashboard", () => {
     });
 
     expect(await screen.findByText("60% completed")).toBeInTheDocument();
+    expect(screen.getByText("Processed: 5 / 50")).toBeInTheDocument();
     expect(screen.getByText("clip.mp4")).toBeInTheDocument();
+  });
+
+  it("counts succeeded and failed queue entries as processed", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    renderAuthenticatedPage();
+    await waitFor(() => expect(syncProgressSnapshot).toBeTypeOf("function"));
+    syncProgressSnapshot?.({
+      payload: {
+        status: "PAUSED",
+        total: 10,
+        succeeded: 3,
+        failed: 2,
+        currentPath: "C:/photos/five.jpg",
+      },
+    });
+
+    expect(await screen.findByText("Processed: 5 / 10")).toBeInTheDocument();
+  });
+
+  it("keeps snapshot progress when sync-started follows it", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    renderAuthenticatedPage();
+    await waitFor(() => expect(syncProgressSnapshot).toBeTypeOf("function"));
+    syncProgressSnapshot?.({
+      payload: {
+        status: "RUNNING",
+        total: 50,
+        succeeded: 3,
+        failed: 2,
+        currentPath: "C:/photos/five.jpg",
+        totalBytes: 100,
+        completedBytes: 20,
+      },
+    });
+    syncStarted?.();
+
+    expect(await screen.findByText("20% completed")).toBeInTheDocument();
+    expect(screen.getByText("Processed: 5 / 50")).toBeInTheDocument();
   });
 
   it("changes sync controls from pause to resume when events arrive", async () => {
@@ -189,6 +232,7 @@ describe("sync dashboard", () => {
     syncPaused?.({ payload: { status: "PAUSED", total: 2, succeeded: 0, failed: 0, currentPath: "C:/photos/one.jpg" } });
 
     expect(await screen.findByRole("button", { name: "Resume" })).toBeEnabled();
+    expect(screen.getByText("Processed: 0 / 2")).toBeInTheDocument();
     syncResumed?.({ payload: { status: "RUNNING", total: 2, succeeded: 0, failed: 0, currentPath: "C:/photos/one.jpg" } });
     expect(await screen.findByRole("button", { name: "Pause" })).toBeEnabled();
   });

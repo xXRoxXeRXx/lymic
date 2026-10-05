@@ -26,6 +26,8 @@
   let syncStatus = $state<"idle" | "syncing" | "paused" | "error">("idle");
   let lastSync = $state("Noch nie");
   let progress = $state(0);
+  let processed = $state(0);
+  let syncTotal = $state(0);
   let currentFile = $state("");
   let watchedFolders = $state<WatchedFolder[]>([]);
   let failedSyncs = $state<FailedSyncEntry[]>([]);
@@ -163,6 +165,8 @@
   function applySyncSnapshot(snapshot: SyncSnapshot | null | undefined) {
     if (!snapshot) return;
     syncStatus = snapshot.status === "PAUSED" ? "paused" : snapshot.status === "RUNNING" ? "syncing" : snapshot.failed > 0 ? "error" : "idle";
+    processed = snapshot.succeeded + snapshot.failed;
+    syncTotal = snapshot.total;
     if (snapshot.totalBytes && snapshot.totalBytes > 0) {
       progress = Math.min(100, Math.round(((snapshot.completedBytes ?? 0) / snapshot.totalBytes) * 100));
     } else if (snapshot.total > 0) {
@@ -201,7 +205,6 @@
           if (progressResetTimer) clearTimeout(progressResetTimer);
           progressResetTimer = undefined;
           syncStatus = "syncing";
-          progress = 0;
         }),
         listen("sync-progress-snapshot", (event) => {
           if (componentMounted) applySyncSnapshot(event.payload as SyncSnapshot);
@@ -322,6 +325,8 @@
     progressResetTimer = undefined;
     syncStatus = "syncing";
     progress = 0;
+    processed = 0;
+    syncTotal = 0;
     try {
       const summary = await invoke<SyncSummary>("start_sync");
       // The command response is reliable even when an event is missed.
@@ -368,6 +373,8 @@
     progressResetTimer = undefined;
     syncStatus = "syncing";
     progress = 0;
+    processed = 0;
+    syncTotal = 0;
     try {
       const summary = await invoke<SyncSummary>("retry_failed_syncs");
       await finishSync(summary);
@@ -645,6 +652,9 @@
                 <span>{progress}% {$t('completed')}</span>
                 <span class="truncate max-w-[250px]">{currentFile}</span>
               </div>
+              <p class="text-xs font-medium text-slate-400 dark:text-slate-400">
+                {$t('processed')}: {processed.toLocaleString($locale === 'de' ? 'de-DE' : 'en-US')} / {syncTotal.toLocaleString($locale === 'de' ? 'de-DE' : 'en-US')}
+              </p>
               {#if syncStatus === 'paused'}
                 <p class="text-xs text-amber-600 dark:text-amber-400">{$t('sync_paused_hint')}</p>
               {/if}

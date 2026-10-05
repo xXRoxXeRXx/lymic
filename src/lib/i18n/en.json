@@ -16,6 +16,7 @@
   "syncing": "Syncing...",
   "sync_requires_folder": "Add a folder before starting a sync.",
   "completed": "completed",
+  "processed": "Processed",
   "last_sync": "Last Sync",
   "server": "Server",
   "synced_folders": "Synced Folders",

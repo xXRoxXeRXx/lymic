@@ -142,10 +142,10 @@ pub(crate) async fn resume_sync(
     // scan result from the persisted queue rather than rescanning watched folders.
     if let Ok(guard) = sync_coordinator.0.lock.try_lock() {
         drop(guard);
-        let queued = db::next_sync_queue_block(pool.inner(), 100_000)
+        let has_pending = db::has_pending_sync_queue_items(pool.inner())
             .await
             .map_err(|error| error.to_string())?;
-        if !queued.is_empty() {
+        if has_pending {
             let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
             let audit_context = SyncAuditContext::from_credentials(
                 &credentials.server_url,

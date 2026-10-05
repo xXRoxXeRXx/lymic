@@ -16,6 +16,7 @@
   "syncing": "Synchronisiere...",
   "sync_requires_folder": "Füge vor dem Start einer Synchronisierung einen Ordner hinzu.",
   "completed": "abgeschlossen",
+  "processed": "Verarbeitet",
   "last_sync": "Letzter Sync",
   "server": "Server",
   "synced_folders": "Synchronisierte Ordner",

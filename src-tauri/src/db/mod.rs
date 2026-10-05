@@ -10,8 +10,8 @@ pub use folders::{add_folder, get_folders, remove_folder, restore_folder, Watche
 pub use init::{init, init_at_path, DatabaseStatus, DbInitResult};
 pub use queue::{
     complete_sync_job_if_finished, enqueue_sync_assets, finalize_queued_block, get_sync_snapshot,
-    next_sync_queue_block, recover_sync_job, set_sync_status, QueueAsset, QueuedAsset,
-    SyncSnapshot,
+    has_pending_sync_queue_items, next_sync_queue_block, recover_sync_job, set_sync_status,
+    QueueAsset, QueuedAsset, SyncSnapshot,
 };
 pub use settings::{
     get_upload_parallelism, set_upload_parallelism, validate_upload_parallelism,
