@@ -4,16 +4,15 @@
   import { confirm, open } from "@tauri-apps/plugin-dialog";
   import { listen } from "@tauri-apps/api/event";
   import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-  import {
-    Settings as SettingsIcon, FolderPlus, Folder,
-    Trash2, ArrowLeft, Cloud, CloudUpload,
-    AlertCircle, Info, RefreshCw, Clock, X, User,
-    ChevronRight, ExternalLink, Minus, Activity, Power, Globe, Monitor, Sun, Moon
-  } from "lucide-svelte";
+  import { Settings as SettingsIcon, AlertCircle, X } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import { isSupportedLocale } from "../lib/i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
+  import LoginView from "#lib/components/LoginView.svelte";
+  import DashboardView from "#lib/components/DashboardView.svelte";
+  import SettingsView from "#lib/components/SettingsView.svelte";
+  import type { FailedSyncEntry, LogEntry, SyncStatus, ThemePreference, WatchedFolder } from "../lib/components/types";
 
   // --- State ---
   let isAuthenticated = $state(false);
@@ -23,7 +22,7 @@
   let apiKey = $state("");
   let isLoggingIn = $state(false);
   let loginError = $state("");
-  let syncStatus = $state<"idle" | "syncing" | "paused" | "error">("idle");
+  let syncStatus = $state<SyncStatus>("idle");
   let lastSync = $state("Noch nie");
   let progress = $state(0);
   let processed = $state(0);
@@ -31,7 +30,6 @@
   let currentFile = $state("");
   let watchedFolders = $state<WatchedFolder[]>([]);
   let failedSyncs = $state<FailedSyncEntry[]>([]);
-  let showFailedSyncs = $state(false);
   let isAutostartEnabled = $state(false);
   let logs = $state<LogEntry[]>([]);
   let actionError = $state("");
@@ -41,7 +39,6 @@
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
   let isSyncActionPending = $state(false);
 
-  type ThemePreference = "system" | "light" | "dark";
   const themeStorageKey = "lymic-theme";
 
   function isThemePreference(value: string | null): value is ThemePreference {
@@ -94,13 +91,6 @@
     invoke('update_locale', { locale: currentLocale }).catch(console.error);
   });
 
-  interface LogEntry {
-    id: number;
-    time: string;
-    level: "info" | "success" | "error" | "warn";
-    message: string;
-  }
-
   interface UiLogMessage {
     level?: string;
     message?: string;
@@ -121,18 +111,6 @@
     currentPath: string | null;
     totalBytes?: number;
     completedBytes?: number;
-  }
-
-  interface WatchedFolder {
-    id: number;
-    path: string;
-    recursive: boolean;
-    target_album_id: string | null;
-  }
-
-  interface FailedSyncEntry {
-    localPath: string;
-    failureReason: string;
   }
 
   let logCounter = 0;
@@ -496,7 +474,6 @@
       apiKey = "";
       currentUserName = "";
       failedSyncs = [];
-      showFailedSyncs = false;
       currentView = "dashboard";
     } catch (e) {
       console.error("Logout failed", e);
@@ -571,330 +548,44 @@
         </div>
       {/if}
       
-      <!-- ===== LOGIN VIEW ===== -->
       {#if !isAuthenticated}
-        <div class="max-w-md w-full mx-auto space-y-10 animate-in">
-          <div class="text-center space-y-4">
-            <!-- h2 → h1; the aside's h1 is in a separate sectioning element -->
-            <h1 class="text-3xl font-bold text-slate-900 dark:text-slate-100">{$t('login')}</h1>
-            <p class="text-slate-500 dark:text-slate-400 text-sm">{$t('login_subtitle')}</p>
-          </div>
-
-          <div class="glass-pane space-y-8">
-            <div class="space-y-6">
-              <!-- Added for/id association so labels activate their inputs on click -->
-              <div class="space-y-2">
-                <label for="server-url" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider ml-1">{$t('server_url')}</label>
-                <input
-                  id="server-url"
-                  type="text"
-                  placeholder={$t('server_url_placeholder')}
-                  class="glass-input"
-                  bind:value={serverUrl}
-                />
-              </div>
-              <div class="space-y-2">
-                <label for="api-key" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider ml-1">{$t('api_key')}</label>
-                <input
-                  id="api-key"
-                  type="password"
-                  placeholder={$t('api_key_placeholder')}
-                  class="glass-input"
-                  bind:value={apiKey}
-                />
-              </div>
-            </div>
-
-            {#if loginError}
-              <div class="p-4 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3">
-                <AlertCircle class="w-4 h-4" />
-                <span>{loginError}</span>
-              </div>
-            {/if}
-
-            <button
-              class="btn-action w-full"
-              onclick={handleLogin}
-              disabled={isLoggingIn || !serverUrl || !apiKey}
-            >
-              {isLoggingIn ? $t('connect') : $t('login')}
-            </button>
-          </div>
-        </div>
+        <LoginView bind:serverUrl bind:apiKey {isLoggingIn} {loginError} onLogin={handleLogin} />
 
       <!-- ===== DASHBOARD VIEW ===== -->
       {:else if currentView === "dashboard"}
-        <!-- Sync Status Card -->
-        <section class="glass-pane space-y-8 animate-in">
-          <div class="flex items-center justify-between">
-            <div class="space-y-1">
-              <div class="flex items-center gap-2">
-                  <div class="w-2 h-2 rounded-full {syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : syncStatus === 'paused' ? 'bg-amber-500' : syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500'}"></div>
-                  <span class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('status')}</span>
-              </div>
-              <h3 class="text-3xl font-bold text-slate-900 dark:text-slate-100">
-                  {syncStatus === 'syncing' ? $t('sync_running') : syncStatus === 'paused' ? $t('sync_paused') : syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
-              </h3>
-            </div>
-            <button
-              class="btn-action"
-              onclick={handleSyncAction}
-              disabled={isSyncActionPending || ((syncStatus !== 'syncing' && syncStatus !== 'paused') && watchedFolders.length === 0)}
-              title={watchedFolders.length === 0 ? $t('sync_requires_folder') : undefined}
-              aria-describedby={watchedFolders.length === 0 ? 'sync-requires-folder' : undefined}
-            >
-              {syncStatus === 'syncing' ? $t('pause_sync') : syncStatus === 'paused' ? $t('resume_sync') : $t('sync_now')}
-            </button>
-            {#if watchedFolders.length === 0}
-              <span id="sync-requires-folder" class="sr-only">{$t('sync_requires_folder')}</span>
-            {/if}
-          </div>
-
-          {#if syncStatus === 'syncing' || syncStatus === 'paused'}
-            <div class="space-y-3">
-              <div class="glass-progress">
-                <div class="glass-progress-fill" style="width: {progress}%;"></div>
-              </div>
-              <div class="flex justify-between text-xs font-medium text-slate-400 dark:text-slate-400">
-                <span>{progress}% {$t('completed')}</span>
-                <span class="truncate max-w-[250px]">{currentFile}</span>
-              </div>
-              <p class="text-xs font-medium text-slate-400 dark:text-slate-400">
-                {$t('processed')}: {processed.toLocaleString($locale === 'de' ? 'de-DE' : 'en-US')} / {syncTotal.toLocaleString($locale === 'de' ? 'de-DE' : 'en-US')}
-              </p>
-              {#if syncStatus === 'paused'}
-                <p class="text-xs text-amber-600 dark:text-amber-400">{$t('sync_paused_hint')}</p>
-              {/if}
-            </div>
-          {:else}
-            <div class="flex gap-10 pt-2 border-t border-black/5 dark:border-white/10">
-              <div class="space-y-1">
-                <p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('last_sync')}</p>
-                <p class="font-semibold text-slate-600 dark:text-slate-300">{lastSync === 'Noch nie' ? $t('never') : lastSync}</p>
-              </div>
-              <div class="space-y-1">
-                <p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('server')}</p>
-                <p class="font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[150px]">{serverUrl.replace(/https?:\/\//, '')}</p>
-              </div>
-            </div>
-          {/if}
-
-          {#if failedSyncs.length > 0}
-            <div class="border-t border-red-100 dark:border-red-900/60 pt-5 space-y-4">
-              <div class="flex items-center justify-between gap-4">
-                <button
-                  type="button"
-                  class="flex items-center gap-2 text-sm font-bold text-red-700 dark:text-red-300 hover:text-red-800 dark:hover:text-red-200"
-                  aria-expanded={showFailedSyncs}
-                  aria-controls="failed-sync-details-list"
-                  onclick={() => showFailedSyncs = !showFailedSyncs}
-                >
-                  <AlertCircle class="w-4 h-4" />
-                  {$t('failed_sync_count', { values: { count: failedSyncs.length } })}
-                  <ChevronRight class="w-4 h-4 transition-transform {showFailedSyncs ? 'rotate-90' : ''}" />
-                </button>
-                <button
-                  type="button"
-                  class="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:text-slate-300 dark:disabled:text-slate-600"
-                  onclick={handleRetryFailedSyncs}
-                  disabled={syncStatus === 'syncing'}
-                >
-                  {$t('retry_failed_syncs')}
-                </button>
-              </div>
-              {#if showFailedSyncs}
-                <div id="failed-sync-details-list" class="max-h-48 overflow-y-auto space-y-3 pr-2" aria-label={$t('failed_sync_details')}>
-                  {#each failedSyncs as failedSync}
-                    <div class="rounded-lg bg-red-50 dark:bg-red-950/50 p-3 text-xs">
-                      <p class="break-all font-mono text-red-800 dark:text-red-200">{failedSync.localPath}</p>
-                      <p class="mt-1 text-red-600 dark:text-red-300">{failedSync.failureReason || $t('failure_details_unavailable')}</p>
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/if}
-        </section>
-
-        <!-- Folders & Logs Grid -->
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
-          
-          <!-- Folder Management -->
-          <div class="space-y-6 animate-in" style="animation-delay: 100ms">
-            <div class="flex items-center justify-between px-2">
-              <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-widest">{$t('synced_folders')}</h4>
-              <button class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors" 
-                      onclick={handleAddFolder}>
-                <FolderPlus class="w-4 h-4" />
-              </button>
-            </div>
-            
-            <div class="space-y-4">
-              {#each watchedFolders as folder}
-                <div class="glass-pane !p-4 flex items-center justify-between group">
-                  <div class="flex items-center gap-4 min-w-0">
-                    <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/50 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                      <Folder class="w-5 h-5" />
-                    </div>
-                    <div class="min-w-0">
-                      <p class="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{folder.path.split(/[/\\]/).pop()}</p>
-                      <p class="text-[10px] font-mono text-slate-400 dark:text-slate-400 truncate">{folder.path}</p>
-                    </div>
-                  </div>
-                  <button
-                    class="p-2 text-slate-300 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                    aria-label={`${$t('remove_folder')}: ${folder.path}`}
-                    onclick={() => handleRemoveFolder(folder.id)}
-                  >
-                    <Trash2 class="w-4 h-4" />
-                  </button>
-                </div>
-              {/each}
-              {#if watchedFolders.length === 0}
-                  <div class="glass-pane !p-12 text-center border-dashed border-2">
-                    <p class="text-sm text-slate-400 dark:text-slate-400 italic">{$t('no_folders')}</p>
-                  </div>
-              {/if}
-            </div>
-          </div>
-
-          <!-- Activity Log -->
-          <div class="space-y-6 animate-in" style="animation-delay: 200ms">
-             <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-widest px-2">{$t('activity_log')}</h4>
-             <!-- Was slicing to 10 in the template while storing 50 in state — now shows all stored entries -->
-             <div class="glass-pane !p-6 h-full max-h-[400px] overflow-y-auto space-y-4 selectable">
-               {#if logs.length === 0}
-                  <p class="text-xs text-slate-400 dark:text-slate-400 italic">{$t('no_activity')}</p>
-               {:else}
-                 {#each logs as log}
-                   <div class="flex items-start gap-4 text-[11px] leading-relaxed group">
-                      <span class="text-slate-400 dark:text-slate-400 font-mono w-14 shrink-0">{log.time}</span>
-                      <span class="text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors">{log.message}</span>
-                   </div>
-                 {/each}
-               {/if}
-             </div>
-          </div>
-        </div>
-
-      <!-- ===== SETTINGS VIEW ===== -->
+        <DashboardView
+          {syncStatus}
+          {lastSync}
+          {progress}
+          {processed}
+          {syncTotal}
+          {currentFile}
+          {serverUrl}
+          {watchedFolders}
+          {failedSyncs}
+          {logs}
+          {isSyncActionPending}
+          onSyncAction={handleSyncAction}
+          onRetryFailedSyncs={handleRetryFailedSyncs}
+          onAddFolder={handleAddFolder}
+          onRemoveFolder={handleRemoveFolder}
+        />
+       <!-- ===== SETTINGS VIEW ===== -->
       {:else if currentView === "settings"}
-        <div class="space-y-10 animate-in">
-          
-          <div class="glass-pane space-y-2 !p-0 overflow-hidden">
-            <div class="p-8 flex items-center justify-between border-b border-black/5 dark:border-white/10">
-              <div class="space-y-1">
-                <p class="font-bold text-slate-900 dark:text-slate-100">{$t('autostart')}</p>
-                <p class="text-xs text-slate-500 dark:text-slate-400">{$t('autostart_subtitle')}</p>
-              </div>
-              <button
-                class="w-12 h-6 border rounded-full relative transition-all {isAutostartEnabled ? 'bg-blue-600 border-blue-600' : 'bg-slate-200 dark:bg-slate-700 border-slate-200 dark:border-slate-700'}"
-                onclick={toggleAutostart}
-                aria-label={isAutostartEnabled ? $t('autostart_disable') : $t('autostart_enable')}
-                aria-pressed={isAutostartEnabled}
-              >
-                <div class="absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all {isAutostartEnabled ? 'translate-x-6' : 'translate-x-0'}"></div>
-              </button>
-            </div>
-
-            <div class="p-8 flex items-center justify-between border-b border-black/5 dark:border-white/10">
-              <div class="space-y-1">
-                <p class="font-bold text-slate-900 dark:text-slate-100">{$t('language')}</p>
-                <p class="text-xs text-slate-500 dark:text-slate-400">{$t('language_subtitle')}</p>
-              </div>
-              <div class="flex gap-2">
-                <button 
-                  class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'en' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}"
-                  onclick={() => $locale = 'en'}
-                  aria-pressed={$locale === 'en'}>
-                  EN
-                </button>
-                <button 
-                  class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'de' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}"
-                  onclick={() => $locale = 'de'}
-                  aria-pressed={$locale === 'de'}>
-                  DE
-                </button>
-              </div>
-            </div>
-
-            <div class="p-8 flex items-center justify-between gap-6 border-b border-black/5 dark:border-white/10">
-              <div class="space-y-1">
-                <p class="font-bold text-slate-900 dark:text-slate-100">{$t('appearance')}</p>
-                <p class="text-xs text-slate-500 dark:text-slate-400">{$t('appearance_subtitle')}</p>
-              </div>
-              <div class="flex gap-2" role="group" aria-label={$t('appearance')}>
-                <button
-                  type="button"
-                  class="px-3 py-2 rounded-lg text-xs font-bold transition-colors {themePreference === 'system' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}"
-                  aria-pressed={themePreference === 'system'}
-                  title={$t('theme_system')}
-                  onclick={() => setThemePreference('system')}
-                >
-                  <Monitor class="w-4 h-4" />
-                  <span class="sr-only">{$t('theme_system')}</span>
-                </button>
-                <button
-                  type="button"
-                  class="px-3 py-2 rounded-lg text-xs font-bold transition-colors {themePreference === 'light' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}"
-                  aria-pressed={themePreference === 'light'}
-                  title={$t('theme_light')}
-                  onclick={() => setThemePreference('light')}
-                >
-                  <Sun class="w-4 h-4" />
-                  <span class="sr-only">{$t('theme_light')}</span>
-                </button>
-                <button
-                  type="button"
-                  class="px-3 py-2 rounded-lg text-xs font-bold transition-colors {themePreference === 'dark' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}"
-                  aria-pressed={themePreference === 'dark'}
-                  title={$t('theme_dark')}
-                  onclick={() => setThemePreference('dark')}
-                >
-                  <Moon class="w-4 h-4" />
-                  <span class="sr-only">{$t('theme_dark')}</span>
-                </button>
-              </div>
-            </div>
-
-            <div class="p-8 flex items-center justify-between gap-6 border-b border-black/5 dark:border-white/10">
-              <div class="space-y-1">
-                <label for="upload-parallelism" class="font-bold text-slate-900 dark:text-slate-100">{$t('upload_parallelism')}</label>
-                <p class="text-xs text-slate-500 dark:text-slate-400">{$t('upload_parallelism_subtitle')}</p>
-              </div>
-              <select
-                id="upload-parallelism"
-                class="glass-input !w-auto !py-2 text-sm font-semibold"
-                value={uploadParallelism}
-                onchange={handleUploadParallelismChange}
-                disabled={isSavingUploadParallelism}
-              >
-                {#each [1, 2, 3, 4, 5, 6, 7, 8] as value}
-                  <option value={value}>{value}</option>
-                {/each}
-              </select>
-            </div>
-
-            <div class="p-8 flex items-center justify-between">
-              <div class="space-y-1">
-                <p class="font-bold text-slate-900 dark:text-slate-100">{$t('account')}</p>
-                {#if currentUserName}
-                  <p class="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                    <User class="w-4 h-4 text-slate-400 dark:text-slate-400" />
-                    {$t('logged_in_as')} {currentUserName}
-                  </p>
-                {/if}
-                <p class="text-xs text-slate-500 dark:text-slate-400">{$t('logged_in_at')} {serverUrl}</p>
-              </div>
-              <!-- Was fire-and-forget inline onclick; now uses async handleLogout -->
-              <button class="text-xs font-bold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 px-4 py-2 rounded-lg transition-colors"
-                      onclick={handleLogout}>
-                {$t('logout')}
-              </button>
-            </div>
-          </div>
-        </div>
-      {/if}
+        <SettingsView
+          {currentUserName}
+          {serverUrl}
+          {isAutostartEnabled}
+          {themePreference}
+          {uploadParallelism}
+          {isSavingUploadParallelism}
+          onToggleAutostart={toggleAutostart}
+          onLocaleChange={(nextLocale) => $locale = nextLocale}
+          onThemeChange={setThemePreference}
+          onUploadParallelismChange={handleUploadParallelismChange}
+          onLogout={handleLogout}
+        />
+       {/if}
 
     </main>
 
