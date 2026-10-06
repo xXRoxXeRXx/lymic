@@ -30,6 +30,7 @@ let syncStarted: (() => void) | undefined;
 let syncPaused: ((event: { payload: unknown }) => void) | undefined;
 let syncResumed: ((event: { payload: unknown }) => void) | undefined;
 let syncProgressSnapshot: ((event: { payload: unknown }) => void) | undefined;
+let logMessage: ((event: { payload: unknown }) => void) | undefined;
 let systemThemeIsDark = false;
 let colorSchemeListeners = new Set<(event: MediaQueryListEvent) => void>();
 
@@ -93,12 +94,14 @@ beforeEach(() => {
   syncPaused = undefined;
   syncResumed = undefined;
   syncProgressSnapshot = undefined;
+  logMessage = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
     if (event === "trigger-sync") triggerSync = handler;
     if (event === "sync-started") syncStarted = handler;
     if (event === "sync-paused") syncPaused = handler as (event: { payload: unknown }) => void;
     if (event === "sync-resumed") syncResumed = handler as (event: { payload: unknown }) => void;
     if (event === "sync-progress-snapshot") syncProgressSnapshot = handler as (event: { payload: unknown }) => void;
+    if (event === "log-message") logMessage = handler as (event: { payload: unknown }) => void;
     return Promise.resolve(() => {});
   });
   tauri.isEnabled.mockResolvedValue(false);
@@ -378,6 +381,41 @@ describe("sync dashboard", () => {
     await fireEvent.click(await screen.findByRole("button", { name: "Sync Now" }));
 
     await waitFor(() => expect(screen.getByText("Sync completed with errors")).toBeInTheDocument());
+  });
+});
+
+describe("activity log", () => {
+  it("renders an ERROR payload with its formatted event timestamp", async () => {
+    renderAuthenticatedPage();
+    await waitFor(() => expect(logMessage).toBeTypeOf("function"));
+    const timestamp = 1_700_000_000_123;
+
+    logMessage?.({ payload: { level: "ERROR", message: "Upload failed", timestamp } });
+
+    expect(await screen.findByText("Upload failed")).toBeInTheDocument();
+    const expectedTime = new Date(timestamp)
+      .toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+    expect(screen.getByText(expectedTime)).toBeInTheDocument();
+  });
+
+  it("accepts SUCCESS and WARN structured payloads", async () => {
+    renderAuthenticatedPage();
+    await waitFor(() => expect(logMessage).toBeTypeOf("function"));
+
+    logMessage?.({ payload: { level: "SUCCESS", message: "Sync completed", timestamp: 1_700_000_000_000 } });
+    logMessage?.({ payload: { level: "WARN", message: "Storage is almost full", timestamp: 1_700_000_001_000 } });
+
+    expect(await screen.findByText("Sync completed")).toBeInTheDocument();
+    expect(screen.getByText("Storage is almost full")).toBeInTheDocument();
+  });
+
+  it("defaults unknown levels and malformed timestamps without interrupting logging", async () => {
+    renderAuthenticatedPage();
+    await waitFor(() => expect(logMessage).toBeTypeOf("function"));
+
+    logMessage?.({ payload: { level: "UNKNOWN", message: "Unrecognized level", timestamp: Number.NaN } });
+
+    expect(await screen.findByText("Unrecognized level")).toBeInTheDocument();
   });
 });
 

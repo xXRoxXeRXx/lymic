@@ -99,7 +99,12 @@
     time: string;
     level: "info" | "success" | "error" | "warn";
     message: string;
-    raw: string;
+  }
+
+  interface UiLogMessage {
+    level?: string;
+    message?: string;
+    timestamp?: number;
   }
 
   interface SyncSummary {
@@ -146,20 +151,22 @@
     return $t("unknown_error");
   }
 
-  function parseLog(raw: string): LogEntry {
-    const timeMatch = raw.match(/\[(\d{2}:\d{2}:\d{2})\]/);
-    const levelMatch = raw.match(/\[(INFO|ERROR|SUCCESS|WARN)\]/i);
-    const time = timeMatch?.[1] ?? new Date().toLocaleTimeString($locale === 'de' ? 'de-DE' : 'en-US', { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    const rawLevel = (levelMatch?.[1] ?? "INFO").toUpperCase();
-
+  function toLogEntry(payload: UiLogMessage | null | undefined): LogEntry {
     let level: LogEntry["level"] = "info";
-    if (rawLevel === "ERROR") level = "error";
-    else if (rawLevel === "SUCCESS") level = "success";
-    else if (rawLevel === "WARN") level = "warn";
+    switch (payload?.level) {
+      case "ERROR": level = "error"; break;
+      case "SUCCESS": level = "success"; break;
+      case "WARN": level = "warn"; break;
+    }
 
-    let message = raw.replace(/\[\d{2}:\d{2}:\d{2}\]/, "").replace(/\[(INFO|ERROR|SUCCESS|WARN)\]/i, "").trim();
-
-    return { id: ++logCounter, time, level, message, raw };
+    const timestamp = typeof payload?.timestamp === "number" && Number.isFinite(payload.timestamp)
+      ? payload.timestamp
+      : Date.now();
+    const time = new Date(timestamp).toLocaleTimeString(
+      $locale === 'de' ? 'de-DE' : 'en-US',
+      { hour: "2-digit", minute: "2-digit", hour12: false },
+    );
+    return { id: ++logCounter, time, level, message: payload?.message ?? "" };
   }
 
   function applySyncSnapshot(snapshot: SyncSnapshot | null | undefined) {
@@ -226,7 +233,7 @@
         }),
         listen("log-message", (event) => {
           if (!componentMounted) return;
-          const entry = parseLog(event.payload as string);
+          const entry = toLogEntry(event.payload as UiLogMessage);
           logs = [entry, ...logs].slice(0, 50);
         }),
         listen("sync-idle", () => {
@@ -270,7 +277,7 @@
         try {
           const recoveryNotice = await invoke<string | null>("get_database_recovery_notice");
           if (recoveryNotice && componentMounted) {
-            const entry = parseLog(`[WARN] ${recoveryNotice}`);
+            const entry = toLogEntry({ level: "WARN", message: recoveryNotice, timestamp: Date.now() });
             logs = [entry, ...logs].slice(0, 50);
           }
         } catch (e) {
@@ -761,7 +768,7 @@
                {:else}
                  {#each logs as log}
                    <div class="flex items-start gap-4 text-[11px] leading-relaxed group">
-                      <span class="text-slate-400 dark:text-slate-400 font-mono w-14 shrink-0">{log.time.split(':').slice(0,2).join(':')}</span>
+                      <span class="text-slate-400 dark:text-slate-400 font-mono w-14 shrink-0">{log.time}</span>
                       <span class="text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors">{log.message}</span>
                    </div>
                  {/each}

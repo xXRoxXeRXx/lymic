@@ -1,7 +1,7 @@
 mod event;
 mod writer;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 pub use event::{
     actor_id, audit_safe_error, upload_details, AuditEvent, Outcome, Severity, SyncAuditContext,
@@ -12,11 +12,7 @@ pub use writer::{
 };
 
 fn emit_audit_failure(app: &AppHandle, message: &str) {
-    let timestamp = chrono::Local::now().format("%H:%M:%S");
-    let _ = app.emit(
-        "log-message",
-        format!("[{}] [ERROR] {}", timestamp, message),
-    );
+    crate::app::events::log_to_ui(app, "ERROR", message);
 }
 
 pub fn audit_event(app: &AppHandle, event: AuditEvent) {
