@@ -56,7 +56,14 @@ pub(crate) fn calculate_stable_checksums(path: &str) -> std::io::Result<(Checksu
 
 fn scan_folder_for_media(path: &Path) -> ScanResult {
     let mut result = ScanResult::default();
-    for entry in walkdir::WalkDir::new(path) {
+    for entry in walkdir::WalkDir::new(path)
+        .into_iter()
+        .filter_entry(|entry| {
+            let name = entry.file_name().to_string_lossy();
+            !name.starts_with('.')
+                && !matches!(name.as_ref(), "@eaDir" | "@SynoResource" | "#recycle")
+        })
+    {
         match entry {
             Ok(entry) if entry.file_type().is_file() && is_media_file(entry.path()) => {
                 let file_path = entry.path().to_string_lossy().to_string();
@@ -193,6 +200,38 @@ mod tests {
         assert_eq!(result.files.len(), 1);
         assert_eq!(result.overlapping_folders.len(), 1);
         assert!(!result.files[0].path.starts_with(r"\\?\"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn folder_scan_skips_hidden_and_nas_metadata_entries() {
+        let root = temporary_directory();
+        let media_path = root.join("Vacation").join("photo.jpg");
+        let excluded_media_paths = [
+            root.join(".cache").join("cached.jpg"),
+            root.join("@eaDir").join("thumbnail.jpg"),
+            root.join("Vacation")
+                .join("@eaDir")
+                .join("SYNOPHOTO_THUMB_SM.jpg"),
+            root.join("@SynoResource").join("resource.jpg"),
+            root.join("#recycle").join("deleted.jpg"),
+            root.join(".hidden.jpg"),
+        ];
+
+        std::fs::create_dir_all(media_path.parent().unwrap()).unwrap();
+        std::fs::write(&media_path, b"test image").unwrap();
+        for path in &excluded_media_paths {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).unwrap();
+            }
+            std::fs::write(path, b"excluded image").unwrap();
+        }
+
+        let result = scan_folders_for_media(vec![root.clone()]).await.unwrap();
+
+        assert_eq!(result.files.len(), 1);
+        assert_eq!(result.files[0].path, media_path.to_string_lossy());
+        assert!(result.failures.is_empty());
         std::fs::remove_dir_all(root).unwrap();
     }
 
