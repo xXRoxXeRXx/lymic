@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-10-06
+
+### Added
+- **Byte-level sync progress tracking**:
+  - Tracks synchronization progress across queue blocks based on total and completed bytes (`totalBytes`, `completedBytes`), providing accurate byte-weighted progress calculations in both the backend coordinator and the frontend dashboard.
+- **XMP sidecar naming variant discovery**:
+  - Automatically identifies sidecar metadata files using both stem-based (`photo.xmp`) and appended (`photo.jpg.xmp`) naming conventions, including case-insensitive matching on non-Windows platforms.
+
+### Changed
+- **Modular Svelte UI architecture**:
+  - Decomposed the monolithic main page into modular Svelte components (`DashboardView`, `FolderList`, `ActivityLog`, `SettingsView`, `LoginView`, `FailedSyncsModal`) with shared TypeScript types and dedicated unit tests.
+- **Pausable sync queue processing windows**:
+  - Bounded sync execution into small, inspectable batch windows, allowing responsive pause and resume operations without stalling active thread pools or corrupting queue checkpoints.
+- **Upload pipeline hash caching**:
+  - Reuses cached file hashes from the local database during queue execution to avoid redundant re-hashing of unchanged media files.
+- **Typed frontend activity log events**:
+  - Replaced unstructured log strings with typed, structured event payloads (`UiLogEvent`) for clearer auditability and consistent UI rendering.
+
+### Fixed
+- **NAS and system metadata exclusion during folder scans**:
+  - Excludes Synology and NAS metadata directories (`@eaDir`, `@SynoResource`, `#recycle`) as well as hidden dot-directories from media scans to prevent unwanted files and phantom sync errors.
+- **Automatic removal of missing files on retry**:
+  - Cleanly discards queue entries for files that no longer exist on disk when retrying failed synchronizations instead of triggering repeated errors.
+
 ## [0.12.0] - 2026-10-04
 
 ### Fixed
