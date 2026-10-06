@@ -341,7 +341,7 @@ mod tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     #[test]
     fn finds_ascii_case_insensitive_sidecars_using_their_actual_names() {
         let directory = temporary_directory();
@@ -355,7 +355,7 @@ mod tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     #[test]
     fn ignores_non_regular_case_insensitive_matches() {
         let directory = temporary_directory();
@@ -367,7 +367,7 @@ mod tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     #[test]
     fn exact_case_wins_and_case_insensitive_matches_are_sorted() {
         let directory = temporary_directory();

@@ -206,6 +206,8 @@ mod tests {
     #[tokio::test]
     async fn folder_scan_skips_hidden_and_nas_metadata_entries() {
         let root = temporary_directory();
+        std::fs::create_dir_all(&root).unwrap();
+        let root = crate::media::paths::normalize_folder_path(&root);
         let media_path = root.join("Vacation").join("photo.jpg");
         let excluded_media_paths = [
             root.join(".cache").join("cached.jpg"),
