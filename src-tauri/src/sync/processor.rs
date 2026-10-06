@@ -41,8 +41,6 @@ pub(crate) async fn process_sync_block(
     let ScanResult {
         files, failures, ..
     } = scan_result;
-    let total_files = files.len();
-    let total_bytes: u64 = files.iter().map(|asset| asset.size).sum();
     let mut queue_results = Vec::new();
     for failure in failures {
         log_to_ui(
@@ -54,16 +52,6 @@ pub(crate) async fn process_sync_block(
         queue_results.push((failure.path, "FAILED".to_string()));
     }
     let units = upload_units_from_assets(files);
-    log_to_ui(
-        &app,
-        "INFO",
-        &format!(
-            "{}: Starting pipeline for {} files ({:.2} MB)",
-            "Sync",
-            total_files,
-            total_bytes as f64 / 1024.0 / 1024.0
-        ),
-    );
 
     let mut hashed_units = Vec::new();
     let mut hashing = FuturesUnordered::new();
