@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::io;
+use std::path::{Path, PathBuf};
 use tokio::io::AsyncReadExt as _;
 use tokio_util::io::ReaderStream;
 
@@ -83,19 +84,22 @@ pub(super) async fn upload_form(
     if let Some(part) = live_photo_part {
         form = form.part("livePhotoData", part);
     }
-    let sidecar_path = path_buf.with_extension("xmp");
-    let sidecar_file = match tokio::fs::File::open(&sidecar_path).await {
-        Ok(file) => Some(file),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-        Err(error) => {
-            return Err(format!(
-                "Cannot open sidecar {}: {}",
-                sidecar_path.display(),
-                error
-            ))
-        }
+    let sidecar_path = find_sidecar_path(&path_buf)?;
+    let sidecar_file = match sidecar_path.as_ref() {
+        Some(sidecar_path) => match tokio::fs::File::open(sidecar_path).await {
+            Ok(file) => Some(file),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(format!(
+                    "Cannot open sidecar {}: {}",
+                    sidecar_path.display(),
+                    error
+                ))
+            }
+        },
+        None => None,
     };
-    if let Some(sidecar_file) = sidecar_file {
+    if let (Some(sidecar_path), Some(sidecar_file)) = (sidecar_path, sidecar_file) {
         let sidecar_name = sidecar_path
             .file_name()
             .and_then(|name| name.to_str())
@@ -123,6 +127,96 @@ pub(super) async fn upload_form(
     Ok(form)
 }
 
+fn find_sidecar_path(asset_path: &Path) -> Result<Option<PathBuf>, String> {
+    let candidates = sidecar_candidates(asset_path);
+    for candidate in &candidates {
+        match std::fs::metadata(candidate) {
+            Ok(metadata) if metadata.is_file() => return Ok(Some(candidate.clone())),
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "Cannot inspect XMP sidecar for {} at {}: {}",
+                    asset_path.display(),
+                    candidate.display(),
+                    error
+                ));
+            }
+        }
+    }
+
+    let parent = asset_path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty());
+    let directory = parent.unwrap_or_else(|| Path::new("."));
+    let entries = std::fs::read_dir(directory).map_err(|error| {
+        format!(
+            "Cannot scan directory {} for XMP sidecar of {}: {}",
+            directory.display(),
+            asset_path.display(),
+            error
+        )
+    })?;
+
+    let expected_names: Vec<_> = candidates
+        .iter()
+        .map(|candidate| candidate.file_name().and_then(|name| name.to_str()))
+        .collect();
+    let mut matches: Vec<Vec<PathBuf>> = vec![Vec::new(); candidates.len()];
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "Cannot read directory entry in {} while finding XMP sidecar for {}: {}",
+                directory.display(),
+                asset_path.display(),
+                error
+            )
+        })?;
+        let entry_name = entry.file_name();
+        let Some(entry_name) = entry_name.to_str() else {
+            continue;
+        };
+        for (index, expected_name) in expected_names.iter().enumerate() {
+            if expected_name
+                .is_some_and(|expected_name| entry_name.eq_ignore_ascii_case(expected_name))
+            {
+                let path = entry.path();
+                let metadata = std::fs::metadata(&path).map_err(|error| {
+                    format!(
+                        "Cannot inspect XMP sidecar candidate {} for {}: {}",
+                        path.display(),
+                        asset_path.display(),
+                        error
+                    )
+                })?;
+                if metadata.is_file() {
+                    matches[index].push(path);
+                }
+            }
+        }
+    }
+
+    for mut schema_matches in matches {
+        schema_matches.sort();
+        if let Some(sidecar_path) = schema_matches.into_iter().next() {
+            return Ok(Some(sidecar_path));
+        }
+    }
+    Ok(None)
+}
+
+fn sidecar_candidates(asset_path: &Path) -> Vec<PathBuf> {
+    let stem_candidate = asset_path.with_extension("xmp");
+    let mut full_name_candidate = asset_path.as_os_str().to_os_string();
+    full_name_candidate.push(".xmp");
+    let full_name_candidate = PathBuf::from(full_name_candidate);
+    if stem_candidate == full_name_candidate {
+        vec![stem_candidate]
+    } else {
+        vec![stem_candidate, full_name_candidate]
+    }
+}
+
 fn validate_sidecar_size(size: u64) -> Result<(), String> {
     if size > MAX_SIDECAR_BYTES {
         return Err(format!(
@@ -145,7 +239,30 @@ pub(super) fn parse_upload_response(body: &[u8]) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_upload_response, validate_sidecar_size, MAX_SIDECAR_BYTES};
+    use super::{
+        find_sidecar_path, parse_upload_response, sidecar_candidates, validate_sidecar_size,
+        MAX_SIDECAR_BYTES,
+    };
+    use std::path::{Path, PathBuf};
+
+    fn temporary_directory() -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "lymic-xmp-sidecar-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&path).unwrap();
+        path
+    }
+
+    fn create_file(directory: &Path, name: &str) -> PathBuf {
+        let path = directory.join(name);
+        std::fs::write(&path, b"test").unwrap();
+        path
+    }
 
     #[test]
     fn upload_response_requires_non_empty_id() {
@@ -170,5 +287,102 @@ mod tests {
         let error = validate_sidecar_size(MAX_SIDECAR_BYTES + 1).unwrap_err();
         assert!(error.contains("exceeds"));
         assert!(error.contains(&(MAX_SIDECAR_BYTES + 1).to_string()));
+    }
+
+    #[test]
+    fn sidecar_candidates_support_both_naming_schemes_without_duplicates() {
+        assert_eq!(
+            sidecar_candidates(Path::new("photo.jpg")),
+            vec![PathBuf::from("photo.xmp"), PathBuf::from("photo.jpg.xmp")]
+        );
+        assert_eq!(
+            sidecar_candidates(Path::new("photo")),
+            vec![PathBuf::from("photo.xmp")]
+        );
+    }
+
+    #[test]
+    fn finds_no_sidecar_or_either_exact_naming_scheme() {
+        let directory = temporary_directory();
+        let asset = create_file(&directory, "photo.jpg");
+        assert_eq!(find_sidecar_path(&asset).unwrap(), None);
+
+        let stem_sidecar = create_file(&directory, "photo.xmp");
+        assert_eq!(
+            find_sidecar_path(&asset).unwrap(),
+            Some(stem_sidecar.clone())
+        );
+        std::fs::remove_file(stem_sidecar).unwrap();
+
+        let full_name_sidecar = create_file(&directory, "photo.jpg.xmp");
+        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(full_name_sidecar));
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn stem_sidecar_wins_over_full_name_sidecar() {
+        let directory = temporary_directory();
+        let asset = create_file(&directory, "photo.jpg");
+        let stem_sidecar = create_file(&directory, "photo.xmp");
+        create_file(&directory, "photo.jpg.xmp");
+
+        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(stem_sidecar));
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn ignores_non_regular_sidecar_candidates() {
+        let directory = temporary_directory();
+        let asset = create_file(&directory, "photo.jpg");
+        std::fs::create_dir(directory.join("photo.xmp")).unwrap();
+        let full_name_sidecar = create_file(&directory, "photo.jpg.xmp");
+
+        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(full_name_sidecar));
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn finds_ascii_case_insensitive_sidecars_using_their_actual_names() {
+        let directory = temporary_directory();
+        let asset = create_file(&directory, "photo.jpg");
+        let stem_sidecar = create_file(&directory, "photo.XMP");
+        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(stem_sidecar));
+        std::fs::remove_file(directory.join("photo.XMP")).unwrap();
+
+        let full_name_sidecar = create_file(&directory, "PHOTO.JPG.XmP");
+        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(full_name_sidecar));
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn ignores_non_regular_case_insensitive_matches() {
+        let directory = temporary_directory();
+        let asset = create_file(&directory, "photo.jpg");
+        std::fs::create_dir(directory.join("PHOTO.XMP")).unwrap();
+        let full_name_sidecar = create_file(&directory, "PHOTO.JPG.XMP");
+
+        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(full_name_sidecar));
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn exact_case_wins_and_case_insensitive_matches_are_sorted() {
+        let directory = temporary_directory();
+        let asset = create_file(&directory, "photo.jpg");
+        let exact_sidecar = create_file(&directory, "photo.xmp");
+        create_file(&directory, "PHOTO.XMP");
+        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(exact_sidecar));
+        std::fs::remove_file(directory.join("photo.xmp")).unwrap();
+
+        let first_sorted_sidecar = directory.join("PHOTO.XMP");
+        create_file(&directory, "Photo.Xmp");
+        assert_eq!(
+            find_sidecar_path(&asset).unwrap(),
+            Some(first_sorted_sidecar)
+        );
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

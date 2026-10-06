@@ -352,6 +352,7 @@ mod tests {
         assert!(request.contains("name=\"sidecarData\""));
         assert!(request.contains(image.file_name().unwrap().to_str().unwrap()));
         assert!(request.contains(video.file_name().unwrap().to_str().unwrap()));
+        assert!(request.contains(sidecar.file_name().unwrap().to_str().unwrap()));
         std::fs::remove_file(image).unwrap();
         std::fs::remove_file(video).unwrap();
         std::fs::remove_file(sidecar).unwrap();
