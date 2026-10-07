@@ -2,10 +2,50 @@ use super::extensions::is_media_file;
 use super::model::{calculate_checksums, Asset, Checksums, FileFailure, ScanResult};
 use super::paths::overlapping_folder_paths;
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
+
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 
 const MAX_STABLE_HASH_ATTEMPTS: usize = 3;
 const _: () = assert!(MAX_STABLE_HASH_ATTEMPTS > 0);
+
+#[cfg(windows)]
+const FILE_ATTRIBUTE_HIDDEN: u32 = 0x0000_0002;
+
+fn is_hidden_name(name: &std::ffi::OsStr) -> bool {
+    name.to_str().is_some_and(|name| name.starts_with('.'))
+}
+
+#[cfg(windows)]
+fn metadata_is_hidden(metadata: &std::fs::Metadata) -> bool {
+    metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0
+}
+
+fn is_hidden_path(path: &Path) -> bool {
+    if path
+        .components()
+        .any(|component| matches!(component, Component::Normal(name) if is_hidden_name(name)))
+    {
+        return true;
+    }
+
+    #[cfg(windows)]
+    {
+        std::fs::metadata(path)
+            .map(|metadata| metadata_is_hidden(&metadata))
+            .unwrap_or(false)
+    }
+
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+fn is_hidden_file_path(path: &Path) -> bool {
+    is_hidden_path(path) || path.parent().is_some_and(|parent| is_hidden_path(parent))
+}
 
 pub(crate) fn metadata_mtime(metadata: &std::fs::Metadata) -> i64 {
     metadata
@@ -59,20 +99,42 @@ fn scan_folder_for_media(path: &Path) -> ScanResult {
     for entry in walkdir::WalkDir::new(path)
         .into_iter()
         .filter_entry(|entry| {
+            if entry.depth() == 0 {
+                return true;
+            }
             let name = entry.file_name().to_string_lossy();
-            !name.starts_with('.')
-                && !matches!(name.as_ref(), "@eaDir" | "@SynoResource" | "#recycle")
+            if is_hidden_name(entry.file_name())
+                || matches!(name.as_ref(), "@eaDir" | "@SynoResource" | "#recycle")
+            {
+                return false;
+            }
+
+            #[cfg(windows)]
+            if entry.file_type().is_dir() {
+                return entry
+                    .metadata()
+                    .map(|metadata| !metadata_is_hidden(&metadata))
+                    .unwrap_or(true);
+            }
+
+            true
         })
     {
         match entry {
             Ok(entry) if entry.file_type().is_file() && is_media_file(entry.path()) => {
                 let file_path = entry.path().to_string_lossy().to_string();
                 match entry.metadata() {
-                    Ok(metadata) => result.files.push(Asset {
-                        path: file_path,
-                        size: metadata.len(),
-                        mtime: metadata_mtime(&metadata),
-                    }),
+                    Ok(metadata) => {
+                        #[cfg(windows)]
+                        if metadata_is_hidden(&metadata) {
+                            continue;
+                        }
+                        result.files.push(Asset {
+                            path: file_path,
+                            size: metadata.len(),
+                            mtime: metadata_mtime(&metadata),
+                        });
+                    }
                     Err(error) => result.failures.push(FileFailure {
                         path: file_path,
                         error: format!("Could not read file metadata: {}", error),
@@ -114,7 +176,7 @@ pub(crate) async fn scan_paths_for_media(paths: Vec<PathBuf>) -> Result<ScanResu
     tokio::task::spawn_blocking(move || {
         let mut result = ScanResult::default();
         for path in paths {
-            if !is_media_file(&path) {
+            if is_hidden_file_path(&path) || !is_media_file(&path) {
                 continue;
             }
             match std::fs::metadata(&path) {
@@ -234,6 +296,87 @@ mod tests {
         assert_eq!(result.files.len(), 1);
         assert_eq!(result.files[0].path, media_path.to_string_lossy());
         assert!(result.failures.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn path_scan_skips_hidden_files_and_hidden_parent_directories() {
+        let root = temporary_directory();
+        let visible_path = root.join("Vacation").join("photo.jpg");
+        let hidden_file_path = root.join(".hidden.jpg");
+        let hidden_directory_path = root.join(".cache").join("cached.jpg");
+
+        std::fs::create_dir_all(visible_path.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(hidden_directory_path.parent().unwrap()).unwrap();
+        std::fs::write(&visible_path, b"visible image").unwrap();
+        std::fs::write(&hidden_file_path, b"hidden image").unwrap();
+        std::fs::write(&hidden_directory_path, b"hidden image").unwrap();
+
+        let result = scan_paths_for_media(vec![
+            visible_path.clone(),
+            hidden_file_path,
+            hidden_directory_path,
+        ])
+        .await
+        .unwrap();
+
+        assert_eq!(result.files.len(), 1);
+        assert_eq!(result.files[0].path, visible_path.to_string_lossy());
+        assert!(result.failures.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    fn set_hidden_attribute(path: &Path, hidden: bool) {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::SetFileAttributesW;
+
+        let wide_path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        let current_attributes = std::fs::metadata(path).unwrap().file_attributes();
+        let attributes = if hidden {
+            current_attributes | FILE_ATTRIBUTE_HIDDEN
+        } else {
+            current_attributes & !FILE_ATTRIBUTE_HIDDEN
+        };
+        assert_ne!(
+            unsafe { SetFileAttributesW(wide_path.as_ptr(), attributes) },
+            0
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn scans_skip_windows_hidden_files_and_directories() {
+        let root = temporary_directory();
+        let visible_path = root.join("Vacation").join("photo.jpg");
+        let hidden_file_path = root.join("hidden.jpg");
+        let hidden_directory = root.join("hidden-directory");
+        let hidden_directory_path = hidden_directory.join("cached.jpg");
+
+        std::fs::create_dir_all(visible_path.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(&hidden_directory).unwrap();
+        std::fs::write(&visible_path, b"visible image").unwrap();
+        std::fs::write(&hidden_file_path, b"hidden image").unwrap();
+        std::fs::write(&hidden_directory_path, b"hidden image").unwrap();
+        set_hidden_attribute(&hidden_file_path, true);
+        set_hidden_attribute(&hidden_directory, true);
+
+        let folder_result = scan_folders_for_media(vec![root.clone()]).await.unwrap();
+        let paths_result = scan_paths_for_media(vec![
+            visible_path.clone(),
+            hidden_file_path.clone(),
+            hidden_directory_path.clone(),
+        ])
+        .await
+        .unwrap();
+
+        assert_eq!(folder_result.files.len(), 1);
+        assert_eq!(folder_result.files[0].path, visible_path.to_string_lossy());
+        assert_eq!(paths_result.files.len(), 1);
+        assert_eq!(paths_result.files[0].path, visible_path.to_string_lossy());
+
+        set_hidden_attribute(&hidden_file_path, false);
+        set_hidden_attribute(&hidden_directory, false);
         std::fs::remove_dir_all(root).unwrap();
     }
 
