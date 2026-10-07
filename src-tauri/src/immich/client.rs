@@ -76,7 +76,7 @@ impl ImmichClient {
             .header("x-api-key", &self.api_key)
             .send()
             .await
-            .map_err(|_| "Connection failed".to_string())?;
+            .map_err(|error| format!("Connection failed: {}", error))?;
         if !response.status().is_success() {
             return Err(format!(
                 "Server returned error: {}",
@@ -117,7 +117,9 @@ impl ImmichClient {
             .json(&json!({ "assets": assets }))
             .send()
             .await
-            .map_err(|_| BulkCheckError::Retryable("Check request failed".to_string()))?;
+            .map_err(|error| {
+                BulkCheckError::Retryable(format!("Check request failed: {}", error))
+            })?;
         if !response.status().is_success() {
             return Err(bulk_check_response_error(response).await);
         }
@@ -148,7 +150,7 @@ impl ImmichClient {
             .multipart(form)
             .send()
             .await
-            .map_err(|_| "Network error during upload".to_string())?;
+            .map_err(|error| format!("Network error during upload: {}", error))?;
         if response.status().is_success() {
             parse_upload_response(
                 &read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?,
@@ -356,6 +358,28 @@ mod tests {
         std::fs::remove_file(image).unwrap();
         std::fs::remove_file(video).unwrap();
         std::fs::remove_file(sidecar).unwrap();
+    }
+
+    #[tokio::test]
+    async fn upload_network_error_includes_reqwest_cause() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        let asset_path = temporary_file(b"image data");
+        let error = client
+            .upload_asset_with_live_photo(asset_path.to_str().unwrap(), "file-hash", None)
+            .await
+            .unwrap_err();
+        std::fs::remove_file(asset_path).unwrap();
+
+        let prefix = "Network error during upload: ";
+        assert!(error.starts_with(prefix));
+        assert!(error.len() > prefix.len());
     }
 
     #[tokio::test]
