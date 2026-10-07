@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { getVersion } from "@tauri-apps/api/app";
   import { invoke } from "@tauri-apps/api/core";
   import { confirm, open } from "@tauri-apps/plugin-dialog";
   import { listen } from "@tauri-apps/api/event";
@@ -38,6 +39,7 @@
   let componentMounted = false;
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
   let isSyncActionPending = $state(false);
+  let appVersion = $state<string | undefined>();
 
   const themeStorageKey = "lymic-theme";
 
@@ -173,6 +175,14 @@
     };
     colorSchemeQuery.addEventListener("change", handleColorSchemeChange);
     componentMounted = true;
+
+    void getVersion()
+      .then((version) => {
+        if (componentMounted) appVersion = version;
+      })
+      .catch((error) => {
+        console.warn("Failed to load app version", error);
+      });
 
     async function setupListeners() {
       const listeners = await Promise.all([
@@ -592,7 +602,9 @@
     <!-- Global Footer -->
     <footer class="h-16 px-10 border-t border-black/5 dark:border-white/10 flex items-center justify-end text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-widest shrink-0">
       <span>Lymic - Unofficial Immich Desktop Client</span>
-      <span class="ml-2">v0.13.0</span>
+      {#if appVersion}
+        <span class="ml-2">v{appVersion}</span>
+      {/if}
     </footer>
 
   </div>

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Page from "./+page.svelte";
 
 const tauri = vi.hoisted(() => ({
+  getVersion: vi.fn(),
   invoke: vi.fn(),
   listen: vi.fn(),
   isEnabled: vi.fn(),
@@ -34,6 +35,7 @@ let logMessage: ((event: { payload: unknown }) => void) | undefined;
 let systemThemeIsDark = false;
 let colorSchemeListeners = new Set<(event: MediaQueryListEvent) => void>();
 
+vi.mock("@tauri-apps/api/app", () => ({ getVersion: tauri.getVersion }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: tauri.listen }));
 vi.mock("@tauri-apps/plugin-autostart", () => ({
@@ -106,11 +108,34 @@ beforeEach(() => {
   });
   tauri.isEnabled.mockResolvedValue(false);
   tauri.confirm.mockResolvedValue(true);
+  tauri.getVersion.mockResolvedValue("0.0.0");
 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+describe("app version", () => {
+  it("displays the version provided by the Tauri runtime", async () => {
+    tauri.getVersion.mockResolvedValue("1.2.3");
+
+    renderAuthenticatedPage();
+
+    expect(await screen.findByText("v1.2.3")).toBeInTheDocument();
+  });
+
+  it("omits the version without interrupting initialization when loading fails", async () => {
+    const error = new Error("Tauri IPC unavailable");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    tauri.getVersion.mockRejectedValue(error);
+
+    renderAuthenticatedPage();
+
+    expect(await screen.findByText("Dashboard", { selector: "h1" })).toBeInTheDocument();
+    expect(screen.queryByText(/v\d+/)).not.toBeInTheDocument();
+    expect(warn).toHaveBeenCalledWith("Failed to load app version", error);
+  });
 });
 
 describe("sync dashboard", () => {
