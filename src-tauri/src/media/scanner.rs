@@ -47,13 +47,19 @@ fn is_hidden_file_path(path: &Path) -> bool {
     is_hidden_path(path) || path.parent().is_some_and(|parent| is_hidden_path(parent))
 }
 
+fn system_time_mtime(time: std::time::SystemTime) -> i64 {
+    match time.duration_since(std::time::UNIX_EPOCH) {
+        Ok(duration) => i64::try_from(duration.as_nanos()).unwrap_or(0),
+        Err(error) => i64::try_from(error.duration().as_nanos())
+            .ok()
+            .and_then(|nanoseconds| nanoseconds.checked_neg())
+            .unwrap_or(0),
+    }
+}
+
 pub(crate) fn metadata_mtime(metadata: &std::fs::Metadata) -> i64 {
-    metadata
-        .modified()
-        .ok()
-        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-        .and_then(|duration| i64::try_from(duration.as_nanos()).ok())
-        .unwrap_or(0)
+    // Zero is the cache sentinel for an unknown or unrepresentable file version.
+    metadata.modified().map(system_time_mtime).unwrap_or(0)
 }
 
 pub(crate) fn file_version(path: &str) -> std::io::Result<(u64, i64)> {
@@ -68,16 +74,32 @@ pub(crate) fn reuse_cached_checksums(
     cached_sha1_base64: &str,
 ) -> std::io::Result<Option<(Checksums, u64, i64)>> {
     let (size, mtime) = file_version(path)?;
+    Ok(reuse_cached_checksums_for_version(
+        expected_size,
+        expected_mtime,
+        size,
+        mtime,
+        cached_sha1_base64,
+    ))
+}
+
+fn reuse_cached_checksums_for_version(
+    expected_size: u64,
+    expected_mtime: i64,
+    size: u64,
+    mtime: i64,
+    cached_sha1_base64: &str,
+) -> Option<(Checksums, u64, i64)> {
     if expected_mtime == 0 || mtime == 0 || (size, mtime) != (expected_size, expected_mtime) {
-        return Ok(None);
+        return None;
     }
-    Ok(Some((
+    Some((
         Checksums {
             sha1_base64: cached_sha1_base64.to_string(),
         },
         size,
         mtime,
-    )))
+    ))
 }
 
 pub(crate) fn calculate_stable_checksums(path: &str) -> std::io::Result<(Checksums, u64, i64)> {
@@ -245,6 +267,7 @@ pub(crate) async fn prepare_failed_sync_retry(paths: Vec<String>) -> Result<Scan
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, UNIX_EPOCH};
 
     fn temporary_directory() -> PathBuf {
         std::env::temp_dir().join(format!("lymic-scan-test-{}", uuid::Uuid::new_v4()))
@@ -431,6 +454,29 @@ mod tests {
     }
 
     #[test]
+    fn system_time_mtime_preserves_pre_epoch_nanoseconds() {
+        assert_eq!(
+            system_time_mtime(UNIX_EPOCH - Duration::from_nanos(100)),
+            -100
+        );
+    }
+
+    #[test]
+    fn system_time_mtime_handles_boundaries_and_sentinel() {
+        assert_eq!(system_time_mtime(UNIX_EPOCH), 0);
+        assert_eq!(
+            system_time_mtime(UNIX_EPOCH + Duration::from_nanos(100)),
+            100
+        );
+        assert_eq!(
+            system_time_mtime(
+                UNIX_EPOCH + Duration::from_secs(i64::MAX as u64 / 1_000_000_000 + 1)
+            ),
+            0
+        );
+    }
+
+    #[test]
     fn stable_checksums_use_current_version_when_file_changes_after_scan() {
         let root = temporary_directory();
         std::fs::create_dir_all(&root).unwrap();
@@ -495,6 +541,14 @@ mod tests {
             .unwrap()
             .is_none());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cached_checksum_is_reused_with_matching_negative_mtime() {
+        let reused = reuse_cached_checksums_for_version(123, -42, 123, -42, "cached-sha1").unwrap();
+
+        assert_eq!(reused.0.sha1_base64, "cached-sha1");
+        assert_eq!((reused.1, reused.2), (123, -42));
     }
 
     #[test]

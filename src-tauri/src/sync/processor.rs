@@ -217,12 +217,11 @@ async fn hash_unit(
     let result: Result<HashedUploadUnit, String> = async {
         let mut hashed = Vec::new();
         for asset in unit.assets() {
-            let cached = if asset.mtime == 0 {
-                Ok(None)
-            } else {
-                db::get_cached_hash(&pool, &asset.path, asset.mtime, asset.size as i64).await
-            }
-            .map_err(|error| format!("Could not load cached hash for {}: {}", asset.path, error))?;
+            let cached = db::get_cached_hash(&pool, &asset.path, asset.mtime, asset.size as i64)
+                .await
+                .map_err(|error| {
+                    format!("Could not load cached hash for {}: {}", asset.path, error)
+                })?;
             if let Some(cached_sha1_base64) = cached.as_ref() {
                 let path = asset.path.clone();
                 let expected_size = asset.size;
