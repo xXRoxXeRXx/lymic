@@ -101,6 +101,29 @@ mod tests {
     use super::SyncCoordinatorInner;
 
     #[tokio::test]
+    async fn cancellation_lookup_finds_work_and_cancels() {
+        let coordinator = SyncCoordinatorInner::new(false);
+        let folder =
+            std::env::temp_dir().join(format!("lymic-coord-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let folder = crate::media::paths::normalize_folder_path(&folder);
+        let active_path = folder.join("active.jpg");
+        coordinator
+            .register_active_work([active_path.to_string_lossy().to_string()])
+            .await;
+
+        let cancellation = coordinator
+            .cancellation_for_path(&active_path.to_string_lossy())
+            .await
+            .expect("the path must find its cancellation token");
+        coordinator.cancel_work_in(&folder.to_string_lossy()).await;
+
+        assert!(cancellation.is_cancelled());
+        let _ = std::fs::remove_dir_all(folder);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
     async fn cancellation_lookup_is_case_insensitive_for_windows_paths() {
         let coordinator = SyncCoordinatorInner::new(false);
         coordinator

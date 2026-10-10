@@ -371,6 +371,8 @@ mod tests {
     #[tokio::test]
     async fn scans_skip_windows_hidden_files_and_directories() {
         let root = temporary_directory();
+        std::fs::create_dir_all(&root).unwrap();
+        let root = crate::media::paths::normalize_folder_path(&root);
         let visible_path = root.join("Vacation").join("photo.jpg");
         let hidden_file_path = root.join("hidden.jpg");
         let hidden_directory = root.join("hidden-directory");
