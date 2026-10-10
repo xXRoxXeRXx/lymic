@@ -9,6 +9,11 @@ use crate::sync::progress::TransferStatsTracker;
 
 const MAX_SIDECAR_BYTES: u64 = 10 * 1024 * 1024;
 
+pub(super) struct UploadPayload {
+    pub(super) form: reqwest::multipart::Form,
+    pub(super) total_file_bytes: u64,
+}
+
 #[derive(Deserialize)]
 struct UploadResponse {
     id: String,
@@ -18,7 +23,7 @@ pub(super) async fn upload_form(
     path: &str,
     live_photo_path: Option<&str>,
     transfer_tracker: Option<TransferStatsTracker>,
-) -> Result<reqwest::multipart::Form, String> {
+) -> Result<UploadPayload, String> {
     let path_buf = std::path::PathBuf::from(path);
     let file_name = path_buf
         .file_name()
@@ -71,13 +76,14 @@ pub(super) async fn upload_form(
             .and_then(|name| name.to_str())
             .unwrap_or("live-photo.mov")
             .to_string();
-        Some(
+        Some((
             reqwest::multipart::Part::stream_with_length(
                 reqwest::Body::wrap_stream(observed_stream(live_file, transfer_tracker.clone())),
                 live_metadata.len(),
             )
             .file_name(live_name),
-        )
+            live_metadata.len(),
+        ))
     } else {
         None
     };
@@ -85,8 +91,10 @@ pub(super) async fn upload_form(
         .text("fileCreatedAt", created_at_iso)
         .text("fileModifiedAt", modified_at_iso)
         .part("assetData", asset_part);
-    if let Some(part) = live_photo_part {
+    let mut total_file_bytes = metadata.len();
+    if let Some((part, size)) = live_photo_part {
         form = form.part("livePhotoData", part);
+        total_file_bytes = total_file_bytes.saturating_add(size);
     }
     let sidecar_path = find_sidecar_path(&path_buf)?;
     let sidecar_file = match sidecar_path.as_ref() {
@@ -126,9 +134,13 @@ pub(super) async fn upload_form(
                 )
                 .file_name(sidecar_name),
             );
+            total_file_bytes = total_file_bytes.saturating_add(size);
         }
     }
-    Ok(form)
+    Ok(UploadPayload {
+        form,
+        total_file_bytes,
+    })
 }
 
 fn observed_stream(
@@ -255,7 +267,7 @@ pub(super) fn parse_upload_response(body: &[u8]) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        find_sidecar_path, observed_stream, parse_upload_response, sidecar_candidates,
+        find_sidecar_path, observed_stream, parse_upload_response, sidecar_candidates, upload_form,
         validate_sidecar_size, MAX_SIDECAR_BYTES,
     };
     use crate::sync::progress::TransferStatsTracker;
@@ -296,6 +308,44 @@ mod tests {
             tracker.snapshot().transferred_bytes,
             b"payload bytes".len() as u64
         );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[tokio::test]
+    async fn upload_form_counts_only_attached_file_parts() {
+        let directory = temporary_directory();
+        let asset = create_file(&directory, "photo.jpg");
+        std::fs::write(&asset, b"image data").unwrap();
+        let asset_size = std::fs::metadata(&asset).unwrap().len();
+
+        let payload = upload_form(asset.to_str().unwrap(), None, None)
+            .await
+            .unwrap();
+        assert_eq!(payload.total_file_bytes, asset_size);
+        drop(payload);
+
+        let live_photo = create_file(&directory, "photo.mov");
+        std::fs::write(&live_photo, b"live photo data").unwrap();
+        let live_photo_size = std::fs::metadata(&live_photo).unwrap().len();
+        let payload = upload_form(
+            asset.to_str().unwrap(),
+            Some(live_photo.to_str().unwrap()),
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(payload.total_file_bytes, asset_size + live_photo_size);
+        drop(payload);
+
+        let sidecar = asset.with_extension("xmp");
+        std::fs::write(&sidecar, b"sidecar data").unwrap();
+        let sidecar_size = std::fs::metadata(&sidecar).unwrap().len();
+        let payload = upload_form(asset.to_str().unwrap(), None, None)
+            .await
+            .unwrap();
+        assert_eq!(payload.total_file_bytes, asset_size + sidecar_size);
+        drop(payload);
+
         std::fs::remove_dir_all(directory).unwrap();
     }
 

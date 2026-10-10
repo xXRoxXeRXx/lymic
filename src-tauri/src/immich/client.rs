@@ -2,12 +2,26 @@ use super::bulk_check::{bulk_check_response_error, parse_bulk_check_response, Bu
 use super::response::{
     read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
 };
-use super::upload::parse_upload_response;
+use super::upload::{parse_upload_response, upload_form};
 use crate::sync::progress::TransferStatsTracker;
 use reqwest::{Client, Response};
 use serde::Deserialize;
 use serde_json::json;
 use url::Url;
+
+const UPLOAD_TIMEOUT_BASE_SECONDS: u64 = 5 * 60;
+const UPLOAD_TIMEOUT_SECONDS_PER_GIB: u64 = 2 * 60 * 60;
+const GIB_BYTES: u128 = 1024 * 1024 * 1024;
+
+fn upload_timeout(total_file_bytes: u64) -> std::time::Duration {
+    let proportional_seconds = (u128::from(total_file_bytes)
+        .saturating_mul(u128::from(UPLOAD_TIMEOUT_SECONDS_PER_GIB))
+        .saturating_add(GIB_BYTES - 1))
+        / GIB_BYTES;
+    let total_seconds =
+        u128::from(UPLOAD_TIMEOUT_BASE_SECONDS).saturating_add(proportional_seconds);
+    std::time::Duration::from_secs(u64::try_from(total_seconds).unwrap_or(u64::MAX))
+}
 
 pub(crate) struct ImmichClient {
     pub(super) client: Client,
@@ -142,13 +156,27 @@ impl ImmichClient {
         live_photo_path: Option<&str>,
         transfer_tracker: Option<TransferStatsTracker>,
     ) -> Result<String, String> {
-        let form = super::upload::upload_form(path, live_photo_path, transfer_tracker).await?;
+        let payload = upload_form(path, live_photo_path, transfer_tracker).await?;
+        self.post_upload_form(
+            payload.form,
+            precomputed_hash,
+            upload_timeout(payload.total_file_bytes),
+        )
+        .await
+    }
+
+    async fn post_upload_form(
+        &self,
+        form: reqwest::multipart::Form,
+        precomputed_hash: &str,
+        timeout: std::time::Duration,
+    ) -> Result<String, String> {
         let response: Response = self
             .client
             .post(self.endpoint_url("assets"))
             .header("x-api-key", &self.api_key)
             .header("x-immich-checksum", precomputed_hash)
-            .timeout(std::time::Duration::from_secs(300))
+            .timeout(timeout)
             .multipart(form)
             .send()
             .await
@@ -168,11 +196,12 @@ impl ImmichClient {
 
 #[cfg(test)]
 mod tests {
-    use super::ImmichClient;
+    use super::{upload_timeout, ImmichClient, GIB_BYTES, UPLOAD_TIMEOUT_BASE_SECONDS};
     use reqwest::Client;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use url::Url;
+    use uuid::Uuid;
 
     async fn read_http_request(stream: &mut tokio::net::TcpStream) -> Vec<u8> {
         let mut request = Vec::new();
@@ -202,14 +231,28 @@ mod tests {
         request
     }
 
+    async fn read_http_headers(stream: &mut tokio::net::TcpStream) {
+        let mut request = Vec::new();
+        let mut chunk = [0; 4096];
+        loop {
+            let read = stream.read(&mut chunk).await.unwrap();
+            assert_ne!(read, 0, "mock server received an incomplete request");
+            request.extend_from_slice(&chunk[..read]);
+            if request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                return;
+            }
+        }
+    }
+
     fn temporary_file(contents: &[u8]) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!(
-            "lymic-immich-client-test-{}-{}",
+            "lymic-immich-client-test-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            Uuid::new_v4(),
         ));
         std::fs::write(&path, contents).unwrap();
         path
@@ -263,6 +306,27 @@ mod tests {
                 expected_endpoint
             );
         }
+    }
+
+    #[test]
+    fn upload_timeout_scales_with_file_payload_size() {
+        assert_eq!(
+            upload_timeout(0),
+            std::time::Duration::from_secs(UPLOAD_TIMEOUT_BASE_SECONDS)
+        );
+        assert_eq!(
+            upload_timeout(1),
+            std::time::Duration::from_secs(UPLOAD_TIMEOUT_BASE_SECONDS + 1)
+        );
+        assert_eq!(
+            upload_timeout(GIB_BYTES as u64),
+            std::time::Duration::from_secs(UPLOAD_TIMEOUT_BASE_SECONDS + 2 * 60 * 60)
+        );
+        assert_eq!(
+            upload_timeout(GIB_BYTES as u64 + 1),
+            std::time::Duration::from_secs(UPLOAD_TIMEOUT_BASE_SECONDS + 2 * 60 * 60 + 1)
+        );
+        assert!(upload_timeout(u64::MAX) > upload_timeout(GIB_BYTES as u64));
     }
 
     #[tokio::test]
@@ -383,6 +447,68 @@ mod tests {
         let prefix = "Network error during upload: ";
         assert!(error.starts_with(prefix));
         assert!(error.len() > prefix.len());
+    }
+
+    #[tokio::test]
+    async fn upload_request_uses_injected_timeout_when_server_stalls() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            read_http_headers(&mut stream).await;
+            std::future::pending::<()>().await;
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        let asset_path = temporary_file(b"image data");
+        let payload = super::upload_form(asset_path.to_str().unwrap(), None, None)
+            .await
+            .unwrap();
+        let error = client
+            .post_upload_form(
+                payload.form,
+                "file-hash",
+                std::time::Duration::from_millis(50),
+            )
+            .await
+            .unwrap_err();
+        std::fs::remove_file(asset_path).unwrap();
+
+        assert!(error.starts_with("Network error during upload: "));
+    }
+
+    #[tokio::test]
+    async fn upload_request_succeeds_immediately_with_large_deadline() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut stream).await;
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 14\r\nConnection: close\r\n\r\n{\"id\":\"large\"}").await.unwrap();
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        let asset_path = temporary_file(b"image data");
+        let payload = super::upload_form(asset_path.to_str().unwrap(), None, None)
+            .await
+            .unwrap();
+        let response = client
+            .post_upload_form(
+                payload.form,
+                "file-hash",
+                upload_timeout(10 * GIB_BYTES as u64),
+            )
+            .await
+            .unwrap();
+        std::fs::remove_file(asset_path).unwrap();
+
+        assert_eq!(response, "large");
     }
 
     #[tokio::test]
