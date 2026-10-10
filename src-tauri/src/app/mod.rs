@@ -5,17 +5,38 @@ pub(crate) mod startup;
 pub(crate) mod state;
 pub(crate) mod tray;
 
+use std::ffi::{OsStr, OsString};
 use tauri::Manager;
+
+const AUTOSTART_ARGUMENT: &str = "--autostart";
+
+fn has_stored_credentials<T, E>(credentials: Result<Option<T>, E>) -> bool {
+    matches!(credentials, Ok(Some(_)))
+}
+
+fn should_start_in_background(args: &[OsString], has_credentials: bool) -> bool {
+    has_credentials && args.iter().any(|arg| arg == OsStr::new(AUTOSTART_ARGUMENT))
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub(crate) fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .arg(AUTOSTART_ARGUMENT)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            let args = std::env::args_os().collect::<Vec<_>>();
+            let has_credentials = has_stored_credentials(crate::auth::get_credentials());
+            if !should_start_in_background(&args, has_credentials) {
+                tray::show_main_window(app.handle());
+            }
+
             let startup = startup::initialize(app)?;
             let has_folders = startup.has_folders;
             let recovered_sync = startup.recovered_sync.clone();
@@ -65,4 +86,45 @@ pub(crate) fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn autostart_with_credentials_starts_in_background() {
+        assert!(should_start_in_background(
+            &[OsString::from("lymic"), OsString::from(AUTOSTART_ARGUMENT)],
+            true
+        ));
+    }
+
+    #[test]
+    fn autostart_without_credentials_shows_window() {
+        assert!(!should_start_in_background(
+            &[OsString::from("lymic"), OsString::from(AUTOSTART_ARGUMENT)],
+            false
+        ));
+    }
+
+    #[test]
+    fn manual_launch_with_credentials_shows_window() {
+        assert!(!should_start_in_background(
+            &[OsString::from("lymic")],
+            true
+        ));
+    }
+
+    #[test]
+    fn credential_errors_are_treated_as_not_authenticated() {
+        let has_credentials = has_stored_credentials::<(), _>(Err("keyring unavailable"));
+
+        assert!(!has_credentials);
+        assert!(!has_stored_credentials::<(), ()>(Ok(None)));
+        assert!(!should_start_in_background(
+            &[OsString::from("lymic"), OsString::from(AUTOSTART_ARGUMENT)],
+            has_credentials
+        ));
+    }
 }

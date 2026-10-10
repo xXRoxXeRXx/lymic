@@ -263,7 +263,7 @@ pub(crate) fn hide_on_close(window: &tauri::Window, event: &tauri::WindowEvent) 
     }
 }
 
-fn show_main_window(app: &tauri::AppHandle) {
+pub(crate) fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();

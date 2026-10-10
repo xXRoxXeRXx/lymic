@@ -24,7 +24,7 @@
   "activity_log": "Activity Log",
   "no_activity": "No recent activity.",
   "autostart": "Autostart",
-  "autostart_subtitle": "Start Lymic automatically on system boot.",
+  "autostart_subtitle": "Start Lymic in the background at system login when credentials are saved.",
   "autostart_enable": "Enable autostart",
   "autostart_disable": "Disable autostart",
   "language": "Language",

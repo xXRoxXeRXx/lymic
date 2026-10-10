@@ -24,7 +24,7 @@
   "activity_log": "Aktivitätsverlauf",
   "no_activity": "Keine aktuellen Aktivitäten.",
   "autostart": "Autostart",
-  "autostart_subtitle": "Lymic beim Systemstart automatisch öffnen.",
+  "autostart_subtitle": "Lymic bei der Systemanmeldung im Hintergrund starten, wenn Zugangsdaten gespeichert sind.",
   "autostart_enable": "Autostart aktivieren",
   "autostart_disable": "Autostart deaktivieren",
   "language": "Sprache",
