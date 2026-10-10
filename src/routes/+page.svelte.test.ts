@@ -31,6 +31,7 @@ let syncStarted: (() => void) | undefined;
 let syncPaused: ((event: { payload: unknown }) => void) | undefined;
 let syncResumed: ((event: { payload: unknown }) => void) | undefined;
 let syncProgressSnapshot: ((event: { payload: unknown }) => void) | undefined;
+let syncTransferStats: ((event: { payload: unknown }) => void) | undefined;
 let logMessage: ((event: { payload: unknown }) => void) | undefined;
 let systemThemeIsDark = false;
 let colorSchemeListeners = new Set<(event: MediaQueryListEvent) => void>();
@@ -96,6 +97,7 @@ beforeEach(() => {
   syncPaused = undefined;
   syncResumed = undefined;
   syncProgressSnapshot = undefined;
+  syncTransferStats = undefined;
   logMessage = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
     if (event === "trigger-sync") triggerSync = handler;
@@ -103,6 +105,7 @@ beforeEach(() => {
     if (event === "sync-paused") syncPaused = handler as (event: { payload: unknown }) => void;
     if (event === "sync-resumed") syncResumed = handler as (event: { payload: unknown }) => void;
     if (event === "sync-progress-snapshot") syncProgressSnapshot = handler as (event: { payload: unknown }) => void;
+    if (event === "sync-transfer-stats") syncTransferStats = handler as (event: { payload: unknown }) => void;
     if (event === "log-message") logMessage = handler as (event: { payload: unknown }) => void;
     return Promise.resolve(() => {});
   });
@@ -251,6 +254,20 @@ describe("sync dashboard", () => {
 
     expect(await screen.findByText("20% completed")).toBeInTheDocument();
     expect(screen.getByText("Processed: 5 / 50")).toBeInTheDocument();
+  });
+
+  it("renders transfer statistics, preserves them while paused, and resets them for a new run", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    renderAuthenticatedPage();
+    await waitFor(() => expect(syncTransferStats).toBeTypeOf("function"));
+    syncProgressSnapshot?.({ payload: { status: "RUNNING", total: 1, succeeded: 0, failed: 0, currentPath: null } });
+    syncTransferStats?.({ payload: { transferredBytes: 1_500_000, transferRateBytesPerSecond: 2_000_000, estimatedSecondsRemaining: 10, status: "RUNNING" } });
+    expect(await screen.findByText(/Transferred: 1.4 MiB/)).toBeInTheDocument();
+    expect(screen.getByText(/Rate: 2 MB\/s/)).toBeInTheDocument();
+    syncPaused?.({ payload: { status: "PAUSED", total: 1, succeeded: 0, failed: 0, currentPath: null } });
+    expect(screen.getByText(/Rate: 2 MB\/s/)).toBeInTheDocument();
+    syncStarted?.();
+    await waitFor(() => expect(screen.queryByText(/Transferred:/)).not.toBeInTheDocument());
   });
 
   it("changes sync controls from pause to resume when events arrive", async () => {

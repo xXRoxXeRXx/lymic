@@ -2607,6 +2607,7 @@ name = "lymic-desktop"
 version = "0.13.0"
 dependencies = [
  "base64 0.22.1",
+ "bytes",
  "chrono",
  "futures",
  "keyring",

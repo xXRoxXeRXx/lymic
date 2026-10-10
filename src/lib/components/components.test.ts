@@ -57,6 +57,20 @@ describe("DashboardView", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     expect(onSyncAction).toHaveBeenCalledOnce();
   });
+
+  it("renders available transfer statistics and hides unavailable rate and ETA", () => {
+    render(DashboardView, {
+      ...props,
+      syncStatus: "syncing",
+      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+      transferredBytes: 1_024,
+      transferRateBytesPerSecond: null,
+      estimatedSecondsRemaining: null,
+    });
+    expect(screen.getByText("Transferred: 1 KiB")).toBeInTheDocument();
+    expect(screen.queryByText(/Rate:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Time remaining:/)).not.toBeInTheDocument();
+  });
 });
 
 describe("FailedSyncsModal", () => {

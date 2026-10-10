@@ -36,6 +36,7 @@ pub(crate) fn update_locale(
     if let Some(MenuItemKind::MenuItem(item)) = menu.get("sync") {
         let _ = item.set_text(&translations.tray_sync);
     }
+    crate::app::tray::refresh_transfer_status(&app);
 
     Ok(())
 }
@@ -53,10 +54,12 @@ mod tests {
 
         let en = backend_translations("en");
         assert!(!en.tray_quit.is_empty());
+        assert!(!en.tray_transferred.is_empty());
         assert!(!en.notification_complete_body.is_empty());
 
         let de = backend_translations("de");
         assert!(!de.tray_quit.is_empty());
+        assert!(!de.tray_transferred.is_empty());
         assert!(!de.notification_complete_body.is_empty());
     }
 }

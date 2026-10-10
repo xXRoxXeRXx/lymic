@@ -1,8 +1,11 @@
+use futures::TryStreamExt;
 use serde::Deserialize;
 use std::io;
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncReadExt as _;
 use tokio_util::io::ReaderStream;
+
+use crate::sync::progress::TransferStatsTracker;
 
 const MAX_SIDECAR_BYTES: u64 = 10 * 1024 * 1024;
 
@@ -14,6 +17,7 @@ struct UploadResponse {
 pub(super) async fn upload_form(
     path: &str,
     live_photo_path: Option<&str>,
+    transfer_tracker: Option<TransferStatsTracker>,
 ) -> Result<reqwest::multipart::Form, String> {
     let path_buf = std::path::PathBuf::from(path);
     let file_name = path_buf
@@ -37,7 +41,7 @@ pub(super) async fn upload_form(
         .await
         .map_err(|error| format!("Cannot open file {}: {}", path, error))?;
     let asset_part = reqwest::multipart::Part::stream_with_length(
-        reqwest::Body::wrap_stream(ReaderStream::new(asset_file)),
+        reqwest::Body::wrap_stream(observed_stream(asset_file, transfer_tracker.clone())),
         metadata.len(),
     )
     .file_name(file_name);
@@ -69,7 +73,7 @@ pub(super) async fn upload_form(
             .to_string();
         Some(
             reqwest::multipart::Part::stream_with_length(
-                reqwest::Body::wrap_stream(ReaderStream::new(live_file)),
+                reqwest::Body::wrap_stream(observed_stream(live_file, transfer_tracker.clone())),
                 live_metadata.len(),
             )
             .file_name(live_name),
@@ -125,6 +129,17 @@ pub(super) async fn upload_form(
         }
     }
     Ok(form)
+}
+
+fn observed_stream(
+    file: tokio::fs::File,
+    transfer_tracker: Option<TransferStatsTracker>,
+) -> impl futures::Stream<Item = Result<bytes::Bytes, std::io::Error>> {
+    ReaderStream::new(file).inspect_ok(move |chunk| {
+        if let Some(transfer_stats) = &transfer_tracker {
+            transfer_stats.record_chunk(chunk.len() as u64);
+        }
+    })
 }
 
 fn find_sidecar_path(asset_path: &Path) -> Result<Option<PathBuf>, String> {
@@ -240,9 +255,11 @@ pub(super) fn parse_upload_response(body: &[u8]) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        find_sidecar_path, parse_upload_response, sidecar_candidates, validate_sidecar_size,
-        MAX_SIDECAR_BYTES,
+        find_sidecar_path, observed_stream, parse_upload_response, sidecar_candidates,
+        validate_sidecar_size, MAX_SIDECAR_BYTES,
     };
+    use crate::sync::progress::TransferStatsTracker;
+    use futures::StreamExt;
     use std::path::{Path, PathBuf};
 
     fn temporary_directory() -> PathBuf {
@@ -262,6 +279,24 @@ mod tests {
         let path = directory.join(name);
         std::fs::write(&path, b"test").unwrap();
         path
+    }
+
+    #[tokio::test]
+    async fn observed_stream_counts_only_read_payload_bytes() {
+        let directory = temporary_directory();
+        let path = create_file(&directory, "photo.jpg");
+        std::fs::write(&path, b"payload bytes").unwrap();
+        let tracker = TransferStatsTracker::new(100, 0);
+        let file = tokio::fs::File::open(&path).await.unwrap();
+        let mut stream = Box::pin(observed_stream(file, Some(tracker.clone())));
+        while let Some(chunk) = stream.next().await {
+            chunk.unwrap();
+        }
+        assert_eq!(
+            tracker.snapshot().transferred_bytes,
+            b"payload bytes".len() as u64
+        );
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

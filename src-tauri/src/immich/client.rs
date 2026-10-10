@@ -3,6 +3,7 @@ use super::response::{
     read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
 };
 use super::upload::parse_upload_response;
+use crate::sync::progress::TransferStatsTracker;
 use reqwest::{Client, Response};
 use serde::Deserialize;
 use serde_json::json;
@@ -139,8 +140,9 @@ impl ImmichClient {
         path: &str,
         precomputed_hash: &str,
         live_photo_path: Option<&str>,
+        transfer_tracker: Option<TransferStatsTracker>,
     ) -> Result<String, String> {
-        let form = super::upload::upload_form(path, live_photo_path).await?;
+        let form = super::upload::upload_form(path, live_photo_path, transfer_tracker).await?;
         let response: Response = self
             .client
             .post(self.endpoint_url("assets"))
@@ -296,7 +298,7 @@ mod tests {
         let asset_path = temporary_file(b"image data");
         assert_eq!(
             client
-                .upload_asset_with_live_photo(asset_path.to_str().unwrap(), "new-file", None)
+                .upload_asset_with_live_photo(asset_path.to_str().unwrap(), "new-file", None, None)
                 .await
                 .unwrap(),
             "uploaded-asset"
@@ -341,7 +343,8 @@ mod tests {
                 .upload_asset_with_live_photo(
                     image.to_str().unwrap(),
                     "image-hash",
-                    Some(video.to_str().unwrap())
+                    Some(video.to_str().unwrap()),
+                    None,
                 )
                 .await
                 .unwrap(),
@@ -372,7 +375,7 @@ mod tests {
         };
         let asset_path = temporary_file(b"image data");
         let error = client
-            .upload_asset_with_live_photo(asset_path.to_str().unwrap(), "file-hash", None)
+            .upload_asset_with_live_photo(asset_path.to_str().unwrap(), "file-hash", None, None)
             .await
             .unwrap_err();
         std::fs::remove_file(asset_path).unwrap();

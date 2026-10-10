@@ -53,6 +53,9 @@
   "tray_quit": "Quit",
   "tray_show": "Show Window",
   "tray_sync": "Sync Now",
+  "tray_transferred": "Transferred",
+  "tray_rate": "Rate",
+  "tray_eta": "ETA",
   "notification_complete_title": "{} Complete",
   "notification_complete_body": "Processed {processed} files. {uploaded} new uploads. {failed} errors.",
   "failed_sync_count": "{count} failed file(s)",
@@ -62,5 +65,8 @@
   "sync_paused": "Sync paused",
   "pause_sync": "Pause",
   "resume_sync": "Resume",
-  "sync_paused_hint": "Your queued files will resume from where they stopped."
+  "sync_paused_hint": "Your queued files will resume from where they stopped.",
+  "transferred": "Transferred",
+  "transfer_rate": "Rate",
+  "remaining_time": "Time remaining"
 }

@@ -412,7 +412,12 @@ async fn upload_unit(
     );
     let _ = app.emit("sync-progress", &unit.image.path);
 
-    let upload = client.upload_asset_with_live_photo(&unit.image.path, &image_hash, video_path);
+    let upload = client.upload_asset_with_live_photo(
+        &unit.image.path,
+        &image_hash,
+        video_path,
+        Some(progress.transfer_stats()),
+    );
     let Some(upload_result) = await_or_cancellation(cancellation, upload).await else {
         return UploadOutcome {
             uploaded: 0,

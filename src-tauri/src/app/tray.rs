@@ -1,5 +1,6 @@
-use crate::app::locale::backend_translations;
-use crate::app::state::TrayMenuState;
+use crate::app::locale::{backend_translations, LocaleState};
+use crate::app::state::{TrayMenuState, TrayTransferStatus};
+use crate::sync::progress::TransferStatsEvent;
 use tauri::menu::{Menu, MenuItem, MenuItemKind};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
@@ -10,6 +11,107 @@ pub(crate) fn set_sync_enabled(app: &tauri::AppHandle, enabled: bool) {
     };
     if let Some(MenuItemKind::MenuItem(item)) = tray_menu.0.get("sync") {
         let _ = item.set_enabled(enabled);
+    }
+}
+
+pub(crate) fn update_transfer_status(app: &tauri::AppHandle, event: TransferStatsEvent) {
+    if let Some(state) = app.try_state::<TrayTransferStatus>() {
+        *state.0.lock().expect("tray transfer status lock poisoned") = Some(event.clone());
+    }
+    apply_transfer_status(app, &event);
+}
+
+pub(crate) fn refresh_transfer_status(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<TrayTransferStatus>() else {
+        return;
+    };
+    let event = state
+        .0
+        .lock()
+        .expect("tray transfer status lock poisoned")
+        .clone();
+    if let Some(event) = event {
+        apply_transfer_status(app, &event);
+    }
+}
+
+fn apply_transfer_status(app: &tauri::AppHandle, event: &TransferStatsEvent) {
+    let Some(tray_menu) = app.try_state::<TrayMenuState>() else {
+        return;
+    };
+    let Some(MenuItemKind::MenuItem(item)) = tray_menu.0.get("sync-status") else {
+        return;
+    };
+    let visible = event.status == "RUNNING" || event.status == "PAUSED";
+    let _ = item.set_enabled(false);
+    let text = if visible {
+        format_transfer_status(app, event)
+    } else {
+        String::new()
+    };
+    let _ = item.set_text(&text);
+}
+
+fn format_transfer_status(app: &tauri::AppHandle, event: &TransferStatsEvent) -> String {
+    let locale = app
+        .try_state::<LocaleState>()
+        .and_then(|state| state.0.lock().ok().map(|locale| locale.clone()))
+        .unwrap_or_else(|| "en".to_string());
+    let translations = backend_translations(&locale);
+    let mut parts = vec![format!(
+        "{}% | {}: {}",
+        if event.total_bytes == 0 {
+            0
+        } else {
+            ((event.completed_bytes as f64 / event.total_bytes as f64) * 100.0).round() as u64
+        },
+        translations.tray_transferred,
+        format_bytes(event.stats.transferred_bytes, &locale),
+    )];
+    if event.stats.transfer_rate_bytes_per_second > 0.0 {
+        let rate = event.stats.transfer_rate_bytes_per_second / 1_000_000.0;
+        let rate = if locale == "de" {
+            format!("{rate:.1}").replace('.', ",")
+        } else {
+            format!("{rate:.1}")
+        };
+        parts.push(format!("{}: {} MB/s", translations.tray_rate, rate));
+    }
+    if let Some(seconds) = event.stats.estimated_seconds_remaining {
+        parts.push(format!(
+            "{}: {}",
+            translations.tray_eta,
+            format_duration(seconds)
+        ));
+    }
+    parts.join(" | ")
+}
+
+fn format_bytes(bytes: u64, locale: &str) -> String {
+    const UNITS: [&str; 4] = ["B", "KiB", "MiB", "GiB"];
+    let mut value = bytes as f64;
+    let mut index = 0;
+    while value >= 1024.0 && index < UNITS.len() - 1 {
+        value /= 1024.0;
+        index += 1;
+    }
+    if index == 0 {
+        format!("{} {}", bytes, UNITS[index])
+    } else {
+        let value = if locale == "de" {
+            format!("{value:.1}").replace('.', ",")
+        } else {
+            format!("{value:.1}")
+        };
+        format!("{} {}", value, UNITS[index])
+    }
+}
+
+fn format_duration(seconds: u64) -> String {
+    if seconds >= 3600 {
+        format!("{}h {:02}m", seconds / 3600, (seconds % 3600) / 60)
+    } else {
+        format!("{}m {:02}s", seconds / 60, seconds % 60)
     }
 }
 
@@ -24,8 +126,11 @@ pub(crate) fn setup(app: &tauri::App, has_folders: bool) -> Result<(), Box<dyn s
         has_folders,
         None::<&str>,
     )?;
-    let menu = Menu::with_items(app, &[&sync_i, &show_i, &quit_i])?;
+    let status_i = MenuItem::with_id(app, "sync-status", "", false, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&status_i, &sync_i, &show_i, &quit_i])?;
     app.handle().manage(TrayMenuState(menu.clone()));
+    app.handle()
+        .manage(TrayTransferStatus(std::sync::Mutex::new(None)));
     let icon = app
         .default_window_icon()
         .ok_or("No default window icon configured in tauri.conf.json")?

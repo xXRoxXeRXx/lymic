@@ -12,6 +12,9 @@
     processed: number;
     syncTotal: number;
     currentFile: string;
+    transferredBytes?: number;
+    transferRateBytesPerSecond?: number | null;
+    estimatedSecondsRemaining?: number | null;
     serverUrl: string;
     watchedFolders: WatchedFolder[];
     failedSyncs: FailedSyncEntry[];
@@ -30,6 +33,9 @@
     processed,
     syncTotal,
     currentFile,
+    transferredBytes = 0,
+    transferRateBytesPerSecond = null,
+    estimatedSecondsRemaining = null,
     serverUrl,
     watchedFolders,
     failedSyncs,
@@ -40,6 +46,19 @@
     onAddFolder,
     onRemoveFolder
   }: Props = $props();
+
+  const numberLocale = $derived($locale === 'de' ? 'de-DE' : 'en-US');
+  function formatBytes(bytes: number) {
+    const units = ['B', 'KiB', 'MiB', 'GiB'];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+    return unit === 0 ? `${value} ${units[unit]}` : `${value.toLocaleString(numberLocale, { maximumFractionDigits: 1 })} ${units[unit]}`;
+  }
+  function formatDuration(seconds: number) {
+    if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+    return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
+  }
 </script>
 
 <section class="glass-pane space-y-8 animate-in">
@@ -76,6 +95,13 @@
       <p class="text-xs font-medium text-slate-400 dark:text-slate-400">
         {$t('processed')}: {processed.toLocaleString($locale === 'de' ? 'de-DE' : 'en-US')} / {syncTotal.toLocaleString($locale === 'de' ? 'de-DE' : 'en-US')}
       </p>
+      {#if transferredBytes > 0 || transferRateBytesPerSecond !== null || estimatedSecondsRemaining !== null}
+        <p class="text-xs font-medium text-slate-400 dark:text-slate-400">
+          {#if transferredBytes > 0}{$t('transferred')}: {formatBytes(transferredBytes)}{/if}
+          {#if transferRateBytesPerSecond !== null} {transferredBytes > 0 ? ' · ' : ''}{$t('transfer_rate')}: {(transferRateBytesPerSecond / 1_000_000).toLocaleString(numberLocale, { maximumFractionDigits: 1 })} MB/s{/if}
+          {#if estimatedSecondsRemaining !== null} {(transferredBytes > 0 || transferRateBytesPerSecond !== null) ? ' · ' : ''}{$t('remaining_time')}: {formatDuration(estimatedSecondsRemaining)}{/if}
+        </p>
+      {/if}
       {#if syncStatus === 'paused'}
         <p class="text-xs text-amber-600 dark:text-amber-400">{$t('sync_paused_hint')}</p>
       {/if}

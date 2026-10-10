@@ -7,6 +7,9 @@ pub(crate) struct BackendTranslations {
     pub(crate) tray_quit: String,
     pub(crate) tray_show: String,
     pub(crate) tray_sync: String,
+    pub(crate) tray_transferred: String,
+    pub(crate) tray_rate: String,
+    pub(crate) tray_eta: String,
     pub(crate) notification_complete_title: String,
     pub(crate) notification_complete_body: String,
 }

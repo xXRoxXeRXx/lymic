@@ -81,6 +81,14 @@ pub(crate) async fn run_sync_pipeline(
         snapshot.total_bytes.max(0) as u64,
         snapshot.completed_bytes.max(0) as u64,
     );
+    let transfer_stats = progress.transfer_stats();
+    transfer_stats.set_active(true);
+    let _transfer_cleanup = TransferStatsCleanup {
+        app: app.clone(),
+        tracker: transfer_stats.clone(),
+    };
+    spawn_transfer_reporter(app.clone(), transfer_stats.clone());
+    emit_transfer_stats(&app, &transfer_stats);
     loop {
         // The durable queue is materialized in a small window. A pause is observed
         // before loading another window and inside the processor between new work.
@@ -88,6 +96,12 @@ pub(crate) async fn run_sync_pipeline(
             let snapshot = db::set_sync_status(&pool, "PAUSED")
                 .await
                 .map_err(|error| format!("Could not persist paused sync: {}", error))?;
+            transfer_stats.sync_queue(
+                snapshot.total_bytes.max(0) as u64,
+                snapshot.completed_bytes.max(0) as u64,
+            );
+            transfer_stats.set_paused(true);
+            emit_transfer_stats(&app, &transfer_stats);
             let _ = app.emit("sync-paused", &snapshot);
             audit_event(
                 &app,
@@ -104,6 +118,12 @@ pub(crate) async fn run_sync_pipeline(
                 let snapshot = db::set_sync_status(&pool, "RUNNING")
                     .await
                     .map_err(|error| format!("Could not resume sync: {}", error))?;
+                transfer_stats.sync_queue(
+                    snapshot.total_bytes.max(0) as u64,
+                    snapshot.completed_bytes.max(0) as u64,
+                );
+                transfer_stats.set_paused(false);
+                emit_transfer_stats(&app, &transfer_stats);
                 let _ = app.emit("sync-resumed", &snapshot);
                 audit_event(
                     &app,
@@ -130,6 +150,12 @@ pub(crate) async fn run_sync_pipeline(
                         .map_err(|error| error.to_string())?,
                 );
             let _ = app.emit("sync-progress-snapshot", &snapshot);
+            transfer_stats.sync_queue(
+                snapshot.total_bytes.max(0) as u64,
+                snapshot.completed_bytes.max(0) as u64,
+            );
+            transfer_stats.set_active(false);
+            emit_transfer_stats(&app, &transfer_stats);
             if is_auto {
                 let _ = app.emit("sync-idle", ());
             }
@@ -193,8 +219,48 @@ pub(crate) async fn run_sync_pipeline(
                 snapshot.total_bytes.max(0) as u64,
                 snapshot.completed_bytes.max(0) as u64,
             );
+            emit_transfer_stats(&app, &transfer_stats);
             let _ = app.emit("sync-progress-snapshot", &snapshot);
         }
+    }
+}
+
+fn emit_transfer_stats(
+    app: &tauri::AppHandle,
+    transfer_stats: &crate::sync::progress::TransferStatsTracker,
+) {
+    let event = transfer_stats.event();
+    crate::app::tray::update_transfer_status(app, event.clone());
+    let _ = app.emit("sync-transfer-stats", event);
+}
+
+fn spawn_transfer_reporter(
+    app: tauri::AppHandle,
+    transfer_stats: crate::sync::progress::TransferStatsTracker,
+) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(crate::sync::progress::TRANSFER_STATS_THROTTLE);
+        loop {
+            interval.tick().await;
+            if transfer_stats.should_emit() {
+                emit_transfer_stats(&app, &transfer_stats);
+            }
+            if !transfer_stats.status().active {
+                break;
+            }
+        }
+    });
+}
+
+struct TransferStatsCleanup {
+    app: tauri::AppHandle,
+    tracker: crate::sync::progress::TransferStatsTracker,
+}
+
+impl Drop for TransferStatsCleanup {
+    fn drop(&mut self) {
+        self.tracker.set_active(false);
+        emit_transfer_stats(&self.app, &self.tracker);
     }
 }
 

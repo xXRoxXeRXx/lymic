@@ -53,6 +53,9 @@
   "tray_quit": "Beenden",
   "tray_show": "Einstellungen",
   "tray_sync": "Jetzt synchronisieren",
+  "tray_transferred": "Übertragen",
+  "tray_rate": "Rate",
+  "tray_eta": "Restzeit",
   "notification_complete_title": "{} Abgeschlossen",
   "notification_complete_body": "{processed} Dateien verarbeitet. {uploaded} neue Uploads. {failed} Fehler.",
   "failed_sync_count": "{count} fehlgeschlagene Datei(en)",
@@ -62,5 +65,8 @@
   "sync_paused": "Synchronisierung pausiert",
   "pause_sync": "Pausieren",
   "resume_sync": "Fortsetzen",
-  "sync_paused_hint": "Eingereihte Dateien werden an der letzten Stelle fortgesetzt."
+  "sync_paused_hint": "Eingereihte Dateien werden an der letzten Stelle fortgesetzt.",
+  "transferred": "Übertragen",
+  "transfer_rate": "Rate",
+  "remaining_time": "Restzeit"
 }

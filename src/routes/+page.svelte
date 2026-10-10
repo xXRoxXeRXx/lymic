@@ -29,6 +29,9 @@
   let processed = $state(0);
   let syncTotal = $state(0);
   let currentFile = $state("");
+  let transferredBytes = $state(0);
+  let transferRateBytesPerSecond = $state<number | null>(null);
+  let estimatedSecondsRemaining = $state<number | null>(null);
   let watchedFolders = $state<WatchedFolder[]>([]);
   let failedSyncs = $state<FailedSyncEntry[]>([]);
   let isAutostartEnabled = $state(false);
@@ -113,6 +116,19 @@
     currentPath: string | null;
     totalBytes?: number;
     completedBytes?: number;
+  }
+
+  interface TransferStatsEvent {
+    transferredBytes: number;
+    transferRateBytesPerSecond: number;
+    estimatedSecondsRemaining: number | null;
+    status: "RUNNING" | "PAUSED" | "IDLE";
+  }
+
+  function resetTransferStats() {
+    transferredBytes = 0;
+    transferRateBytesPerSecond = null;
+    estimatedSecondsRemaining = null;
   }
 
   interface RemoveFolderResult {
@@ -204,6 +220,14 @@
           if (progressResetTimer) clearTimeout(progressResetTimer);
           progressResetTimer = undefined;
           syncStatus = "syncing";
+          resetTransferStats();
+        }),
+        listen("sync-transfer-stats", (event) => {
+          if (!componentMounted) return;
+          const stats = event.payload as TransferStatsEvent;
+          transferredBytes = stats.transferredBytes ?? 0;
+          transferRateBytesPerSecond = stats.transferRateBytesPerSecond > 0 ? stats.transferRateBytesPerSecond : null;
+          estimatedSecondsRemaining = stats.estimatedSecondsRemaining;
         }),
         listen("sync-progress-snapshot", (event) => {
           if (componentMounted) applySyncSnapshot(event.payload as SyncSnapshot);
@@ -326,6 +350,7 @@
     progress = 0;
     processed = 0;
     syncTotal = 0;
+    resetTransferStats();
     try {
       const summary = await invoke<SyncSummary>("start_sync");
       // The command response is reliable even when an event is missed.
@@ -374,6 +399,7 @@
     progress = 0;
     processed = 0;
     syncTotal = 0;
+    resetTransferStats();
     try {
       const summary = await invoke<SyncSummary>("retry_failed_syncs");
       await finishSync(summary);
@@ -583,6 +609,9 @@
           {processed}
           {syncTotal}
           {currentFile}
+          {transferredBytes}
+          {transferRateBytesPerSecond}
+          {estimatedSecondsRemaining}
           {serverUrl}
           {watchedFolders}
           {failedSyncs}
