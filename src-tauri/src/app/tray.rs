@@ -1,6 +1,12 @@
 use crate::app::locale::{backend_translations, LocaleState};
-use crate::app::state::{TrayMenuState, TrayTransferStatus};
+use crate::app::state::{TrayMenuState, TraySyncStatus, TrayTransferStatus};
 use crate::sync::progress::TransferStatsEvent;
+use crate::{
+    app::events::{emit_sync_error, log_to_ui},
+    commands::sync,
+    db,
+    sync::SyncCoordinator,
+};
 use tauri::menu::{Menu, MenuItem, MenuItemKind};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
@@ -11,6 +17,68 @@ pub(crate) fn set_sync_enabled(app: &tauri::AppHandle, enabled: bool) {
     };
     if let Some(MenuItemKind::MenuItem(item)) = tray_menu.0.get("sync") {
         let _ = item.set_enabled(enabled);
+    }
+}
+
+pub(crate) fn update_sync_action(app: &tauri::AppHandle, snapshot: &db::SyncSnapshot) {
+    if let Some(state) = app.try_state::<TraySyncStatus>() {
+        *state.0.lock().expect("tray sync status lock poisoned") = snapshot.status.clone();
+    }
+    apply_sync_action(app, &snapshot.status);
+}
+
+pub(crate) fn refresh_sync_action(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<TraySyncStatus>() else {
+        return;
+    };
+    let status = state
+        .0
+        .lock()
+        .expect("tray sync status lock poisoned")
+        .clone();
+    apply_sync_action(app, &status);
+}
+
+fn apply_sync_action(app: &tauri::AppHandle, status: &str) {
+    let Some(tray_menu) = app.try_state::<TrayMenuState>() else {
+        return;
+    };
+    let Some(MenuItemKind::MenuItem(item)) = tray_menu.0.get("sync") else {
+        return;
+    };
+    let locale = current_locale(app);
+    let _ = item.set_text(sync_action_text(status, backend_translations(&locale)));
+}
+
+fn current_locale(app: &tauri::AppHandle) -> String {
+    app.try_state::<LocaleState>()
+        .and_then(|state| state.0.lock().ok().map(|locale| locale.clone()))
+        .unwrap_or_else(|| "en".to_string())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum TrayAction {
+    Pause,
+    Resume,
+    Start,
+}
+
+pub(crate) fn decide_sync_action(status: &str) -> TrayAction {
+    match status {
+        "RUNNING" => TrayAction::Pause,
+        "PAUSED" => TrayAction::Resume,
+        _ => TrayAction::Start,
+    }
+}
+
+fn sync_action_text<'a>(
+    status: &str,
+    translations: &'a crate::app::locale::BackendTranslations,
+) -> &'a str {
+    match status {
+        "RUNNING" => &translations.tray_pause_sync,
+        "PAUSED" => &translations.tray_resume_sync,
+        _ => &translations.tray_sync,
     }
 }
 
@@ -53,10 +121,7 @@ fn apply_transfer_status(app: &tauri::AppHandle, event: &TransferStatsEvent) {
 }
 
 fn format_transfer_status(app: &tauri::AppHandle, event: &TransferStatsEvent) -> String {
-    let locale = app
-        .try_state::<LocaleState>()
-        .and_then(|state| state.0.lock().ok().map(|locale| locale.clone()))
-        .unwrap_or_else(|| "en".to_string());
+    let locale = current_locale(app);
     let translations = backend_translations(&locale);
     let mut parts = vec![format!(
         "{}% | {}: {}",
@@ -115,7 +180,11 @@ fn format_duration(seconds: u64) -> String {
     }
 }
 
-pub(crate) fn setup(app: &tauri::App, has_folders: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn setup(
+    app: &tauri::App,
+    has_folders: bool,
+    recovered_sync: db::SyncSnapshot,
+) -> Result<(), Box<dyn std::error::Error>> {
     let translations = backend_translations("en");
     let quit_i = MenuItem::with_id(app, "quit", &translations.tray_quit, true, None::<&str>)?;
     let show_i = MenuItem::with_id(app, "show", &translations.tray_show, true, None::<&str>)?;
@@ -131,6 +200,10 @@ pub(crate) fn setup(app: &tauri::App, has_folders: bool) -> Result<(), Box<dyn s
     app.handle().manage(TrayMenuState(menu.clone()));
     app.handle()
         .manage(TrayTransferStatus(std::sync::Mutex::new(None)));
+    app.handle().manage(TraySyncStatus(std::sync::Mutex::new(
+        recovered_sync.status.clone(),
+    )));
+    update_sync_action(app.handle(), &recovered_sync);
     let icon = app
         .default_window_icon()
         .ok_or("No default window icon configured in tauri.conf.json")?
@@ -142,7 +215,10 @@ pub(crate) fn setup(app: &tauri::App, has_folders: bool) -> Result<(), Box<dyn s
             "quit" => app.exit(0),
             "show" => show_main_window(app),
             "sync" => {
-                let _ = app.emit("trigger-sync", ());
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    handle_sync_action(app).await;
+                });
             }
             _ => {}
         })
@@ -165,6 +241,45 @@ pub(crate) fn setup(app: &tauri::App, has_folders: bool) -> Result<(), Box<dyn s
     Ok(())
 }
 
+async fn handle_sync_action(app: tauri::AppHandle) {
+    let pool = app.state::<sqlx::SqlitePool>().inner().clone();
+    let coordinator = app.state::<SyncCoordinator>().inner().0.clone();
+    let result = async {
+        let snapshot = db::get_sync_snapshot(&pool)
+            .await
+            .map_err(|error| error.to_string())?;
+        match decide_sync_action(&snapshot.status) {
+            TrayAction::Pause => sync::pause_sync_inner(&app, &pool, &coordinator)
+                .await
+                .map(|_| ()),
+            TrayAction::Resume => sync::resume_sync_inner(&app, &pool, &coordinator)
+                .await
+                .map(|_| ()),
+            TrayAction::Start => app
+                .emit("trigger-sync", ())
+                .map_err(|error| error.to_string()),
+        }
+    }
+    .await;
+
+    if let Err(error) = result {
+        log_to_ui(
+            &app,
+            "ERROR",
+            &format!("Tray synchronization action failed: {error}"),
+        );
+        emit_sync_error(&app, &error);
+    }
+    match db::get_sync_snapshot(&pool).await {
+        Ok(snapshot) => update_sync_action(&app, &snapshot),
+        Err(error) => log_to_ui(
+            &app,
+            "ERROR",
+            &format!("Could not refresh tray sync state: {error}"),
+        ),
+    }
+}
+
 pub(crate) fn hide_on_close(window: &tauri::Window, event: &tauri::WindowEvent) {
     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
         let _ = window.hide();
@@ -176,5 +291,38 @@ fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sync_action_text_follows_persisted_status() {
+        let translations = backend_translations("en");
+        assert_eq!(sync_action_text("IDLE", translations), "Sync Now");
+        assert_eq!(sync_action_text("RUNNING", translations), "Pause Sync");
+        assert_eq!(sync_action_text("PAUSED", translations), "Resume Sync");
+    }
+
+    #[test]
+    fn sync_action_text_is_localized() {
+        let translations = backend_translations("de");
+        assert_eq!(
+            sync_action_text("RUNNING", translations),
+            "Synchronisierung pausieren"
+        );
+        assert_eq!(
+            sync_action_text("PAUSED", translations),
+            "Synchronisierung fortsetzen"
+        );
+    }
+
+    #[test]
+    fn tray_action_dispatch_follows_persisted_status() {
+        assert_eq!(decide_sync_action("RUNNING"), TrayAction::Pause);
+        assert_eq!(decide_sync_action("PAUSED"), TrayAction::Resume);
+        assert_eq!(decide_sync_action("IDLE"), TrayAction::Start);
     }
 }

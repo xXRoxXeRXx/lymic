@@ -18,8 +18,9 @@ pub(crate) fn run() {
         .setup(|app| {
             let startup = startup::initialize(app)?;
             let has_folders = startup.has_folders;
+            let recovered_sync = startup.recovered_sync.clone();
             background::spawn(app.handle().clone(), startup);
-            tray::setup(app, has_folders)
+            tray::setup(app, has_folders, recovered_sync)
         })
         .invoke_handler(tauri::generate_handler![
             crate::commands::auth::login,

@@ -399,7 +399,7 @@
   }
 
   async function handleStartSync() {
-    if (syncStatus === "syncing" || isSyncActionPending) {
+    if (syncStatus === "syncing" || syncStatus === "paused" || isSyncActionPending) {
       console.warn("Sync already in progress, ignoring trigger.");
       return;
     }

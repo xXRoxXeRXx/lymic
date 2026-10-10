@@ -53,6 +53,8 @@
   "tray_quit": "Quit",
   "tray_show": "Show Window",
   "tray_sync": "Sync Now",
+  "tray_pause_sync": "Pause Sync",
+  "tray_resume_sync": "Resume Sync",
   "tray_transferred": "Transferred",
   "tray_rate": "Rate",
   "tray_eta": "ETA",

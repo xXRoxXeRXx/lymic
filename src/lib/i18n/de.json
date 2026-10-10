@@ -53,6 +53,8 @@
   "tray_quit": "Beenden",
   "tray_show": "Einstellungen",
   "tray_sync": "Jetzt synchronisieren",
+  "tray_pause_sync": "Synchronisierung pausieren",
+  "tray_resume_sync": "Synchronisierung fortsetzen",
   "tray_transferred": "Übertragen",
   "tray_rate": "Rate",
   "tray_eta": "Restzeit",

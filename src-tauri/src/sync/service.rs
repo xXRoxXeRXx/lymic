@@ -67,6 +67,7 @@ pub(crate) async fn sync_scan_result_if_authenticated(
         .collect();
     match db::enqueue_sync_assets(&pool, &assets, &failures).await {
         Ok(snapshot) => {
+            crate::app::tray::update_sync_action(&app, &snapshot);
             let _ = app.emit("sync-progress-snapshot", &snapshot);
         }
         Err(error) => {

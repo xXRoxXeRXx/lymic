@@ -1,3 +1,4 @@
+/*
 #![allow(dead_code)]
 
 use sqlx::{
@@ -688,13 +689,17 @@ pub async fn get_failed_syncs(pool: &SqlitePool) -> Result<Vec<FailedSyncEntry>,
         .collect())
 }
 
+*/
+
 #[cfg(test)]
 mod database_tests {
-    use super::*;
-    use crate::db::{
-        discard_failed_sync_paths, discard_sync_data_in_folder, has_pending_sync_queue_items,
+    use super::super::init::quarantine_corrupt_db;
+    use crate::db::*;
+    use sqlx::{
+        sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+        Row, SqlitePool,
     };
-    use sqlx::sqlite::SqlitePoolOptions;
+    use std::time::Duration;
 
     async fn test_pool() -> SqlitePool {
         let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
@@ -817,6 +822,63 @@ mod database_tests {
         assert_eq!(
             next_sync_queue_block(&pool, 1).await.unwrap()[0].local_path,
             "later.jpg"
+        );
+    }
+
+    #[tokio::test]
+    async fn paused_queue_preserves_terminal_records_when_new_items_are_enqueued() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let terminal_assets = [
+            QueueAsset {
+                path: "completed.jpg",
+                size: 1,
+                mtime: 1,
+            },
+            QueueAsset {
+                path: "failed.jpg",
+                size: 2,
+                mtime: 2,
+            },
+        ];
+        crate::db::enqueue_sync_assets(&pool, &terminal_assets, &[])
+            .await
+            .unwrap();
+        finalize_queued_block(
+            &pool,
+            &[
+                ("completed.jpg".to_string(), "SYNCED".to_string()),
+                ("failed.jpg".to_string(), "FAILED".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+        set_sync_status(&pool, "PAUSED").await.unwrap();
+
+        let new_asset = [QueueAsset {
+            path: "new.jpg",
+            size: 3,
+            mtime: 3,
+        }];
+        let snapshot = crate::db::enqueue_sync_assets(&pool, &new_asset, &[])
+            .await
+            .unwrap();
+
+        assert_eq!(snapshot.status, "PAUSED");
+        assert_eq!(snapshot.total, 3);
+        let rows: Vec<(String, String)> = sqlx::query_as(
+            "SELECT local_path, status FROM sync_queue WHERE job_id = 1 ORDER BY sequence",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                ("completed.jpg".to_string(), "SYNCED".to_string()),
+                ("failed.jpg".to_string(), "FAILED".to_string()),
+                ("new.jpg".to_string(), "PENDING".to_string()),
+            ]
         );
     }
 

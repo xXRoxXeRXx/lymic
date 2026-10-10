@@ -48,6 +48,7 @@ pub(crate) async fn run_sync_pipeline(
     let snapshot = db::enqueue_sync_assets(&pool, &queue_assets, &queue_failures)
         .await
         .map_err(|error| format!("Could not persist sync queue: {}", error))?;
+    crate::app::tray::update_sync_action(&app, &snapshot);
     let _sync_guard = match coordinator.lock.try_lock() {
         Ok(guard) => guard,
         Err(_) => {
@@ -96,6 +97,7 @@ pub(crate) async fn run_sync_pipeline(
             let snapshot = db::set_sync_status(&pool, "PAUSED")
                 .await
                 .map_err(|error| format!("Could not persist paused sync: {}", error))?;
+            crate::app::tray::update_sync_action(&app, &snapshot);
             transfer_stats.sync_queue(
                 snapshot.total_bytes.max(0) as u64,
                 snapshot.completed_bytes.max(0) as u64,
@@ -118,6 +120,7 @@ pub(crate) async fn run_sync_pipeline(
                 let snapshot = db::set_sync_status(&pool, "RUNNING")
                     .await
                     .map_err(|error| format!("Could not resume sync: {}", error))?;
+                crate::app::tray::update_sync_action(&app, &snapshot);
                 transfer_stats.sync_queue(
                     snapshot.total_bytes.max(0) as u64,
                     snapshot.completed_bytes.max(0) as u64,
@@ -150,6 +153,7 @@ pub(crate) async fn run_sync_pipeline(
                         .map_err(|error| error.to_string())?,
                 );
             let _ = app.emit("sync-progress-snapshot", &snapshot);
+            crate::app::tray::update_sync_action(&app, &snapshot);
             transfer_stats.sync_queue(
                 snapshot.total_bytes.max(0) as u64,
                 snapshot.completed_bytes.max(0) as u64,
@@ -215,6 +219,7 @@ pub(crate) async fn run_sync_pipeline(
             let snapshot = db::finalize_queued_block(&pool, queue_results)
                 .await
                 .map_err(|error| format!("Could not persist queue block: {}", error))?;
+            crate::app::tray::update_sync_action(&app, &snapshot);
             progress.sync_from_snapshot(
                 snapshot.total_bytes.max(0) as u64,
                 snapshot.completed_bytes.max(0) as u64,

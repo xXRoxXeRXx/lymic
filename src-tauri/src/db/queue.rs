@@ -55,7 +55,14 @@ pub async fn enqueue_sync_assets(
     let status: String = sqlx::query_scalar("SELECT status FROM sync_jobs WHERE id = 1")
         .fetch_one(&mut *tx)
         .await?;
-    if status == "IDLE" && (!assets.is_empty() || !failures.is_empty()) {
+    let has_pending: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING')",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    let should_reset = (status == "IDLE" || (status == "RUNNING" && !has_pending))
+        && (!assets.is_empty() || !failures.is_empty());
+    if should_reset {
         sqlx::query("UPDATE sync_jobs SET status = 'RUNNING', next_sequence = 1, total_count = 0, success_count = 0, failure_count = 0, current_path = NULL WHERE id = 1")
             .execute(&mut *tx).await?;
         sqlx::query("DELETE FROM sync_queue WHERE job_id = 1")
