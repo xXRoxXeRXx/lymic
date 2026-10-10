@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-10-10
+
+### Added
+- **Sync transfer speed and ETA statistics**:
+  - Calculates real-time upload speed and remaining time estimation during active synchronizations, displayed both on the dashboard and in the system tray tooltip.
+
+### Changed
+- **Quieter activity logging**:
+  - Removed redundant pipeline initialization messages from the UI activity log during sync execution.
+
+### Fixed
+- **Sync cancellation on folder removal**:
+  - Cancels active and scheduled sync runs and removes queued assets when a watched folder is removed from configuration.
+- **Hidden file and directory skipping**:
+  - Automatically filters out dot-directories, dotfiles, and Windows hidden-attribute files or folders during filesystem scanning.
+- **Pre-epoch file modification timestamp caching**:
+  - Correctly preserves negative UNIX epoch timestamps in the hash cache for photos with metadata dated prior to 1970.
+- **Detailed network error cause reporting**:
+  - Preserves underlying network and HTTP error details during Immich server connectivity checks and media uploads.
+- **Dynamic bundled app version display**:
+  - Retrieves and displays the runtime application version in the UI footer using the Tauri API.
+
 ## [0.13.0] - 2026-10-06
 
 ### Added
