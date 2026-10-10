@@ -115,6 +115,10 @@
     completedBytes?: number;
   }
 
+  interface RemoveFolderResult {
+    requiresSyncCancellation: boolean;
+  }
+
   let logCounter = 0;
 
   function formatError(error: unknown): string {
@@ -408,8 +412,17 @@
   async function handleRemoveFolder(id: number) {
     actionError = "";
     try {
-      await invoke<void>("remove_folder", { id });
+      const result = await invoke<RemoveFolderResult>("remove_folder", { id });
+      if (result?.requiresSyncCancellation) {
+        const confirmed = await confirm($t("remove_folder_sync_warning"), {
+          title: $t("remove_folder"),
+          kind: "warning",
+        });
+        if (!confirmed) return;
+        await invoke<RemoveFolderResult>("remove_folder", { id, confirmCancellation: true });
+      }
       await refreshFolders();
+      await refreshFailedSyncs();
     } catch (e) {
       console.error("Failed to remove folder", e);
       actionError = formatError(e);

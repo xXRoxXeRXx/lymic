@@ -44,7 +44,7 @@ fn is_hidden_path(path: &Path) -> bool {
 }
 
 fn is_hidden_file_path(path: &Path) -> bool {
-    is_hidden_path(path) || path.parent().is_some_and(|parent| is_hidden_path(parent))
+    is_hidden_path(path) || path.parent().is_some_and(is_hidden_path)
 }
 
 fn system_time_mtime(time: std::time::SystemTime) -> i64 {

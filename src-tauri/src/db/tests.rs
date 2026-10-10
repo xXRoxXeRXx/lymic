@@ -691,7 +691,9 @@ pub async fn get_failed_syncs(pool: &SqlitePool) -> Result<Vec<FailedSyncEntry>,
 #[cfg(test)]
 mod database_tests {
     use super::*;
-    use crate::db::{discard_failed_sync_paths, has_pending_sync_queue_items};
+    use crate::db::{
+        discard_failed_sync_paths, discard_sync_data_in_folder, has_pending_sync_queue_items,
+    };
     use sqlx::sqlite::SqlitePoolOptions;
 
     async fn test_pool() -> SqlitePool {
@@ -1136,6 +1138,86 @@ mod database_tests {
         assert_eq!(snapshot.status, "IDLE");
         assert_eq!(snapshot.total, 0);
         assert_eq!(snapshot.failed, 0);
+    }
+
+    #[tokio::test]
+    async fn discarding_folder_sync_data_keeps_component_prefix_siblings() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let assets = [
+            QueueAsset {
+                path: "C:/Photos/one.jpg",
+                size: 1,
+                mtime: 1,
+            },
+            QueueAsset {
+                path: "C:/Photos/nested/two.jpg",
+                size: 2,
+                mtime: 2,
+            },
+            QueueAsset {
+                path: "C:/Photos-alt/keep.jpg",
+                size: 3,
+                mtime: 3,
+            },
+        ];
+        enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+        mark_sync_failed(&pool, "C:/Photos/failed.jpg", 4, 4, "failed")
+            .await
+            .unwrap();
+        mark_sync_failed(&pool, "C:/Photos-alt/keep-failed.jpg", 5, 5, "failed")
+            .await
+            .unwrap();
+
+        discard_sync_data_in_folder(&pool, "C:/Photos")
+            .await
+            .unwrap();
+
+        let queue_paths: Vec<String> =
+            sqlx::query_scalar("SELECT local_path FROM sync_queue ORDER BY local_path")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(queue_paths, vec!["C:/Photos-alt/keep.jpg"]);
+        let failure_paths: Vec<_> = get_failed_syncs(&pool)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|entry| entry.local_path)
+            .collect();
+        assert_eq!(failure_paths, vec!["C:/Photos-alt/keep-failed.jpg"]);
+    }
+
+    #[tokio::test]
+    async fn discarding_folder_sync_data_preserves_completed_hash_cache() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        update_sync_state(
+            &pool,
+            "C:/Photos/uploaded.jpg",
+            "hash",
+            1,
+            1,
+            "SYNCED",
+            Some("remote"),
+        )
+        .await
+        .unwrap();
+        mark_sync_failed(&pool, "C:/Photos/failed.jpg", 2, 2, "failed")
+            .await
+            .unwrap();
+
+        discard_sync_data_in_folder(&pool, "C:/Photos")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            get_cached_hash(&pool, "C:/Photos/uploaded.jpg", 1, 1)
+                .await
+                .unwrap(),
+            Some("hash".to_string())
+        );
+        assert!(get_failed_syncs(&pool).await.unwrap().is_empty());
     }
 
     #[tokio::test]

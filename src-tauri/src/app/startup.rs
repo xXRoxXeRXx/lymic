@@ -135,11 +135,7 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
     handle.manage(tokio::sync::Mutex::new(watcher));
     handle.manage(sync::SyncState(AtomicBool::new(false)));
     handle.manage(sync::SyncCoordinator(std::sync::Arc::new(
-        sync::SyncCoordinatorInner {
-            lock: tokio::sync::Mutex::new(()),
-            paused: AtomicBool::new(recovered_sync.status == "PAUSED"),
-            resume: tokio::sync::Notify::new(),
-        },
+        sync::SyncCoordinatorInner::new(recovered_sync.status == "PAUSED"),
     )));
     handle.manage(crate::app::locale::LocaleState(std::sync::Mutex::new(
         "en".to_string(),

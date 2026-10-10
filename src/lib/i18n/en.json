@@ -44,6 +44,7 @@
   "logout_confirmation": "Do you really want to log out?",
   "select_folder": "Select Folder",
   "remove_folder": "Remove folder",
+  "remove_folder_sync_warning": "Syncing this folder is in progress. Removing it will cancel active uploads and discard all pending transfers for this folder. Files already uploaded remain on the server. Remove the folder?",
   "never": "Never",
   "hero_tagline": "Immich Desktop Client",
   "hero_title_line_1": "Your Moments",

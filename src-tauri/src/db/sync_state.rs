@@ -1,4 +1,6 @@
+use crate::media::paths::{normalize_folder_path, path_is_within};
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
+use std::path::PathBuf;
 
 const DISCARD_PATH_BATCH_SIZE: usize = 500;
 
@@ -129,6 +131,84 @@ pub async fn discard_failed_sync_paths(
             separated.push_unseparated(")");
             query.build().execute(&mut *tx).await?;
         }
+    }
+
+    sqlx::query(
+        "UPDATE sync_jobs SET \
+         total_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1), \
+         success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), \
+         failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED'), \
+         status = CASE WHEN NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN 'IDLE' ELSE status END, \
+         current_path = CASE WHEN NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN NULL ELSE current_path END \
+         WHERE id = 1",
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
+}
+
+pub async fn has_sync_work_in_folder(pool: &SqlitePool, folder: &str) -> Result<bool, sqlx::Error> {
+    let prefix = format!("{}%", folder.trim_end_matches(['/', '\\']));
+    let paths: Vec<String> = sqlx::query_scalar(
+        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND status = 'PENDING' AND local_path LIKE ?",
+    )
+    .bind(prefix)
+    .fetch_all(pool)
+    .await?;
+    let folder = normalize_folder_path(&PathBuf::from(folder));
+    Ok(paths
+        .into_iter()
+        .any(|path| path_is_within(&normalize_folder_path(&PathBuf::from(path)), &folder)))
+}
+
+pub async fn discard_sync_data_in_folder(
+    pool: &SqlitePool,
+    folder: &str,
+) -> Result<(), sqlx::Error> {
+    let prefix = format!("{}%", folder.trim_end_matches(['/', '\\']));
+    let paths: Vec<String> = sqlx::query_scalar(
+        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND local_path LIKE ? \
+         UNION \
+         SELECT local_path FROM sync_state WHERE status != 'SYNCED' AND local_path LIKE ?",
+    )
+    .bind(&prefix)
+    .bind(&prefix)
+    .fetch_all(pool)
+    .await?;
+    let folder = normalize_folder_path(&PathBuf::from(folder));
+    let matching: Vec<_> = paths
+        .into_iter()
+        .filter(|path| path_is_within(&normalize_folder_path(&PathBuf::from(path)), &folder))
+        .collect();
+    discard_folder_sync_paths(pool, &matching).await
+}
+
+async fn discard_folder_sync_paths(pool: &SqlitePool, paths: &[String]) -> Result<(), sqlx::Error> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    let mut tx = pool.begin().await?;
+    for path_batch in paths.chunks(DISCARD_PATH_BATCH_SIZE) {
+        let mut queue = QueryBuilder::<Sqlite>::new(
+            "DELETE FROM sync_queue WHERE job_id = 1 AND local_path IN (",
+        );
+        let mut queue_paths = queue.separated(", ");
+        for path in path_batch {
+            queue_paths.push_bind(path);
+        }
+        queue_paths.push_unseparated(")");
+        queue.build().execute(&mut *tx).await?;
+
+        let mut state = QueryBuilder::<Sqlite>::new(
+            "DELETE FROM sync_state WHERE status != 'SYNCED' AND local_path IN (",
+        );
+        let mut state_paths = state.separated(", ");
+        for path in path_batch {
+            state_paths.push_bind(path);
+        }
+        state_paths.push_unseparated(")");
+        state.build().execute(&mut *tx).await?;
     }
 
     sqlx::query(

@@ -44,6 +44,7 @@
   "logout_confirmation": "Möchtest du dich wirklich abmelden?",
   "select_folder": "Ordner auswählen",
   "remove_folder": "Ordner entfernen",
+  "remove_folder_sync_warning": "Dieser Ordner wird gerade synchronisiert. Beim Entfernen werden aktive Uploads abgebrochen und alle offenen Übertragungen dieses Ordners verworfen. Bereits hochgeladene Dateien bleiben auf dem Server. Ordner entfernen?",
   "never": "Noch nie",
   "hero_tagline": "Immich Desktop Client",
   "hero_title_line_1": "Deine Momente",

@@ -327,6 +327,60 @@ describe("sync dashboard", () => {
     });
   });
 
+  it("confirms before cancelling an active folder sync", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    let removeCalls = 0;
+    tauri.invoke.mockImplementation((command: string, args?: { confirmCancellation?: boolean }) => {
+      if (command === "remove_folder") {
+        removeCalls += 1;
+        if (!args?.confirmCancellation) return Promise.resolve({ requiresSyncCancellation: true });
+        watchedFolders = [];
+        return Promise.resolve({ requiresSyncCancellation: false });
+      }
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve([]);
+      if (command === "get_upload_parallelism") return Promise.resolve(3);
+      if (command === "get_sync_status") return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
+      return Promise.resolve();
+    });
+    render(Page);
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Remove folder: C:/photos" }));
+
+    await waitFor(() => expect(tauri.confirm).toHaveBeenCalledWith(
+      "Syncing this folder is in progress. Removing it will cancel active uploads and discard all pending transfers for this folder. Files already uploaded remain on the server. Remove the folder?",
+      { title: "Remove folder", kind: "warning" },
+    ));
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 1, confirmCancellation: true }));
+    expect(removeCalls).toBe(2);
+  });
+
+  it("keeps an active folder when sync cancellation is declined", async () => {
+    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
+    tauri.confirm.mockResolvedValue(false);
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "remove_folder") return Promise.resolve({ requiresSyncCancellation: true });
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve(watchedFolders);
+      if (command === "get_failed_syncs") return Promise.resolve([]);
+      if (command === "get_upload_parallelism") return Promise.resolve(3);
+      if (command === "get_sync_status") return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
+      return Promise.resolve();
+    });
+    render(Page);
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Remove folder: C:/photos" }));
+
+    await waitFor(() => expect(tauri.confirm).toHaveBeenCalled());
+    expect(tauri.invoke).not.toHaveBeenCalledWith("remove_folder", { id: 1, confirmCancellation: true });
+    expect(screen.getByText("photos")).toBeInTheDocument();
+  });
+
   it("shows persisted failure details and retries them", async () => {
     failedSyncs = [{ localPath: "C:/photos/failed.jpg", failureReason: "Upload rejected" }];
     renderAuthenticatedPage();

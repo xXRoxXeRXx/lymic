@@ -167,6 +167,9 @@ pub(crate) async fn run_sync_pipeline(
                 .collect(),
             ..Default::default()
         };
+        let active_work = coordinator
+            .register_active_work(block.files.iter().map(|asset| asset.path.clone()))
+            .await;
         let result = process_sync_block(
             app.clone(),
             pool.clone(),
@@ -176,7 +179,9 @@ pub(crate) async fn run_sync_pipeline(
             progress.clone(),
             coordinator.clone(),
         )
-        .await?;
+        .await;
+        coordinator.unregister_active_work(&active_work).await;
+        let result = result?;
         totals.processed += result.processed;
         totals.uploaded += result.uploaded;
         totals.failed += result.failed;

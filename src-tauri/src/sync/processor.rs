@@ -11,10 +11,11 @@ use crate::{
     },
     sync::{retry::check_assets_exist_with_backoff, JobByteProgress, SyncCoordinatorInner},
 };
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures::{future, stream::FuturesUnordered, StreamExt};
 use serde_json::json;
 use std::sync::{atomic::Ordering, Arc};
 use tauri::Emitter;
+use tokio_util::sync::CancellationToken;
 
 #[derive(serde::Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -97,23 +98,38 @@ pub(crate) async fn process_sync_block(
                     .map(|checksums| checksums.sha1_base64.clone())
             })
             .collect();
-        let existing =
-            check_assets_exist_with_backoff(&client, hashes, &app, &audit_context).await?;
+        let mut cancellations = Vec::new();
+        for unit in chunk {
+            if let Some(asset) = unit.assets().next() {
+                if let Some(cancellation) = coordinator.cancellation_for_path(&asset.path).await {
+                    cancellations.push(cancellation);
+                }
+            }
+        }
+        let bulk_check = check_assets_exist_with_backoff(&client, hashes, &app, &audit_context);
+        let existing = if cancellations.is_empty() {
+            bulk_check.await?
+        } else {
+            tokio::select! {
+                result = bulk_check => result?,
+                _ = wait_for_any_cancellation(cancellations) => continue,
+            }
+        };
         // A check in flight may complete after pause, but its answer must not start work.
         if !can_start_work(&coordinator) {
             break;
         }
         let mut upload_units = Vec::new();
         for unit in chunk {
-            let accepted: Vec<_> = unit
-                .assets()
-                .filter(|asset| !existing.contains(&asset.checksums.as_ref().unwrap().sha1_base64))
-                .cloned()
-                .collect();
-            for asset in unit
-                .assets()
-                .filter(|asset| existing.contains(&asset.checksums.as_ref().unwrap().sha1_base64))
-            {
+            let mut accepted = Vec::new();
+            for asset in unit.assets() {
+                if is_path_cancelled(&coordinator, &asset.path).await {
+                    continue;
+                }
+                if !existing.contains(&asset.checksums.as_ref().unwrap().sha1_base64) {
+                    accepted.push(asset.clone());
+                    continue;
+                }
                 let hash = &asset.checksums.as_ref().unwrap().sha1_base64;
                 let status = if db::update_sync_state(
                     &pool,
@@ -155,6 +171,14 @@ pub(crate) async fn process_sync_block(
             let Some(unit) = pending.next() else {
                 break;
             };
+            let path = unit.image.path.clone();
+            if is_path_cancelled(&coordinator, &path).await {
+                continue;
+            }
+            let cancellation = coordinator
+                .cancellation_for_path(&path)
+                .await
+                .unwrap_or_default();
             uploads.push(upload_unit(
                 unit,
                 client.clone(),
@@ -162,6 +186,7 @@ pub(crate) async fn process_sync_block(
                 app.clone(),
                 progress.clone(),
                 audit_context.clone(),
+                cancellation,
             ));
         }
         while let Some(outcome) = uploads.next().await {
@@ -169,6 +194,14 @@ pub(crate) async fn process_sync_block(
             queue_results.extend(outcome.queue_results);
             if can_start_work(&coordinator) {
                 if let Some(unit) = pending.next() {
+                    let path = unit.image.path.clone();
+                    if is_path_cancelled(&coordinator, &path).await {
+                        continue;
+                    }
+                    let cancellation = coordinator
+                        .cancellation_for_path(&path)
+                        .await
+                        .unwrap_or_default();
                     uploads.push(upload_unit(
                         unit,
                         client.clone(),
@@ -176,6 +209,7 @@ pub(crate) async fn process_sync_block(
                         app.clone(),
                         progress.clone(),
                         audit_context.clone(),
+                        cancellation,
                     ));
                 }
             }
@@ -196,6 +230,22 @@ pub(crate) async fn process_sync_block(
         failed,
         queue_results,
     })
+}
+
+async fn wait_for_any_cancellation(cancellations: Vec<CancellationToken>) {
+    future::select_all(
+        cancellations
+            .into_iter()
+            .map(|cancellation| Box::pin(async move { cancellation.cancelled().await })),
+    )
+    .await;
+}
+
+async fn is_path_cancelled(coordinator: &SyncCoordinatorInner, path: &str) -> bool {
+    coordinator
+        .cancellation_for_path(path)
+        .await
+        .is_some_and(|cancellation| cancellation.is_cancelled())
 }
 
 fn can_start_work(coordinator: &SyncCoordinatorInner) -> bool {
@@ -329,6 +379,7 @@ async fn upload_unit(
     app: tauri::AppHandle,
     progress: JobByteProgress,
     audit_context: SyncAuditContext,
+    cancellation: CancellationToken,
 ) -> UploadOutcome {
     let image_hash = unit.image.checksums.as_ref().unwrap().sha1_base64.clone();
     let video_path = unit
@@ -361,10 +412,14 @@ async fn upload_unit(
     );
     let _ = app.emit("sync-progress", &unit.image.path);
 
-    let (uploaded, status, failure_reason, remote_id) = match client
-        .upload_asset_with_live_photo(&unit.image.path, &image_hash, video_path)
-        .await
-    {
+    let upload = client.upload_asset_with_live_photo(&unit.image.path, &image_hash, video_path);
+    let Some(upload_result) = await_or_cancellation(cancellation, upload).await else {
+        return UploadOutcome {
+            uploaded: 0,
+            queue_results: Vec::new(),
+        };
+    };
+    let (uploaded, status, failure_reason, remote_id) = match upload_result {
         Ok(remote_id) => {
             let mut persisted = true;
             for asset in unit.assets() {
@@ -467,6 +522,16 @@ async fn upload_unit(
     }
 }
 
+async fn await_or_cancellation<T>(
+    cancellation: CancellationToken,
+    operation: impl std::future::Future<Output = T>,
+) -> Option<T> {
+    tokio::select! {
+        _ = cancellation.cancelled() => None,
+        result = operation => Some(result),
+    }
+}
+
 pub(crate) async fn load_upload_parallelism(pool: &sqlx::SqlitePool) -> Result<usize, String> {
     db::get_upload_parallelism(pool)
         .await
@@ -529,21 +594,13 @@ mod tests {
 
     #[test]
     fn pause_before_hashing_prevents_new_hashes() {
-        let coordinator = SyncCoordinatorInner {
-            lock: tokio::sync::Mutex::new(()),
-            paused: std::sync::atomic::AtomicBool::new(true),
-            resume: tokio::sync::Notify::new(),
-        };
+        let coordinator = SyncCoordinatorInner::new(true);
         assert!(!can_start_work(&coordinator));
     }
 
     #[test]
     fn pause_during_hashing_prevents_follow_up_hashes() {
-        let coordinator = SyncCoordinatorInner {
-            lock: tokio::sync::Mutex::new(()),
-            paused: std::sync::atomic::AtomicBool::new(false),
-            resume: tokio::sync::Notify::new(),
-        };
+        let coordinator = SyncCoordinatorInner::new(false);
         assert!(can_start_work(&coordinator));
         coordinator.paused.store(true, Ordering::SeqCst);
         assert!(!can_start_work(&coordinator));
@@ -551,23 +608,70 @@ mod tests {
 
     #[test]
     fn pause_before_bulk_check_prevents_new_request() {
-        let coordinator = SyncCoordinatorInner {
-            lock: tokio::sync::Mutex::new(()),
-            paused: std::sync::atomic::AtomicBool::new(true),
-            resume: tokio::sync::Notify::new(),
-        };
+        let coordinator = SyncCoordinatorInner::new(true);
         assert!(!can_start_work(&coordinator));
     }
 
     #[test]
     fn pause_during_uploads_prevents_follow_up_uploads() {
-        let coordinator = SyncCoordinatorInner {
-            lock: tokio::sync::Mutex::new(()),
-            paused: std::sync::atomic::AtomicBool::new(false),
-            resume: tokio::sync::Notify::new(),
-        };
+        let coordinator = SyncCoordinatorInner::new(false);
         assert!(can_start_work(&coordinator));
         coordinator.paused.store(true, Ordering::SeqCst);
         assert!(!can_start_work(&coordinator));
+    }
+
+    #[tokio::test]
+    async fn cancellation_aborts_a_blocking_upload_without_a_terminal_queue_result() {
+        let cancellation = CancellationToken::new();
+        let entered = std::sync::Arc::new(tokio::sync::Notify::new());
+        let entered_by_upload = entered.clone();
+        let blocking_upload = async move {
+            entered_by_upload.notify_one();
+            std::future::pending::<Result<String, String>>().await
+        };
+        let cancellation_for_upload = cancellation.clone();
+        let upload = tokio::spawn(async move {
+            await_or_cancellation(cancellation_for_upload, blocking_upload).await
+        });
+
+        entered.notified().await;
+        cancellation.cancel();
+
+        // None is intentionally mapped by upload_unit to an empty queue result, so it
+        // cannot create a failed/retryable persistence record.
+        assert!(upload.await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn cancelling_one_upload_does_not_stop_another_folder() {
+        let cancelled = CancellationToken::new();
+        cancelled.cancel();
+        let other_folder = CancellationToken::new();
+
+        assert!(
+            await_or_cancellation(cancelled, std::future::pending::<()>())
+                .await
+                .is_none()
+        );
+        assert_eq!(
+            await_or_cancellation(other_folder, async { "uploaded" }).await,
+            Some("uploaded")
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_folder_paths_are_skipped_before_follow_up_uploads() {
+        let coordinator = std::sync::Arc::new(SyncCoordinatorInner::new(false));
+        coordinator
+            .register_active_work([
+                "C:/removed/first.jpg".to_string(),
+                "C:/removed/second.jpg".to_string(),
+                "C:/kept/third.jpg".to_string(),
+            ])
+            .await;
+        coordinator.cancel_work_in("C:/removed").await;
+
+        assert!(is_path_cancelled(&coordinator, "C:/removed/second.jpg").await);
+        assert!(!is_path_cancelled(&coordinator, "C:/kept/third.jpg").await);
     }
 }

@@ -18,8 +18,8 @@ pub use settings::{
     DEFAULT_UPLOAD_PARALLELISM,
 };
 pub use sync_state::{
-    discard_failed_sync_paths, get_cached_hash, get_failed_syncs, mark_sync_failed,
-    update_sync_state, FailedSyncEntry,
+    discard_failed_sync_paths, discard_sync_data_in_folder, get_cached_hash, get_failed_syncs,
+    has_sync_work_in_folder, mark_sync_failed, update_sync_state, FailedSyncEntry,
 };
 
 #[cfg(test)]

@@ -4,11 +4,24 @@ use crate::audit::audit_event;
 use crate::media::paths::{normalize_folder_path, path_is_within};
 use crate::{
     db,
-    sync::{scan_folders_for_media, sync_scan_result_if_authenticated},
+    sync::{scan_folders_for_media, sync_scan_result_if_authenticated, SyncCoordinator},
     watcher,
 };
 use serde_json::json;
 use std::path::PathBuf;
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RemoveFolderResult {
+    requires_sync_cancellation: bool,
+}
+
+fn removal_requires_confirmation(
+    has_active_work: bool,
+    confirm_cancellation: Option<bool>,
+) -> bool {
+    has_active_work && !confirm_cancellation.unwrap_or(false)
+}
 
 // tokio::sync::Mutex avoids blocking the async executor while waiting
 //         for the lock (std::sync::Mutex::lock blocks the current thread).
@@ -170,14 +183,25 @@ pub(crate) async fn remove_folder(
     app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
     watcher: tauri::State<'_, tokio::sync::Mutex<watcher::WatcherState>>,
+    sync_coordinator: tauri::State<'_, SyncCoordinator>,
     id: i64,
-) -> Result<(), String> {
+    confirm_cancellation: Option<bool>,
+) -> Result<RemoveFolderResult, String> {
     let folders = db::get_folders(pool.inner())
         .await
         .map_err(|e| e.to_string())?;
 
     if let Some(folder) = folders.iter().find(|f| f.id == id) {
         let path = folder.path.clone();
+        let has_active_work = sync_coordinator.0.has_active_work_in(&path).await
+            || db::has_sync_work_in_folder(pool.inner(), &path)
+                .await
+                .map_err(|error| error.to_string())?;
+        if removal_requires_confirmation(has_active_work, confirm_cancellation) {
+            return Ok(RemoveFolderResult {
+                requires_sync_cancellation: true,
+            });
+        }
         {
             let mut w = watcher.lock().await;
             if let Err(e) = watcher::unwatch_path(&mut w, &path) {
@@ -188,6 +212,19 @@ pub(crate) async fn remove_folder(
                 );
                 return Err(format!("Failed to unwatch '{}': {}", path, e));
             }
+        }
+
+        // The watcher is gone before cancellation so no new work can be produced for this root.
+        // The queue cleanup is path-component based and leaves sibling roots untouched.
+        sync_coordinator.0.cancel_work_in(&path).await;
+        if let Err(error) = db::discard_sync_data_in_folder(pool.inner(), &path).await {
+            let path_for_check = PathBuf::from(&path);
+            let is_available = tokio::task::spawn_blocking(move || path_for_check.is_dir())
+                .await
+                .unwrap_or(false);
+            let mut w = watcher.lock().await;
+            let _ = w.reconcile_path(&path, is_available);
+            return Err(error.to_string());
         }
 
         if let Err(error) = db::remove_folder(pool.inner(), id).await {
@@ -237,5 +274,25 @@ pub(crate) async fn remove_folder(
             json!({ "folder_id": id }),
         ),
     );
-    Ok(())
+    Ok(RemoveFolderResult {
+        requires_sync_cancellation: false,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{removal_requires_confirmation, RemoveFolderResult};
+
+    #[test]
+    fn active_folder_requires_explicit_cancellation_confirmation() {
+        assert!(removal_requires_confirmation(true, None));
+        assert!(removal_requires_confirmation(true, Some(false)));
+        assert!(!removal_requires_confirmation(true, Some(true)));
+        assert!(!removal_requires_confirmation(false, None));
+
+        let result = RemoveFolderResult {
+            requires_sync_cancellation: true,
+        };
+        assert!(result.requires_sync_cancellation);
+    }
 }
