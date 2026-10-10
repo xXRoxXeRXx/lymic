@@ -9,9 +9,8 @@ pub(crate) struct BackendTranslations {
     pub(crate) tray_sync: String,
     pub(crate) tray_pause_sync: String,
     pub(crate) tray_resume_sync: String,
-    pub(crate) tray_transferred: String,
-    pub(crate) tray_rate: String,
     pub(crate) tray_eta: String,
+    pub(crate) tray_idle_status: String,
     pub(crate) notification_complete_title: String,
     pub(crate) notification_complete_body: String,
 }

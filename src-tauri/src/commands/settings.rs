@@ -54,14 +54,14 @@ mod tests {
         assert!(!en.tray_quit.is_empty());
         assert!(!en.tray_pause_sync.is_empty());
         assert!(!en.tray_resume_sync.is_empty());
-        assert!(!en.tray_transferred.is_empty());
+        assert!(!en.tray_idle_status.is_empty());
         assert!(!en.notification_complete_body.is_empty());
 
         let de = backend_translations("de");
         assert!(!de.tray_quit.is_empty());
         assert!(!de.tray_pause_sync.is_empty());
         assert!(!de.tray_resume_sync.is_empty());
-        assert!(!de.tray_transferred.is_empty());
+        assert!(!de.tray_idle_status.is_empty());
         assert!(!de.notification_complete_body.is_empty());
     }
 }

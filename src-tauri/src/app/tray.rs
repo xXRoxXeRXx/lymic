@@ -86,7 +86,7 @@ pub(crate) fn update_transfer_status(app: &tauri::AppHandle, event: TransferStat
     if let Some(state) = app.try_state::<TrayTransferStatus>() {
         *state.0.lock().expect("tray transfer status lock poisoned") = Some(event.clone());
     }
-    apply_transfer_status(app, &event);
+    apply_transfer_status(app, Some(&event));
 }
 
 pub(crate) fn refresh_transfer_status(app: &tauri::AppHandle) {
@@ -98,50 +98,40 @@ pub(crate) fn refresh_transfer_status(app: &tauri::AppHandle) {
         .lock()
         .expect("tray transfer status lock poisoned")
         .clone();
-    if let Some(event) = event {
-        apply_transfer_status(app, &event);
-    }
+    apply_transfer_status(app, event.as_ref());
 }
 
-fn apply_transfer_status(app: &tauri::AppHandle, event: &TransferStatsEvent) {
+fn apply_transfer_status(app: &tauri::AppHandle, event: Option<&TransferStatsEvent>) {
+    let text = transfer_status_label(event, &current_locale(app));
     let Some(tray_menu) = app.try_state::<TrayMenuState>() else {
         return;
     };
     let Some(MenuItemKind::MenuItem(item)) = tray_menu.0.get("sync-status") else {
         return;
     };
-    let visible = event.status == "RUNNING" || event.status == "PAUSED";
     let _ = item.set_enabled(false);
-    let text = if visible {
-        format_transfer_status(app, event)
-    } else {
-        String::new()
-    };
     let _ = item.set_text(&text);
 }
 
-fn format_transfer_status(app: &tauri::AppHandle, event: &TransferStatsEvent) -> String {
-    let locale = current_locale(app);
-    let translations = backend_translations(&locale);
-    let mut parts = vec![format!(
-        "{}% | {}: {}",
-        if event.total_bytes == 0 {
-            0
-        } else {
-            ((event.completed_bytes as f64 / event.total_bytes as f64) * 100.0).round() as u64
-        },
-        translations.tray_transferred,
-        format_bytes(event.stats.transferred_bytes, &locale),
-    )];
-    if event.stats.transfer_rate_bytes_per_second > 0.0 {
-        let rate = event.stats.transfer_rate_bytes_per_second / 1_000_000.0;
-        let rate = if locale == "de" {
-            format!("{rate:.1}").replace('.', ",")
-        } else {
-            format!("{rate:.1}")
-        };
-        parts.push(format!("{}: {} MB/s", translations.tray_rate, rate));
+fn transfer_status_label(event: Option<&TransferStatsEvent>, locale: &str) -> String {
+    match event {
+        Some(event) if event.status == "RUNNING" || event.status == "PAUSED" => {
+            format_transfer_status(event, locale)
+        }
+        _ => idle_transfer_status(locale),
     }
+}
+
+fn idle_transfer_status(locale: &str) -> String {
+    backend_translations(locale).tray_idle_status.clone()
+}
+
+fn format_transfer_status(event: &TransferStatsEvent, locale: &str) -> String {
+    let translations = backend_translations(locale);
+    let mut parts = vec![format!(
+        "{}%",
+        crate::sync::progress::calculate_percent(event.completed_bytes, event.total_bytes)
+    )];
     if let Some(seconds) = event.stats.estimated_seconds_remaining {
         parts.push(format!(
             "{}: {}",
@@ -150,26 +140,6 @@ fn format_transfer_status(app: &tauri::AppHandle, event: &TransferStatsEvent) ->
         ));
     }
     parts.join(" | ")
-}
-
-fn format_bytes(bytes: u64, locale: &str) -> String {
-    const UNITS: [&str; 4] = ["B", "KiB", "MiB", "GiB"];
-    let mut value = bytes as f64;
-    let mut index = 0;
-    while value >= 1024.0 && index < UNITS.len() - 1 {
-        value /= 1024.0;
-        index += 1;
-    }
-    if index == 0 {
-        format!("{} {}", bytes, UNITS[index])
-    } else {
-        let value = if locale == "de" {
-            format!("{value:.1}").replace('.', ",")
-        } else {
-            format!("{value:.1}")
-        };
-        format!("{} {}", value, UNITS[index])
-    }
 }
 
 fn format_duration(seconds: u64) -> String {
@@ -195,7 +165,13 @@ pub(crate) fn setup(
         has_folders,
         None::<&str>,
     )?;
-    let status_i = MenuItem::with_id(app, "sync-status", "", false, None::<&str>)?;
+    let status_i = MenuItem::with_id(
+        app,
+        "sync-status",
+        &translations.tray_idle_status,
+        false,
+        None::<&str>,
+    )?;
     let menu = Menu::with_items(app, &[&status_i, &sync_i, &show_i, &quit_i])?;
     app.handle().manage(TrayMenuState(menu.clone()));
     app.handle()
@@ -297,6 +273,20 @@ fn show_main_window(app: &tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sync::progress::TransferStatsSnapshot;
+
+    fn transfer_event(status: &'static str, eta: Option<u64>) -> TransferStatsEvent {
+        TransferStatsEvent {
+            stats: TransferStatsSnapshot {
+                transferred_bytes: 42_000_000,
+                transfer_rate_bytes_per_second: 12_500_000.0,
+                estimated_seconds_remaining: eta,
+            },
+            status,
+            total_bytes: 1_000,
+            completed_bytes: 420,
+        }
+    }
 
     #[test]
     fn sync_action_text_follows_persisted_status() {
@@ -324,5 +314,57 @@ mod tests {
         assert_eq!(decide_sync_action("RUNNING"), TrayAction::Pause);
         assert_eq!(decide_sync_action("PAUSED"), TrayAction::Resume);
         assert_eq!(decide_sync_action("IDLE"), TrayAction::Start);
+    }
+
+    #[test]
+    fn idle_transfer_status_is_localized() {
+        assert_eq!(idle_transfer_status("en"), "No transfer active");
+        assert_eq!(idle_transfer_status("de"), "Keine Übertragung aktiv");
+    }
+
+    #[test]
+    fn idle_event_and_empty_state_yield_idle_label() {
+        let event = transfer_event("IDLE", None);
+
+        assert_eq!(
+            transfer_status_label(Some(&event), "en"),
+            "No transfer active"
+        );
+        assert_eq!(transfer_status_label(None, "de"), "Keine Übertragung aktiv");
+    }
+
+    #[test]
+    fn active_transfer_status_shows_percentage_and_localized_eta_only() {
+        let event = transfer_event("RUNNING", Some(192));
+
+        let text = format_transfer_status(&event, "de");
+
+        assert_eq!(text, "42% | Restzeit: 3m 12s");
+        assert!(!text.contains("42.0"));
+        assert!(!text.contains("MB/s"));
+        assert!(!text.contains("Rate"));
+    }
+
+    #[test]
+    fn active_transfer_status_without_eta_shows_percentage_only() {
+        let event = transfer_event("RUNNING", None);
+
+        assert_eq!(format_transfer_status(&event, "en"), "42%");
+    }
+
+    #[test]
+    fn paused_transfer_status_without_eta_shows_percentage_only() {
+        let event = transfer_event("PAUSED", None);
+
+        assert_eq!(format_transfer_status(&event, "en"), "42%");
+    }
+
+    #[test]
+    fn transfer_status_preserves_zero_eta_and_zero_total_behavior() {
+        let mut event = transfer_event("RUNNING", Some(0));
+        event.total_bytes = 0;
+        event.completed_bytes = 0;
+
+        assert_eq!(format_transfer_status(&event, "en"), "0% | ETA: 0m 00s");
     }
 }
