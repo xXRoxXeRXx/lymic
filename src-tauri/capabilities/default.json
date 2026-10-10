@@ -8,6 +8,8 @@
   "permissions": [
     "core:default",
     "dialog:allow-open",
-    "dialog:allow-confirm"
+    "dialog:allow-confirm",
+    "process:allow-restart",
+    "updater:default"
   ]
 }

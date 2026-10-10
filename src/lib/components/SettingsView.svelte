@@ -10,10 +10,13 @@
     themePreference: ThemePreference;
     uploadParallelism: number;
     isSavingUploadParallelism: boolean;
+    updateStatus: "unknown" | "current" | "available";
+    isCheckingForUpdates: boolean;
     onToggleAutostart: () => void;
     onLocaleChange: (locale: string) => void;
     onThemeChange: (preference: ThemePreference) => void;
     onUploadParallelismChange: (event: Event) => void;
+    onCheckForUpdates: () => void;
     onLogout: () => void;
   }
 
@@ -24,10 +27,13 @@
     themePreference,
     uploadParallelism,
     isSavingUploadParallelism,
+    updateStatus,
+    isCheckingForUpdates,
     onToggleAutostart,
     onLocaleChange,
     onThemeChange,
     onUploadParallelismChange,
+    onCheckForUpdates,
     onLogout
   }: Props = $props();
 </script>
@@ -78,6 +84,24 @@
           <span class="sr-only">{$t('theme_dark')}</span>
         </button>
       </div>
+    </div>
+
+    <div class="p-8 flex items-center justify-between gap-6 border-b border-black/5 dark:border-white/10">
+      <div class="space-y-1">
+        <p class="font-bold text-slate-900 dark:text-slate-100">{$t('updates')}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400">
+          {#if updateStatus === 'current'}
+            {$t('update_current')}
+          {:else if updateStatus === 'available'}
+            {$t('update_available_short')}
+          {:else}
+            {$t('update_check_subtitle')}
+          {/if}
+        </p>
+      </div>
+      <button type="button" class="rounded-lg bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700" onclick={onCheckForUpdates} disabled={isCheckingForUpdates}>
+        {isCheckingForUpdates ? $t('update_checking') : $t('check_for_updates')}
+      </button>
     </div>
 
     <div class="p-8 flex items-center justify-between gap-6 border-b border-black/5 dark:border-white/10">

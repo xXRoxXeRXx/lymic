@@ -9,6 +9,8 @@ const tauri = vi.hoisted(() => ({
   listen: vi.fn(),
   isEnabled: vi.fn(),
   confirm: vi.fn(),
+  check: vi.fn(),
+  relaunch: vi.fn(),
 }));
 
 type WatchedFolder = {
@@ -45,6 +47,8 @@ vi.mock("@tauri-apps/plugin-autostart", () => ({
   isEnabled: tauri.isEnabled,
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), confirm: tauri.confirm }));
+vi.mock("@tauri-apps/plugin-updater", () => ({ check: tauri.check }));
+vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: tauri.relaunch }));
 
 function renderAuthenticatedPage() {
   tauri.invoke.mockImplementation((command: string) => {
@@ -112,6 +116,8 @@ beforeEach(() => {
   tauri.isEnabled.mockResolvedValue(false);
   tauri.confirm.mockResolvedValue(true);
   tauri.getVersion.mockResolvedValue("0.0.0");
+  tauri.check.mockResolvedValue(null);
+  tauri.relaunch.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -138,6 +144,115 @@ describe("app version", () => {
     expect(await screen.findByText("Dashboard", { selector: "h1" })).toBeInTheDocument();
     expect(screen.queryByText(/v\d+/)).not.toBeInTheDocument();
     expect(warn).toHaveBeenCalledWith("Failed to load app version", error);
+  });
+});
+
+describe("application updates", () => {
+  it("silently checks for updates at startup and opens a dialog when one is found", async () => {
+    tauri.check.mockResolvedValue({ version: "0.15.0", body: "New sync improvements", downloadAndInstall: vi.fn() });
+    renderAuthenticatedPage();
+
+    expect(await screen.findByRole("dialog", { name: "Update available" })).toBeInTheDocument();
+    expect(screen.getByText("Version 0.15.0 is ready to install.")).toBeInTheDocument();
+    expect(screen.getByText("New sync improvements")).toBeInTheDocument();
+  });
+
+  it("does not show an error when an update check fails", async () => {
+    const error = new Error("GitHub unavailable");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    tauri.check.mockRejectedValue(error);
+    renderAuthenticatedPage();
+
+    expect(await screen.findByText("Dashboard", { selector: "h1" })).toBeInTheDocument();
+    await waitFor(() => expect(warn).toHaveBeenCalledWith("Failed to check for updates", error));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("checks manually from settings and reports the current version", async () => {
+    renderAuthenticatedPage();
+    await screen.findByText("Dashboard", { selector: "h1" });
+    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
+
+    expect(await screen.findByText("Lymic is up to date.")).toBeInTheDocument();
+    expect(tauri.check).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows download progress, installs, and relaunches after confirmation", async () => {
+    let finishDownload: (() => void) | undefined;
+    const downloadAndInstall = vi.fn((onEvent: (event: { event: string; data: { contentLength?: number; chunkLength?: number } }) => void) => {
+      onEvent({ event: "Started", data: { contentLength: 100 } });
+      onEvent({ event: "Progress", data: { chunkLength: 40 } });
+      return new Promise<void>((resolve) => { finishDownload = resolve; });
+    });
+    tauri.check.mockResolvedValue({ version: "0.15.0", body: "", downloadAndInstall });
+    renderAuthenticatedPage();
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Install and restart" }));
+    expect(await screen.findByText("Downloading update... 40%")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install and restart" })).toBeDisabled();
+    await waitFor(() => expect(syncStarted).toBeTypeOf("function"));
+    syncStarted?.();
+    expect(screen.getByText("Downloading update... 40%")).toBeInTheDocument();
+    expect(screen.queryByText("Finish or resume and complete synchronization before installing this update.")).not.toBeInTheDocument();
+    finishDownload?.();
+
+    await waitFor(() => expect(tauri.relaunch).toHaveBeenCalledOnce());
+    expect(downloadAndInstall).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the dialog open and allows a retry when installation fails", async () => {
+    const downloadAndInstall = vi.fn().mockRejectedValue(new Error("Signature rejected"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    tauri.check.mockResolvedValue({ version: "0.15.0", body: "", downloadAndInstall });
+    renderAuthenticatedPage();
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Install and restart" }));
+
+    expect(await screen.findByText("The update could not be installed. You can try again.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(error).toHaveBeenCalled();
+  });
+
+  it("resets a failed installation state after checking again", async () => {
+    const downloadAndInstall = vi.fn().mockRejectedValue(new Error("Signature rejected"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    tauri.check.mockResolvedValue({ version: "0.15.0", body: "", downloadAndInstall });
+    renderAuthenticatedPage();
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Install and restart" }));
+    await screen.findByText("The update could not be installed. You can try again.");
+    await fireEvent.click(screen.getByText("Later", { selector: "button" }));
+    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
+
+    expect(await screen.findByRole("button", { name: "Install and restart" })).toBeEnabled();
+    expect(screen.queryByText("The update could not be installed. You can try again.")).not.toBeInTheDocument();
+  });
+
+  it("blocks installation during a paused sync and enables it when idle", async () => {
+    const downloadAndInstall = vi.fn();
+    tauri.check.mockResolvedValue({ version: "0.15.0", body: "", downloadAndInstall });
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_sync_status") return Promise.resolve({ status: "PAUSED", total: 1, succeeded: 0, failed: 0, currentPath: null });
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_folders") return Promise.resolve([]);
+      if (command === "get_failed_syncs") return Promise.resolve([]);
+      if (command === "get_upload_parallelism") return Promise.resolve(3);
+      return Promise.resolve();
+    });
+    render(Page);
+
+    await screen.findByText("Sync paused");
+    const install = screen.getByRole("button", { name: "Install and restart" });
+    expect(install).toBeDisabled();
+    expect(screen.getByText("Finish or resume and complete synchronization before installing this update.")).toBeInTheDocument();
+    await waitFor(() => expect(syncProgressSnapshot).toBeTypeOf("function"));
+    syncProgressSnapshot?.({ payload: { status: "IDLE", total: 1, succeeded: 1, failed: 0, currentPath: null } });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Install and restart" })).toBeEnabled());
   });
 });
 

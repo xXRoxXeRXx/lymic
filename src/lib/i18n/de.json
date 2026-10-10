@@ -68,5 +68,21 @@
   "sync_paused_hint": "Eingereihte Dateien werden an der letzten Stelle fortgesetzt.",
   "transferred": "Übertragen",
   "transfer_rate": "Rate",
-  "remaining_time": "Restzeit"
+  "remaining_time": "Restzeit",
+  "updates": "Updates",
+  "update_check_subtitle": "Prüfe, ob eine neue Version verfügbar ist.",
+  "check_for_updates": "Nach Updates suchen",
+  "update_checking": "Prüfe...",
+  "update_current": "Lymic ist aktuell.",
+  "update_available_short": "Ein Update ist verfügbar.",
+  "update_available": "Update verfügbar",
+  "update_version": "Version {version} ist zur Installation bereit.",
+  "update_notes": "Versionshinweise",
+  "update_later": "Später",
+  "update_install": "Installieren und neu starten",
+  "update_retry": "Erneut versuchen",
+  "update_downloading": "Update wird heruntergeladen...",
+  "update_installing": "Update wird installiert...",
+  "update_install_failed": "Das Update konnte nicht installiert werden. Du kannst es erneut versuchen.",
+  "update_sync_blocked": "Beende oder setze die Synchronisierung fort und warte ihren Abschluss ab, bevor du dieses Update installierst."
 }

@@ -27,6 +27,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -36,5 +37,16 @@
     ],
     "publisher": "xXRoxXeRXx",
     "copyright": "Copyright © 2026 xXRoxXeRXx"
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk0NERCMDcwMDY5OTlEODcKUldTSG5aa0djTEJObENXRHNqV1dvd2RUYmN4N2J0dlhDc2E0SHJnMXR4V2V2anZSajNlbWRVdTgK",
+      "endpoints": [
+        "https://github.com/xXRoxXeRXx/lymic/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

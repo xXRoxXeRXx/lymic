@@ -20,7 +20,7 @@ Lymic is designed as an **upload-oriented client**, not a two-way filesystem mir
 - Pause and resume synchronization safely.
 - Show synchronization status, progress, errors, and logs in the desktop UI.
 - Retry failed files.
-- Support native credential storage, system-tray controls, desktop notifications, optional autostart, English, German, and light/dark appearance preferences.
+- Support native credential storage, system-tray controls, desktop notifications, optional autostart, signed in-app updates, English, German, and light/dark appearance preferences.
 
 ## 3. Requirements
 
@@ -215,7 +215,7 @@ cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 ```
 
-The release workflow runs the frontend check plus Rust formatting, Clippy, and Rust tests. It does not currently run `npm test`.
+The release workflow runs all of the checks above, including `npm test`, before bundling a release.
 
 ## 10. Repository Map
 
@@ -238,9 +238,23 @@ The release workflow runs the frontend check plus Rust formatting, Clippy, and R
 
 ## 11. Build and Release Process
 
-Publishing is defined in [`.github/workflows/release.yml`](../.github/workflows/release.yml). A push of a tag matching `v*` triggers a matrix build for macOS, Ubuntu 22.04, and Windows. The workflow installs Node.js and stable Rust, performs the configured checks, then invokes the Tauri GitHub Action to create a draft release.
+Publishing is defined in [`.github/workflows/release.yml`](../.github/workflows/release.yml). A push of a tag matching `v*` triggers a matrix build for macOS Apple Silicon, Ubuntu 22.04, and Windows. The workflow installs Node.js and stable Rust, runs all checks, then invokes the Tauri GitHub Action to create a signed draft release. The action uploads installer artifacts, their signatures, and `latest.json`; Windows update metadata deliberately selects the NSIS installer.
 
 Update the version consistently in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` before creating a release tag.
+
+### In-app update signing
+
+Tauri validates update signatures before installation. Generate an updater key pair once, outside the repository, and preserve both the private key and its password securely:
+
+```bash
+npm run tauri signer generate
+```
+
+The public key is embedded in `src-tauri/tauri.conf.json`. Store the private key in the GitHub repository secret `TAURI_SIGNING_PRIVATE_KEY` and its password, when one was set, in `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Never commit either value. Losing the private key or password prevents signing future updates for already installed clients.
+
+Create a `vX.Y.Z` tag only after the three version fields are synchronized. The workflow leaves the GitHub release as a draft. Review generated release notes, installers, signature files, and `latest.json` for `windows-x86_64`, `linux-x86_64`, and `darwin-aarch64`, then publish the draft manually. Only published stable releases are returned by the update endpoint; drafts and pre-releases are intentionally excluded.
+
+The first updater-enabled release can update only installations that already include this updater public key. Existing `0.14.0` installations must install the first updater-enabled release manually from GitHub. Linux in-app updates apply to AppImage packages only. macOS artifacts also require Apple code signing and notarization for Gatekeeper trust; those credentials and steps are separate from Tauri updater signing.
 
 ## 12. Troubleshooting
 

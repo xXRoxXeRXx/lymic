@@ -5,6 +5,8 @@
   import { confirm, open } from "@tauri-apps/plugin-dialog";
   import { listen } from "@tauri-apps/api/event";
   import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
+  import { check, type Update } from "@tauri-apps/plugin-updater";
+  import { relaunch } from "@tauri-apps/plugin-process";
   import { Settings as SettingsIcon, AlertCircle, X } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import { isSupportedLocale } from "../lib/i18n";
@@ -13,6 +15,7 @@
   import LoginView from "#lib/components/LoginView.svelte";
   import DashboardView from "#lib/components/DashboardView.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
+  import UpdateDialog from "#lib/components/UpdateDialog.svelte";
   import type { FailedSyncEntry, LogEntry, SyncStatus, ThemePreference, WatchedFolder } from "../lib/components/types";
 
   // --- State ---
@@ -43,6 +46,13 @@
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
   let isSyncActionPending = $state(false);
   let appVersion = $state<string | undefined>();
+  let availableUpdate = $state<Update | null>(null);
+  let isUpdateDialogOpen = $state(false);
+  let updateStatus = $state<"unknown" | "current" | "available">("unknown");
+  let isCheckingForUpdates = $state(false);
+  let updateInstallState = $state<"idle" | "downloading" | "installing" | "error">("idle");
+  let downloadedUpdateBytes = $state(0);
+  let updateContentLength = $state<number | null>(null);
 
   const themeStorageKey = "lymic-theme";
 
@@ -70,6 +80,57 @@
     themePreference = preference;
     localStorage.setItem(themeStorageKey, preference);
     applyTheme();
+  }
+
+  async function checkForUpdates() {
+    if (isCheckingForUpdates) return;
+    isCheckingForUpdates = true;
+
+    try {
+      const update = await check();
+      if (!componentMounted) return;
+      availableUpdate = update;
+      updateStatus = update ? "available" : "current";
+      if (update) {
+        updateInstallState = "idle";
+        isUpdateDialogOpen = true;
+      }
+    } catch (error) {
+      // Update endpoint, network, and signature errors must not interrupt normal app use.
+      console.warn("Failed to check for updates", error);
+    } finally {
+      isCheckingForUpdates = false;
+    }
+  }
+
+  async function installUpdate() {
+    if (
+      !availableUpdate ||
+      syncStatus === "syncing" ||
+      syncStatus === "paused" ||
+      updateInstallState === "downloading" ||
+      updateInstallState === "installing"
+    ) return;
+
+    downloadedUpdateBytes = 0;
+    updateContentLength = null;
+    updateInstallState = "downloading";
+    try {
+      await availableUpdate.downloadAndInstall((event) => {
+        if (!componentMounted) return;
+        if (event.event === "Started") {
+          updateContentLength = event.data.contentLength ?? null;
+        } else if (event.event === "Progress") {
+          downloadedUpdateBytes += event.data.chunkLength;
+        } else if (event.event === "Finished") {
+          updateInstallState = "installing";
+        }
+      });
+      await relaunch();
+    } catch (error) {
+      console.error("Failed to install update", error);
+      if (componentMounted) updateInstallState = "error";
+    }
   }
 
   if (typeof window !== "undefined") {
@@ -195,6 +256,8 @@
     };
     colorSchemeQuery.addEventListener("change", handleColorSchemeChange);
     componentMounted = true;
+
+    void checkForUpdates();
 
     void getVersion()
       .then((version) => {
@@ -631,10 +694,13 @@
           {themePreference}
           {uploadParallelism}
           {isSavingUploadParallelism}
+          {updateStatus}
+          {isCheckingForUpdates}
           onToggleAutostart={toggleAutostart}
           onLocaleChange={(nextLocale) => $locale = nextLocale}
           onThemeChange={setThemePreference}
           onUploadParallelismChange={handleUploadParallelismChange}
+          onCheckForUpdates={checkForUpdates}
           onLogout={handleLogout}
         />
        {/if}
@@ -650,4 +716,17 @@
     </footer>
 
   </div>
+
+  {#if isUpdateDialogOpen && availableUpdate}
+    <UpdateDialog
+      version={availableUpdate.version}
+      notes={availableUpdate.body ?? ""}
+      isSyncActive={syncStatus === "syncing" || syncStatus === "paused"}
+      installState={updateInstallState}
+      downloadedBytes={downloadedUpdateBytes}
+      contentLength={updateContentLength}
+      onLater={() => isUpdateDialogOpen = false}
+      onInstall={installUpdate}
+    />
+  {/if}
 </div>
