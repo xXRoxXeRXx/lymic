@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-10-10
+
+### Added
+- **Tray pause and resume controls**:
+  - Allows pausing and resuming active synchronizations directly from the system tray menu.
+
+### Changed
+- **Compact tray transfer status**:
+  - Formats the tray tooltip to present remaining item count, transferred size, upload speed, and ETA in a compact single line.
+
+### Fixed
+- **Payload-scaled upload timeouts**:
+  - Dynamically scales HTTP upload timeouts based on file size to prevent timeouts on large media files or slower connections.
+- **Silent autostart launch**:
+  - Launches minimized to the system tray on system autostart for authenticated users without showing the main window upfront.
+- **Queue state synchronization**:
+  - Keeps tray actions synchronized with queue state and prevents redundant or conflicting sync triggers while paused.
+
 ## [0.15.0] - 2026-10-10
 
 ### Added
