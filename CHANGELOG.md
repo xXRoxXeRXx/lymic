@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.2] - 2026-10-11
+
+### Fixed
+- **Windows startup hang**:
+  - Schedules main-window display on the Tauri event loop instead of calling native window APIs during setup.
+  - Adds tray, event-loop, and window-display audit phases to precisely diagnose any remaining startup stalls.
+
 ## [0.16.1] - 2026-10-11
 
 ### Fixed

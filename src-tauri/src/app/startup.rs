@@ -220,7 +220,7 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
     })
 }
 
-fn record_startup_phase(
+pub(crate) fn record_startup_phase(
     app: &tauri::AppHandle,
     phase: &str,
     outcome: audit::Outcome,

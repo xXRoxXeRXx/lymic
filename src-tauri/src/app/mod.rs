@@ -39,13 +39,53 @@ pub(crate) fn run() {
             let has_folders = startup.has_folders;
             let recovered_sync = startup.recovered_sync.clone();
             background::spawn(app.handle().clone(), startup);
-            tray::setup(app, has_folders, recovered_sync)?;
+            startup::record_startup_phase(
+                app.handle(),
+                "tray_initializing",
+                crate::audit::Outcome::Started,
+                None,
+            );
+            tray::setup(app, has_folders, recovered_sync).map_err(|error| {
+                startup::record_startup_phase(
+                    app.handle(),
+                    "tray_initialization_failed",
+                    crate::audit::Outcome::Failure,
+                    Some(error.to_string()),
+                );
+                error
+            })?;
+            startup::record_startup_phase(
+                app.handle(),
+                "tray_ready",
+                crate::audit::Outcome::Success,
+                None,
+            );
 
-            // Do not expose the webview until every native service is ready. This prevents
-            // a rendered login screen from becoming unresponsive when startup subsequently
-            // aborts (for example because database or tray initialization failed).
+            // `setup` runs before the Windows event loop. Scheduling the native window call
+            // avoids blocking that loop with `show` or `set_focus` during initialization.
             if !start_in_background {
-                tray::show_main_window(app.handle());
+                let handle = app.handle().clone();
+                startup::record_startup_phase(
+                    &handle,
+                    "main_window_display_queued",
+                    crate::audit::Outcome::Started,
+                    None,
+                );
+                handle.clone().run_on_main_thread(move || {
+                    startup::record_startup_phase(
+                        &handle,
+                        "main_window_displaying",
+                        crate::audit::Outcome::Started,
+                        None,
+                    );
+                    tray::show_main_window(&handle);
+                    startup::record_startup_phase(
+                        &handle,
+                        "main_window_displayed",
+                        crate::audit::Outcome::Success,
+                        None,
+                    );
+                })?;
             }
             Ok(())
         })
@@ -73,6 +113,14 @@ pub(crate) fn run() {
         .build(tauri::generate_context!())
         .expect("error while building application")
         .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Ready) {
+                startup::record_startup_phase(
+                    app,
+                    "event_loop_ready",
+                    crate::audit::Outcome::Success,
+                    None,
+                );
+            }
             if matches!(event, tauri::RunEvent::Exit) {
                 if let Some(logger) = app
                     .try_state::<std::sync::Arc<crate::audit::AuditLogger>>()
