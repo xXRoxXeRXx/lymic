@@ -995,6 +995,10 @@ mod database_tests {
 
         set_upload_parallelism(&pool, 6).await.unwrap();
         assert_eq!(get_upload_parallelism(&pool).await.unwrap(), 6);
+        assert_eq!(validate_upload_parallelism(1), Some(1));
+        assert_eq!(validate_upload_parallelism(8), Some(8));
+        assert_eq!(validate_upload_parallelism(0), None);
+        assert_eq!(validate_upload_parallelism(9), None);
         assert!(set_upload_parallelism(&pool, 0).await.is_err());
         assert!(set_upload_parallelism(&pool, 9).await.is_err());
     }
