@@ -45,14 +45,13 @@ pub(crate) fn run() {
                 crate::audit::Outcome::Started,
                 None,
             );
-            tray::setup(app, has_folders, recovered_sync).map_err(|error| {
+            tray::setup(app, has_folders, recovered_sync).inspect_err(|error| {
                 startup::record_startup_phase(
                     app.handle(),
                     "tray_initialization_failed",
                     crate::audit::Outcome::Failure,
                     Some(error.to_string()),
                 );
-                error
             })?;
             startup::record_startup_phase(
                 app.handle(),
