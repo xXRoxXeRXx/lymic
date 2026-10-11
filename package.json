@@ -1,6 +1,6 @@
 {
   "name": "lymic",
-  "version": "0.16.5",
+  "version": "0.17.0",
   "description": "High-performance desktop sync client for Immich",
   "keywords": [
     "immich",

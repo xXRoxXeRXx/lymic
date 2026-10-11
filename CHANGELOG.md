@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-10-11
+
+### Added
+- **Dedicated page controllers**:
+  - Decomposes the frontend into modular controllers (`auth`, `sync`, `preferences`, `update`, and `feedback`) with unit test coverage.
+
+### Fixed
+- **Atomic upload state reconciliation**:
+  - Updates media unit state and sync item records atomically in a single database transaction upon upload completion.
+- **Audit memory bounds**:
+  - Bounds the in-memory audit queue with item and byte limits to prevent excessive memory usage under high event volume.
+- **Ambiguous watcher event reconciliation**:
+  - Recognizes ambiguous filesystem watcher events and triggers directory rescans instead of queueing unverified events.
+- **Immich response error propagation**:
+  - Correctly surfaces network failures and truncated error bodies during Immich API requests.
+- **XMP sidecar directory caching**:
+  - Caches directory scans to avoid redundant disk reads when discovering companion sidecars.
+- **Database facade encapsulation**:
+  - Narrows internal module re-exports to enforce clean architectural boundaries.
+- **NSIS installer branding**:
+  - Configures the custom application icon for the Windows NSIS installer.
+
 ## [0.16.5] - 2026-10-11
 
 ### Fixed
