@@ -34,7 +34,15 @@ fn bulk_check_status_error(status: StatusCode) -> BulkCheckError {
 
 pub(super) async fn bulk_check_response_error(response: Response) -> BulkCheckError {
     let status = response.status();
-    let detail = response_error_detail(response).await;
+    let detail = match response_error_detail(response).await {
+        Ok(detail) => detail,
+        Err(error) => {
+            return BulkCheckError::Retryable(format!(
+                "Bulk-check error response could not be read ({}): {}",
+                status, error
+            ));
+        }
+    };
     match bulk_check_status_error(status) {
         BulkCheckError::Retryable(message) => {
             BulkCheckError::Retryable(format!("{}{}", message, detail))

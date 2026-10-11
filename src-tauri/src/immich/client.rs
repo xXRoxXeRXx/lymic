@@ -95,7 +95,7 @@ impl ImmichClient {
         if !response.status().is_success() {
             return Err(format!(
                 "Server returned error: {}",
-                response_status_error(response).await
+                response_status_error(response).await?
             ));
         }
         let user: CurrentUserResponse = response
@@ -189,7 +189,7 @@ impl ImmichClient {
         } else {
             Err(format!(
                 "Upload failed: {}",
-                response_status_error(response).await
+                response_status_error(response).await?
             ))
         }
     }

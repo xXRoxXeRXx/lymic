@@ -3,19 +3,25 @@ use reqwest::Response;
 pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 8 * 1024;
 pub(super) const MAX_SUCCESS_RESPONSE_BYTES: usize = 1024 * 1024;
 
-pub(super) async fn response_status_error(response: Response) -> String {
+pub(super) async fn response_status_error(response: Response) -> Result<String, String> {
     let status = response.status();
-    format!("{}{}", status, response_error_detail(response).await)
+    match response_error_detail(response).await {
+        Ok(detail) => Ok(format!("{}{}", status, detail)),
+        Err(error) => Err(format!("{}: error body unreadable ({})", status, error)),
+    }
 }
 
-pub(super) async fn response_error_detail(response: Response) -> String {
+pub(super) async fn response_error_detail(response: Response) -> Result<String, String> {
     read_error_body_capped(response, MAX_ERROR_RESPONSE_BYTES).await
 }
 
-pub(super) async fn read_error_body_capped(mut response: Response, max_bytes: usize) -> String {
+pub(super) async fn read_error_body_capped(
+    mut response: Response,
+    max_bytes: usize,
+) -> Result<String, String> {
     let mut body = Vec::with_capacity(max_bytes);
     let mut truncated = false;
-    while let Ok(Some(chunk)) = response.chunk().await {
+    while let Some(chunk) = response.chunk().await.map_err(|error| error.to_string())? {
         let remaining = max_bytes.saturating_sub(body.len());
         if chunk.len() > remaining {
             body.extend_from_slice(&chunk[..remaining]);
@@ -28,12 +34,12 @@ pub(super) async fn read_error_body_capped(mut response: Response, max_bytes: us
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    match (text.is_empty(), truncated) {
+    Ok(match (text.is_empty(), truncated) {
         (true, false) => String::new(),
         (true, true) => ": [truncated]".to_string(),
         (false, false) => format!(": {}", text),
         (false, true) => format!(": {}... [truncated]", text),
-    }
+    })
 }
 
 pub(super) async fn read_response_body_limited(
@@ -69,7 +75,10 @@ pub(super) async fn read_response_body_limited(
 
 #[cfg(test)]
 mod tests {
-    use super::{read_error_body_capped, read_response_body_limited, MAX_ERROR_RESPONSE_BYTES};
+    use super::{
+        read_error_body_capped, read_response_body_limited, response_status_error,
+        MAX_ERROR_RESPONSE_BYTES,
+    };
     use reqwest::{Client, Response};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -135,11 +144,38 @@ mod tests {
     async fn error_body_is_capped_and_marked_as_truncated() {
         let body = vec![b'x'; MAX_ERROR_RESPONSE_BYTES + 1];
         let response = test_response(&format!("HTTP/1.1 500 Internal Server Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()), body).await;
-        let detail = read_error_body_capped(response, MAX_ERROR_RESPONSE_BYTES).await;
+        let detail = read_error_body_capped(response, MAX_ERROR_RESPONSE_BYTES)
+            .await
+            .unwrap();
         assert!(detail.ends_with("... [truncated]"));
         assert_eq!(
             detail.len(),
             MAX_ERROR_RESPONSE_BYTES + ": ".len() + "... [truncated]".len()
         );
+    }
+
+    #[tokio::test]
+    async fn error_body_read_rejects_truncated_response_after_partial_bytes() {
+        let response = test_response(
+            "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 14\r\nConnection: close\r\n\r\n",
+            b"partial".to_vec(),
+        )
+        .await;
+
+        assert!(read_error_body_capped(response, MAX_ERROR_RESPONSE_BYTES)
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn status_error_includes_status_when_error_body_read_fails() {
+        let response = test_response(
+            "HTTP/1.1 401 Unauthorized\r\nContent-Length: 14\r\nConnection: close\r\n\r\n",
+            b"partial".to_vec(),
+        )
+        .await;
+
+        let error = response_status_error(response).await.unwrap_err();
+        assert!(error.starts_with("401 Unauthorized: error body unreadable ("));
     }
 }
