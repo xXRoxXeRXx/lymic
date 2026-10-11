@@ -70,6 +70,9 @@ pub(crate) fn update_locale(
 
     let mut current = state.0.lock().map_err(|e| e.to_string())?;
     *current = locale.clone();
+    // `refresh_sync_action` reads LocaleState again. Release this non-reentrant mutex
+    // before updating tray labels, otherwise locale initialization deadlocks at startup.
+    drop(current);
 
     // Update tray menu labels
     let translations = backend_translations(&locale);
