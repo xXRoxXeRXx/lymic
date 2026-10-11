@@ -29,6 +29,7 @@ pub(crate) struct SyncSummary {
 
 pub(crate) const BULK_CHECK_CHUNK_SIZE: usize = 100;
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_sync_block(
     app: tauri::AppHandle,
     pool: sqlx::SqlitePool,
@@ -375,6 +376,7 @@ struct UploadOutcome {
     queue_results: Vec<(String, String)>,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn upload_unit(
     unit: HashedUploadUnit,
     client: Arc<ImmichClient>,

@@ -8,7 +8,8 @@ pub use event::{
 };
 #[allow(unused_imports)]
 pub use writer::{
-    report_audit, AuditError, AuditLogger, AuditWriter, MAX_AUDIT_FILES, MAX_AUDIT_FILE_BYTES,
+    report_audit, AuditError, AuditLogger, AuditWriter, AUDIT_QUEUE_BYTE_CAPACITY,
+    AUDIT_QUEUE_CAPACITY, MAX_AUDIT_FILES, MAX_AUDIT_FILE_BYTES,
 };
 
 fn emit_audit_failure(app: &AppHandle, message: &str) {
