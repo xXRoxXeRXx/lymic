@@ -21,6 +21,23 @@ pub(crate) fn request_rescan(rescan_requested: &AtomicBool, rescan_notify: &Noti
     rescan_notify.notify_one();
 }
 
+pub(crate) fn dispatch_event(
+    event: Event,
+    tx: &mpsc::Sender<Event>,
+    rescan_requested: &AtomicBool,
+    rescan_notify: &Notify,
+) {
+    match event.kind {
+        EventKind::Create(_) | EventKind::Modify(_) => {
+            // A full queue means individual paths are no longer trustworthy. The
+            // receiver will reconcile every watched folder after draining its batch.
+            send_or_request_rescan(tx, event, rescan_requested, rescan_notify);
+        }
+        EventKind::Any | EventKind::Other => request_rescan(rescan_requested, rescan_notify),
+        EventKind::Remove(_) | EventKind::Access(_) => {}
+    }
+}
+
 pub fn create_watcher(
     tx: mpsc::Sender<Event>,
     rescan_requested: Arc<AtomicBool>,
@@ -28,14 +45,7 @@ pub fn create_watcher(
 ) -> notify::Result<RecommendedWatcher> {
     RecommendedWatcher::new(
         move |res: notify::Result<Event>| match res {
-            Ok(event) => match event.kind {
-                EventKind::Create(_) | EventKind::Modify(_) => {
-                    // A full queue means individual paths are no longer trustworthy. The
-                    // receiver will reconcile every watched folder after draining its batch.
-                    send_or_request_rescan(&tx, event, &rescan_requested, &rescan_notify);
-                }
-                _ => {}
-            },
+            Ok(event) => dispatch_event(event, &tx, &rescan_requested, &rescan_notify),
             Err(_) => {
                 // notify itself can report an overflow or backend error. Reconcile rather
                 // than silently accepting a potentially incomplete event stream.
@@ -49,6 +59,66 @@ pub fn create_watcher(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
+    use std::path::PathBuf;
+
+    async fn was_notified(notify: &Notify) -> bool {
+        tokio::time::timeout(std::time::Duration::ZERO, notify.notified())
+            .await
+            .is_ok()
+    }
+
+    #[tokio::test]
+    async fn create_and_modify_events_are_forwarded_unchanged() {
+        let (tx, mut rx) = mpsc::channel(2);
+        let dirty = AtomicBool::new(false);
+        let notify = Notify::new();
+        let create =
+            Event::new(EventKind::Create(CreateKind::File)).add_path(PathBuf::from("created.jpg"));
+        let rename = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::Both)))
+            .add_path(PathBuf::from("before.jpg"))
+            .add_path(PathBuf::from("after.jpg"));
+
+        dispatch_event(create.clone(), &tx, &dirty, &notify);
+        dispatch_event(rename.clone(), &tx, &dirty, &notify);
+
+        assert_eq!(rx.recv().await, Some(create));
+        assert_eq!(rx.recv().await, Some(rename));
+        assert!(!dirty.load(Ordering::Acquire));
+    }
+
+    #[tokio::test]
+    async fn ambiguous_events_request_a_rescan_without_queueing() {
+        for kind in [EventKind::Any, EventKind::Other] {
+            let (tx, mut rx) = mpsc::channel(1);
+            let dirty = AtomicBool::new(false);
+            let notify = Notify::new();
+
+            dispatch_event(Event::new(kind), &tx, &dirty, &notify);
+
+            assert!(dirty.load(Ordering::Acquire));
+            assert!(was_notified(&notify).await);
+            assert!(rx.try_recv().is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn remove_events_are_ignored() {
+        let (tx, mut rx) = mpsc::channel(1);
+        let dirty = AtomicBool::new(false);
+        let notify = Notify::new();
+
+        dispatch_event(
+            Event::new(EventKind::Remove(RemoveKind::File)).add_path(PathBuf::from("gone.jpg")),
+            &tx,
+            &dirty,
+            &notify,
+        );
+
+        assert!(!dirty.load(Ordering::Acquire));
+        assert!(rx.try_recv().is_err());
+        assert!(!was_notified(&notify).await);
+    }
 
     #[tokio::test]
     async fn full_channel_requests_a_rescan() {
@@ -60,10 +130,6 @@ mod tests {
         send_or_request_rescan(&tx, 2, &dirty, &notify);
 
         assert!(dirty.load(Ordering::Acquire));
-        assert!(
-            tokio::time::timeout(std::time::Duration::ZERO, notify.notified())
-                .await
-                .is_ok()
-        );
+        assert!(was_notified(&notify).await);
     }
 }
