@@ -24,18 +24,71 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
         .map_err(|error| format!("Failed to initialize audit logger: {error}"))?;
     handle.manage(std::sync::Arc::new(audit_logger));
 
+    record_startup_phase(&handle, "audit_logger_ready", audit::Outcome::Success, None);
+
     let (tx, watch_events) = tokio::sync::mpsc::channel(WATCH_EVENT_QUEUE_CAPACITY);
     let rescan_requested = std::sync::Arc::new(AtomicBool::new(false));
     let rescan_notify = std::sync::Arc::new(tokio::sync::Notify::new());
+    record_startup_phase(
+        &handle,
+        "watcher_initializing",
+        audit::Outcome::Started,
+        None,
+    );
     let watcher = watcher::create_watcher(tx, rescan_requested.clone(), rescan_notify.clone())
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| {
+            record_startup_phase(
+                &handle,
+                "watcher_initialization_failed",
+                audit::Outcome::Failure,
+                Some(error.to_string()),
+            );
+            error.to_string()
+        })?;
+    record_startup_phase(&handle, "watcher_ready", audit::Outcome::Success, None);
 
     // If DB initialization fails completely, setup exits cleanly. Corruption is repaired by db::init.
-    let db_init = tauri::async_runtime::block_on(db::init(&handle))
-        .map_err(|error| format!("Failed to initialize database: {error}"))?;
+    record_startup_phase(
+        &handle,
+        "database_initializing",
+        audit::Outcome::Started,
+        None,
+    );
+    let db_init = tauri::async_runtime::block_on(db::init(&handle)).map_err(|error| {
+        let message = format!("Failed to initialize database: {error}");
+        record_startup_phase(
+            &handle,
+            "database_initialization_failed",
+            audit::Outcome::Failure,
+            Some(message.clone()),
+        );
+        message
+    })?;
     let pool = db_init.pool;
-    let recovered_sync = tauri::async_runtime::block_on(db::recover_sync_job(&pool))
-        .map_err(|error| format!("Failed to recover sync queue: {error}"))?;
+    record_startup_phase(&handle, "database_ready", audit::Outcome::Success, None);
+    record_startup_phase(
+        &handle,
+        "sync_recovery_starting",
+        audit::Outcome::Started,
+        None,
+    );
+    let recovered_sync =
+        tauri::async_runtime::block_on(db::recover_sync_job(&pool)).map_err(|error| {
+            let message = format!("Failed to recover sync queue: {error}");
+            record_startup_phase(
+                &handle,
+                "sync_recovery_failed",
+                audit::Outcome::Failure,
+                Some(message.clone()),
+            );
+            message
+        })?;
+    record_startup_phase(
+        &handle,
+        "sync_recovery_complete",
+        audit::Outcome::Success,
+        None,
+    );
 
     let mut recovery_notice = None;
     if let db::DatabaseStatus::Repaired {
@@ -165,4 +218,29 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
         rescan_requested,
         rescan_notify,
     })
+}
+
+fn record_startup_phase(
+    app: &tauri::AppHandle,
+    phase: &str,
+    outcome: audit::Outcome,
+    failure_reason: Option<String>,
+) {
+    audit_event(
+        app,
+        audit::AuditEvent::new(
+            audit::AuditEvent::operation_id(),
+            "app.startup.phase",
+            outcome,
+            if failure_reason.is_some() {
+                audit::Severity::Error
+            } else {
+                audit::Severity::Info
+            },
+            None,
+            "startup",
+            phase,
+            json!({ "phase": phase, "failure_reason": failure_reason }),
+        ),
+    );
 }

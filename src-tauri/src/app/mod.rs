@@ -33,15 +33,21 @@ pub(crate) fn run() {
         .setup(|app| {
             let args = std::env::args_os().collect::<Vec<_>>();
             let has_credentials = has_stored_credentials(crate::auth::get_credentials());
-            if !should_start_in_background(&args, has_credentials) {
-                tray::show_main_window(app.handle());
-            }
+            let start_in_background = should_start_in_background(&args, has_credentials);
 
             let startup = startup::initialize(app)?;
             let has_folders = startup.has_folders;
             let recovered_sync = startup.recovered_sync.clone();
             background::spawn(app.handle().clone(), startup);
-            tray::setup(app, has_folders, recovered_sync)
+            tray::setup(app, has_folders, recovered_sync)?;
+
+            // Do not expose the webview until every native service is ready. This prevents
+            // a rendered login screen from becoming unresponsive when startup subsequently
+            // aborts (for example because database or tray initialization failed).
+            if !start_in_background {
+                tray::show_main_window(app.handle());
+            }
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             crate::commands::auth::login,
