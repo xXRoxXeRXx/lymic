@@ -4,3 +4,4 @@ mod response;
 mod upload;
 
 pub(crate) use client::ImmichClient;
+pub(crate) use upload::SidecarDirectoryCache;

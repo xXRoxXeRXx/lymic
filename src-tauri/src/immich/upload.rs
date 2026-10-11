@@ -1,7 +1,9 @@
 use futures::TryStreamExt;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 use tokio::io::AsyncReadExt as _;
 use tokio_util::io::ReaderStream;
 
@@ -14,6 +16,19 @@ pub(super) struct UploadPayload {
     pub(super) total_file_bytes: u64,
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct SidecarDirectoryCache {
+    directories: Arc<Mutex<HashMap<PathBuf, Arc<DirectoryIndexSlot>>>>,
+}
+
+type DirectoryIndexResult = Result<Arc<DirectorySidecarIndex>, String>;
+type DirectoryIndexSlot = OnceLock<DirectoryIndexResult>;
+
+#[derive(Clone, Default)]
+struct DirectorySidecarIndex {
+    by_lowercase_name: HashMap<String, Vec<PathBuf>>,
+}
+
 #[derive(Deserialize)]
 struct UploadResponse {
     id: String,
@@ -23,6 +38,7 @@ pub(super) async fn upload_form(
     path: &str,
     live_photo_path: Option<&str>,
     transfer_tracker: Option<TransferStatsTracker>,
+    sidecar_cache: SidecarDirectoryCache,
 ) -> Result<UploadPayload, String> {
     let path_buf = std::path::PathBuf::from(path);
     let file_name = path_buf
@@ -33,7 +49,7 @@ pub(super) async fn upload_form(
     let metadata_path = path_buf.clone();
     let (metadata, sidecar_path) = tokio::task::spawn_blocking(move || {
         let metadata = std::fs::metadata(&metadata_path).map_err(|error| error.to_string())?;
-        let sidecar_path = find_sidecar_path(&metadata_path)?;
+        let sidecar_path = sidecar_cache.find_sidecar_path(&metadata_path)?;
         Ok::<_, String>((metadata, sidecar_path))
     })
     .await
@@ -162,82 +178,105 @@ fn observed_stream(
     })
 }
 
-fn find_sidecar_path(asset_path: &Path) -> Result<Option<PathBuf>, String> {
-    let candidates = sidecar_candidates(asset_path);
-    for candidate in &candidates {
-        match std::fs::metadata(candidate) {
-            Ok(metadata) if metadata.is_file() => return Ok(Some(candidate.clone())),
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(format!(
-                    "Cannot inspect XMP sidecar for {} at {}: {}",
-                    asset_path.display(),
-                    candidate.display(),
-                    error
-                ));
-            }
-        }
+impl SidecarDirectoryCache {
+    pub(crate) fn new() -> Self {
+        Self::default()
     }
 
-    let parent = asset_path
-        .parent()
-        .filter(|path| !path.as_os_str().is_empty());
-    let directory = parent.unwrap_or_else(|| Path::new("."));
-    let entries = std::fs::read_dir(directory).map_err(|error| {
-        format!(
-            "Cannot scan directory {} for XMP sidecar of {}: {}",
-            directory.display(),
-            asset_path.display(),
-            error
-        )
-    })?;
+    fn find_sidecar_path(&self, asset_path: &Path) -> Result<Option<PathBuf>, String> {
+        let directory = asset_path
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let index_slot = {
+            let mut directories = self
+                .directories
+                .lock()
+                .map_err(|_| "XMP sidecar directory cache lock was poisoned".to_string())?;
+            directories
+                .entry(directory.to_path_buf())
+                .or_insert_with(|| Arc::new(DirectoryIndexSlot::new()))
+                .clone()
+        };
+        let index = index_slot
+            .get_or_init(|| DirectorySidecarIndex::build(directory).map(Arc::new))
+            .clone()?;
+        index.find(asset_path)
+    }
+}
 
-    let expected_names: Vec<_> = candidates
-        .iter()
-        .map(|candidate| candidate.file_name().and_then(|name| name.to_str()))
-        .collect();
-    let mut matches: Vec<Vec<PathBuf>> = vec![Vec::new(); candidates.len()];
-    for entry in entries {
-        let entry = entry.map_err(|error| {
+impl DirectorySidecarIndex {
+    fn build(directory: &Path) -> Result<Self, String> {
+        let entries = std::fs::read_dir(directory).map_err(|error| {
             format!(
-                "Cannot read directory entry in {} while finding XMP sidecar for {}: {}",
+                "Cannot scan directory {} for XMP sidecars: {}",
                 directory.display(),
-                asset_path.display(),
                 error
             )
         })?;
-        let entry_name = entry.file_name();
-        let Some(entry_name) = entry_name.to_str() else {
-            continue;
-        };
-        for (index, expected_name) in expected_names.iter().enumerate() {
-            if expected_name
-                .is_some_and(|expected_name| entry_name.eq_ignore_ascii_case(expected_name))
-            {
-                let path = entry.path();
-                let metadata = std::fs::metadata(&path).map_err(|error| {
-                    format!(
-                        "Cannot inspect XMP sidecar candidate {} for {}: {}",
+        let mut by_lowercase_name: HashMap<String, Vec<PathBuf>> = HashMap::new();
+        for entry in entries {
+            let entry = entry.map_err(|error| {
+                format!(
+                    "Cannot read directory entry in {} while indexing XMP sidecars: {}",
+                    directory.display(),
+                    error
+                )
+            })?;
+            let entry_name = entry.file_name();
+            let Some(entry_name) = entry_name.to_str() else {
+                continue;
+            };
+            if !entry_name.to_ascii_lowercase().ends_with(".xmp") {
+                continue;
+            }
+            let path = entry.path();
+            let metadata = match std::fs::metadata(&path) {
+                Ok(metadata) => metadata,
+                // A sidecar can disappear between read_dir and metadata. It was not part of
+                // this job's snapshot, so ignore it rather than failing every upload here.
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => {
+                    return Err(format!(
+                        "Cannot inspect XMP sidecar candidate {}: {}",
                         path.display(),
-                        asset_path.display(),
                         error
-                    )
-                })?;
-                if metadata.is_file() {
-                    matches[index].push(path);
+                    ));
                 }
+            };
+            if metadata.is_file() {
+                by_lowercase_name
+                    .entry(entry_name.to_ascii_lowercase())
+                    .or_default()
+                    .push(path);
             }
         }
+        for paths in by_lowercase_name.values_mut() {
+            paths.sort();
+        }
+        Ok(Self { by_lowercase_name })
     }
 
-    for mut schema_matches in matches {
-        schema_matches.sort();
-        if let Some(sidecar_path) = schema_matches.into_iter().next() {
-            return Ok(Some(sidecar_path));
+    fn find(&self, asset_path: &Path) -> Result<Option<PathBuf>, String> {
+        let candidates = sidecar_candidates(asset_path);
+        for candidate in candidates {
+            let Some(name) = candidate.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            let Some(matches) = self.by_lowercase_name.get(&name.to_ascii_lowercase()) else {
+                continue;
+            };
+            if let Some(exact) = matches.iter().find(|path| {
+                path.file_name().and_then(|entry_name| entry_name.to_str()) == Some(name)
+            }) {
+                return Ok(Some(exact.clone()));
+            }
+            if let Some(sidecar_path) = matches.first() {
+                return Ok(Some(sidecar_path.clone()));
+            }
         }
+        Ok(None)
     }
-    Ok(None)
 }
 
 fn sidecar_candidates(asset_path: &Path) -> Vec<PathBuf> {
@@ -275,8 +314,8 @@ pub(super) fn parse_upload_response(body: &[u8]) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        find_sidecar_path, observed_stream, parse_upload_response, sidecar_candidates, upload_form,
-        validate_sidecar_size, MAX_SIDECAR_BYTES,
+        observed_stream, parse_upload_response, sidecar_candidates, upload_form,
+        validate_sidecar_size, SidecarDirectoryCache, MAX_SIDECAR_BYTES,
     };
     use crate::sync::progress::TransferStatsTracker;
     use futures::StreamExt;
@@ -299,6 +338,10 @@ mod tests {
         let path = directory.join(name);
         std::fs::write(&path, b"test").unwrap();
         path
+    }
+
+    fn find_sidecar_path(asset_path: &Path) -> Result<Option<PathBuf>, String> {
+        SidecarDirectoryCache::new().find_sidecar_path(asset_path)
     }
 
     #[tokio::test]
@@ -326,9 +369,14 @@ mod tests {
         std::fs::write(&asset, b"image data").unwrap();
         let asset_size = std::fs::metadata(&asset).unwrap().len();
 
-        let payload = upload_form(asset.to_str().unwrap(), None, None)
-            .await
-            .unwrap();
+        let payload = upload_form(
+            asset.to_str().unwrap(),
+            None,
+            None,
+            SidecarDirectoryCache::new(),
+        )
+        .await
+        .unwrap();
         assert_eq!(payload.total_file_bytes, asset_size);
         drop(payload);
 
@@ -339,6 +387,7 @@ mod tests {
             asset.to_str().unwrap(),
             Some(live_photo.to_str().unwrap()),
             None,
+            SidecarDirectoryCache::new(),
         )
         .await
         .unwrap();
@@ -348,9 +397,14 @@ mod tests {
         let sidecar = asset.with_extension("xmp");
         std::fs::write(&sidecar, b"sidecar data").unwrap();
         let sidecar_size = std::fs::metadata(&sidecar).unwrap().len();
-        let payload = upload_form(asset.to_str().unwrap(), None, None)
-            .await
-            .unwrap();
+        let payload = upload_form(
+            asset.to_str().unwrap(),
+            None,
+            None,
+            SidecarDirectoryCache::new(),
+        )
+        .await
+        .unwrap();
         assert_eq!(payload.total_file_bytes, asset_size + sidecar_size);
         drop(payload);
 
@@ -420,6 +474,25 @@ mod tests {
         create_file(&directory, "photo.jpg.xmp");
 
         assert_eq!(find_sidecar_path(&asset).unwrap(), Some(stem_sidecar));
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn cache_keeps_a_directory_snapshot_until_the_next_sync_job() {
+        let directory = temporary_directory();
+        let asset = create_file(&directory, "photo.jpg");
+        let cache = SidecarDirectoryCache::new();
+
+        assert_eq!(cache.find_sidecar_path(&asset).unwrap(), None);
+        let sidecar = create_file(&directory, "photo.xmp");
+        assert_eq!(cache.find_sidecar_path(&asset).unwrap(), None);
+        assert_eq!(
+            SidecarDirectoryCache::new()
+                .find_sidecar_path(&asset)
+                .unwrap(),
+            Some(sidecar)
+        );
+
         std::fs::remove_dir_all(directory).unwrap();
     }
 

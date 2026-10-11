@@ -4,7 +4,7 @@ use crate::{
     app::events::log_to_ui,
     audit::{self, audit_event, upload_details, SyncAuditContext},
     db,
-    immich::ImmichClient,
+    immich::{ImmichClient, SidecarDirectoryCache},
     media::{
         model::{upload_units_from_assets, HashedUploadUnit, ScanResult, UploadUnit},
         scanner::{calculate_stable_checksums, reuse_cached_checksums},
@@ -37,6 +37,7 @@ pub(crate) async fn process_sync_block(
     audit_context: SyncAuditContext,
     progress: JobByteProgress,
     coordinator: Arc<SyncCoordinatorInner>,
+    sidecar_cache: SidecarDirectoryCache,
 ) -> Result<SyncSummary, String> {
     let upload_parallelism = load_upload_parallelism(&pool).await?;
     let ScanResult {
@@ -187,6 +188,7 @@ pub(crate) async fn process_sync_block(
                 progress.clone(),
                 audit_context.clone(),
                 cancellation,
+                sidecar_cache.clone(),
             ));
         }
         while let Some(outcome) = uploads.next().await {
@@ -210,6 +212,7 @@ pub(crate) async fn process_sync_block(
                         progress.clone(),
                         audit_context.clone(),
                         cancellation,
+                        sidecar_cache.clone(),
                     ));
                 }
             }
@@ -380,6 +383,7 @@ async fn upload_unit(
     progress: JobByteProgress,
     audit_context: SyncAuditContext,
     cancellation: CancellationToken,
+    sidecar_cache: SidecarDirectoryCache,
 ) -> UploadOutcome {
     let image_hash = unit.image.checksums.as_ref().unwrap().sha1_base64.clone();
     let video_path = unit
@@ -417,6 +421,7 @@ async fn upload_unit(
         &image_hash,
         video_path,
         Some(progress.transfer_stats()),
+        sidecar_cache,
     );
     let Some(upload_result) = await_or_cancellation(cancellation, upload).await else {
         return UploadOutcome {

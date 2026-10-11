@@ -7,7 +7,7 @@ use crate::{
     },
     audit::{self, audit_event, SyncAuditContext},
     db,
-    immich::ImmichClient,
+    immich::{ImmichClient, SidecarDirectoryCache},
     media::model::{Asset, ScanResult},
     sync::{
         processor::{process_sync_block, SyncSummary},
@@ -83,6 +83,7 @@ pub(crate) async fn run_sync_pipeline(
         snapshot.completed_bytes.max(0) as u64,
     );
     let transfer_stats = progress.transfer_stats();
+    let sidecar_cache = SidecarDirectoryCache::new();
     transfer_stats.set_active(true);
     let _transfer_cleanup = TransferStatsCleanup {
         app: app.clone(),
@@ -208,6 +209,7 @@ pub(crate) async fn run_sync_pipeline(
             audit_context.clone(),
             progress.clone(),
             coordinator.clone(),
+            sidecar_cache.clone(),
         )
         .await;
         coordinator.unregister_active_work(&active_work).await;

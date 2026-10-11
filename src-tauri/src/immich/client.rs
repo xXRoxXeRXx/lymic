@@ -2,7 +2,7 @@ use super::bulk_check::{bulk_check_response_error, parse_bulk_check_response, Bu
 use super::response::{
     read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
 };
-use super::upload::{parse_upload_response, upload_form};
+use super::upload::{parse_upload_response, upload_form, SidecarDirectoryCache};
 use crate::sync::progress::TransferStatsTracker;
 use reqwest::{Client, Response};
 use serde::Deserialize;
@@ -155,8 +155,9 @@ impl ImmichClient {
         precomputed_hash: &str,
         live_photo_path: Option<&str>,
         transfer_tracker: Option<TransferStatsTracker>,
+        sidecar_cache: SidecarDirectoryCache,
     ) -> Result<String, String> {
-        let payload = upload_form(path, live_photo_path, transfer_tracker).await?;
+        let payload = upload_form(path, live_photo_path, transfer_tracker, sidecar_cache).await?;
         self.post_upload_form(
             payload.form,
             precomputed_hash,
@@ -196,7 +197,9 @@ impl ImmichClient {
 
 #[cfg(test)]
 mod tests {
-    use super::{upload_timeout, ImmichClient, GIB_BYTES, UPLOAD_TIMEOUT_BASE_SECONDS};
+    use super::{
+        upload_timeout, ImmichClient, SidecarDirectoryCache, GIB_BYTES, UPLOAD_TIMEOUT_BASE_SECONDS,
+    };
     use reqwest::Client;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -362,7 +365,13 @@ mod tests {
         let asset_path = temporary_file(b"image data");
         assert_eq!(
             client
-                .upload_asset_with_live_photo(asset_path.to_str().unwrap(), "new-file", None, None)
+                .upload_asset_with_live_photo(
+                    asset_path.to_str().unwrap(),
+                    "new-file",
+                    None,
+                    None,
+                    SidecarDirectoryCache::new(),
+                )
                 .await
                 .unwrap(),
             "uploaded-asset"
@@ -409,6 +418,7 @@ mod tests {
                     "image-hash",
                     Some(video.to_str().unwrap()),
                     None,
+                    SidecarDirectoryCache::new(),
                 )
                 .await
                 .unwrap(),
@@ -439,7 +449,13 @@ mod tests {
         };
         let asset_path = temporary_file(b"image data");
         let error = client
-            .upload_asset_with_live_photo(asset_path.to_str().unwrap(), "file-hash", None, None)
+            .upload_asset_with_live_photo(
+                asset_path.to_str().unwrap(),
+                "file-hash",
+                None,
+                None,
+                SidecarDirectoryCache::new(),
+            )
             .await
             .unwrap_err();
         std::fs::remove_file(asset_path).unwrap();
@@ -464,9 +480,14 @@ mod tests {
             api_key: "test-key".to_string(),
         };
         let asset_path = temporary_file(b"image data");
-        let payload = super::upload_form(asset_path.to_str().unwrap(), None, None)
-            .await
-            .unwrap();
+        let payload = super::upload_form(
+            asset_path.to_str().unwrap(),
+            None,
+            None,
+            SidecarDirectoryCache::new(),
+        )
+        .await
+        .unwrap();
         let error = client
             .post_upload_form(
                 payload.form,
@@ -495,9 +516,14 @@ mod tests {
             api_key: "test-key".to_string(),
         };
         let asset_path = temporary_file(b"image data");
-        let payload = super::upload_form(asset_path.to_str().unwrap(), None, None)
-            .await
-            .unwrap();
+        let payload = super::upload_form(
+            asset_path.to_str().unwrap(),
+            None,
+            None,
+            SidecarDirectoryCache::new(),
+        )
+        .await
+        .unwrap();
         let response = client
             .post_upload_form(
                 payload.form,
