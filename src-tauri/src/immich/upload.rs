@@ -30,7 +30,14 @@ pub(super) async fn upload_form(
         .and_then(|name| name.to_str())
         .unwrap_or("file")
         .to_string();
-    let metadata = std::fs::metadata(path).map_err(|error| error.to_string())?;
+    let metadata_path = path_buf.clone();
+    let (metadata, sidecar_path) = tokio::task::spawn_blocking(move || {
+        let metadata = std::fs::metadata(&metadata_path).map_err(|error| error.to_string())?;
+        let sidecar_path = find_sidecar_path(&metadata_path)?;
+        Ok::<_, String>((metadata, sidecar_path))
+    })
+    .await
+    .map_err(|error| format!("Filesystem task failed while preparing {}: {}", path, error))??;
     let created_at = metadata
         .created()
         .or_else(|_| metadata.modified())
@@ -51,12 +58,14 @@ pub(super) async fn upload_form(
     )
     .file_name(file_name);
     let live_photo_part = if let Some(live_photo_path) = live_photo_path {
-        let live_metadata = std::fs::metadata(live_photo_path).map_err(|error| {
-            format!(
-                "Cannot read live photo video metadata for {}: {}",
-                live_photo_path, error
-            )
-        })?;
+        let live_metadata = tokio::fs::metadata(live_photo_path)
+            .await
+            .map_err(|error| {
+                format!(
+                    "Cannot read live photo video metadata for {}: {}",
+                    live_photo_path, error
+                )
+            })?;
         if !live_metadata.is_file() {
             return Err(format!(
                 "Live photo video is not a regular file: {}",
@@ -96,7 +105,6 @@ pub(super) async fn upload_form(
         form = form.part("livePhotoData", part);
         total_file_bytes = total_file_bytes.saturating_add(size);
     }
-    let sidecar_path = find_sidecar_path(&path_buf)?;
     let sidecar_file = match sidecar_path.as_ref() {
         Some(sidecar_path) => match tokio::fs::File::open(sidecar_path).await {
             Ok(file) => Some(file),
