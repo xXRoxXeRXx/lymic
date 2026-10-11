@@ -1,6 +1,53 @@
 use crate::app::locale::{backend_translations, is_supported_locale, LocaleState};
 use crate::app::state::{DatabaseRecoveryNotice, TrayMenuState};
+use crate::audit::{audit_event, AuditEvent, Outcome, Severity};
+use serde_json::json;
 use tauri::{menu::MenuItemKind, Manager};
+
+const WEBVIEW_STARTUP_PHASES: &[&str] = &[
+    "locale_update_started",
+    "locale_update_complete",
+    "on_mount_started",
+    "update_check_started",
+    "update_check_complete",
+    "version_load_started",
+    "version_load_complete",
+    "auth_status_started",
+    "auth_status_complete",
+    "folders_load_complete",
+    "sync_status_complete",
+    "autostart_status_complete",
+    "upload_parallelism_complete",
+    "listeners_complete",
+];
+
+fn record_webview_startup_phase(app: &tauri::AppHandle, phase: &str) {
+    audit_event(
+        app,
+        AuditEvent::new(
+            AuditEvent::operation_id(),
+            "app.webview.startup.phase",
+            Outcome::Success,
+            Severity::Info,
+            None,
+            "webview",
+            phase,
+            json!({ "phase": phase }),
+        ),
+    );
+}
+
+#[tauri::command]
+pub(crate) fn record_webview_startup_phase_probe(
+    app: tauri::AppHandle,
+    phase: String,
+) -> Result<(), String> {
+    if !WEBVIEW_STARTUP_PHASES.contains(&phase.as_str()) {
+        return Err("Unsupported webview startup phase".to_string());
+    }
+    record_webview_startup_phase(&app, &phase);
+    Ok(())
+}
 
 #[tauri::command]
 pub(crate) fn get_database_recovery_notice(
@@ -19,6 +66,8 @@ pub(crate) fn update_locale(
         return Err(format!("Unsupported locale: {}", locale));
     }
 
+    record_webview_startup_phase(&app, "locale_update_started");
+
     let mut current = state.0.lock().map_err(|e| e.to_string())?;
     *current = locale.clone();
 
@@ -36,6 +85,7 @@ pub(crate) fn update_locale(
     crate::app::tray::refresh_sync_action(&app);
     crate::app::tray::refresh_transfer_status(&app);
 
+    record_webview_startup_phase(&app, "locale_update_complete");
     Ok(())
 }
 

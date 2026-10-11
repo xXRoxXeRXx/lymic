@@ -106,6 +106,7 @@ pub(crate) fn run() {
             crate::commands::sync::get_upload_parallelism,
             crate::commands::sync::set_upload_parallelism,
             crate::commands::settings::update_locale,
+            crate::commands::settings::record_webview_startup_phase_probe,
             crate::commands::settings::get_database_recovery_notice
         ])
         .on_window_event(tray::hide_on_close)

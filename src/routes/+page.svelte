@@ -103,6 +103,14 @@
     }
   }
 
+  async function recordWebviewStartupPhase(phase: string) {
+    try {
+      await invoke<void>("record_webview_startup_phase_probe", { phase });
+    } catch (error) {
+      console.warn("Failed to record webview startup phase", phase, error);
+    }
+  }
+
   async function installUpdate() {
     if (
       !availableUpdate ||
@@ -257,15 +265,22 @@
     colorSchemeQuery.addEventListener("change", handleColorSchemeChange);
     componentMounted = true;
 
-    void checkForUpdates();
+    void (async () => {
+      await recordWebviewStartupPhase("update_check_started");
+      await checkForUpdates();
+      await recordWebviewStartupPhase("update_check_complete");
+    })();
 
-    void getVersion()
-      .then((version) => {
+    void (async () => {
+      await recordWebviewStartupPhase("version_load_started");
+      await getVersion().then((version) => {
         if (componentMounted) appVersion = version;
       })
       .catch((error) => {
         console.warn("Failed to load app version", error);
       });
+      await recordWebviewStartupPhase("version_load_complete");
+    })();
 
     async function setupListeners() {
       const listeners = await Promise.all([
@@ -329,7 +344,10 @@
 
     (async () => {
       try {
+        await recordWebviewStartupPhase("on_mount_started");
+        await recordWebviewStartupPhase("auth_status_started");
         isAuthenticated = await invoke<boolean>("get_auth_status");
+        await recordWebviewStartupPhase("auth_status_complete");
         if (isAuthenticated) {
           serverUrl = await invoke<string>("get_server_url");
           try {
@@ -340,18 +358,22 @@
           await refreshFailedSyncs();
         }
           await refreshFolders();
+          await recordWebviewStartupPhase("folders_load_complete");
           try {
             applySyncSnapshot(await invoke<SyncSnapshot>("get_sync_status"));
           } catch (e) {
             console.warn("Failed to load sync status", e);
           }
+        await recordWebviewStartupPhase("sync_status_complete");
         isAutostartEnabled = await isEnabled();
+        await recordWebviewStartupPhase("autostart_status_complete");
         try {
           uploadParallelism = await invoke<number>("get_upload_parallelism");
         } catch (e) {
           console.error("Failed to load upload parallelism", e);
           actionError = formatError(e);
         }
+        await recordWebviewStartupPhase("upload_parallelism_complete");
 
         try {
           const recoveryNotice = await invoke<string | null>("get_database_recovery_notice");
@@ -365,6 +387,7 @@
         
         if (componentMounted) {
           await setupListeners();
+          await recordWebviewStartupPhase("listeners_complete");
         }
       } catch (e) {
         console.error("Init failed", e);
