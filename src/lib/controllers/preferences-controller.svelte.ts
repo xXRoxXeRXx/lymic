@@ -1,0 +1,137 @@
+import { invoke } from "@tauri-apps/api/core";
+import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+import type { ThemePreference } from "../components/types";
+import { isSupportedLocale } from "../i18n";
+import type { UiLogMessage } from "./types";
+
+export function createPreferencesController(options: {
+  reportError(error: unknown): void;
+  addLog(message: UiLogMessage): void;
+  locale(): string;
+  setLocale(locale: string): void;
+}) {
+  const themeStorageKey = "lymic-theme";
+  const savedTheme = typeof localStorage === "undefined" ? null : localStorage.getItem(themeStorageKey);
+  const initialTheme: ThemePreference = savedTheme === "system" || savedTheme === "light" || savedTheme === "dark"
+    ? savedTheme
+    : "system";
+  let themePreference = $state<ThemePreference>(initialTheme);
+  let isAutostartEnabled = $state(false);
+  let uploadParallelism = $state(3);
+  let isSavingUploadParallelism = $state(false);
+  let colorSchemeQuery: MediaQueryList | undefined;
+  let listener: (() => void) | undefined;
+
+  if (savedTheme && savedTheme !== initialTheme && typeof localStorage !== "undefined") {
+    localStorage.removeItem(themeStorageKey);
+  }
+
+  function applyTheme() {
+    if (typeof window === "undefined") return;
+    document.documentElement.dataset.theme = themePreference === "system"
+      ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+      : themePreference;
+  }
+
+  function setThemePreference(value: ThemePreference) {
+    themePreference = value;
+    if (typeof localStorage !== "undefined") localStorage.setItem(themeStorageKey, value);
+    applyTheme();
+  }
+
+  async function hydrate() {
+    try {
+      isAutostartEnabled = await isEnabled();
+    } catch (error) {
+      options.reportError(error);
+    }
+
+    try {
+      uploadParallelism = await invoke<number>("get_upload_parallelism");
+    } catch (error) {
+      console.error("Failed to load upload parallelism", error);
+      options.reportError(error);
+    }
+
+    try {
+      const notice = await invoke<string | null>("get_database_recovery_notice");
+      if (notice) options.addLog({ level: "WARN", message: notice, timestamp: Date.now() });
+    } catch (error) {
+      console.warn("Failed to check database recovery notice", error);
+    }
+  }
+
+  async function setLocale(value: string) {
+    if (!isSupportedLocale(value)) return;
+    options.setLocale(value);
+    if (typeof localStorage !== "undefined") localStorage.setItem("lymic-locale", value);
+    try {
+      await invoke("update_locale", { locale: value });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  async function toggleAutostart() {
+    try {
+      if (isAutostartEnabled) await disable();
+      else await enable();
+      isAutostartEnabled = await isEnabled();
+    } catch (error) {
+      console.error("Failed to update autostart", error);
+      options.reportError(error);
+    }
+  }
+
+  async function changeUploadParallelism(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    const nextValue = Number(select.value);
+    const previousValue = uploadParallelism;
+    isSavingUploadParallelism = true;
+    try {
+      await invoke<void>("set_upload_parallelism", { uploadParallelism: nextValue });
+      uploadParallelism = nextValue;
+    } catch (error) {
+      console.error("Failed to update upload parallelism", error);
+      options.reportError(error);
+      select.value = String(previousValue);
+    } finally {
+      isSavingUploadParallelism = false;
+    }
+  }
+
+  function startLifecycle() {
+    if (typeof window === "undefined") return;
+    applyTheme();
+    colorSchemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    listener = () => {
+      if (themePreference === "system") applyTheme();
+    };
+    colorSchemeQuery.addEventListener("change", listener);
+
+    const stored = typeof localStorage === "undefined" ? null : localStorage.getItem("lymic-locale");
+    if (isSupportedLocale(stored)) void setLocale(stored);
+    else {
+      if (stored && typeof localStorage !== "undefined") localStorage.removeItem("lymic-locale");
+      void setLocale(options.locale());
+    }
+  }
+
+  function stopLifecycle() {
+    if (colorSchemeQuery && listener) colorSchemeQuery.removeEventListener("change", listener);
+  }
+
+  return {
+    get themePreference() { return themePreference; },
+    get isAutostartEnabled() { return isAutostartEnabled; },
+    get uploadParallelism() { return uploadParallelism; },
+    get isSavingUploadParallelism() { return isSavingUploadParallelism; },
+    hydrate,
+    startLifecycle,
+    stopLifecycle,
+    setThemePreference,
+    setLocale,
+    toggleAutostart,
+    changeUploadParallelism,
+  };
+}

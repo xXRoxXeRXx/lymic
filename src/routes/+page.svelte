@@ -1,620 +1,64 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getVersion } from "@tauri-apps/api/app";
-  import { invoke } from "@tauri-apps/api/core";
-  import { confirm, open } from "@tauri-apps/plugin-dialog";
-  import { listen } from "@tauri-apps/api/event";
-  import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-  import { check, type Update } from "@tauri-apps/plugin-updater";
-  import { relaunch } from "@tauri-apps/plugin-process";
   import { Settings as SettingsIcon, AlertCircle, X } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
-  import { isSupportedLocale } from "../lib/i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
   import LoginView from "#lib/components/LoginView.svelte";
   import DashboardView from "#lib/components/DashboardView.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
   import UpdateDialog from "#lib/components/UpdateDialog.svelte";
-  import type { FailedSyncEntry, LogEntry, SyncStatus, ThemePreference, WatchedFolder } from "../lib/components/types";
+  import { createFeedbackController } from "#lib/controllers/feedback-controller.svelte.ts";
+  import { createAuthController } from "#lib/controllers/auth-controller.svelte.ts";
+  import { createSyncController } from "#lib/controllers/sync-controller.svelte.ts";
+  import { createPreferencesController } from "#lib/controllers/preferences-controller.svelte.ts";
+  import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
 
-  // --- State ---
-  let isAuthenticated = $state(false);
   let currentView = $state("dashboard");
-  let serverUrl = $state("");
-  let currentUserName = $state("");
-  let apiKey = $state("");
-  let isLoggingIn = $state(false);
-  let loginError = $state("");
-  let syncStatus = $state<SyncStatus>("idle");
-  let lastSync = $state("Noch nie");
-  let progress = $state(0);
-  let processed = $state(0);
-  let syncTotal = $state(0);
-  let currentFile = $state("");
-  let transferredBytes = $state(0);
-  let transferRateBytesPerSecond = $state<number | null>(null);
-  let estimatedSecondsRemaining = $state<number | null>(null);
-  let watchedFolders = $state<WatchedFolder[]>([]);
-  let failedSyncs = $state<FailedSyncEntry[]>([]);
-  let isAutostartEnabled = $state(false);
-  let logs = $state<LogEntry[]>([]);
-  let actionError = $state("");
-  let uploadParallelism = $state(3);
-  let isSavingUploadParallelism = $state(false);
-  let componentMounted = false;
-  let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
-  let isSyncActionPending = $state(false);
-  let appVersion = $state<string | undefined>();
-  let availableUpdate = $state<Update | null>(null);
-  let isUpdateDialogOpen = $state(false);
-  let updateStatus = $state<"unknown" | "current" | "available">("unknown");
-  let isCheckingForUpdates = $state(false);
-  let updateInstallState = $state<"idle" | "downloading" | "installing" | "error">("idle");
-  let downloadedUpdateBytes = $state(0);
-  let updateContentLength = $state<number | null>(null);
-
-  const themeStorageKey = "lymic-theme";
-
-  function isThemePreference(value: string | null): value is ThemePreference {
-    return value === "system" || value === "light" || value === "dark";
-  }
-
-  const savedTheme = typeof localStorage !== "undefined" ? localStorage.getItem(themeStorageKey) : null;
-  let themePreference = $state<ThemePreference>("system");
-  if (isThemePreference(savedTheme)) {
-    themePreference = savedTheme;
-  } else if (savedTheme) {
-    localStorage.removeItem(themeStorageKey);
-  }
-
-  function applyTheme() {
-    const systemThemeIsDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const effectiveTheme = themePreference === "system"
-      ? (systemThemeIsDark ? "dark" : "light")
-      : themePreference;
-    document.documentElement.dataset.theme = effectiveTheme;
-  }
-
-  function setThemePreference(preference: ThemePreference) {
-    themePreference = preference;
-    localStorage.setItem(themeStorageKey, preference);
-    applyTheme();
-  }
-
-  async function checkForUpdates() {
-    if (isCheckingForUpdates) return;
-    isCheckingForUpdates = true;
-
-    try {
-      const update = await check();
-      if (!componentMounted) return;
-      availableUpdate = update;
-      updateStatus = update ? "available" : "current";
-      if (update) {
-        updateInstallState = "idle";
-        isUpdateDialogOpen = true;
-      }
-    } catch (error) {
-      // Update endpoint, network, and signature errors must not interrupt normal app use.
-      console.warn("Failed to check for updates", error);
-    } finally {
-      isCheckingForUpdates = false;
-    }
-  }
-
-  async function recordWebviewStartupPhase(phase: string) {
-    try {
-      await invoke<void>("record_webview_startup_phase_probe", { phase });
-    } catch (error) {
-      console.warn("Failed to record webview startup phase", phase, error);
-    }
-  }
-
-  async function installUpdate() {
-    if (
-      !availableUpdate ||
-      syncStatus === "syncing" ||
-      syncStatus === "paused" ||
-      updateInstallState === "downloading" ||
-      updateInstallState === "installing"
-    ) return;
-
-    downloadedUpdateBytes = 0;
-    updateContentLength = null;
-    updateInstallState = "downloading";
-    try {
-      await availableUpdate.downloadAndInstall((event) => {
-        if (!componentMounted) return;
-        if (event.event === "Started") {
-          updateContentLength = event.data.contentLength ?? null;
-        } else if (event.event === "Progress") {
-          downloadedUpdateBytes += event.data.chunkLength;
-        } else if (event.event === "Finished") {
-          updateInstallState = "installing";
-        }
-      });
-      await relaunch();
-    } catch (error) {
-      console.error("Failed to install update", error);
-      if (componentMounted) updateInstallState = "error";
-    }
-  }
-
-  if (typeof window !== "undefined") {
-    applyTheme();
-  }
-  
-  // Initialize locale
-  const savedLocale = typeof localStorage !== 'undefined' ? localStorage.getItem('lymic-locale') : null;
-  if (isSupportedLocale(savedLocale)) {
-    $locale = savedLocale;
-  } else if (savedLocale) {
-    localStorage.removeItem('lymic-locale');
-  }
-
-  // Persist locale and notify backend
-  $effect(() => {
-    if (!isSupportedLocale($locale)) {
-      $locale = 'en';
-      return;
-    }
-
-    const currentLocale = $locale;
-    localStorage.setItem('lymic-locale', currentLocale);
-    invoke('update_locale', { locale: currentLocale }).catch(console.error);
+  const feedback = createFeedbackController(() => $t("unknown_error"));
+  const sync = createSyncController({
+    reportError: feedback.report,
+    t: (key) => $t(key),
+    locale: () => $locale ?? "en",
   });
+  const auth = createAuthController({
+    formatError: feedback.formatError,
+    reportError: feedback.report,
+    t: (key) => $t(key),
+    onLogin: sync.refreshFailedSyncs,
+    onLogout: () => {
+      sync.clearUserState();
+      currentView = "dashboard";
+    },
+  });
+  const preferences = createPreferencesController({
+    reportError: feedback.report,
+    addLog: sync.addLog,
+    locale: () => $locale ?? "en",
+    setLocale: (value) => $locale = value,
+  });
+  const updater = createUpdateController(() => sync.isActive);
 
-  interface UiLogMessage {
-    level?: string;
-    message?: string;
-    timestamp?: number;
-  }
-
-  interface SyncSummary {
-    processed: number;
-    uploaded: number;
-    failed: number;
-  }
-
-  interface SyncSnapshot {
-    status: "RUNNING" | "PAUSED" | "IDLE";
-    total: number;
-    succeeded: number;
-    failed: number;
-    currentPath: string | null;
-    totalBytes?: number;
-    completedBytes?: number;
-  }
-
-  interface TransferStatsEvent {
-    transferredBytes: number;
-    transferRateBytesPerSecond: number;
-    estimatedSecondsRemaining: number | null;
-    status: "RUNNING" | "PAUSED" | "IDLE";
-  }
-
-  function resetTransferStats() {
-    transferredBytes = 0;
-    transferRateBytesPerSecond = null;
-    estimatedSecondsRemaining = null;
-  }
-
-  interface RemoveFolderResult {
-    requiresSyncCancellation: boolean;
-  }
-
-  let logCounter = 0;
-
-  function formatError(error: unknown): string {
-    if (typeof error === "string") return error;
-    if (error instanceof Error) return error.message;
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "message" in error &&
-      typeof error.message === "string"
-    ) {
-      return error.message;
-    }
-    return $t("unknown_error");
-  }
-
-  function toLogEntry(payload: UiLogMessage | null | undefined): LogEntry {
-    let level: LogEntry["level"] = "info";
-    switch (payload?.level) {
-      case "ERROR": level = "error"; break;
-      case "SUCCESS": level = "success"; break;
-      case "WARN": level = "warn"; break;
-    }
-
-    const timestamp = typeof payload?.timestamp === "number" && Number.isFinite(payload.timestamp)
-      ? payload.timestamp
-      : Date.now();
-    const time = new Date(timestamp).toLocaleTimeString(
-      $locale === 'de' ? 'de-DE' : 'en-US',
-      { hour: "2-digit", minute: "2-digit", hour12: false },
-    );
-    return { id: ++logCounter, time, level, message: payload?.message ?? "" };
-  }
-
-  function applySyncSnapshot(snapshot: SyncSnapshot | null | undefined) {
-    if (!snapshot) return;
-    syncStatus = snapshot.status === "PAUSED" ? "paused" : snapshot.status === "RUNNING" ? "syncing" : snapshot.failed > 0 ? "error" : "idle";
-    processed = snapshot.succeeded + snapshot.failed;
-    syncTotal = snapshot.total;
-    if (snapshot.totalBytes && snapshot.totalBytes > 0) {
-      progress = Math.min(100, Math.round(((snapshot.completedBytes ?? 0) / snapshot.totalBytes) * 100));
-    } else if (snapshot.total > 0) {
-      progress = Math.min(100, Math.round(((snapshot.succeeded + snapshot.failed) / snapshot.total) * 100));
-    } else {
-      progress = 0;
-    }
-    if (snapshot.currentPath) currentFile = snapshot.currentPath.split(/[/\\]/).pop() || "";
-  }
-
-  // Store unlisteners outside the async IIFE so onMount can return them synchronously.
-  // Previously the cleanup was returned from the IIFE (a Promise), which Svelte ignores —
-  // all event listeners were permanently leaking on unmount.
   onMount(() => {
-    let unlisteners: (() => void)[] = [];
-    const colorSchemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleColorSchemeChange = () => {
-      if (themePreference === "system") applyTheme();
-    };
-    colorSchemeQuery.addEventListener("change", handleColorSchemeChange);
-    componentMounted = true;
+    sync.startLifecycle();
+    updater.startLifecycle();
+    preferences.startLifecycle();
 
-    void (async () => {
-      await recordWebviewStartupPhase("update_check_started");
-      await checkForUpdates();
-      await recordWebviewStartupPhase("update_check_complete");
-    })();
-
-    void (async () => {
-      await recordWebviewStartupPhase("version_load_started");
-      await getVersion().then((version) => {
-        if (componentMounted) appVersion = version;
-      })
-      .catch((error) => {
-        console.warn("Failed to load app version", error);
-      });
-      await recordWebviewStartupPhase("version_load_complete");
-    })();
-
-    async function setupListeners() {
-      const listeners = await Promise.all([
-        listen("sync-progress", (event) => {
-          if (!componentMounted) return;
-          syncStatus = "syncing";
-          currentFile = (event.payload as string).split(/[/\\]/).pop() || "";
-        }),
-        listen("sync-progress-percent", (event) => {
-          if (!componentMounted) return;
-          progress = event.payload as number;
-        }),
-        listen("sync-started", () => {
-          if (!componentMounted) return;
-          if (progressResetTimer) clearTimeout(progressResetTimer);
-          progressResetTimer = undefined;
-          syncStatus = "syncing";
-          resetTransferStats();
-        }),
-        listen("sync-transfer-stats", (event) => {
-          if (!componentMounted) return;
-          const stats = event.payload as TransferStatsEvent;
-          transferredBytes = stats.transferredBytes ?? 0;
-          transferRateBytesPerSecond = stats.transferRateBytesPerSecond > 0 ? stats.transferRateBytesPerSecond : null;
-          estimatedSecondsRemaining = stats.estimatedSecondsRemaining;
-        }),
-        listen("sync-progress-snapshot", (event) => {
-          if (componentMounted) applySyncSnapshot(event.payload as SyncSnapshot);
-        }),
-        listen("sync-paused", (event) => {
-          if (componentMounted) applySyncSnapshot(event.payload as SyncSnapshot);
-        }),
-        listen("sync-resumed", (event) => {
-          if (componentMounted) applySyncSnapshot(event.payload as SyncSnapshot);
-        }),
-        listen("sync-error", () => {
-          if (!componentMounted) return;
-          syncStatus = "error";
-          progress = 0;
-        }),
-        listen("trigger-sync", () => {
-          if (!componentMounted) return;
-          handleStartSync();
-        }),
-        listen("log-message", (event) => {
-          if (!componentMounted) return;
-          const entry = toLogEntry(event.payload as UiLogMessage);
-          logs = [entry, ...logs].slice(0, 50);
-        }),
-        listen("sync-idle", () => {
-          void finishSync();
-        }),
-      ]);
-
-      if (!componentMounted) {
-        listeners.forEach(un => un());
-      } else {
-        unlisteners = listeners;
-      }
-    }
-
-    (async () => {
-      try {
-        await recordWebviewStartupPhase("on_mount_started");
-        await recordWebviewStartupPhase("auth_status_started");
-        isAuthenticated = await invoke<boolean>("get_auth_status");
-        await recordWebviewStartupPhase("auth_status_complete");
-        if (isAuthenticated) {
-          serverUrl = await invoke<string>("get_server_url");
-          try {
-            currentUserName = await invoke<string>("get_current_user_name");
-          } catch (e) {
-            console.warn("Failed to load current user", e);
-          }
-          await refreshFailedSyncs();
-        }
-          await refreshFolders();
-          await recordWebviewStartupPhase("folders_load_complete");
-          try {
-            applySyncSnapshot(await invoke<SyncSnapshot>("get_sync_status"));
-          } catch (e) {
-            console.warn("Failed to load sync status", e);
-          }
-        await recordWebviewStartupPhase("sync_status_complete");
-        isAutostartEnabled = await isEnabled();
-        await recordWebviewStartupPhase("autostart_status_complete");
-        try {
-          uploadParallelism = await invoke<number>("get_upload_parallelism");
-        } catch (e) {
-          console.error("Failed to load upload parallelism", e);
-          actionError = formatError(e);
-        }
-        await recordWebviewStartupPhase("upload_parallelism_complete");
-
-        try {
-          const recoveryNotice = await invoke<string | null>("get_database_recovery_notice");
-          if (recoveryNotice && componentMounted) {
-            const entry = toLogEntry({ level: "WARN", message: recoveryNotice, timestamp: Date.now() });
-            logs = [entry, ...logs].slice(0, 50);
-          }
-        } catch (e) {
-          console.warn("Failed to check database recovery notice", e);
-        }
-        
-        if (componentMounted) {
-          await setupListeners();
-          await recordWebviewStartupPhase("listeners_complete");
-        }
-      } catch (e) {
-        console.error("Init failed", e);
-      }
-    })();
+    void auth.hydrate()
+      .then(() => auth.isAuthenticated ? sync.refreshFailedSyncs() : undefined)
+      .catch((error) => console.error("Failed to hydrate authentication", error));
+    void sync.hydrate()
+      .then(() => sync.startSubscriptions())
+      .catch((error) => console.error("Failed to hydrate sync state", error));
+    void preferences.hydrate().catch((error) => console.error("Failed to hydrate preferences", error));
+    updater.startup();
 
     return () => {
-      componentMounted = false;
-      if (progressResetTimer) clearTimeout(progressResetTimer);
-      unlisteners.forEach(fn => fn());
-      colorSchemeQuery.removeEventListener("change", handleColorSchemeChange);
+      sync.destroy();
+      updater.destroy();
+      preferences.stopLifecycle();
     };
   });
-
-  async function finishSync(summary?: SyncSummary) {
-    if (!componentMounted) return;
-    await refreshFailedSyncs();
-    if (!componentMounted) return;
-    if (syncStatus === "error" || (summary && summary.failed > 0) || failedSyncs.length > 0) {
-      syncStatus = "error";
-      progress = 0;
-      return;
-    }
-    syncStatus = "idle";
-    progress = 100;
-    lastSync = new Date().toLocaleTimeString($locale === 'de' ? 'de-DE' : 'en-US', { hour: "2-digit", minute: "2-digit" });
-    if (progressResetTimer) clearTimeout(progressResetTimer);
-    progressResetTimer = setTimeout(() => {
-      if (componentMounted) progress = 0;
-      progressResetTimer = undefined;
-    }, 2000);
-  }
-
-  async function handleStartSync() {
-    if (syncStatus === "syncing" || syncStatus === "paused" || isSyncActionPending) {
-      console.warn("Sync already in progress, ignoring trigger.");
-      return;
-    }
-    if (watchedFolders.length === 0) {
-      console.warn("Sync requires at least one watched folder, ignoring trigger.");
-      return;
-    }
-    if (progressResetTimer) clearTimeout(progressResetTimer);
-    progressResetTimer = undefined;
-    syncStatus = "syncing";
-    progress = 0;
-    processed = 0;
-    syncTotal = 0;
-    resetTransferStats();
-    try {
-      const summary = await invoke<SyncSummary>("start_sync");
-      // The command response is reliable even when an event is missed.
-      await finishSync(summary);
-    } catch (e) {
-      console.error("Sync failed", e);
-      syncStatus = "error";
-    }
-  }
-
-  async function handleSyncAction() {
-    if (isSyncActionPending) return;
-    if (syncStatus === "syncing" || syncStatus === "paused") {
-      isSyncActionPending = true;
-      try {
-        const command = syncStatus === "syncing" ? "pause_sync" : "resume_sync";
-        applySyncSnapshot(await invoke<SyncSnapshot>(command));
-      } catch (e) {
-        actionError = formatError(e);
-      } finally {
-        isSyncActionPending = false;
-      }
-      return;
-    }
-    await handleStartSync();
-  }
-
-  async function refreshFailedSyncs() {
-    try {
-      failedSyncs = await invoke<FailedSyncEntry[]>("get_failed_syncs");
-      if (failedSyncs.length > 0 && syncStatus === "idle") {
-        syncStatus = "error";
-      }
-    } catch (e) {
-      console.error("Failed to load sync failures", e);
-      actionError = formatError(e);
-    }
-  }
-
-  async function handleRetryFailedSyncs() {
-    if (syncStatus === "syncing" || failedSyncs.length === 0) return;
-    actionError = "";
-    if (progressResetTimer) clearTimeout(progressResetTimer);
-    progressResetTimer = undefined;
-    syncStatus = "syncing";
-    progress = 0;
-    processed = 0;
-    syncTotal = 0;
-    resetTransferStats();
-    try {
-      const summary = await invoke<SyncSummary>("retry_failed_syncs");
-      await finishSync(summary);
-    } catch (e) {
-      console.error("Failed to retry sync failures", e);
-      actionError = formatError(e);
-      await refreshFailedSyncs();
-      syncStatus = "error";
-    }
-  }
-
-  // Log errors instead of silently swallowing them.
-  async function refreshFolders() {
-    try {
-      watchedFolders = await invoke<WatchedFolder[]>("get_folders");
-    } catch (e) {
-      console.error("Failed to load folders", e);
-      actionError = formatError(e);
-    }
-  }
-
-  async function handleAddFolder() {
-    actionError = "";
-    try {
-      const selected = await open({ directory: true, multiple: false, title: $t('select_folder') });
-      if (selected && typeof selected === "string") {
-        await invoke<number>("add_folder", { path: selected });
-        await refreshFolders();
-      }
-    } catch (e) {
-      console.error("Failed to add folder", e);
-      actionError = formatError(e);
-    }
-  }
-
-  async function handleRemoveFolder(id: number) {
-    actionError = "";
-    try {
-      const result = await invoke<RemoveFolderResult>("remove_folder", { id });
-      if (result?.requiresSyncCancellation) {
-        const confirmed = await confirm($t("remove_folder_sync_warning"), {
-          title: $t("remove_folder"),
-          kind: "warning",
-        });
-        if (!confirmed) return;
-        await invoke<RemoveFolderResult>("remove_folder", { id, confirmCancellation: true });
-      }
-      await refreshFolders();
-      await refreshFailedSyncs();
-    } catch (e) {
-      console.error("Failed to remove folder", e);
-      actionError = formatError(e);
-    }
-  }
-
-  async function toggleAutostart() {
-    actionError = "";
-    try {
-      if (isAutostartEnabled) await disable(); else await enable();
-      isAutostartEnabled = await isEnabled();
-    } catch (e) {
-      console.error("Failed to update autostart", e);
-      actionError = formatError(e);
-    }
-  }
-
-  async function handleUploadParallelismChange(event: Event) {
-    const select = event.currentTarget as HTMLSelectElement;
-    const nextValue = Number(select.value);
-    const previousValue = uploadParallelism;
-    actionError = "";
-    isSavingUploadParallelism = true;
-
-    try {
-      await invoke<void>("set_upload_parallelism", { uploadParallelism: nextValue });
-      uploadParallelism = nextValue;
-    } catch (e) {
-      console.error("Failed to update upload parallelism", e);
-      actionError = formatError(e);
-      select.value = String(previousValue);
-    } finally {
-      isSavingUploadParallelism = false;
-    }
-  }
-
-  async function handleLogin() {
-    if (!serverUrl || !apiKey) return;
-    isLoggingIn = true;
-    loginError = "";
-    try {
-      await invoke<void>("login", { serverUrl, apiKey });
-      isAuthenticated = true;
-      await refreshFailedSyncs();
-      try {
-        currentUserName = await invoke<string>("get_current_user_name");
-      } catch (e) {
-        // The credentials are valid even if the optional account label cannot load.
-        console.warn("Failed to load current user", e);
-      }
-    } catch (e) {
-      loginError = formatError(e);
-    } finally {
-      isLoggingIn = false;
-    }
-  }
-
-  // Extracted from inline onclick. Awaits backend call before resetting UI state.
-  // Previously invoke("logout") was fire-and-forget; on failure credentials stayed in keyring
-  // while the UI showed the login screen.
-  async function handleLogout() {
-    const shouldLogout = await confirm($t("logout_confirmation"), {
-      title: $t("logout"),
-      kind: "warning",
-    });
-    if (!shouldLogout) return;
-
-    actionError = "";
-    try {
-      await invoke<void>("logout");
-      isAuthenticated = false;
-      apiKey = "";
-      currentUserName = "";
-      failedSyncs = [];
-      currentView = "dashboard";
-    } catch (e) {
-      console.error("Logout failed", e);
-      actionError = formatError(e);
-    }
-  }
 </script>
 
 <div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-[#F1F5F9] dark:bg-slate-950">
@@ -632,7 +76,6 @@
       <img src={logo} alt="Lymic Logo" class="w-16 h-16 object-contain" />
       <span class="font-bold tracking-tight text-3xl">Lymic</span>
     </div>
-
     <div class="absolute bottom-12 left-12 right-12 text-white">
       <p class="text-xs font-semibold uppercase tracking-[0.3em] opacity-60 mb-2">{$t('hero_tagline')}</p>
       <h1 class="text-4xl font-bold tracking-tight">
@@ -647,7 +90,7 @@
     
     <!-- Header (Simple & Glass) -->
     <header class="h-20 px-10 flex items-center justify-between shrink-0 z-10">
-      {#if isAuthenticated}
+      {#if auth.isAuthenticated}
         <div class="flex items-center gap-4">
           <!-- h2 → h1 for correct heading hierarchy in the content column -->
           <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100">
@@ -655,8 +98,10 @@
           </h1>
         </div>
         <div class="flex items-center gap-2">
-          <button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/50 dark:hover:bg-white/10 transition-colors"
-                  onclick={() => currentView = currentView === "settings" ? "dashboard" : "settings"}>
+          <button
+            class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/50 dark:hover:bg-white/10 transition-colors"
+            onclick={() => currentView = currentView === "settings" ? "dashboard" : "settings"}
+          >
             {#if currentView === "settings"}
               <X class="w-5 h-5 text-slate-900 dark:text-slate-100" />
             {:else}
@@ -667,89 +112,90 @@
       {/if}
     </header>
 
-    <main class="flex-1 overflow-y-auto p-10 flex flex-col {!isAuthenticated ? 'justify-center' : 'space-y-10'}">
-      {#if isAuthenticated && actionError}
+    <main class="flex-1 overflow-y-auto p-10 flex flex-col {!auth.isAuthenticated ? 'justify-center' : 'space-y-10'}">
+      {#if auth.isAuthenticated && feedback.error}
         <div class="p-4 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
           <AlertCircle class="w-4 h-4 shrink-0" />
-          <span>{actionError}</span>
+          <span>{feedback.error}</span>
           <button
             type="button"
             class="ml-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
             aria-label={$t('dismiss_error')}
-            onclick={() => actionError = ""}
+            onclick={feedback.clear}
           >
             <X class="w-4 h-4" />
           </button>
         </div>
       {/if}
-      
-      {#if !isAuthenticated}
-        <LoginView bind:serverUrl bind:apiKey {isLoggingIn} {loginError} onLogin={handleLogin} />
-
+      {#if !auth.isAuthenticated}
+        <LoginView
+          bind:serverUrl={auth.serverUrl}
+          bind:apiKey={auth.apiKey}
+          isLoggingIn={auth.isLoggingIn}
+          loginError={auth.loginError}
+          onLogin={auth.login}
+        />
       <!-- ===== DASHBOARD VIEW ===== -->
       {:else if currentView === "dashboard"}
         <DashboardView
-          {syncStatus}
-          {lastSync}
-          {progress}
-          {processed}
-          {syncTotal}
-          {currentFile}
-          {transferredBytes}
-          {transferRateBytesPerSecond}
-          {estimatedSecondsRemaining}
-          {serverUrl}
-          {watchedFolders}
-          {failedSyncs}
-          {logs}
-          {isSyncActionPending}
-          onSyncAction={handleSyncAction}
-          onRetryFailedSyncs={handleRetryFailedSyncs}
-          onAddFolder={handleAddFolder}
-          onRemoveFolder={handleRemoveFolder}
+          syncStatus={sync.syncStatus}
+          lastSync={sync.lastSync}
+          progress={sync.progress}
+          processed={sync.processed}
+          syncTotal={sync.syncTotal}
+          currentFile={sync.currentFile}
+          transferredBytes={sync.transferredBytes}
+          transferRateBytesPerSecond={sync.transferRateBytesPerSecond}
+          estimatedSecondsRemaining={sync.estimatedSecondsRemaining}
+          serverUrl={auth.serverUrl}
+          watchedFolders={sync.watchedFolders}
+          failedSyncs={sync.failedSyncs}
+          logs={sync.logs}
+          isSyncActionPending={sync.isSyncActionPending}
+          onSyncAction={sync.syncAction}
+          onRetryFailedSyncs={sync.retryFailedSyncs}
+          onAddFolder={sync.addFolder}
+          onRemoveFolder={sync.removeFolder}
         />
-       <!-- ===== SETTINGS VIEW ===== -->
+      <!-- ===== SETTINGS VIEW ===== -->
       {:else if currentView === "settings"}
         <SettingsView
-          {currentUserName}
-          {serverUrl}
-          {isAutostartEnabled}
-          {themePreference}
-          {uploadParallelism}
-          {isSavingUploadParallelism}
-          {updateStatus}
-          {isCheckingForUpdates}
-          onToggleAutostart={toggleAutostart}
-          onLocaleChange={(nextLocale) => $locale = nextLocale}
-          onThemeChange={setThemePreference}
-          onUploadParallelismChange={handleUploadParallelismChange}
-          onCheckForUpdates={checkForUpdates}
-          onLogout={handleLogout}
+          currentUserName={auth.currentUserName}
+          serverUrl={auth.serverUrl}
+          isAutostartEnabled={preferences.isAutostartEnabled}
+          themePreference={preferences.themePreference}
+          uploadParallelism={preferences.uploadParallelism}
+          isSavingUploadParallelism={preferences.isSavingUploadParallelism}
+          updateStatus={updater.updateStatus}
+          isCheckingForUpdates={updater.isCheckingForUpdates}
+          onToggleAutostart={preferences.toggleAutostart}
+          onLocaleChange={preferences.setLocale}
+          onThemeChange={preferences.setThemePreference}
+          onUploadParallelismChange={preferences.changeUploadParallelism}
+          onCheckForUpdates={updater.checkForUpdates}
+          onLogout={auth.logout}
         />
-       {/if}
-
+      {/if}
     </main>
 
     <!-- Global Footer -->
     <footer class="h-16 px-10 border-t border-black/5 dark:border-white/10 flex items-center justify-end text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-widest shrink-0">
       <span>Lymic - Unofficial Immich Desktop Client</span>
-      {#if appVersion}
-        <span class="ml-2">v{appVersion}</span>
+      {#if updater.appVersion}
+        <span class="ml-2">v{updater.appVersion}</span>
       {/if}
     </footer>
-
   </div>
-
-  {#if isUpdateDialogOpen && availableUpdate}
+  {#if updater.isUpdateDialogOpen && updater.availableUpdate}
     <UpdateDialog
-      version={availableUpdate.version}
-      notes={availableUpdate.body ?? ""}
-      isSyncActive={syncStatus === "syncing" || syncStatus === "paused"}
-      installState={updateInstallState}
-      downloadedBytes={downloadedUpdateBytes}
-      contentLength={updateContentLength}
-      onLater={() => isUpdateDialogOpen = false}
-      onInstall={installUpdate}
+      version={updater.availableUpdate.version}
+      notes={updater.availableUpdate.body ?? ""}
+      isSyncActive={sync.isActive}
+      installState={updater.updateInstallState}
+      downloadedBytes={updater.downloadedUpdateBytes}
+      contentLength={updater.updateContentLength}
+      onLater={() => updater.isUpdateDialogOpen = false}
+      onInstall={updater.installUpdate}
     />
   {/if}
 </div>
