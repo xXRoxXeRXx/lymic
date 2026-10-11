@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.1] - 2026-10-11
+
+### Fixed
+- **Deferred startup window display**:
+  - Defers revealing the main window until database initialization, background recovery, and system tray setup complete successfully.
+- **Startup phase diagnostics**:
+  - Records granular audit events across startup phases to trace initialization progress and diagnose startup failures.
+
 ## [0.16.0] - 2026-10-10
 
 ### Added
