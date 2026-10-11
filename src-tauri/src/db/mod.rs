@@ -14,7 +14,8 @@ pub use queue::{
 pub use settings::{get_upload_parallelism, set_upload_parallelism};
 pub use sync_state::{
     discard_failed_sync_paths, discard_sync_data_in_folder, get_cached_hash, get_failed_syncs,
-    has_sync_work_in_folder, mark_sync_failed, update_sync_state, FailedSyncEntry,
+    has_sync_work_in_folder, mark_sync_failed, persist_uploaded_unit, update_sync_state,
+    FailedSyncEntry, UploadedAssetState,
 };
 
 #[cfg(test)]

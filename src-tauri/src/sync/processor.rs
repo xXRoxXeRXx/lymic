@@ -193,6 +193,9 @@ pub(crate) async fn process_sync_block(
             ));
         }
         while let Some(outcome) = uploads.next().await {
+            // An unreconciled remote upload aborts this block. Dropping other in-flight
+            // uploads leaves them pending so the next preflight bulk check can recover them.
+            let outcome = outcome?;
             uploaded += outcome.uploaded;
             queue_results.extend(outcome.queue_results);
             if can_start_work(&coordinator) {
@@ -376,6 +379,52 @@ struct UploadOutcome {
     queue_results: Vec<(String, String)>,
 }
 
+fn uploaded_asset_states(unit: &HashedUploadUnit) -> Vec<db::UploadedAssetState<'_>> {
+    unit.assets()
+        .map(|asset| db::UploadedAssetState {
+            path: &asset.path,
+            hash: &asset.checksums.as_ref().unwrap().sha1_base64,
+            mtime: asset.mtime,
+            size: asset.size as i64,
+        })
+        .collect()
+}
+
+async fn persist_with_reconciliation<Persist, PersistFuture, Check, CheckFuture>(
+    hashes: &[String],
+    mut persist: Persist,
+    mut check: Check,
+) -> Result<bool, String>
+where
+    Persist: FnMut() -> PersistFuture,
+    PersistFuture: std::future::Future<Output = Result<(), String>>,
+    Check: FnMut(Vec<String>) -> CheckFuture,
+    CheckFuture: std::future::Future<Output = Result<Vec<String>, String>>,
+{
+    let initial_error = match persist().await {
+        Ok(()) => return Ok(false),
+        Err(error) => error,
+    };
+    let existing = check(hashes.to_vec()).await.map_err(|error| {
+        format!(
+            "Remote upload succeeded but local state persistence could not be reconciled (initial persistence error: {}; remote check error: {}).",
+            initial_error, error
+        )
+    })?;
+    if !hashes.iter().all(|hash| existing.contains(hash)) {
+        return Err(format!(
+            "Remote upload succeeded but local state persistence could not be reconciled (initial persistence error: {}; not every upload-unit asset was found remotely).",
+            initial_error
+        ));
+    }
+    persist().await.map(|()| true).map_err(|error| {
+        format!(
+            "Remote upload succeeded but local state persistence could not be reconciled (initial persistence error: {}; retry persistence error: {}).",
+            initial_error, error
+        )
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn upload_unit(
     unit: HashedUploadUnit,
@@ -386,7 +435,7 @@ async fn upload_unit(
     audit_context: SyncAuditContext,
     cancellation: CancellationToken,
     sidecar_cache: SidecarDirectoryCache,
-) -> UploadOutcome {
+) -> Result<UploadOutcome, String> {
     let image_hash = unit.image.checksums.as_ref().unwrap().sha1_base64.clone();
     let video_path = unit
         .live_photo_video
@@ -426,52 +475,75 @@ async fn upload_unit(
         sidecar_cache,
     );
     let Some(upload_result) = await_or_cancellation(cancellation, upload).await else {
-        return UploadOutcome {
+        return Ok(UploadOutcome {
             uploaded: 0,
             queue_results: Vec::new(),
-        };
+        });
     };
     let (uploaded, status, failure_reason, remote_id) = match upload_result {
         Ok(remote_id) => {
-            let mut persisted = true;
-            for asset in unit.assets() {
-                let hash = &asset.checksums.as_ref().unwrap().sha1_base64;
-                let remote = if asset.path == unit.image.path {
-                    Some(remote_id.as_str())
-                } else {
-                    None
-                };
-                if db::update_sync_state(
-                    &pool,
-                    &asset.path,
-                    hash,
-                    asset.mtime,
-                    asset.size as i64,
-                    "SYNCED",
-                    remote,
-                )
-                .await
-                .is_err()
-                {
-                    persisted = false;
+            let states = uploaded_asset_states(&unit);
+            let hashes = states
+                .iter()
+                .map(|state| state.hash.to_string())
+                .collect::<Vec<_>>();
+            let persistence_pool = pool.clone();
+            let persistence_states = states.clone();
+            let persistence_remote_id = remote_id.clone();
+            match persist_with_reconciliation(
+                &hashes,
+                move || {
+                    let pool = persistence_pool.clone();
+                    let states = persistence_states.clone();
+                    let remote_id = persistence_remote_id.clone();
+                    async move {
+                        db::persist_uploaded_unit(&pool, &states, &remote_id)
+                            .await
+                            .map_err(|error| error.to_string())
+                    }
+                },
+                |hashes| check_assets_exist_with_backoff(&client, hashes, &app, &audit_context),
+            )
+            .await
+            {
+                Ok(true) => {
+                    log_to_ui(
+                        &app,
+                        "INFO",
+                        "Remote upload succeeded and local state persistence was reconciled.",
+                    );
+                    audit_event(
+                        &app,
+                        audit_context.event(
+                            "file.upload.local_persistence.reconciliation.completed",
+                            audit::Outcome::Success,
+                            audit::Severity::Info,
+                            "Remote upload succeeded and local state persistence was reconciled",
+                            json!({ "remote_asset_id": remote_id }),
+                        ),
+                    );
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    log_to_ui(&app, "ERROR", &error);
+                    audit_event(
+                        &app,
+                        audit_context.event(
+                            "file.upload.local_persistence.reconciliation.failed",
+                            audit::Outcome::Failure,
+                            audit::Severity::Error,
+                            "Remote upload succeeded but local state persistence could not be reconciled",
+                            json!({
+                                "local_paths": unit.assets().map(|asset| asset.path.clone()).collect::<Vec<_>>(),
+                                "remote_asset_id": remote_id,
+                                "failure_reason": audit_context.safe_error(&error),
+                            }),
+                        ),
+                    );
+                    return Err(error);
                 }
             }
-            if persisted {
-                (unit.assets().count(), "SYNCED", None, Some(remote_id))
-            } else {
-                let reason = "Upload completed but sync state could not be persisted atomically";
-                for asset in unit.assets() {
-                    let _ = db::mark_sync_failed(
-                        &pool,
-                        &asset.path,
-                        asset.mtime,
-                        asset.size as i64,
-                        reason,
-                    )
-                    .await;
-                }
-                (0, "FAILED", Some(reason.to_string()), None)
-            }
+            (unit.assets().count(), "SYNCED", None, Some(remote_id))
         }
         Err(error) => {
             log_to_ui(
@@ -525,13 +597,13 @@ async fn upload_unit(
         ),
     );
     progress.advance(&app, unit.byte_size());
-    UploadOutcome {
+    Ok(UploadOutcome {
         uploaded,
         queue_results: unit
             .assets()
             .map(|asset| (asset.path.clone(), status.to_string()))
             .collect(),
-    }
+    })
 }
 
 async fn await_or_cancellation<T>(
@@ -602,6 +674,85 @@ mod tests {
     #[test]
     fn bulk_check_chunk_size_is_bounded_to_100() {
         assert_eq!(BULK_CHECK_CHUNK_SIZE, 100);
+    }
+
+    #[tokio::test]
+    async fn reconciliation_retries_persistence_without_another_upload() {
+        let persistence_attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let bulk_checks = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let upload_requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(1));
+        let hashes = vec!["image-hash".to_string(), "video-hash".to_string()];
+        let attempts = persistence_attempts.clone();
+        let checks = bulk_checks.clone();
+        let uploads = upload_requests.clone();
+
+        let reconciled = persist_with_reconciliation(
+            &hashes,
+            move || {
+                let attempt = attempts.fetch_add(1, Ordering::SeqCst);
+                async move {
+                    if attempt == 0 {
+                        Err("injected first persistence failure".to_string())
+                    } else {
+                        Ok(())
+                    }
+                }
+            },
+            move |requested_hashes| {
+                checks.fetch_add(1, Ordering::SeqCst);
+                async move { Ok(requested_hashes) }
+            },
+        )
+        .await;
+
+        assert_eq!(reconciled, Ok(true));
+        assert_eq!(persistence_attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(bulk_checks.load(Ordering::SeqCst), 1);
+        assert_eq!(uploads.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn incomplete_reconciliation_aborts_without_retry_or_terminal_result() {
+        let persistence_attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hashes = vec!["image-hash".to_string(), "video-hash".to_string()];
+        let attempts = persistence_attempts.clone();
+        let queue_results: Vec<(String, String)> = Vec::new();
+
+        let result = persist_with_reconciliation(
+            &hashes,
+            move || {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                async { Err("injected persistence failure".to_string()) }
+            },
+            |_| async { Ok(vec!["image-hash".to_string()]) },
+        )
+        .await;
+
+        assert!(result.unwrap_err().contains("not every upload-unit asset"));
+        assert_eq!(persistence_attempts.load(Ordering::SeqCst), 1);
+        assert!(queue_results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn failed_reconciliation_retry_aborts_without_terminal_result() {
+        let persistence_attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hashes = vec!["image-hash".to_string(), "video-hash".to_string()];
+        let attempts = persistence_attempts.clone();
+        let queue_results: Vec<(String, String)> = Vec::new();
+
+        let result = persist_with_reconciliation(
+            &hashes,
+            move || {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                async { Err("injected persistence failure".to_string()) }
+            },
+            |requested_hashes| async move { Ok(requested_hashes) },
+        )
+        .await;
+
+        assert!(result.unwrap_err().contains("retry persistence error"));
+        assert_eq!(persistence_attempts.load(Ordering::SeqCst), 2);
+        assert!(queue_results.is_empty());
     }
 
     #[test]

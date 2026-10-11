@@ -1062,6 +1062,125 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn uploaded_unit_persistence_syncs_all_members_and_only_images_store_remote_ids() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let assets = [
+            UploadedAssetState {
+                path: "photo.heic",
+                hash: "photo-hash",
+                mtime: 11,
+                size: 101,
+            },
+            UploadedAssetState {
+                path: "photo.mov",
+                hash: "video-hash",
+                mtime: 12,
+                size: 202,
+            },
+        ];
+
+        persist_uploaded_unit(&pool, &assets, "remote-photo")
+            .await
+            .unwrap();
+
+        let rows: Vec<(String, String, i64, i64, String, Option<String>)> = sqlx::query_as(
+            "SELECT local_path, file_hash, last_modified, size, status, remote_id \
+             FROM sync_state ORDER BY local_path",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                (
+                    "photo.heic".to_string(),
+                    "photo-hash".to_string(),
+                    11,
+                    101,
+                    "SYNCED".to_string(),
+                    Some("remote-photo".to_string()),
+                ),
+                (
+                    "photo.mov".to_string(),
+                    "video-hash".to_string(),
+                    12,
+                    202,
+                    "SYNCED".to_string(),
+                    None,
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn uploaded_unit_persistence_rolls_back_when_a_later_write_fails() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        update_sync_state(&pool, "photo.heic", "old-photo", 1, 1, "PENDING", None)
+            .await
+            .unwrap();
+        update_sync_state(&pool, "photo.mov", "old-video", 2, 2, "PENDING", None)
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TRIGGER abort_uploaded_video_update BEFORE UPDATE ON sync_state \
+             WHEN NEW.local_path = 'photo.mov' BEGIN SELECT RAISE(ABORT, 'injected failure'); END",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let assets = [
+            UploadedAssetState {
+                path: "photo.heic",
+                hash: "new-photo",
+                mtime: 11,
+                size: 101,
+            },
+            UploadedAssetState {
+                path: "photo.mov",
+                hash: "new-video",
+                mtime: 12,
+                size: 202,
+            },
+        ];
+
+        assert!(persist_uploaded_unit(&pool, &assets, "remote-photo")
+            .await
+            .is_err());
+
+        let rows: Vec<(String, String, i64, i64, String, Option<String>)> = sqlx::query_as(
+            "SELECT local_path, file_hash, last_modified, size, status, remote_id \
+             FROM sync_state ORDER BY local_path",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                (
+                    "photo.heic".to_string(),
+                    "old-photo".to_string(),
+                    1,
+                    1,
+                    "PENDING".to_string(),
+                    None,
+                ),
+                (
+                    "photo.mov".to_string(),
+                    "old-video".to_string(),
+                    2,
+                    2,
+                    "PENDING".to_string(),
+                    None,
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn failed_state_clears_hash_and_is_never_cached() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();

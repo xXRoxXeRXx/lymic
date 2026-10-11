@@ -1,5 +1,5 @@
 use crate::media::paths::{normalize_folder_path, path_is_within};
-use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
+use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool, Transaction};
 use std::path::PathBuf;
 
 const DISCARD_PATH_BATCH_SIZE: usize = 500;
@@ -9,6 +9,46 @@ const DISCARD_PATH_BATCH_SIZE: usize = 500;
 pub struct FailedSyncEntry {
     pub local_path: String,
     pub failure_reason: String,
+}
+
+/// State data for one member of an upload unit.
+#[derive(Clone)]
+pub struct UploadedAssetState<'a> {
+    pub path: &'a str,
+    pub hash: &'a str,
+    pub mtime: i64,
+    pub size: i64,
+}
+
+async fn upsert_sync_state(
+    tx: &mut Transaction<'_, Sqlite>,
+    path: &str,
+    hash: &str,
+    mtime: i64,
+    size: i64,
+    status: &str,
+    remote_id: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO sync_state (local_path, file_hash, last_modified, size, status, remote_id)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(local_path) DO UPDATE SET
+            file_hash = excluded.file_hash,
+            last_modified = excluded.last_modified,
+            size = excluded.size,
+             status = excluded.status,
+             remote_id = excluded.remote_id,
+             failure_reason = CASE WHEN excluded.status = 'SYNCED' THEN NULL ELSE sync_state.failure_reason END",
+    )
+    .bind(path)
+    .bind(hash)
+    .bind(mtime)
+    .bind(size)
+    .bind(status)
+    .bind(remote_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 pub async fn get_cached_hash(
@@ -40,26 +80,30 @@ pub async fn update_sync_state(
     status: &str,
     remote_id: Option<&str>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO sync_state (local_path, file_hash, last_modified, size, status, remote_id)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(local_path) DO UPDATE SET
-            file_hash = excluded.file_hash,
-            last_modified = excluded.last_modified,
-            size = excluded.size,
-             status = excluded.status,
-             remote_id = excluded.remote_id,
-             failure_reason = CASE WHEN excluded.status = 'SYNCED' THEN NULL ELSE sync_state.failure_reason END",
-    )
-    .bind(path)
-    .bind(hash)
-    .bind(mtime)
-    .bind(size)
-    .bind(status)
-    .bind(remote_id)
-    .execute(pool)
-    .await?;
-    Ok(())
+    let mut tx = pool.begin().await?;
+    upsert_sync_state(&mut tx, path, hash, mtime, size, status, remote_id).await?;
+    tx.commit().await
+}
+
+pub async fn persist_uploaded_unit(
+    pool: &SqlitePool,
+    assets: &[UploadedAssetState<'_>],
+    remote_id: &str,
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    for (index, asset) in assets.iter().enumerate() {
+        upsert_sync_state(
+            &mut tx,
+            asset.path,
+            asset.hash,
+            asset.mtime,
+            asset.size,
+            "SYNCED",
+            (index == 0).then_some(remote_id),
+        )
+        .await?;
+    }
+    tx.commit().await
 }
 
 pub async fn mark_sync_failed(
