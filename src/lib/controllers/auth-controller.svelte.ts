@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 
+const LOCAL_HTTP_NOT_ALLOWED_ERROR = "LOCAL_HTTP_NOT_ALLOWED";
+const CLOUDFLARE_ACCESS_PAIR_REQUIRED_ERROR = "CLOUDFLARE_ACCESS_PAIR_REQUIRED";
+
 export function createAuthController(options: {
   formatError: (error: unknown) => string;
   onLogin: () => Promise<void> | void;
@@ -12,10 +15,12 @@ export function createAuthController(options: {
   let serverUrl = $state("");
   let currentUserName = $state("");
   let apiKey = $state("");
+  let allowLocalHttp = $state(false);
   let cloudflareClientId = $state("");
   let cloudflareClientSecret = $state("");
   let isLoggingIn = $state(false);
   let loginError = $state("");
+  let loginErrorCode = $state("");
 
   async function loadCurrentUser() {
     try {
@@ -38,14 +43,17 @@ export function createAuthController(options: {
     const normalizedCloudflareClientSecret = cloudflareClientSecret.trim();
     if (Boolean(normalizedCloudflareClientId) !== Boolean(normalizedCloudflareClientSecret)) {
       loginError = options.t("cloudflare_access_pair_required");
+      loginErrorCode = CLOUDFLARE_ACCESS_PAIR_REQUIRED_ERROR;
       return;
     }
     isLoggingIn = true;
     loginError = "";
+    loginErrorCode = "";
     try {
       await invoke<void>("login", {
         serverUrl,
         apiKey,
+        allowLocalHttp,
         cloudflareClientId: normalizedCloudflareClientId || null,
         cloudflareClientSecret: normalizedCloudflareClientSecret || null,
       });
@@ -53,7 +61,13 @@ export function createAuthController(options: {
       await options.onLogin();
       await loadCurrentUser();
     } catch (error) {
-      loginError = options.formatError(error);
+      const message = options.formatError(error);
+      if (message.startsWith(`${LOCAL_HTTP_NOT_ALLOWED_ERROR}:`)) {
+        loginError = options.t("local_http_not_allowed");
+        loginErrorCode = LOCAL_HTTP_NOT_ALLOWED_ERROR;
+      } else {
+        loginError = message;
+      }
     } finally {
       isLoggingIn = false;
     }
@@ -69,6 +83,8 @@ export function createAuthController(options: {
       await invoke<void>("logout");
       isAuthenticated = false;
       apiKey = "";
+      allowLocalHttp = false;
+      loginErrorCode = "";
       cloudflareClientId = "";
       cloudflareClientSecret = "";
       currentUserName = "";
@@ -86,12 +102,15 @@ export function createAuthController(options: {
     get currentUserName() { return currentUserName; },
     get apiKey() { return apiKey; },
     set apiKey(value: string) { apiKey = value; },
+    get allowLocalHttp() { return allowLocalHttp; },
+    set allowLocalHttp(value: boolean) { allowLocalHttp = value; },
     get cloudflareClientId() { return cloudflareClientId; },
     set cloudflareClientId(value: string) { cloudflareClientId = value; },
     get cloudflareClientSecret() { return cloudflareClientSecret; },
     set cloudflareClientSecret(value: string) { cloudflareClientSecret = value; },
     get isLoggingIn() { return isLoggingIn; },
     get loginError() { return loginError; },
+    get loginErrorCode() { return loginErrorCode; },
     hydrate,
     login,
     logout,

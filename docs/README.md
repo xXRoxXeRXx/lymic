@@ -26,11 +26,11 @@ Lymic is designed as an **upload-oriented client**, not a two-way filesystem mir
 
 ### To use the application
 
-1. An accessible Immich server using **HTTPS** with a valid TLS configuration.
+1. An accessible Immich server using **HTTPS** with a valid TLS configuration. HTTP is available only through the explicit local-loopback exception below.
 2. An Immich API key.
 3. Local folders containing media that the operating-system account running Lymic can read.
 
-The client rejects server URLs that contain embedded credentials, a query string, or a fragment. HTTP redirects are intentionally disabled. These protections mean a reverse proxy must expose the final HTTPS endpoint directly.
+The client rejects server URLs that contain embedded credentials, a query string, or a fragment. Redirects are intentionally disabled for both HTTPS and the local HTTP exception. These protections mean a reverse proxy must expose the final HTTPS endpoint directly.
 
 ### To build from source
 
@@ -55,9 +55,13 @@ Lymic normally does not need deletion or album-write privileges. Connection vali
 
 Credentials are stored in the operating system's native keyring (for example, Keychain, Credential Manager, or Secret Service), not in the project's SQLite database.
 
+### Local HTTP (optional)
+
+HTTPS is required unless the user explicitly enables **Allow HTTP for local server** in **Advanced login options** for that sign-in. This opt-in accepts only `localhost`, IPv4 addresses in `127.0.0.0/8`, and IPv6 loopback `[::1]`; it does not accept LAN addresses, `.local` names, public hosts, or hosts that merely resolve to loopback. The choice is stored with that server's API key in the native keyring and is used for later account lookups and synchronization. HTTP exposes the API key, so it should be enabled only for an intentional local deployment. Redirects remain prohibited.
+
 ### Cloudflare Access service tokens (optional)
 
-For an Immich server protected by Cloudflare Access, open **Advanced login options** and supply a Cloudflare Access service-token client ID and client secret. Both values are required together. Lymic sends them as `CF-Access-Client-Id` and `CF-Access-Client-Secret` only to the configured Immich HTTPS endpoint, including connection validation, duplicate checks, and uploads. They are stored with the API key in the native keyring, never SQLite, and are omitted from logs and error messages. Create and manage tokens according to [Cloudflare's service-token documentation](https://developers.cloudflare.com/cloudflare-one/identity/service-tokens/).
+For an Immich server protected by Cloudflare Access, open **Advanced login options** and supply a Cloudflare Access service-token client ID and client secret. Both values are required together. Lymic sends them as `CF-Access-Client-Id` and `CF-Access-Client-Secret` only to the configured Immich endpoint, including connection validation, duplicate checks, and uploads. That endpoint is HTTPS by default or an explicitly opted-in loopback HTTP endpoint. They are stored with the API key in the native keyring, never SQLite, and are omitted from logs and error messages. Create and manage tokens according to [Cloudflare's service-token documentation](https://developers.cloudflare.com/cloudflare-one/identity/service-tokens/).
 
 ## 5. Synchronization Lifecycle
 
@@ -105,7 +109,7 @@ Rust application layer
   ├── audit logging
   └── system tray and desktop plugins
   │
-   ├── Native keyring (API key and optional Cloudflare Access token)
+   ├── Native keyring (API key, local HTTP opt-in, and optional Cloudflare Access token)
   ├── SQLite database (local state)
   └── Immich REST API (remote assets)
 ```
@@ -159,7 +163,7 @@ Audit records are written as JSON Lines (`.jsonl`) in application data. Logs rot
 Security controls include:
 
 - Native keyring storage for credentials.
-- HTTPS-only server URLs.
+- HTTPS-only server URLs by default, with an explicit loopback-only local HTTP opt-in.
 - Refusal of credentials in URLs, redirects, query strings, and fragments.
 - Streaming I/O to avoid retaining whole media files in memory.
 - A restrictive Tauri content-security policy for the packaged application.
@@ -264,7 +268,7 @@ The first updater-enabled release can update only installations that already inc
 
 | Symptom | Check |
 | --- | --- |
-| Cannot sign in | Confirm the final server URL is HTTPS, has no redirect, credentials, query string, or fragment, and that the API key has the required access. |
+| Cannot sign in | Confirm the final server URL is HTTPS, or is an opted-in loopback-only HTTP URL, has no redirect, credentials, query string, or fragment, and that the API key has the required access. |
 | Folder cannot be watched | Confirm the folder exists and the application has permission to read it. Temporarily unavailable folders remain configured and are retried. |
 | Assets are skipped | The bulk upload check may have found matching assets already on Immich. Review logs and server state before forcing another upload. |
 | Uploads fail or stall | Inspect the UI error state and local audit logs, verify network access and server health, then retry failed files. |

@@ -20,6 +20,7 @@ pub(crate) async fn login(
     app: tauri::AppHandle,
     server_url: String,
     api_key: String,
+    allow_local_http: bool,
     cloudflare_client_id: Option<String>,
     cloudflare_client_secret: Option<String>,
 ) -> Result<(), String> {
@@ -48,6 +49,7 @@ pub(crate) async fn login(
         let temp_client = immich::ImmichClient::new(
             server_url.clone(),
             api_key.clone(),
+            allow_local_http,
             cloudflare_client_id.clone(),
             cloudflare_client_secret.clone(),
         )?;
@@ -55,6 +57,7 @@ pub(crate) async fn login(
         auth::store_credentials(
             &server_url,
             &api_key,
+            temp_client.uses_http(),
             cloudflare_client_id.clone(),
             cloudflare_client_secret.clone(),
         )
@@ -160,6 +163,7 @@ pub(crate) async fn get_current_user_name() -> Result<String, String> {
     let client = immich::ImmichClient::new(
         credentials.server_url,
         credentials.api_key,
+        credentials.allow_local_http,
         credentials.cloudflare_client_id,
         credentials.cloudflare_client_secret,
     )?;

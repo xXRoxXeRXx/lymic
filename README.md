@@ -98,11 +98,15 @@ Download the latest installer for your operating system from the [Lymic releases
 
 Generate an API key in the Immich web interface under **Account Settings → API Keys**, then enter the server URL and key in Lymic.
 
-The server URL must use **HTTPS** and must not include embedded credentials, a query string, or a fragment. Redirects are intentionally disabled, so configure your reverse proxy to expose the final HTTPS endpoint directly.
+The server URL must use **HTTPS** by default and must not include embedded credentials, a query string, or a fragment. Redirects are intentionally disabled, so configure your reverse proxy to expose the final HTTPS endpoint directly.
+
+### Local HTTP (Optional)
+
+For a local development or self-hosted instance only, **Advanced login options** includes **Allow HTTP for local server**. This is off by default and permits HTTP only for `localhost`, IPv4 loopback addresses in `127.0.0.0/8`, and IPv6 loopback `[::1]`. LAN addresses, `.local` names, and public hosts remain HTTPS-only. HTTP exposes the API key to local network observers, so use it only when that tradeoff is intentional. The per-server choice is stored with the API key in the native keyring and redirects remain disabled.
 
 ### Cloudflare Access (Optional)
 
-If Immich is protected by Cloudflare Access, open **Advanced login options** and enter a Cloudflare Access service-token client ID and client secret. Lymic sends them as `CF-Access-Client-Id` and `CF-Access-Client-Secret` on requests only to the configured Immich HTTPS endpoint. Both values are stored with the API key in the native keyring and are omitted from logs. See [Cloudflare's service-token documentation](https://developers.cloudflare.com/cloudflare-one/identity/service-tokens/).
+If Immich is protected by Cloudflare Access, open **Advanced login options** and enter a Cloudflare Access service-token client ID and client secret. Lymic sends them as `CF-Access-Client-Id` and `CF-Access-Client-Secret` only to the configured Immich endpoint, which is HTTPS by default or an explicitly opted-in loopback HTTP endpoint. Both values are stored with the API key in the native keyring and are omitted from logs. See [Cloudflare's service-token documentation](https://developers.cloudflare.com/cloudflare-one/identity/service-tokens/).
 
 ### Required Permissions (Scopes)
 

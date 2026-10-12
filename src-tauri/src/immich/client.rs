@@ -10,11 +10,12 @@ use reqwest::{
 };
 use serde::Deserialize;
 use serde_json::json;
-use url::Url;
+use url::{Host, Url};
 
 const UPLOAD_TIMEOUT_BASE_SECONDS: u64 = 5 * 60;
 const UPLOAD_TIMEOUT_SECONDS_PER_GIB: u64 = 2 * 60 * 60;
 const GIB_BYTES: u128 = 1024 * 1024 * 1024;
+pub(crate) const LOCAL_HTTP_NOT_ALLOWED_ERROR: &str = "LOCAL_HTTP_NOT_ALLOWED";
 
 fn upload_timeout(total_file_bytes: u64) -> std::time::Duration {
     let proportional_seconds = (u128::from(total_file_bytes)
@@ -44,13 +45,23 @@ impl ImmichClient {
     pub(crate) fn new(
         server_url: String,
         api_key: String,
+        allow_local_http: bool,
         cloudflare_client_id: Option<String>,
         cloudflare_client_secret: Option<String>,
     ) -> Result<Self, String> {
         let mut base_url =
             Url::parse(server_url.trim()).map_err(|_| "Invalid server URL".to_string())?;
-        if base_url.scheme() != "https" {
-            return Err("Only HTTPS server URLs are supported".to_string());
+        match base_url.scheme() {
+            "https" => {}
+            "http" if allow_local_http && is_loopback_host(base_url.host()) => {}
+            "http" => {
+                return Err(
+                    format!(
+                        "{LOCAL_HTTP_NOT_ALLOWED_ERROR}: HTTP is allowed only for localhost and loopback addresses. All other servers require HTTPS."
+                    ),
+                )
+            }
+            _ => return Err("Only HTTPS server URLs are supported".to_string()),
         }
         if base_url.host().is_none() {
             return Err("Server URL must include a host".to_string());
@@ -114,6 +125,10 @@ impl ImmichClient {
 
     pub(crate) async fn validate_connection(&self) -> Result<(), String> {
         self.current_user().await.map(|_| ())
+    }
+
+    pub(crate) fn uses_http(&self) -> bool {
+        self.server_url.scheme() == "http"
     }
 
     pub(crate) async fn current_user(&self) -> Result<String, String> {
@@ -227,10 +242,20 @@ impl ImmichClient {
     }
 }
 
+fn is_loopback_host(host: Option<Host<&str>>) -> bool {
+    match host {
+        Some(Host::Domain("localhost")) => true,
+        Some(Host::Ipv4(address)) => address.is_loopback(),
+        Some(Host::Ipv6(address)) => address.is_loopback(),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        upload_timeout, ImmichClient, SidecarDirectoryCache, GIB_BYTES, UPLOAD_TIMEOUT_BASE_SECONDS,
+        upload_timeout, ImmichClient, SidecarDirectoryCache, GIB_BYTES,
+        LOCAL_HTTP_NOT_ALLOWED_ERROR, UPLOAD_TIMEOUT_BASE_SECONDS,
     };
     use reqwest::Client;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -304,13 +329,19 @@ mod tests {
     fn rejects_insecure_or_sensitive_server_urls() {
         for server_url in [
             "http://immich.example",
+            "http://localhost",
             "https://user:password@immich.example",
             "https://immich.example/?token=secret",
             "https://immich.example/#fragment",
         ] {
-            assert!(
-                ImmichClient::new(server_url.to_string(), "key".to_string(), None, None).is_err()
-            );
+            assert!(ImmichClient::new(
+                server_url.to_string(),
+                "key".to_string(),
+                false,
+                None,
+                None
+            )
+            .is_err());
         }
     }
 
@@ -345,7 +376,8 @@ mod tests {
 
         for (server_url, expected_endpoint) in cases {
             let client =
-                ImmichClient::new(server_url.to_string(), "key".to_string(), None, None).unwrap();
+                ImmichClient::new(server_url.to_string(), "key".to_string(), false, None, None)
+                    .unwrap();
             assert_eq!(
                 client.endpoint_url("/assets/bulk-upload-check").as_str(),
                 expected_endpoint
@@ -358,6 +390,7 @@ mod tests {
         assert!(ImmichClient::new(
             "https://immich.example".to_string(),
             "key".to_string(),
+            false,
             Some("client-id".to_string()),
             None,
         )
@@ -365,10 +398,58 @@ mod tests {
         assert!(ImmichClient::new(
             "https://immich.example".to_string(),
             "key".to_string(),
+            false,
             Some("bad\nclient-id".to_string()),
             Some("client-secret".to_string()),
         )
         .is_err());
+    }
+
+    #[test]
+    fn accepts_opted_in_http_only_for_loopback_hosts() {
+        for server_url in [
+            "http://localhost",
+            "http://127.0.0.1",
+            "http://127.255.255.255",
+            "http://[::1]",
+        ] {
+            assert!(
+                ImmichClient::new(server_url.to_string(), "key".to_string(), true, None, None)
+                    .is_ok()
+            );
+        }
+
+        for server_url in [
+            "http://10.0.0.1",
+            "http://192.168.1.1",
+            "http://172.16.0.1",
+            "http://immich.local",
+            "http://immich.example",
+            "ftp://localhost",
+            "http://localhost/?token=secret",
+            "http://localhost/#fragment",
+            "http://user:password@localhost",
+        ] {
+            assert!(
+                ImmichClient::new(server_url.to_string(), "key".to_string(), true, None, None)
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn local_http_rejection_uses_a_stable_error_code() {
+        let error = ImmichClient::new(
+            "http://immich.example".to_string(),
+            "key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .err()
+        .unwrap();
+
+        assert!(error.starts_with(LOCAL_HTTP_NOT_ALLOWED_ERROR));
     }
 
     #[test]
