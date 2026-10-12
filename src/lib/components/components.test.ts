@@ -48,6 +48,8 @@ describe("LoginView", () => {
     expect(screen.getByLabelText("Cloudflare Access client ID")).toBeVisible();
     expect(screen.getByLabelText("Cloudflare Access client ID")).toHaveAttribute("type", "password");
     expect(screen.getByLabelText("Cloudflare Access client secret")).toHaveAttribute("type", "password");
+    expect(screen.getByRole("heading", { name: "Local HTTP" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Cloudflare Access" })).toBeVisible();
     expect(screen.getByLabelText("Allow HTTP for local server")).not.toBeChecked();
     expect(screen.getByText("HTTP exposes your API key. It works only with localhost and loopback addresses.")).toBeVisible();
   });
