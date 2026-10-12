@@ -49,9 +49,9 @@ The existing project guidance recommends these scopes:
 | --- | --- |
 | `asset.upload` | Upload new media assets. |
 | `asset.read` | Check whether an asset already exists. |
-| `server_info.read` | Validate server compatibility. |
+| `user.read` | Retrieve the signed-in user during login. |
 
-Lymic normally does not need deletion or album-write privileges. Connection validation calls Immich's user endpoint, so ensure the key and Immich version allow the account lookup used during sign-in.
+Lymic normally does not need deletion or album-write privileges.
 
 Credentials are stored in the operating system's native keyring (for example, Keychain, Credential Manager, or Secret Service), not in the project's SQLite database.
 

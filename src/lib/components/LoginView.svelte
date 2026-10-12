@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { AlertCircle } from "lucide-svelte";
+  import { AlertCircle, CircleHelp, X } from "lucide-svelte";
+  import { tick } from "svelte";
   import { t } from "svelte-i18n";
 
   let {
@@ -25,6 +26,30 @@
   } = $props();
 
   let advancedDetailsOpen = $state(false);
+  let isApiKeyHelpOpen = $state(false);
+  let apiKeyHelpButton: HTMLButtonElement;
+
+  function openApiKeyHelp() {
+    isApiKeyHelpOpen = true;
+  }
+
+  async function closeApiKeyHelp() {
+    isApiKeyHelpOpen = false;
+    await tick();
+    apiKeyHelpButton.focus();
+  }
+
+  function handleApiKeyHelpKeydown(event: KeyboardEvent) {
+    if (isApiKeyHelpOpen && event.key === "Escape") {
+      closeApiKeyHelp();
+    }
+  }
+
+  function handleApiKeyHelpBackdropClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) {
+      closeApiKeyHelp();
+    }
+  }
 
   $effect(() => {
     if (
@@ -38,6 +63,8 @@
   });
 </script>
 
+<svelte:window onkeydown={handleApiKeyHelpKeydown} />
+
 <div class="max-w-md w-full mx-auto space-y-10 animate-in">
   <div class="text-center space-y-4">
     <h1 class="text-3xl font-bold text-slate-900 dark:text-slate-100">{$t('login')}</h1>
@@ -50,7 +77,12 @@
         <input id="server-url" type="text" placeholder={$t('server_url_placeholder')} class="glass-input" bind:value={serverUrl} />
       </div>
       <div class="space-y-2">
-        <label for="api-key" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider ml-1">{$t('api_key')}</label>
+        <div class="flex items-center gap-1 ml-1">
+          <label for="api-key" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('api_key')}</label>
+          <button bind:this={apiKeyHelpButton} type="button" class="cursor-pointer rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200" aria-label={$t('api_key_help_button')} onclick={openApiKeyHelp}>
+            <CircleHelp class="h-4 w-4" />
+          </button>
+        </div>
         <input id="api-key" type="password" placeholder={$t('api_key_placeholder')} class="glass-input" bind:value={apiKey} />
       </div>
       <details class="space-y-4" bind:open={advancedDetailsOpen}>
@@ -91,3 +123,23 @@
     </button>
   </div>
 </div>
+
+{#if isApiKeyHelpOpen}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="presentation" onclick={handleApiKeyHelpBackdropClick}>
+    <dialog open class="static m-0 w-full max-w-lg rounded-2xl border-0 bg-white p-6 shadow-2xl dark:bg-slate-900" aria-labelledby="api-key-help-title" aria-modal="true">
+      <div class="flex items-start justify-between gap-4">
+        <h2 id="api-key-help-title" class="text-lg font-bold text-slate-900 dark:text-slate-100">{$t('api_key_help_title')}</h2>
+        <button type="button" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label={$t('api_key_help_close')} onclick={closeApiKeyHelp}>
+          <X class="h-5 w-5" />
+        </button>
+      </div>
+      <p class="mt-4 text-sm text-slate-600 dark:text-slate-300">{$t('api_key_help_creation')}</p>
+      <h3 class="mt-5 text-sm font-bold text-slate-900 dark:text-slate-100">{$t('api_key_help_permissions_title')}</h3>
+      <ul class="mt-2 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+        <li><code class="font-semibold text-slate-800 dark:text-slate-100">asset.upload</code>: {$t('api_key_help_permission_upload')}</li>
+        <li><code class="font-semibold text-slate-800 dark:text-slate-100">asset.read</code>: {$t('api_key_help_permission_read')}</li>
+        <li><code class="font-semibold text-slate-800 dark:text-slate-100">user.read</code>: {$t('api_key_help_permission_user_read')}</li>
+      </ul>
+    </dialog>
+  </div>
+{/if}

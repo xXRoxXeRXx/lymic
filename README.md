@@ -114,9 +114,9 @@ If Immich is protected by Cloudflare Access, open **Advanced login options** and
 |---|---|
 | `asset.upload` | Transmit new media files to the server |
 | `asset.read` | Verify whether a file already exists before uploading |
-| `server_info.read` | Validate the connection and check server compatibility |
+| `user.read` | Retrieve the signed-in user during login |
 
-Lymic normally does not require `asset.delete` or `album.write` permissions. Sign-in validates the authenticated user, so ensure the key and installed Immich version allow that account lookup.
+Lymic normally does not require `asset.delete` or `album.write` permissions.
 
 ---
 

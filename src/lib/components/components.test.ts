@@ -29,6 +29,36 @@ describe("LoginView", () => {
     expect(onLogin).toHaveBeenCalledOnce();
   });
 
+  it("opens API key help and closes it with the close button", async () => {
+    render(LoginView, { serverUrl: "https://immich.example", apiKey: "key", allowLocalHttp: false, cloudflareClientId: "", cloudflareClientSecret: "", isLoggingIn: false, loginError: "", onLogin: vi.fn() });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "API key help" }));
+    expect(screen.getByRole("heading", { name: "Create an Immich API key" })).toBeInTheDocument();
+    expect(screen.getByText("In Immich, create an API key under Account Settings -> API Keys.")).toBeInTheDocument();
+    expect(screen.getByText("asset.upload")).toBeInTheDocument();
+    expect(screen.getByText("asset.read")).toBeInTheDocument();
+    expect(screen.getByText("user.read")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Close API key help" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("API Key")).toHaveValue("key");
+  });
+
+  it("closes API key help with Escape", async () => {
+    render(LoginView, { serverUrl: "https://immich.example", apiKey: "key", allowLocalHttp: false, cloudflareClientId: "", cloudflareClientSecret: "", isLoggingIn: false, loginError: "", onLogin: vi.fn() });
+    const helpButton = screen.getByRole("button", { name: "API key help" });
+    await fireEvent.click(helpButton);
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(helpButton).toHaveFocus();
+  });
+
+  it("closes API key help when its backdrop is clicked", async () => {
+    render(LoginView, { serverUrl: "https://immich.example", apiKey: "key", allowLocalHttp: false, cloudflareClientId: "", cloudflareClientSecret: "", isLoggingIn: false, loginError: "", onLogin: vi.fn() });
+    await fireEvent.click(screen.getByRole("button", { name: "API key help" }));
+    await fireEvent.click(screen.getByRole("presentation"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("keeps Cloudflare Access credentials inside a closed and expandable disclosure", async () => {
     render(LoginView, {
       serverUrl: "https://immich.example",
