@@ -55,6 +55,10 @@ Lymic normally does not need deletion or album-write privileges. Connection vali
 
 Credentials are stored in the operating system's native keyring (for example, Keychain, Credential Manager, or Secret Service), not in the project's SQLite database.
 
+### Cloudflare Access service tokens (optional)
+
+For an Immich server protected by Cloudflare Access, open **Advanced login options** and supply a Cloudflare Access service-token client ID and client secret. Both values are required together. Lymic sends them as `CF-Access-Client-Id` and `CF-Access-Client-Secret` only to the configured Immich HTTPS endpoint, including connection validation, duplicate checks, and uploads. They are stored with the API key in the native keyring, never SQLite, and are omitted from logs and error messages. Create and manage tokens according to [Cloudflare's service-token documentation](https://developers.cloudflare.com/cloudflare-one/identity/service-tokens/).
+
 ## 5. Synchronization Lifecycle
 
 For each configured watched folder, Lymic follows this general flow:
@@ -101,7 +105,7 @@ Rust application layer
   ├── audit logging
   └── system tray and desktop plugins
   │
-  ├── Native keyring (API key)
+   ├── Native keyring (API key and optional Cloudflare Access token)
   ├── SQLite database (local state)
   └── Immich REST API (remote assets)
 ```

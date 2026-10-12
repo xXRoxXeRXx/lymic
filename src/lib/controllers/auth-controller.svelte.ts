@@ -12,6 +12,8 @@ export function createAuthController(options: {
   let serverUrl = $state("");
   let currentUserName = $state("");
   let apiKey = $state("");
+  let cloudflareClientId = $state("");
+  let cloudflareClientSecret = $state("");
   let isLoggingIn = $state(false);
   let loginError = $state("");
 
@@ -32,10 +34,21 @@ export function createAuthController(options: {
 
   async function login() {
     if (!serverUrl || !apiKey) return;
+    const normalizedCloudflareClientId = cloudflareClientId.trim();
+    const normalizedCloudflareClientSecret = cloudflareClientSecret.trim();
+    if (Boolean(normalizedCloudflareClientId) !== Boolean(normalizedCloudflareClientSecret)) {
+      loginError = options.t("cloudflare_access_pair_required");
+      return;
+    }
     isLoggingIn = true;
     loginError = "";
     try {
-      await invoke<void>("login", { serverUrl, apiKey });
+      await invoke<void>("login", {
+        serverUrl,
+        apiKey,
+        cloudflareClientId: normalizedCloudflareClientId || null,
+        cloudflareClientSecret: normalizedCloudflareClientSecret || null,
+      });
       isAuthenticated = true;
       await options.onLogin();
       await loadCurrentUser();
@@ -56,6 +69,8 @@ export function createAuthController(options: {
       await invoke<void>("logout");
       isAuthenticated = false;
       apiKey = "";
+      cloudflareClientId = "";
+      cloudflareClientSecret = "";
       currentUserName = "";
       await options.onLogout();
     } catch (error) {
@@ -71,6 +86,10 @@ export function createAuthController(options: {
     get currentUserName() { return currentUserName; },
     get apiKey() { return apiKey; },
     set apiKey(value: string) { apiKey = value; },
+    get cloudflareClientId() { return cloudflareClientId; },
+    set cloudflareClientId(value: string) { cloudflareClientId = value; },
+    get cloudflareClientSecret() { return cloudflareClientSecret; },
+    set cloudflareClientSecret(value: string) { cloudflareClientSecret = value; },
     get isLoggingIn() { return isLoggingIn; },
     get loginError() { return loginError; },
     hydrate,

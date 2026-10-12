@@ -100,6 +100,10 @@ Generate an API key in the Immich web interface under **Account Settings → API
 
 The server URL must use **HTTPS** and must not include embedded credentials, a query string, or a fragment. Redirects are intentionally disabled, so configure your reverse proxy to expose the final HTTPS endpoint directly.
 
+### Cloudflare Access (Optional)
+
+If Immich is protected by Cloudflare Access, open **Advanced login options** and enter a Cloudflare Access service-token client ID and client secret. Lymic sends them as `CF-Access-Client-Id` and `CF-Access-Client-Secret` on requests only to the configured Immich HTTPS endpoint. Both values are stored with the API key in the native keyring and are omitted from logs. See [Cloudflare's service-token documentation](https://developers.cloudflare.com/cloudflare-one/identity/service-tokens/).
+
 ### Required Permissions (Scopes)
 
 | Scope | Purpose |

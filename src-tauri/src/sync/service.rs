@@ -25,7 +25,12 @@ pub(crate) fn create_authenticated_client(
     app: &tauri::AppHandle,
     credentials: auth::AuthConfig,
 ) -> Option<Arc<ImmichClient>> {
-    match ImmichClient::new(credentials.server_url, credentials.api_key) {
+    match ImmichClient::new(
+        credentials.server_url,
+        credentials.api_key,
+        credentials.cloudflare_client_id,
+        credentials.cloudflare_client_secret,
+    ) {
         Ok(client) => Some(Arc::new(client)),
         Err(error) => {
             log_to_ui(
@@ -86,11 +91,7 @@ pub(crate) async fn sync_scan_result_if_authenticated(
     }
 
     if let Ok(Some(credentials)) = auth::get_credentials() {
-        let audit_context = SyncAuditContext::from_credentials(
-            &credentials.server_url,
-            &credentials.api_key,
-            source,
-        );
+        let audit_context = SyncAuditContext::from_credentials(&credentials, source);
         if let Some(client) = create_authenticated_client(&app, credentials) {
             let app_for_runner = app.clone();
             tauri::async_runtime::spawn(async move {

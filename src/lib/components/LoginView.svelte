@@ -5,16 +5,32 @@
   let {
     serverUrl = $bindable(),
     apiKey = $bindable(),
+    cloudflareClientId = $bindable(""),
+    cloudflareClientSecret = $bindable(""),
     isLoggingIn,
     loginError,
     onLogin
   }: {
     serverUrl: string;
     apiKey: string;
+    cloudflareClientId: string;
+    cloudflareClientSecret: string;
     isLoggingIn: boolean;
     loginError: string;
     onLogin: () => void;
   } = $props();
+
+  let cloudflareDetailsOpen = $state(false);
+
+  $effect(() => {
+    if (
+      cloudflareClientId.trim() ||
+      cloudflareClientSecret.trim() ||
+      loginError === $t('cloudflare_access_pair_required')
+    ) {
+      cloudflareDetailsOpen = true;
+    }
+  });
 </script>
 
 <div class="max-w-md w-full mx-auto space-y-10 animate-in">
@@ -32,6 +48,18 @@
         <label for="api-key" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider ml-1">{$t('api_key')}</label>
         <input id="api-key" type="password" placeholder={$t('api_key_placeholder')} class="glass-input" bind:value={apiKey} />
       </div>
+      <details class="space-y-4" bind:open={cloudflareDetailsOpen}>
+        <summary class="cursor-pointer text-sm font-semibold text-slate-600 dark:text-slate-300">{$t('advanced_login_options')}</summary>
+        <p class="text-xs text-slate-500 dark:text-slate-400">{$t('cloudflare_access_description')}</p>
+        <div class="space-y-2">
+          <label for="cloudflare-client-id" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider ml-1">{$t('cloudflare_client_id')}</label>
+          <input id="cloudflare-client-id" type="password" placeholder={$t('cloudflare_client_id_placeholder')} class="glass-input" bind:value={cloudflareClientId} />
+        </div>
+        <div class="space-y-2">
+          <label for="cloudflare-client-secret" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider ml-1">{$t('cloudflare_client_secret')}</label>
+          <input id="cloudflare-client-secret" type="password" placeholder={$t('cloudflare_client_secret_placeholder')} class="glass-input" bind:value={cloudflareClientSecret} />
+        </div>
+      </details>
     </div>
     {#if loginError}
       <div class="p-4 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3">
