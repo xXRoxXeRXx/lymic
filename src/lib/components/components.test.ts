@@ -15,7 +15,7 @@ describe("LoginView", () => {
   it("binds fields, shows errors, and disables incomplete login", async () => {
     let serverUrl = "";
     let apiKey = "";
-    render(LoginView, { serverUrl, apiKey, cloudflareClientId: "", cloudflareClientSecret: "", isLoggingIn: false, loginError: "Invalid key", onLogin: vi.fn() });
+    render(LoginView, { serverUrl, apiKey, allowLocalHttp: false, cloudflareClientId: "", cloudflareClientSecret: "", isLoggingIn: false, loginError: "Invalid key", onLogin: vi.fn() });
     expect(screen.getByRole("button", { name: "Login" })).toBeDisabled();
     expect(screen.getByText("Invalid key")).toBeInTheDocument();
     await fireEvent.input(screen.getByLabelText("Server URL"), { target: { value: "https://immich.example" } });
@@ -24,7 +24,7 @@ describe("LoginView", () => {
 
   it("calls login when both fields are valid", async () => {
     const onLogin = vi.fn();
-    render(LoginView, { serverUrl: "https://immich.example", apiKey: "key", cloudflareClientId: "", cloudflareClientSecret: "", isLoggingIn: false, loginError: "", onLogin });
+    render(LoginView, { serverUrl: "https://immich.example", apiKey: "key", allowLocalHttp: false, cloudflareClientId: "", cloudflareClientSecret: "", isLoggingIn: false, loginError: "", onLogin });
     await fireEvent.click(screen.getByRole("button", { name: "Login" }));
     expect(onLogin).toHaveBeenCalledOnce();
   });
@@ -33,6 +33,7 @@ describe("LoginView", () => {
     render(LoginView, {
       serverUrl: "https://immich.example",
       apiKey: "key",
+      allowLocalHttp: false,
       cloudflareClientId: "",
       cloudflareClientSecret: "",
       isLoggingIn: false,
@@ -47,12 +48,15 @@ describe("LoginView", () => {
     expect(screen.getByLabelText("Cloudflare Access client ID")).toBeVisible();
     expect(screen.getByLabelText("Cloudflare Access client ID")).toHaveAttribute("type", "password");
     expect(screen.getByLabelText("Cloudflare Access client secret")).toHaveAttribute("type", "password");
+    expect(screen.getByLabelText("Allow HTTP for local server")).not.toBeChecked();
+    expect(screen.getByText("HTTP exposes your API key. It works only with localhost and loopback addresses.")).toBeVisible();
   });
 
   it("expands Cloudflare Access fields when pair validation fails", () => {
     render(LoginView, {
       serverUrl: "https://immich.example",
       apiKey: "key",
+      allowLocalHttp: false,
       cloudflareClientId: "",
       cloudflareClientSecret: "",
       isLoggingIn: false,
@@ -62,6 +66,22 @@ describe("LoginView", () => {
 
     expect(screen.getByText("Advanced login options").closest("details")).toHaveAttribute("open");
     expect(screen.getByLabelText("Cloudflare Access client secret")).toBeVisible();
+  });
+
+  it("expands the advanced options when local HTTP is rejected", () => {
+    render(LoginView, {
+      serverUrl: "http://immich.example",
+      apiKey: "key",
+      allowLocalHttp: false,
+      cloudflareClientId: "",
+      cloudflareClientSecret: "",
+      isLoggingIn: false,
+      loginError: "Only HTTPS is allowed, except localhost and loopback addresses when this option is enabled.",
+      onLogin: vi.fn(),
+    });
+
+    expect(screen.getByText("Advanced login options").closest("details")).toHaveAttribute("open");
+    expect(screen.getByLabelText("Allow HTTP for local server")).toBeVisible();
   });
 });
 

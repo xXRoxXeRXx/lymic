@@ -25,12 +25,7 @@ pub(crate) fn create_authenticated_client(
     app: &tauri::AppHandle,
     credentials: auth::AuthConfig,
 ) -> Option<Arc<ImmichClient>> {
-    match ImmichClient::new(
-        credentials.server_url,
-        credentials.api_key,
-        credentials.cloudflare_client_id,
-        credentials.cloudflare_client_secret,
-    ) {
+    match authenticated_client(credentials) {
         Ok(client) => Some(Arc::new(client)),
         Err(error) => {
             log_to_ui(
@@ -41,6 +36,16 @@ pub(crate) fn create_authenticated_client(
             None
         }
     }
+}
+
+fn authenticated_client(credentials: auth::AuthConfig) -> Result<ImmichClient, String> {
+    ImmichClient::new(
+        credentials.server_url,
+        credentials.api_key,
+        credentials.allow_local_http,
+        credentials.cloudflare_client_id,
+        credentials.cloudflare_client_secret,
+    )
 }
 
 pub(crate) async fn sync_scan_result_if_authenticated(
@@ -139,5 +144,23 @@ mod tests {
         db::add_folder(&pool, "C:/photos").await.unwrap();
         let folders = db::get_folders(&pool).await.unwrap();
         assert!(ensure_sync_has_folders(&folders).is_ok());
+    }
+
+    #[test]
+    fn persisted_local_http_opt_in_is_used_for_sync_clients() {
+        let credentials = auth::AuthConfig {
+            server_url: "http://localhost".to_string(),
+            api_key: "key".to_string(),
+            allow_local_http: true,
+            cloudflare_client_id: None,
+            cloudflare_client_secret: None,
+        };
+
+        assert!(authenticated_client(credentials.clone()).is_ok());
+        let denied_credentials = auth::AuthConfig {
+            allow_local_http: false,
+            ..credentials
+        };
+        assert!(authenticated_client(denied_credentials).is_err());
     }
 }

@@ -5,6 +5,7 @@
   let {
     serverUrl = $bindable(),
     apiKey = $bindable(),
+    allowLocalHttp = $bindable(false),
     cloudflareClientId = $bindable(""),
     cloudflareClientSecret = $bindable(""),
     isLoggingIn,
@@ -13,6 +14,7 @@
   }: {
     serverUrl: string;
     apiKey: string;
+    allowLocalHttp: boolean;
     cloudflareClientId: string;
     cloudflareClientSecret: string;
     isLoggingIn: boolean;
@@ -26,7 +28,8 @@
     if (
       cloudflareClientId.trim() ||
       cloudflareClientSecret.trim() ||
-      loginError === $t('cloudflare_access_pair_required')
+      loginError === $t('cloudflare_access_pair_required') ||
+      loginError === $t('local_http_not_allowed')
     ) {
       cloudflareDetailsOpen = true;
     }
@@ -51,6 +54,13 @@
       <details class="space-y-4" bind:open={cloudflareDetailsOpen}>
         <summary class="cursor-pointer text-sm font-semibold text-slate-600 dark:text-slate-300">{$t('advanced_login_options')}</summary>
         <p class="text-xs text-slate-500 dark:text-slate-400">{$t('cloudflare_access_description')}</p>
+        <div class="flex items-start gap-3 text-sm text-slate-600 dark:text-slate-300">
+          <input id="allow-local-http" type="checkbox" class="mt-0.5" bind:checked={allowLocalHttp} />
+          <span>
+            <label for="allow-local-http" class="font-semibold">{$t('allow_local_http')}</label>
+            <span class="block text-xs text-slate-500 dark:text-slate-400">{$t('allow_local_http_description')}</span>
+          </span>
+        </div>
         <div class="space-y-2">
           <label for="cloudflare-client-id" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider ml-1">{$t('cloudflare_client_id')}</label>
           <input id="cloudflare-client-id" type="password" placeholder={$t('cloudflare_client_id_placeholder')} class="glass-input" bind:value={cloudflareClientId} />

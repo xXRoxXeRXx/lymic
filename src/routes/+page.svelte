@@ -131,6 +131,7 @@
         <LoginView
           bind:serverUrl={auth.serverUrl}
           bind:apiKey={auth.apiKey}
+          bind:allowLocalHttp={auth.allowLocalHttp}
           bind:cloudflareClientId={auth.cloudflareClientId}
           bind:cloudflareClientSecret={auth.cloudflareClientSecret}
           isLoggingIn={auth.isLoggingIn}

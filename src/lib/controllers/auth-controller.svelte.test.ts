@@ -55,6 +55,7 @@ describe("auth controller", () => {
     expect(tauri.invoke).toHaveBeenCalledWith("login", {
       serverUrl: "https://immich.example",
       apiKey: "token",
+      allowLocalHttp: false,
       cloudflareClientId: "client-id",
       cloudflareClientSecret: "client-secret",
     });
@@ -100,8 +101,52 @@ describe("auth controller", () => {
     expect(tauri.invoke).toHaveBeenCalledWith("login", {
       serverUrl: "https://immich.example",
       apiKey: "token",
+      allowLocalHttp: false,
       cloudflareClientId: null,
       cloudflareClientSecret: null,
     });
+  });
+
+  it("forwards the local HTTP opt-in to Tauri and resets it on logout", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_current_user_name") return Promise.resolve("User");
+      return Promise.resolve();
+    });
+    tauri.confirm.mockResolvedValue(true);
+    const controller = createAuthController({
+      formatError: String,
+      onLogin: vi.fn(),
+      onLogout: vi.fn(),
+      reportError: vi.fn(),
+      t: (key) => key,
+    });
+    controller.serverUrl = "http://localhost";
+    controller.apiKey = "token";
+    controller.allowLocalHttp = true;
+
+    await controller.login();
+
+    expect(tauri.invoke).toHaveBeenCalledWith("login", expect.objectContaining({
+      allowLocalHttp: true,
+    }));
+    await controller.logout();
+    expect(controller.allowLocalHttp).toBe(false);
+  });
+
+  it("localizes the backend local HTTP validation error", async () => {
+    tauri.invoke.mockRejectedValue("LOCAL_HTTP_NOT_ALLOWED: Only HTTPS is allowed");
+    const controller = createAuthController({
+      formatError: String,
+      onLogin: vi.fn(),
+      onLogout: vi.fn(),
+      reportError: vi.fn(),
+      t: (key) => key,
+    });
+    controller.serverUrl = "http://immich.example";
+    controller.apiKey = "token";
+
+    await controller.login();
+
+    expect(controller.loginError).toBe("local_http_not_allowed");
   });
 });

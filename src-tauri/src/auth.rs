@@ -7,6 +7,8 @@ pub struct AuthConfig {
     pub server_url: String,
     pub api_key: String,
     #[serde(default)]
+    pub allow_local_http: bool,
+    #[serde(default)]
     pub cloudflare_client_id: Option<String>,
     #[serde(default)]
     pub cloudflare_client_secret: Option<String>,
@@ -33,6 +35,7 @@ const ACCOUNT_NAME: &str = "api-credentials";
 pub fn store_credentials(
     server_url: &str,
     api_key: &str,
+    allow_local_http: bool,
     cloudflare_client_id: Option<String>,
     cloudflare_client_secret: Option<String>,
 ) -> Result<(), String> {
@@ -40,6 +43,7 @@ pub fn store_credentials(
     let config = AuthConfig {
         server_url: server_url.to_string(),
         api_key: api_key.to_string(),
+        allow_local_http,
         cloudflare_client_id,
         cloudflare_client_secret,
     };
@@ -60,6 +64,7 @@ mod tests {
 
         assert!(credentials.cloudflare_client_id.is_none());
         assert!(credentials.cloudflare_client_secret.is_none());
+        assert!(!credentials.allow_local_http);
     }
 
     #[test]
@@ -67,6 +72,7 @@ mod tests {
         let credentials = AuthConfig {
             server_url: "https://immich.example".to_string(),
             api_key: "key".to_string(),
+            allow_local_http: true,
             cloudflare_client_id: Some("client-id".to_string()),
             cloudflare_client_secret: Some("client-secret".to_string()),
         };
@@ -74,6 +80,7 @@ mod tests {
         let json = serde_json::to_string(&credentials).unwrap();
         assert!(json.contains(r#""cloudflare_client_id":"client-id""#));
         assert!(json.contains(r#""cloudflare_client_secret":"client-secret""#));
+        assert!(json.contains(r#""allow_local_http":true"#));
     }
 
     #[test]
@@ -81,6 +88,7 @@ mod tests {
         let credentials = AuthConfig {
             server_url: "https://immich.example".to_string(),
             api_key: "api-key".to_string(),
+            allow_local_http: false,
             cloudflare_client_id: Some("client-id".to_string()),
             cloudflare_client_secret: Some("client-secret".to_string()),
         };
