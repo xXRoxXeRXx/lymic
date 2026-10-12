@@ -79,7 +79,7 @@
       <div class="space-y-2">
         <div class="flex items-center gap-1 ml-1">
           <label for="api-key" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('api_key')}</label>
-          <button bind:this={apiKeyHelpButton} type="button" class="cursor-pointer rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200" aria-label={$t('api_key_help_button')} onclick={openApiKeyHelp}>
+          <button bind:this={apiKeyHelpButton} type="button" class="cursor-pointer rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 dark:focus-visible:outline-blue-400" aria-label={$t('api_key_help_button')} onclick={openApiKeyHelp}>
             <CircleHelp class="h-4 w-4" />
           </button>
         </div>
