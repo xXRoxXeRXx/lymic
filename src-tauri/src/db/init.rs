@@ -26,7 +26,7 @@ pub struct DbInitResult {
 
 #[derive(Debug)]
 pub(crate) enum InitFailure {
-    Corrupt(String),
+    Recoverable(String),
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -49,11 +49,18 @@ pub(crate) fn detect_corruption(err: &sqlx::Error) -> Option<String> {
 }
 
 pub(crate) fn classify_migrate_error(err: sqlx::migrate::MigrateError) -> InitFailure {
+    if let sqlx::migrate::MigrateError::VersionMismatch(version) = &err {
+        return InitFailure::Recoverable(format!(
+            "Migration checksum mismatch for version {} (an app update changed the database schema)",
+            version
+        ));
+    }
+
     let mut current_source: Option<&(dyn std::error::Error + 'static)> = Some(&err);
     while let Some(src) = current_source {
         if let Some(sqlx_err) = src.downcast_ref::<sqlx::Error>() {
             if let Some(reason) = detect_corruption(sqlx_err) {
-                return InitFailure::Corrupt(reason);
+                return InitFailure::Recoverable(reason);
             }
         }
         current_source = src.source();
@@ -82,7 +89,7 @@ async fn verify_and_migrate(pool: &SqlitePool) -> Result<(), InitFailure> {
         .fetch_one(pool)
         .await
         .map_err(|e| match detect_corruption(&e) {
-            Some(reason) => InitFailure::Corrupt(reason),
+            Some(reason) => InitFailure::Recoverable(reason),
             None => InitFailure::Other(Box::new(e)),
         })?;
 
@@ -90,7 +97,7 @@ async fn verify_and_migrate(pool: &SqlitePool) -> Result<(), InitFailure> {
         .try_get(0)
         .map_err(|e| InitFailure::Other(Box::new(e)))?;
     if !status.eq_ignore_ascii_case("ok") {
-        return Err(InitFailure::Corrupt(format!(
+        return Err(InitFailure::Recoverable(format!(
             "SQLite quick_check reported corruption: {}",
             status
         )));
@@ -147,7 +154,7 @@ async fn move_or_copy_and_remove(src: &Path, dst: &Path) -> Result<(), std::io::
     Ok(())
 }
 
-pub(crate) async fn quarantine_corrupt_db(db_path: &Path) -> Result<PathBuf, std::io::Error> {
+pub(crate) async fn quarantine_unusable_db(db_path: &Path) -> Result<PathBuf, std::io::Error> {
     let parent = db_path.parent().unwrap_or_else(|| Path::new("."));
     let file_name = db_path
         .file_name()
@@ -184,18 +191,18 @@ pub(crate) async fn quarantine_corrupt_db(db_path: &Path) -> Result<PathBuf, std
     Ok(backup_path)
 }
 
-async fn repair_corrupt_db(
+async fn repair_unusable_db(
     db_path: &Path,
     reason: String,
 ) -> Result<DbInitResult, Box<dyn std::error::Error + Send + Sync>> {
     let salvaged = try_salvage_folders(db_path).await;
-    let backup_path = quarantine_corrupt_db(db_path).await?;
+    let backup_path = quarantine_unusable_db(db_path).await?;
 
     let new_pool = open_pool(db_path).await?;
     match verify_and_migrate(&new_pool).await {
         Ok(()) => {}
-        Err(InitFailure::Corrupt(r)) => {
-            return Err(format!("Newly created database was also corrupt: {}", r).into())
+        Err(InitFailure::Recoverable(r)) => {
+            return Err(format!("Newly created database could not be used: {}", r).into())
         }
         Err(InitFailure::Other(e)) => return Err(e),
     }
@@ -235,9 +242,9 @@ pub async fn init_at_path(
                     pool,
                     status: DatabaseStatus::Ready,
                 }),
-                Err(InitFailure::Corrupt(reason)) => {
+                Err(InitFailure::Recoverable(reason)) => {
                     pool.close().await;
-                    repair_corrupt_db(db_path, reason).await
+                    repair_unusable_db(db_path, reason).await
                 }
                 Err(InitFailure::Other(err)) => {
                     pool.close().await;
@@ -245,7 +252,7 @@ pub async fn init_at_path(
                 }
             },
             Err(e) => match detect_corruption(&e) {
-                Some(reason) => repair_corrupt_db(db_path, reason).await,
+                Some(reason) => repair_unusable_db(db_path, reason).await,
                 None => Err(Box::new(e)),
             },
         }
@@ -256,9 +263,9 @@ pub async fn init_at_path(
                 pool,
                 status: DatabaseStatus::Ready,
             }),
-            Err(InitFailure::Corrupt(reason)) => {
+            Err(InitFailure::Recoverable(reason)) => {
                 pool.close().await;
-                repair_corrupt_db(db_path, reason).await
+                repair_unusable_db(db_path, reason).await
             }
             Err(InitFailure::Other(err)) => {
                 pool.close().await;

@@ -693,7 +693,7 @@ pub async fn get_failed_syncs(pool: &SqlitePool) -> Result<Vec<FailedSyncEntry>,
 
 #[cfg(test)]
 mod database_tests {
-    use super::super::init::quarantine_corrupt_db;
+    use super::super::init::quarantine_unusable_db;
     use crate::db::*;
     use sqlx::{
         sqlite::{SqliteConnectOptions, SqlitePoolOptions},
@@ -1532,7 +1532,7 @@ mod database_tests {
         std::fs::write(&shm_path, b"DUMMY_RETAINED_SHM_DATA").unwrap();
 
         // 2. Corrupt db file header so it fails with SQLITE_NOTADB / CORRUPT
-        let backup_path = quarantine_corrupt_db(&db_path).await.unwrap();
+        let backup_path = quarantine_unusable_db(&db_path).await.unwrap();
         assert!(backup_path.exists());
         let parent = backup_path.parent().unwrap();
         let backup_name = backup_path.file_name().unwrap().to_str().unwrap();
@@ -1638,6 +1638,53 @@ mod database_tests {
         assert_eq!(std::fs::read(&path1).unwrap(), b"CORRUPT DATA 1");
         assert_eq!(std::fs::read(&path2).unwrap(), b"CORRUPT DATA 2");
 
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn migration_checksum_mismatch_rebuilds_database_and_restores_folders() {
+        let temp_dir = std::env::temp_dir().join(format!("lymic_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let db_path = temp_dir.join("checksum_mismatch_test.db");
+
+        let initial = init_at_path(&db_path).await.unwrap();
+        add_folder(&initial.pool, "C:/important_photos")
+            .await
+            .unwrap();
+        initial.pool.close().await;
+
+        let options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(false);
+        let pool = SqlitePoolOptions::new()
+            .connect_with(options)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE _sqlx_migrations SET checksum = X'00' WHERE version = 1")
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+
+        let repaired = init_at_path(&db_path).await.unwrap();
+        match &repaired.status {
+            DatabaseStatus::Repaired {
+                backup_path,
+                salvaged_folders,
+                reason,
+            } => {
+                assert!(backup_path.exists());
+                assert_eq!(*salvaged_folders, 1);
+                assert!(reason.contains("Migration checksum mismatch for version 1"));
+            }
+            DatabaseStatus::Ready => panic!("Expected checksum mismatch to rebuild the database"),
+        }
+
+        let folders = get_folders(&repaired.pool).await.unwrap();
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].path, "C:/important_photos");
+
+        repaired.pool.close().await;
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
 

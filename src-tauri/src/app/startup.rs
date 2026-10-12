@@ -98,7 +98,7 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
     } = db_init.status
     {
         let notice = format!(
-            "Database corruption detected ({}). Quarantined backup to '{}' and restored {} folder(s).",
+            "Database could not be used ({}). It was backed up to '{}' and rebuilt; restored {} watched folder(s). Other stored app data, including settings, sync queue history, and hash cache, could not be restored.",
             reason,
             backup_path.display(),
             salvaged_folders
@@ -113,7 +113,7 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
                 audit::Severity::Warn,
                 None,
                 "startup",
-                "Database corruption detected and repaired",
+                "Database backed up and rebuilt",
                 json!({ "backup_path": backup_path.to_string_lossy(), "salvaged_folders": salvaged_folders, "reason": reason }),
             ),
         );
