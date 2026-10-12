@@ -3,13 +3,28 @@ use crate::audit::{audit_event, audit_safe_error};
 use crate::{auth, immich};
 use serde_json::json;
 
-// (security): api_key is intentionally kept out of all log and error messages below.
+fn normalize_cloudflare_access_credentials(
+    client_id: Option<String>,
+    client_secret: Option<String>,
+) -> (Option<String>, Option<String>) {
+    (
+        client_id.and_then(|value| (!value.trim().is_empty()).then(|| value.trim().to_string())),
+        client_secret
+            .and_then(|value| (!value.trim().is_empty()).then(|| value.trim().to_string())),
+    )
+}
+
+// (security): credential values are intentionally kept out of all log and error messages below.
 #[tauri::command]
 pub(crate) async fn login(
     app: tauri::AppHandle,
     server_url: String,
     api_key: String,
+    cloudflare_client_id: Option<String>,
+    cloudflare_client_secret: Option<String>,
 ) -> Result<(), String> {
+    let (cloudflare_client_id, cloudflare_client_secret) =
+        normalize_cloudflare_access_credentials(cloudflare_client_id, cloudflare_client_secret);
     log_to_ui(&app, "INFO", "Attempting to connect to server");
     let operation_id = crate::audit::AuditEvent::operation_id();
     let actor_id = Some(crate::audit::actor_id(&server_url, &api_key));
@@ -30,9 +45,19 @@ pub(crate) async fn login(
     // Build a temporary ImmichClient purely to reuse its URL normalisation and
     // pooled reqwest Client. The client is discarded after the connection test.
     let result = async {
-        let temp_client = immich::ImmichClient::new(server_url.clone(), api_key.clone())?;
+        let temp_client = immich::ImmichClient::new(
+            server_url.clone(),
+            api_key.clone(),
+            cloudflare_client_id.clone(),
+            cloudflare_client_secret.clone(),
+        )?;
         temp_client.validate_connection().await?;
-        auth::store_credentials(&server_url, &api_key)
+        auth::store_credentials(
+            &server_url,
+            &api_key,
+            cloudflare_client_id.clone(),
+            cloudflare_client_secret.clone(),
+        )
     }
     .await;
     audit_event(
@@ -57,7 +82,7 @@ pub(crate) async fn login(
             } else {
                 "Login failed"
             },
-            json!({ "failure_reason": result.as_ref().err().map(|error| audit_safe_error(error, Some(&server_url), Some(&api_key))) }),
+            json!({ "failure_reason": result.as_ref().err().map(|error| audit_safe_error(error, &[Some(&server_url), Some(&api_key), cloudflare_client_id.as_deref(), cloudflare_client_secret.as_deref()])) }),
         ),
     );
     result
@@ -93,10 +118,26 @@ pub(crate) async fn logout(app: tauri::AppHandle) -> Result<(), String> {
             } else {
                 "Logout failed"
             },
-            json!({ "failure_reason": result.as_ref().err().map(|error| audit_safe_error(error, None, None)) }),
+            json!({ "failure_reason": result.as_ref().err().map(|error| audit_safe_error(error, &[])) }),
         ),
     );
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_cloudflare_access_credentials;
+
+    #[test]
+    fn normalizes_whitespace_only_cloudflare_access_credentials_to_disabled() {
+        assert_eq!(
+            normalize_cloudflare_access_credentials(
+                Some(" \t ".to_string()),
+                Some("\n".to_string())
+            ),
+            (None, None),
+        );
+    }
 }
 
 #[tauri::command]
@@ -116,6 +157,11 @@ pub(crate) async fn get_server_url() -> Result<String, String> {
 #[tauri::command]
 pub(crate) async fn get_current_user_name() -> Result<String, String> {
     let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-    let client = immich::ImmichClient::new(credentials.server_url, credentials.api_key)?;
+    let client = immich::ImmichClient::new(
+        credentials.server_url,
+        credentials.api_key,
+        credentials.cloudflare_client_id,
+        credentials.cloudflare_client_secret,
+    )?;
     client.current_user().await
 }

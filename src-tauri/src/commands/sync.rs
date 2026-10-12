@@ -52,11 +52,7 @@ pub(crate) async fn start_sync(
     // Ensure we reset the state when we're done, even if we fail.
     let result = async {
         let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-        let audit_context = SyncAuditContext::from_credentials(
-            &credentials.server_url,
-            &credentials.api_key,
-            "manual_sync",
-        );
+        let audit_context = SyncAuditContext::from_credentials(&credentials, "manual_sync");
         let client =
             create_authenticated_client(&app, credentials).ok_or("Invalid server configuration")?;
 
@@ -98,7 +94,7 @@ pub(crate) async fn start_sync(
                 None,
                 "manual_sync",
                 "Manual synchronization aborted",
-                json!({ "failure_reason": audit_safe_error(error, None, None) }),
+                json!({ "failure_reason": audit_safe_error(error, &[]) }),
             ),
         );
     }
@@ -176,11 +172,7 @@ pub(crate) async fn resume_sync_inner(
             .map_err(|error| error.to_string())?;
         if has_pending {
             let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-            let audit_context = SyncAuditContext::from_credentials(
-                &credentials.server_url,
-                &credentials.api_key,
-                "resume_sync",
-            );
+            let audit_context = SyncAuditContext::from_credentials(&credentials, "resume_sync");
             let client = create_authenticated_client(app, credentials)
                 .ok_or("Invalid server configuration")?;
             audit_event(
@@ -279,11 +271,7 @@ pub(crate) async fn retry_failed_syncs(
     crate::app::tray::update_sync_action(&app, &running_snapshot);
     let result = async {
         let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-        let audit_context = SyncAuditContext::from_credentials(
-            &credentials.server_url,
-            &credentials.api_key,
-            "retry_failed_syncs",
-        );
+        let audit_context = SyncAuditContext::from_credentials(&credentials, "retry_failed_syncs");
         let client =
             create_authenticated_client(&app, credentials).ok_or("Invalid server configuration")?;
         let failed_paths = db::get_failed_syncs(pool.inner())
@@ -325,7 +313,7 @@ pub(crate) async fn retry_failed_syncs(
                 None,
                 "retry_failed_syncs",
                 "Failed synchronization retry aborted",
-                json!({ "failure_reason": audit_safe_error(error, None, None) }),
+                json!({ "failure_reason": audit_safe_error(error, &[]) }),
             ),
         );
     }

@@ -165,7 +165,7 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
                         None,
                         "startup",
                         "Watcher registration failed",
-                        json!({ "local_path": folder.path, "failure_reason": audit_safe_error(&error.to_string(), None, None) }),
+                        json!({ "local_path": folder.path, "failure_reason": audit_safe_error(&error.to_string(), &[]) }),
                     ),
                 );
             }

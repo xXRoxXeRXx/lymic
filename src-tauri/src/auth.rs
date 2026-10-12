@@ -1,24 +1,64 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthConfig {
     pub server_url: String,
     pub api_key: String,
+    #[serde(default)]
+    pub cloudflare_client_id: Option<String>,
+    #[serde(default)]
+    pub cloudflare_client_secret: Option<String>,
 }
 
 const SERVICE_NAME: &str = "lymic-sync";
 const ACCOUNT_NAME: &str = "api-credentials";
 
-pub fn store_credentials(server_url: &str, api_key: &str) -> Result<(), String> {
+pub fn store_credentials(
+    server_url: &str,
+    api_key: &str,
+    cloudflare_client_id: Option<String>,
+    cloudflare_client_secret: Option<String>,
+) -> Result<(), String> {
     let entry = Entry::new(SERVICE_NAME, ACCOUNT_NAME).map_err(|e| e.to_string())?;
     let config = AuthConfig {
         server_url: server_url.to_string(),
         api_key: api_key.to_string(),
+        cloudflare_client_id,
+        cloudflare_client_secret,
     };
     let json = serde_json::to_string(&config).map_err(|e| e.to_string())?;
     entry.set_password(&json).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AuthConfig;
+
+    #[test]
+    fn legacy_credential_json_defaults_cloudflare_access_to_disabled() {
+        let credentials: AuthConfig =
+            serde_json::from_str(r#"{"server_url":"https://immich.example","api_key":"key"}"#)
+                .unwrap();
+
+        assert!(credentials.cloudflare_client_id.is_none());
+        assert!(credentials.cloudflare_client_secret.is_none());
+    }
+
+    #[test]
+    fn serializes_configured_cloudflare_access_pair() {
+        let credentials = AuthConfig {
+            server_url: "https://immich.example".to_string(),
+            api_key: "key".to_string(),
+            cloudflare_client_id: Some("client-id".to_string()),
+            cloudflare_client_secret: Some("client-secret".to_string()),
+        };
+
+        let json = serde_json::to_string(&credentials).unwrap();
+        assert!(json.contains(r#""cloudflare_client_id":"client-id""#));
+        assert!(json.contains(r#""cloudflare_client_secret":"client-secret""#));
+    }
 }
 
 pub fn get_credentials() -> Result<Option<AuthConfig>, String> {

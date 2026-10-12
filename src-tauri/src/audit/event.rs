@@ -96,18 +96,16 @@ pub struct SyncAuditContext {
     operation_id: String,
     actor_id: Option<String>,
     source: &'static str,
-    server_url: String,
-    api_key: String,
+    credentials: crate::auth::AuthConfig,
 }
 
 impl SyncAuditContext {
-    pub fn from_credentials(server_url: &str, api_key: &str, source: &'static str) -> Self {
+    pub fn from_credentials(credentials: &crate::auth::AuthConfig, source: &'static str) -> Self {
         Self {
             operation_id: AuditEvent::operation_id(),
-            actor_id: Some(actor_id(server_url, api_key)),
+            actor_id: Some(actor_id(&credentials.server_url, &credentials.api_key)),
             source,
-            server_url: server_url.to_string(),
-            api_key: api_key.to_string(),
+            credentials: credentials.clone(),
         }
     }
 
@@ -132,17 +130,21 @@ impl SyncAuditContext {
     }
 
     pub fn safe_error(&self, error: &str) -> String {
-        audit_safe_error(error, Some(&self.server_url), Some(&self.api_key))
+        audit_safe_error(
+            error,
+            &[
+                Some(&self.credentials.server_url),
+                Some(&self.credentials.api_key),
+                self.credentials.cloudflare_client_id.as_deref(),
+                self.credentials.cloudflare_client_secret.as_deref(),
+            ],
+        )
     }
 }
 
-pub fn audit_safe_error(error: &str, server_url: Option<&str>, api_key: Option<&str>) -> String {
+pub fn audit_safe_error(error: &str, secrets: &[Option<&str>]) -> String {
     let mut redacted = error.replace(['\r', '\n'], " ");
-    for secret in [server_url, api_key]
-        .into_iter()
-        .flatten()
-        .filter(|value| !value.is_empty())
-    {
+    for secret in secrets.iter().flatten().filter(|value| !value.is_empty()) {
         redacted = redacted.replace(secret, "[redacted]");
     }
     redacted
@@ -233,5 +235,15 @@ mod tests {
             actor_id("https://example.test", "key"),
             actor_id("https://other.test", "key")
         );
+    }
+
+    #[test]
+    fn redacts_cloudflare_access_credentials() {
+        let result = audit_safe_error(
+            "request failed for client-id with secret client-secret",
+            &[Some("client-id"), Some("client-secret")],
+        );
+        assert!(!result.contains("client-id"));
+        assert!(!result.contains("client-secret"));
     }
 }

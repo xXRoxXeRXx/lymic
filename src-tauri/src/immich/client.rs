@@ -4,7 +4,10 @@ use super::response::{
 };
 use super::upload::{parse_upload_response, upload_form, SidecarDirectoryCache};
 use crate::sync::progress::TransferStatsTracker;
-use reqwest::{Client, Response};
+use reqwest::{
+    header::{HeaderMap, HeaderName, HeaderValue},
+    Client, Response,
+};
 use serde::Deserialize;
 use serde_json::json;
 use url::Url;
@@ -38,7 +41,12 @@ struct CurrentUserResponse {
 }
 
 impl ImmichClient {
-    pub(crate) fn new(server_url: String, api_key: String) -> Result<Self, String> {
+    pub(crate) fn new(
+        server_url: String,
+        api_key: String,
+        cloudflare_client_id: Option<String>,
+        cloudflare_client_secret: Option<String>,
+    ) -> Result<Self, String> {
         let mut base_url =
             Url::parse(server_url.trim()).map_err(|_| "Invalid server URL".to_string())?;
         if base_url.scheme() != "https" {
@@ -63,10 +71,33 @@ impl ImmichClient {
             format!("{}/api/", path)
         };
         base_url.set_path(&api_path);
+        let default_headers = match (cloudflare_client_id, cloudflare_client_secret) {
+            (None, None) => HeaderMap::new(),
+            (Some(client_id), Some(client_secret)) => {
+                let mut headers = HeaderMap::new();
+                let client_id = HeaderValue::from_str(&client_id)
+                    .map_err(|_| "Invalid Cloudflare Access client ID".to_string())?;
+                let client_secret = HeaderValue::from_str(&client_secret)
+                    .map_err(|_| "Invalid Cloudflare Access client secret".to_string())?;
+                headers.insert(HeaderName::from_static("cf-access-client-id"), client_id);
+                headers.insert(
+                    HeaderName::from_static("cf-access-client-secret"),
+                    client_secret,
+                );
+                headers
+            }
+            _ => {
+                return Err(
+                    "Cloudflare Access client ID and client secret must both be provided"
+                        .to_string(),
+                )
+            }
+        };
         Ok(Self {
             // Reject redirects so an HTTPS endpoint cannot downgrade an API-key request to HTTP.
             client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
+                .default_headers(default_headers)
                 .build()
                 .map_err(|_| "Failed to initialize HTTP client".to_string())?,
             server_url: base_url,
@@ -261,6 +292,13 @@ mod tests {
         path
     }
 
+    fn cloudflare_test_client() -> Client {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("cf-access-client-id", "client-id".parse().unwrap());
+        headers.insert("cf-access-client-secret", "client-secret".parse().unwrap());
+        Client::builder().default_headers(headers).build().unwrap()
+    }
+
     #[test]
     fn rejects_insecure_or_sensitive_server_urls() {
         for server_url in [
@@ -269,7 +307,9 @@ mod tests {
             "https://immich.example/?token=secret",
             "https://immich.example/#fragment",
         ] {
-            assert!(ImmichClient::new(server_url.to_string(), "key".to_string()).is_err());
+            assert!(
+                ImmichClient::new(server_url.to_string(), "key".to_string(), None, None).is_err()
+            );
         }
     }
 
@@ -303,12 +343,31 @@ mod tests {
         ];
 
         for (server_url, expected_endpoint) in cases {
-            let client = ImmichClient::new(server_url.to_string(), "key".to_string()).unwrap();
+            let client =
+                ImmichClient::new(server_url.to_string(), "key".to_string(), None, None).unwrap();
             assert_eq!(
                 client.endpoint_url("/assets/bulk-upload-check").as_str(),
                 expected_endpoint
             );
         }
+    }
+
+    #[test]
+    fn rejects_incomplete_or_invalid_cloudflare_access_headers_locally() {
+        assert!(ImmichClient::new(
+            "https://immich.example".to_string(),
+            "key".to_string(),
+            Some("client-id".to_string()),
+            None,
+        )
+        .is_err());
+        assert!(ImmichClient::new(
+            "https://immich.example".to_string(),
+            "key".to_string(),
+            Some("bad\nclient-id".to_string()),
+            Some("client-secret".to_string()),
+        )
+        .is_err());
     }
 
     #[test]
@@ -351,7 +410,7 @@ mod tests {
             }
         });
         let client = ImmichClient {
-            client: Client::new(),
+            client: cloudflare_test_client(),
             server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
             api_key: "test-key".to_string(),
         };
@@ -380,11 +439,15 @@ mod tests {
         let bulk_request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
         assert!(bulk_request.starts_with("POST /api/assets/bulk-upload-check HTTP/1.1"));
         assert!(bulk_request.contains("x-api-key: test-key"));
+        assert!(bulk_request.contains("cf-access-client-id: client-id"));
+        assert!(bulk_request.contains("cf-access-client-secret: client-secret"));
         assert!(bulk_request.contains(r#""id":"already-there""#));
         assert!(bulk_request.contains(r#""checksum":"new-file""#));
         let upload_request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
         assert!(upload_request.starts_with("POST /api/assets HTTP/1.1"));
         assert!(upload_request.contains("x-immich-checksum: new-file"));
+        assert!(upload_request.contains("cf-access-client-id: client-id"));
+        assert!(upload_request.contains("cf-access-client-secret: client-secret"));
         assert!(upload_request.contains("name=\"assetData\""));
         assert!(!upload_request.contains("name=\"livePhotoData\""));
     }
@@ -559,6 +622,8 @@ mod tests {
         let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
         assert!(request.starts_with("GET /api/users/me HTTP/1.1"));
         assert!(request.contains("x-api-key: test-key"));
+        assert!(!request.contains("cf-access-client-id"));
+        assert!(!request.contains("cf-access-client-secret"));
         assert!(!request.contains("bulk-upload-check"));
     }
 
