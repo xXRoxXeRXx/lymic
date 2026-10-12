@@ -1,7 +1,8 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AuthConfig {
     pub server_url: String,
     pub api_key: String,
@@ -9,6 +10,21 @@ pub struct AuthConfig {
     pub cloudflare_client_id: Option<String>,
     #[serde(default)]
     pub cloudflare_client_secret: Option<String>,
+}
+
+impl fmt::Debug for AuthConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("AuthConfig")
+            .field("server_url", &self.server_url)
+            .field("api_key", &"[redacted]")
+            .field("cloudflare_client_id", &self.cloudflare_client_id)
+            .field(
+                "cloudflare_client_secret",
+                &self.cloudflare_client_secret.as_ref().map(|_| "[redacted]"),
+            )
+            .finish()
+    }
 }
 
 const SERVICE_NAME: &str = "lymic-sync";
@@ -58,6 +74,22 @@ mod tests {
         let json = serde_json::to_string(&credentials).unwrap();
         assert!(json.contains(r#""cloudflare_client_id":"client-id""#));
         assert!(json.contains(r#""cloudflare_client_secret":"client-secret""#));
+    }
+
+    #[test]
+    fn debug_redacts_credentials() {
+        let credentials = AuthConfig {
+            server_url: "https://immich.example".to_string(),
+            api_key: "api-key".to_string(),
+            cloudflare_client_id: Some("client-id".to_string()),
+            cloudflare_client_secret: Some("client-secret".to_string()),
+        };
+
+        let debug = format!("{credentials:?}");
+        assert!(!debug.contains("api-key"));
+        assert!(!debug.contains("client-secret"));
+        assert!(debug.contains("api_key: \"[redacted]\""));
+        assert!(debug.contains("cloudflare_client_secret: Some(\"[redacted]\")"));
     }
 }
 

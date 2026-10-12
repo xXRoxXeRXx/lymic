@@ -19,6 +19,18 @@
     loginError: string;
     onLogin: () => void;
   } = $props();
+
+  let cloudflareDetailsOpen = $state(false);
+
+  $effect(() => {
+    if (
+      cloudflareClientId.trim() ||
+      cloudflareClientSecret.trim() ||
+      loginError === $t('cloudflare_access_pair_required')
+    ) {
+      cloudflareDetailsOpen = true;
+    }
+  });
 </script>
 
 <div class="max-w-md w-full mx-auto space-y-10 animate-in">
@@ -36,7 +48,7 @@
         <label for="api-key" class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider ml-1">{$t('api_key')}</label>
         <input id="api-key" type="password" placeholder={$t('api_key_placeholder')} class="glass-input" bind:value={apiKey} />
       </div>
-      <details class="space-y-4">
+      <details class="space-y-4" bind:open={cloudflareDetailsOpen}>
         <summary class="cursor-pointer text-sm font-semibold text-slate-600 dark:text-slate-300">{$t('advanced_login_options')}</summary>
         <p class="text-xs text-slate-500 dark:text-slate-400">{$t('cloudflare_access_description')}</p>
         <div class="space-y-2">

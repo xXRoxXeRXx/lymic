@@ -36,7 +36,7 @@ export function createAuthController(options: {
     if (!serverUrl || !apiKey) return;
     const normalizedCloudflareClientId = cloudflareClientId.trim();
     const normalizedCloudflareClientSecret = cloudflareClientSecret.trim();
-    if (!!normalizedCloudflareClientId !== !!normalizedCloudflareClientSecret) {
+    if (Boolean(normalizedCloudflareClientId) !== Boolean(normalizedCloudflareClientSecret)) {
       loginError = options.t("cloudflare_access_pair_required");
       return;
     }

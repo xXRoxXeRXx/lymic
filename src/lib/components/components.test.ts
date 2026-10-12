@@ -48,6 +48,21 @@ describe("LoginView", () => {
     expect(screen.getByLabelText("Cloudflare Access client ID")).toHaveAttribute("type", "password");
     expect(screen.getByLabelText("Cloudflare Access client secret")).toHaveAttribute("type", "password");
   });
+
+  it("expands Cloudflare Access fields when pair validation fails", () => {
+    render(LoginView, {
+      serverUrl: "https://immich.example",
+      apiKey: "key",
+      cloudflareClientId: "",
+      cloudflareClientSecret: "",
+      isLoggingIn: false,
+      loginError: "Provide both Cloudflare Access client ID and client secret.",
+      onLogin: vi.fn(),
+    });
+
+    expect(screen.getByText("Advanced login options").closest("details")).toHaveAttribute("open");
+    expect(screen.getByLabelText("Cloudflare Access client secret")).toBeVisible();
+  });
 });
 
 describe("DashboardView", () => {

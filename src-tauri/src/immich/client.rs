@@ -77,8 +77,9 @@ impl ImmichClient {
                 let mut headers = HeaderMap::new();
                 let client_id = HeaderValue::from_str(&client_id)
                     .map_err(|_| "Invalid Cloudflare Access client ID".to_string())?;
-                let client_secret = HeaderValue::from_str(&client_secret)
+                let mut client_secret = HeaderValue::from_str(&client_secret)
                     .map_err(|_| "Invalid Cloudflare Access client secret".to_string())?;
+                client_secret.set_sensitive(true);
                 headers.insert(HeaderName::from_static("cf-access-client-id"), client_id);
                 headers.insert(
                     HeaderName::from_static("cf-access-client-secret"),
