@@ -19,7 +19,7 @@
   "allow_local_http": "Allow HTTP for local server",
   "local_http_options": "Local HTTP",
   "allow_local_http_description": "HTTP exposes your API key. It works only with localhost and loopback addresses.",
-  "local_http_not_allowed": "Only HTTPS is allowed, except localhost and loopback addresses when this option is enabled.",
+  "local_http_not_allowed": "HTTP is allowed only for localhost and loopback addresses. All other servers require HTTPS.",
   "status": "Status",
   "sync_running": "Sync in progress",
   "sync_completed_with_errors": "Sync completed with errors",

@@ -136,6 +136,7 @@
           bind:cloudflareClientSecret={auth.cloudflareClientSecret}
           isLoggingIn={auth.isLoggingIn}
           loginError={auth.loginError}
+          loginErrorCode={auth.loginErrorCode}
           onLogin={auth.login}
         />
       <!-- ===== DASHBOARD VIEW ===== -->

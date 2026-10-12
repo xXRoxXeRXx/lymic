@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 
 const LOCAL_HTTP_NOT_ALLOWED_ERROR = "LOCAL_HTTP_NOT_ALLOWED";
+const CLOUDFLARE_ACCESS_PAIR_REQUIRED_ERROR = "CLOUDFLARE_ACCESS_PAIR_REQUIRED";
 
 export function createAuthController(options: {
   formatError: (error: unknown) => string;
@@ -19,6 +20,7 @@ export function createAuthController(options: {
   let cloudflareClientSecret = $state("");
   let isLoggingIn = $state(false);
   let loginError = $state("");
+  let loginErrorCode = $state("");
 
   async function loadCurrentUser() {
     try {
@@ -41,10 +43,12 @@ export function createAuthController(options: {
     const normalizedCloudflareClientSecret = cloudflareClientSecret.trim();
     if (Boolean(normalizedCloudflareClientId) !== Boolean(normalizedCloudflareClientSecret)) {
       loginError = options.t("cloudflare_access_pair_required");
+      loginErrorCode = CLOUDFLARE_ACCESS_PAIR_REQUIRED_ERROR;
       return;
     }
     isLoggingIn = true;
     loginError = "";
+    loginErrorCode = "";
     try {
       await invoke<void>("login", {
         serverUrl,
@@ -58,9 +62,12 @@ export function createAuthController(options: {
       await loadCurrentUser();
     } catch (error) {
       const message = options.formatError(error);
-      loginError = message.startsWith(`${LOCAL_HTTP_NOT_ALLOWED_ERROR}:`)
-        ? options.t("local_http_not_allowed")
-        : message;
+      if (message.startsWith(`${LOCAL_HTTP_NOT_ALLOWED_ERROR}:`)) {
+        loginError = options.t("local_http_not_allowed");
+        loginErrorCode = LOCAL_HTTP_NOT_ALLOWED_ERROR;
+      } else {
+        loginError = message;
+      }
     } finally {
       isLoggingIn = false;
     }
@@ -77,6 +84,7 @@ export function createAuthController(options: {
       isAuthenticated = false;
       apiKey = "";
       allowLocalHttp = false;
+      loginErrorCode = "";
       cloudflareClientId = "";
       cloudflareClientSecret = "";
       currentUserName = "";
@@ -102,6 +110,7 @@ export function createAuthController(options: {
     set cloudflareClientSecret(value: string) { cloudflareClientSecret = value; },
     get isLoggingIn() { return isLoggingIn; },
     get loginError() { return loginError; },
+    get loginErrorCode() { return loginErrorCode; },
     hydrate,
     login,
     logout,

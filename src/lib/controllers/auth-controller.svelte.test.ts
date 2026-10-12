@@ -76,6 +76,7 @@ describe("auth controller", () => {
     await controller.login();
 
     expect(controller.loginError).toBe("cloudflare_access_pair_required");
+    expect(controller.loginErrorCode).toBe("CLOUDFLARE_ACCESS_PAIR_REQUIRED");
     expect(tauri.invoke).not.toHaveBeenCalled();
   });
 
@@ -134,7 +135,7 @@ describe("auth controller", () => {
   });
 
   it("localizes the backend local HTTP validation error", async () => {
-    tauri.invoke.mockRejectedValue("LOCAL_HTTP_NOT_ALLOWED: Only HTTPS is allowed");
+    tauri.invoke.mockRejectedValue("LOCAL_HTTP_NOT_ALLOWED: HTTP is allowed only for localhost");
     const controller = createAuthController({
       formatError: String,
       onLogin: vi.fn(),
@@ -148,5 +149,6 @@ describe("auth controller", () => {
     await controller.login();
 
     expect(controller.loginError).toBe("local_http_not_allowed");
+    expect(controller.loginErrorCode).toBe("LOCAL_HTTP_NOT_ALLOWED");
   });
 });

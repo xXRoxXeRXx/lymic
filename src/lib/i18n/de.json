@@ -19,7 +19,7 @@
   "allow_local_http": "HTTP für lokalen Server erlauben",
   "local_http_options": "Lokales HTTP",
   "allow_local_http_description": "HTTP legt deinen API-Schlüssel offen. Es funktioniert nur mit localhost und Loopback-Adressen.",
-  "local_http_not_allowed": "Nur HTTPS ist erlaubt, außer für localhost und Loopback-Adressen, wenn diese Option aktiviert ist.",
+  "local_http_not_allowed": "HTTP ist ausschließlich für localhost und Loopback-Adressen zulässig. Alle anderen Server erfordern HTTPS.",
   "status": "Status",
   "sync_running": "Synchronisierung läuft",
   "sync_completed_with_errors": "Synchronisierung mit Fehlern beendet",

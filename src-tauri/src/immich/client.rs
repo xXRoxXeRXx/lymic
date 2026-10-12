@@ -57,7 +57,7 @@ impl ImmichClient {
             "http" => {
                 return Err(
                     format!(
-                        "{LOCAL_HTTP_NOT_ALLOWED_ERROR}: Only HTTPS is allowed, except localhost and loopback addresses when the option is enabled."
+                        "{LOCAL_HTTP_NOT_ALLOWED_ERROR}: HTTP is allowed only for localhost and loopback addresses. All other servers require HTTPS."
                     ),
                 )
             }

@@ -52,6 +52,7 @@ describe("LoginView", () => {
     expect(screen.getByRole("heading", { name: "Cloudflare Access" })).toBeVisible();
     expect(screen.getByLabelText("Allow HTTP for local server")).not.toBeChecked();
     expect(screen.getByText("HTTP exposes your API key. It works only with localhost and loopback addresses.")).toBeVisible();
+    expect(screen.getByLabelText("Allow HTTP for local server")).toHaveAttribute("aria-describedby", "allow-local-http-description");
   });
 
   it("expands Cloudflare Access fields when pair validation fails", () => {
@@ -63,6 +64,7 @@ describe("LoginView", () => {
       cloudflareClientSecret: "",
       isLoggingIn: false,
       loginError: "Provide both Cloudflare Access client ID and client secret.",
+      loginErrorCode: "CLOUDFLARE_ACCESS_PAIR_REQUIRED",
       onLogin: vi.fn(),
     });
 
@@ -78,7 +80,8 @@ describe("LoginView", () => {
       cloudflareClientId: "",
       cloudflareClientSecret: "",
       isLoggingIn: false,
-      loginError: "Only HTTPS is allowed, except localhost and loopback addresses when this option is enabled.",
+      loginError: "HTTP is allowed only for localhost and loopback addresses. All other servers require HTTPS.",
+      loginErrorCode: "LOCAL_HTTP_NOT_ALLOWED",
       onLogin: vi.fn(),
     });
 
