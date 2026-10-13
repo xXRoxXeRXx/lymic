@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.18.0] - 2026-10-13
+
+### Added
+- **Multi-language internationalization (i18n)**:
+  - Expands language support from English and German to 10 languages, adding Arabic, Bengali, French, Hindi, Portuguese, Russian, Spanish, and Simplified Chinese.
+  - Fully localizes activity logs, tray menus, and backend system notifications across all supported languages.
+- **Cloudflare Access service token support**:
+  - Adds optional Cloudflare Access authentication (`CF-Access-Client-Id` and `CF-Access-Client-Secret`) headers for environments behind Cloudflare Zero Trust tunnels.
+- **Loopback and local HTTP login**:
+  - Allows opt-in connection to local unencrypted HTTP instances on localhost and private loopback addresses with explicit confirmation.
+- **API key guidance dialog**:
+  - Adds an in-app help modal on the login screen guiding users through creating and copying Immich API keys.
+
+### Fixed
+- **Database migration checksum recovery**:
+  - Automatically heals and rebuilds corrupted or mismatched migration state while preserving watched folder configurations.
+- **Interactive UI controls and layout**:
+  - Organizes advanced login options into dedicated collapsible controls.
+  - Ensures correct pointer cursor display and focus indicators on interactive buttons, selects, and dialog toggles.
+  - Constrains the autostart toggle thumb within bounds.
 
 ## [0.17.0] - 2026-10-11
 
