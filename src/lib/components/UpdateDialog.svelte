@@ -31,7 +31,7 @@
 </script>
 
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="presentation">
-  <dialog open class="m-0 w-full max-w-lg rounded-2xl border-0 bg-white p-6 shadow-2xl dark:bg-slate-900" aria-labelledby="update-dialog-title">
+  <dialog open class="fixed top-1/2 left-1/2 m-0 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border-0 bg-white p-6 shadow-2xl dark:bg-slate-900" aria-labelledby="update-dialog-title">
     <div class="flex items-start justify-between gap-4">
       <div>
         <h2 id="update-dialog-title" class="text-lg font-bold text-slate-900 dark:text-slate-100">{$t("update_available")}</h2>
