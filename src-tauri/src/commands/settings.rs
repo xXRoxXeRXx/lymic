@@ -98,23 +98,19 @@ mod tests {
 
     #[test]
     fn validates_all_supported_locales_and_translations() {
-        assert!(is_supported_locale("en"));
-        assert!(is_supported_locale("de"));
-        assert!(!is_supported_locale("fr"));
+        let supported = ["en", "de", "zh", "hi", "es", "fr", "ar", "bn", "pt", "ru"];
+        for locale in supported {
+            assert!(is_supported_locale(locale), "Locale {} should be supported", locale);
+            let trans = backend_translations(locale);
+            assert!(!trans.tray_quit.is_empty());
+            assert!(!trans.tray_pause_sync.is_empty());
+            assert!(!trans.tray_resume_sync.is_empty());
+            assert!(!trans.tray_idle_status.is_empty());
+            assert!(!trans.notification_complete_body.is_empty());
+        }
+
+        assert!(!is_supported_locale("it"));
+        assert!(!is_supported_locale("ja"));
         assert!(!is_supported_locale(""));
-
-        let en = backend_translations("en");
-        assert!(!en.tray_quit.is_empty());
-        assert!(!en.tray_pause_sync.is_empty());
-        assert!(!en.tray_resume_sync.is_empty());
-        assert!(!en.tray_idle_status.is_empty());
-        assert!(!en.notification_complete_body.is_empty());
-
-        let de = backend_translations("de");
-        assert!(!de.tray_quit.is_empty());
-        assert!(!de.tray_pause_sync.is_empty());
-        assert!(!de.tray_resume_sync.is_empty());
-        assert!(!de.tray_idle_status.is_empty());
-        assert!(!de.notification_complete_body.is_empty());
     }
 }
