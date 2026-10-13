@@ -100,7 +100,11 @@ mod tests {
     fn validates_all_supported_locales_and_translations() {
         let supported = ["en", "de", "zh", "hi", "es", "fr", "ar", "bn", "pt", "ru"];
         for locale in supported {
-            assert!(is_supported_locale(locale), "Locale {} should be supported", locale);
+            assert!(
+                is_supported_locale(locale),
+                "Locale {} should be supported",
+                locale
+            );
             let trans = backend_translations(locale);
             assert!(!trans.tray_quit.is_empty());
             assert!(!trans.tray_pause_sync.is_empty());

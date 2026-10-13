@@ -48,7 +48,13 @@ pub(crate) fn log_to_ui_keyed(
     log_to_ui_entry(app, level, message, Some(key.to_string()), Some(params));
 }
 
-pub(crate) fn log_to_ui_folder(app: &AppHandle, level: &str, message: &str, key: &str, folder: &str) {
+pub(crate) fn log_to_ui_folder(
+    app: &AppHandle,
+    level: &str,
+    message: &str,
+    key: &str,
+    folder: &str,
+) {
     log_to_ui_keyed(app, level, message, key, params_from(&[("folder", folder)]));
 }
 
@@ -60,7 +66,13 @@ pub(crate) fn log_to_ui_folder_error(
     folder: &str,
     error: &str,
 ) {
-    log_to_ui_keyed(app, level, message, key, params_from(&[("folder", folder), ("error", error)]));
+    log_to_ui_keyed(
+        app,
+        level,
+        message,
+        key,
+        params_from(&[("folder", folder), ("error", error)]),
+    );
 }
 
 pub(crate) fn log_to_ui_file_error(
@@ -71,7 +83,13 @@ pub(crate) fn log_to_ui_file_error(
     file: &str,
     error: &str,
 ) {
-    log_to_ui_keyed(app, level, message, key, params_from(&[("file", file), ("error", error)]));
+    log_to_ui_keyed(
+        app,
+        level,
+        message,
+        key,
+        params_from(&[("file", file), ("error", error)]),
+    );
 }
 
 pub(crate) fn log_to_ui_error(app: &AppHandle, level: &str, message: &str, key: &str, error: &str) {

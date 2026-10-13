@@ -1,4 +1,4 @@
-﻿use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 
 pub(crate) struct LocaleState(pub(crate) Mutex<String>);
 
@@ -28,7 +28,7 @@ pub(crate) fn is_supported_locale(locale: &str) -> bool {
 pub(crate) fn detect_system_locale() -> &'static str {
     let tag = sys_locale::get_locale().unwrap_or_default();
     let code = tag
-        .split(|c: char| c == '_' || c == '-' || c == '.')
+        .split(['_', '-', '.'])
         .next()
         .unwrap_or_default()
         .to_lowercase();

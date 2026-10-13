@@ -1,6 +1,4 @@
-﻿use crate::app::events::{
-    log_to_ui_folder, log_to_ui_folder_error, send_notification_keyed,
-};
+use crate::app::events::{log_to_ui_folder, log_to_ui_folder_error, send_notification_keyed};
 use crate::app::state::{DatabaseRecoveryNotice, DatabaseRecoveryNoticeData};
 use crate::{
     audit::{self, audit_event, audit_safe_error},

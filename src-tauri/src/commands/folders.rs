@@ -1,4 +1,4 @@
-﻿use crate::app::events::{log_to_ui_error, log_to_ui_folder, log_to_ui_folder_error};
+use crate::app::events::{log_to_ui_error, log_to_ui_folder, log_to_ui_folder_error};
 use crate::app::tray::set_sync_enabled;
 use crate::audit::audit_event;
 use crate::media::paths::{normalize_folder_path, path_is_within};
@@ -146,20 +146,21 @@ pub(crate) async fn add_folder(
         let path_clone = path.clone();
         let app_for_scan = app.clone();
         tauri::async_runtime::spawn(async move {
-            let scan_result = match scan_folders_for_media(vec![PathBuf::from(path_clone.clone())]).await {
-                Ok(result) => result,
-                Err(error) => {
-                    log_to_ui_folder_error(
-                        &app_for_scan,
-                        "ERROR",
-                        &format!("Folder scanning failed for '{}': {}", path_clone, error),
-                        "log_folder_scan_failed",
-                        &path_clone,
-                        &error,
-                    );
-                    return;
-                }
-            };
+            let scan_result =
+                match scan_folders_for_media(vec![PathBuf::from(path_clone.clone())]).await {
+                    Ok(result) => result,
+                    Err(error) => {
+                        log_to_ui_folder_error(
+                            &app_for_scan,
+                            "ERROR",
+                            &format!("Folder scanning failed for '{}': {}", path_clone, error),
+                            "log_folder_scan_failed",
+                            &path_clone,
+                            &error,
+                        );
+                        return;
+                    }
+                };
             sync_scan_result_if_authenticated(app_for_scan, pool_inner, scan_result, "folder_add")
                 .await;
         });
