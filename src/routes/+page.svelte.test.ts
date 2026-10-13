@@ -714,8 +714,8 @@ describe("settings", () => {
     expect(await screen.findByText("Language")).toBeInTheDocument();
     expect(screen.getByText("Choose your preferred language.")).toBeInTheDocument();
 
-    const deButton = screen.getByRole("button", { name: "DE" });
-    await fireEvent.click(deButton);
+    const localeSelect = screen.getByLabelText("Language");
+    await fireEvent.change(localeSelect, { target: { value: "de" } });
 
     await waitFor(() => {
       expect(screen.getByText("Sprache")).toBeInTheDocument();

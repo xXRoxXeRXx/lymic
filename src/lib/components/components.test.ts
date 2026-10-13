@@ -210,7 +210,7 @@ describe("SettingsView", () => {
     expect(screen.getByLabelText("Parallel uploads")).toBeDisabled();
     rerender({ currentUserName: "Meyer", serverUrl: "https://immich.example", isAutostartEnabled: false, themePreference: "system", uploadParallelism: 3, isSavingUploadParallelism: false, updateStatus: "current", isCheckingForUpdates: false, onToggleAutostart, onLocaleChange, onThemeChange, onUploadParallelismChange, onCheckForUpdates, onLogout });
     await fireEvent.click(screen.getByRole("button", { name: "Enable autostart" }));
-    await fireEvent.click(screen.getByRole("button", { name: "DE" }));
+    await fireEvent.change(screen.getByLabelText("Language"), { target: { value: "de" } });
     await fireEvent.click(screen.getByRole("button", { name: "Dark" }));
     await fireEvent.change(screen.getByLabelText("Parallel uploads"), { target: { value: "5" } });
     await fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));

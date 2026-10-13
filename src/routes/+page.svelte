@@ -99,7 +99,8 @@
         </div>
         <div class="flex items-center gap-2">
           <button
-            class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/50 dark:hover:bg-white/10 transition-colors"
+            class="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/60 transition-colors hover:bg-white dark:border-slate-700 dark:bg-slate-900/50 dark:hover:bg-slate-800"
+            aria-label={currentView === "settings" ? $t('dashboard') : $t('settings')}
             onclick={() => currentView = currentView === "settings" ? "dashboard" : "settings"}
           >
             {#if currentView === "settings"}

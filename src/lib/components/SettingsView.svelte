@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Monitor, Moon, Sun, User } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
+  import { locales } from "../i18n";
   import type { ThemePreference } from "./types";
 
   interface Props {
@@ -52,17 +53,14 @@
 
     <div class="p-8 flex items-center justify-between border-b border-black/5 dark:border-white/10">
       <div class="space-y-1">
-        <p class="font-bold text-slate-900 dark:text-slate-100">{$t('language')}</p>
+        <label for="locale" class="font-bold text-slate-900 dark:text-slate-100">{$t('language')}</label>
         <p class="text-xs text-slate-500 dark:text-slate-400">{$t('language_subtitle')}</p>
       </div>
-      <div class="flex gap-2">
-        <button class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'en' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}" onclick={() => onLocaleChange('en')} aria-pressed={$locale === 'en'}>
-          EN
-        </button>
-        <button class="px-3 py-1 rounded-lg text-xs font-bold transition-colors {$locale === 'de' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}" onclick={() => onLocaleChange('de')} aria-pressed={$locale === 'de'}>
-          DE
-        </button>
-      </div>
+      <select id="locale" class="glass-input !w-auto !py-2 text-sm font-semibold" value={$locale} onchange={(event) => onLocaleChange((event.currentTarget as HTMLSelectElement).value)}>
+        {#each locales as { code, name }}
+          <option value={code}>{name}</option>
+        {/each}
+      </select>
     </div>
 
     <div class="p-8 flex items-center justify-between gap-6 border-b border-black/5 dark:border-white/10">
@@ -71,15 +69,15 @@
         <p class="text-xs text-slate-500 dark:text-slate-400">{$t('appearance_subtitle')}</p>
       </div>
       <div class="flex gap-2" role="group" aria-label={$t('appearance')}>
-        <button type="button" class="px-3 py-2 rounded-lg text-xs font-bold transition-colors {themePreference === 'system' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}" aria-pressed={themePreference === 'system'} title={$t('theme_system')} onclick={() => onThemeChange('system')}>
+        <button type="button" class="rounded-lg border px-3 py-2 text-xs font-bold transition-colors {themePreference === 'system' ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}" aria-pressed={themePreference === 'system'} title={$t('theme_system')} onclick={() => onThemeChange('system')}>
           <Monitor class="w-4 h-4" />
           <span class="sr-only">{$t('theme_system')}</span>
         </button>
-        <button type="button" class="px-3 py-2 rounded-lg text-xs font-bold transition-colors {themePreference === 'light' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}" aria-pressed={themePreference === 'light'} title={$t('theme_light')} onclick={() => onThemeChange('light')}>
+        <button type="button" class="rounded-lg border px-3 py-2 text-xs font-bold transition-colors {themePreference === 'light' ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}" aria-pressed={themePreference === 'light'} title={$t('theme_light')} onclick={() => onThemeChange('light')}>
           <Sun class="w-4 h-4" />
           <span class="sr-only">{$t('theme_light')}</span>
         </button>
-        <button type="button" class="px-3 py-2 rounded-lg text-xs font-bold transition-colors {themePreference === 'dark' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}" aria-pressed={themePreference === 'dark'} title={$t('theme_dark')} onclick={() => onThemeChange('dark')}>
+        <button type="button" class="rounded-lg border px-3 py-2 text-xs font-bold transition-colors {themePreference === 'dark' ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}" aria-pressed={themePreference === 'dark'} title={$t('theme_dark')} onclick={() => onThemeChange('dark')}>
           <Moon class="w-4 h-4" />
           <span class="sr-only">{$t('theme_dark')}</span>
         </button>
@@ -99,7 +97,7 @@
           {/if}
         </p>
       </div>
-      <button type="button" class="rounded-lg bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700" onclick={onCheckForUpdates} disabled={isCheckingForUpdates}>
+      <button type="button" class="rounded-lg border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700" onclick={onCheckForUpdates} disabled={isCheckingForUpdates}>
         {isCheckingForUpdates ? $t('update_checking') : $t('check_for_updates')}
       </button>
     </div>
@@ -121,7 +119,7 @@
         {/if}
         <p class="text-xs text-slate-500 dark:text-slate-400">{$t('logged_in_at')} {serverUrl}</p>
       </div>
-      <button class="text-xs font-bold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 px-4 py-2 rounded-lg transition-colors" onclick={onLogout}>{$t('logout')}</button>
+      <button class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-bold text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/60" onclick={onLogout}>{$t('logout')}</button>
     </div>
   </div>
 </div>

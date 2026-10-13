@@ -109,7 +109,7 @@
   {:else}
     <div class="flex gap-10 pt-2 border-t border-black/5 dark:border-white/10">
       <div class="space-y-1"><p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('last_sync')}</p><p class="font-semibold text-slate-600 dark:text-slate-300">{lastSync === 'Noch nie' ? $t('never') : lastSync}</p></div>
-      <div class="space-y-1"><p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('server')}</p><p class="font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[150px]">{serverUrl.replace(/https?:\/\//, '')}</p></div>
+      <div class="space-y-1"><p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('server')}</p><p class="font-semibold text-slate-600 dark:text-slate-300">{serverUrl.replace(/https?:\/\//, '')}</p></div>
     </div>
   {/if}
   <FailedSyncsModal {failedSyncs} {syncStatus} onRetry={onRetryFailedSyncs} />

@@ -62,9 +62,9 @@
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--glass-border);
-    border-radius: 24px;
+    border-radius: 12px;
     padding: 2rem;
-    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+    box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.025);
     transition: all 0.3s ease;
   }
 
@@ -136,6 +136,15 @@
     padding: 0.75rem 1rem;
     outline: none;
     transition: all 0.2s ease;
+  }
+
+  select.glass-input {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2364758b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1rem;
+    padding-right: 2.75rem;
   }
 
   :root[data-theme="dark"] .glass-input {

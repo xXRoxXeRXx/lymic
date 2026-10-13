@@ -13,12 +13,13 @@
 </script>
 
 <div class="space-y-6 animate-in" style="animation-delay: 100ms">
-  <div class="flex items-center justify-between px-2">
+  <div class="flex items-center justify-between px-4">
     <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-widest">
       {$t('synced_folders')}
     </h4>
     <button
-      class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors"
+      class="flex h-9 w-9 items-center justify-center rounded-lg border border-blue-600 bg-blue-600 text-white transition-colors hover:bg-blue-700"
+      aria-label={$t('select_folder')}
       onclick={onAddFolder}
     >
       <FolderPlus class="w-4 h-4" />
@@ -37,7 +38,7 @@
           </div>
         </div>
         <button
-          class="p-2 text-slate-300 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+          class="rounded-lg border border-red-200 bg-red-50 p-2 text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/60"
           aria-label={`${$t('remove_folder')}: ${folder.path}`}
           onclick={() => onRemoveFolder(folder.id)}
         >
