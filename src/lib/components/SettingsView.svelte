@@ -45,8 +45,8 @@
         <p class="font-bold text-slate-900 dark:text-slate-100">{$t('autostart')}</p>
         <p class="text-xs text-slate-500 dark:text-slate-400">{$t('autostart_subtitle')}</p>
       </div>
-      <button class="w-12 h-6 border rounded-full relative transition-all {isAutostartEnabled ? 'bg-blue-600 border-blue-600' : 'bg-slate-200 dark:bg-slate-700 border-slate-200 dark:border-slate-700'}" onclick={onToggleAutostart} aria-label={isAutostartEnabled ? $t('autostart_disable') : $t('autostart_enable')} aria-pressed={isAutostartEnabled}>
-        <div class="absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all {isAutostartEnabled ? 'translate-x-6' : 'translate-x-0'}"></div>
+      <button class="w-12 h-6 shrink-0 border rounded-full relative transition-all {isAutostartEnabled ? 'bg-blue-600 border-blue-600' : 'bg-slate-200 dark:bg-slate-700 border-slate-200 dark:border-slate-700'}" onclick={onToggleAutostart} aria-label={isAutostartEnabled ? $t('autostart_disable') : $t('autostart_enable')} aria-pressed={isAutostartEnabled}>
+        <div class="absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all {isAutostartEnabled ? 'right-1' : 'left-1'}"></div>
       </button>
     </div>
 
