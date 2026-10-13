@@ -47,6 +47,17 @@
     -webkit-user-select: text;
   }
 
+  button:not(:disabled),
+  a[href],
+  label[for],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="link"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
   img {
     -webkit-user-drag: none;
     user-select: none;
