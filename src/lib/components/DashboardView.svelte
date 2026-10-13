@@ -1,5 +1,6 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { t, locale } from "svelte-i18n";
+  import { toBcp47Locale } from "../i18n";
   import FailedSyncsModal from "./FailedSyncsModal.svelte";
   import FolderList from "./FolderList.svelte";
   import ActivityLog from "./ActivityLog.svelte";
@@ -7,7 +8,7 @@
 
   interface Props {
     syncStatus: SyncStatus;
-    lastSync: string;
+    lastSync: string | null;
     progress: number;
     processed: number;
     syncTotal: number;
@@ -47,7 +48,7 @@
     onRemoveFolder
   }: Props = $props();
 
-  const numberLocale = $derived($locale === 'de' ? 'de-DE' : 'en-US');
+  const numberLocale = $derived(toBcp47Locale($locale));
   function formatBytes(bytes: number) {
     const units = ['B', 'KiB', 'MiB', 'GiB'];
     let value = bytes;
@@ -93,13 +94,13 @@
         <span class="truncate max-w-[250px]">{currentFile}</span>
       </div>
       <p class="text-xs font-medium text-slate-400 dark:text-slate-400">
-        {$t('processed')}: {processed.toLocaleString($locale === 'de' ? 'de-DE' : 'en-US')} / {syncTotal.toLocaleString($locale === 'de' ? 'de-DE' : 'en-US')}
+        {$t('processed')}: {processed.toLocaleString(numberLocale)} / {syncTotal.toLocaleString(numberLocale)}
       </p>
       {#if transferredBytes > 0 || transferRateBytesPerSecond !== null || estimatedSecondsRemaining !== null}
         <p class="text-xs font-medium text-slate-400 dark:text-slate-400">
           {#if transferredBytes > 0}{$t('transferred')}: {formatBytes(transferredBytes)}{/if}
-          {#if transferRateBytesPerSecond !== null} {transferredBytes > 0 ? ' · ' : ''}{$t('transfer_rate')}: {(transferRateBytesPerSecond / 1_000_000).toLocaleString(numberLocale, { maximumFractionDigits: 1 })} MB/s{/if}
-          {#if estimatedSecondsRemaining !== null} {(transferredBytes > 0 || transferRateBytesPerSecond !== null) ? ' · ' : ''}{$t('remaining_time')}: {formatDuration(estimatedSecondsRemaining)}{/if}
+          {#if transferRateBytesPerSecond !== null} {transferredBytes > 0 ? ' Â· ' : ''}{$t('transfer_rate')}: {(transferRateBytesPerSecond / 1_000_000).toLocaleString(numberLocale, { maximumFractionDigits: 1 })} MB/s{/if}
+          {#if estimatedSecondsRemaining !== null} {(transferredBytes > 0 || transferRateBytesPerSecond !== null) ? ' Â· ' : ''}{$t('remaining_time')}: {formatDuration(estimatedSecondsRemaining)}{/if}
         </p>
       {/if}
       {#if syncStatus === 'paused'}
@@ -108,7 +109,7 @@
     </div>
   {:else}
     <div class="flex gap-10 pt-2 border-t border-black/5 dark:border-white/10">
-      <div class="space-y-1"><p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('last_sync')}</p><p class="font-semibold text-slate-600 dark:text-slate-300">{lastSync === 'Noch nie' ? $t('never') : lastSync}</p></div>
+      <div class="space-y-1"><p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('last_sync')}</p><p class="font-semibold text-slate-600 dark:text-slate-300">{lastSync ?? $t('never')}</p></div>
       <div class="space-y-1"><p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('server')}</p><p class="font-semibold text-slate-600 dark:text-slate-300">{serverUrl.replace(/https?:\/\//, '')}</p></div>
     </div>
   {/if}

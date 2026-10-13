@@ -1,7 +1,7 @@
 //! Tauri-facing sync service facade.
 
 use crate::{
-    app::events::{emit_sync_error, log_to_ui},
+    app::events::{emit_sync_error, log_to_ui_error},
     audit::SyncAuditContext,
     auth, db,
     immich::ImmichClient,
@@ -28,10 +28,12 @@ pub(crate) fn create_authenticated_client(
     match authenticated_client(credentials) {
         Ok(client) => Some(Arc::new(client)),
         Err(error) => {
-            log_to_ui(
+            log_to_ui_error(
                 app,
                 "ERROR",
                 &format!("Invalid server configuration: {}", error),
+                "log_invalid_server_config",
+                &error,
             );
             None
         }

@@ -1,5 +1,7 @@
-use crate::app::events::{log_to_ui, send_notification};
-use crate::app::state::DatabaseRecoveryNotice;
+﻿use crate::app::events::{
+    log_to_ui_folder, log_to_ui_folder_error, send_notification_keyed,
+};
+use crate::app::state::{DatabaseRecoveryNotice, DatabaseRecoveryNoticeData};
 use crate::{
     audit::{self, audit_event, audit_safe_error},
     db, sync, watcher,
@@ -97,13 +99,42 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
         ref reason,
     } = db_init.status
     {
+        let backup_str = backup_path.display().to_string();
         let notice = format!(
             "Database could not be used ({}). It was backed up to '{}' and rebuilt; restored {} watched folder(s). Other stored app data, including settings, sync queue history, and hash cache, could not be restored.",
             reason,
-            backup_path.display(),
+            backup_str,
             salvaged_folders
         );
-        send_notification(&handle, "Lymic - Database Repaired", &notice, "WARN");
+        let system_locale = crate::app::locale::detect_system_locale();
+        let translations = crate::app::locale::backend_translations(system_locale);
+        let title = translations
+            .notification_database_repaired_title
+            .as_deref()
+            .unwrap_or("Lymic - Database Repaired");
+        let body = translations
+            .log_database_repaired_notice
+            .as_deref()
+            .map(|template| {
+                template
+                    .replace("{reason}", reason)
+                    .replace("{backup}", &backup_str)
+                    .replace("{count}", &salvaged_folders.to_string())
+            })
+            .unwrap_or_else(|| notice.clone());
+
+        let mut params = std::collections::HashMap::new();
+        params.insert("reason".to_string(), reason.clone());
+        params.insert("backup".to_string(), backup_str.clone());
+        params.insert("count".to_string(), salvaged_folders.to_string());
+        send_notification_keyed(
+            &handle,
+            title,
+            &body,
+            "WARN",
+            "log_database_repaired_notice",
+            params,
+        );
         audit_event(
             &handle,
             audit::AuditEvent::new(
@@ -117,7 +148,13 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
                 json!({ "backup_path": backup_path.to_string_lossy(), "salvaged_folders": salvaged_folders, "reason": reason }),
             ),
         );
-        recovery_notice = Some(notice);
+        recovery_notice = Some(DatabaseRecoveryNoticeData {
+            message: notice,
+            key: "log_database_repaired_notice".to_string(),
+            reason: reason.clone(),
+            backup: backup_str,
+            count: salvaged_folders,
+        });
     }
 
     let mut watcher = watcher::WatcherState::new(watcher);
@@ -127,13 +164,15 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
     for folder in folders {
         match watcher::watch_path(&mut watcher, &folder.path) {
             Ok(watcher::WatchRegistration::PathUnavailable) => {
-                log_to_ui(
+                log_to_ui_folder(
                     &handle,
                     "WARN",
                     &format!(
                         "Folder '{}' offline at startup; watching deferred.",
                         folder.path
                     ),
+                    "log_folder_offline_startup",
+                    &folder.path,
                 );
                 audit_event(
                     &handle,
@@ -150,10 +189,13 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
                 );
             }
             Err(error) => {
-                log_to_ui(
+                log_to_ui_folder_error(
                     &handle,
                     "WARN",
                     &format!("Could not watch '{}': {}", folder.path, error),
+                    "log_could_not_watch_folder",
+                    &folder.path,
+                    &error.to_string(),
                 );
                 audit_event(
                     &handle,

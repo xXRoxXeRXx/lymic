@@ -1,4 +1,4 @@
-use std::sync::{Mutex, OnceLock};
+﻿use std::sync::{Mutex, OnceLock};
 
 pub(crate) struct LocaleState(pub(crate) Mutex<String>);
 
@@ -13,17 +13,31 @@ pub(crate) struct BackendTranslations {
     pub(crate) tray_idle_status: String,
     pub(crate) notification_complete_title: String,
     pub(crate) notification_complete_body: String,
+    #[serde(default)]
+    pub(crate) notification_database_repaired_title: Option<String>,
+    #[serde(default)]
+    pub(crate) log_database_repaired_notice: Option<String>,
 }
+
+const SUPPORTED_LOCALES: [&str; 10] = ["en", "de", "zh", "hi", "es", "fr", "ar", "bn", "pt", "ru"];
 
 pub(crate) fn is_supported_locale(locale: &str) -> bool {
-    matches!(
-        locale,
-        "en" | "de" | "zh" | "hi" | "es" | "fr" | "ar" | "bn" | "pt" | "ru"
-    )
+    SUPPORTED_LOCALES.contains(&locale)
 }
 
-// The backend consumes its strings from the frontend's translation catalog so the
-// tray and notifications cannot drift from the application language.
+pub(crate) fn detect_system_locale() -> &'static str {
+    let tag = sys_locale::get_locale().unwrap_or_default();
+    let code = tag
+        .split(|c: char| c == '_' || c == '-' || c == '.')
+        .next()
+        .unwrap_or_default()
+        .to_lowercase();
+    SUPPORTED_LOCALES
+        .iter()
+        .copied()
+        .find(|supported| *supported == code)
+        .unwrap_or("en")
+}
 pub(crate) fn backend_translations(locale: &str) -> &'static BackendTranslations {
     static EN_TRANSLATIONS: OnceLock<BackendTranslations> = OnceLock::new();
     static DE_TRANSLATIONS: OnceLock<BackendTranslations> = OnceLock::new();

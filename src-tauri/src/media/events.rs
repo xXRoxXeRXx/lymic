@@ -1,7 +1,7 @@
 use super::extensions::{is_media_file, live_photo_sibling_paths};
 use super::model::{Asset, FileFailure, ScanResult};
 use super::scanner::{scan_folders_for_media, scan_paths_for_media};
-use crate::app::events::log_to_ui;
+use crate::app::events::log_to_ui_keyed;
 use std::collections::HashMap;
 
 pub(crate) async fn add_event_paths(
@@ -45,7 +45,10 @@ pub(crate) async fn add_event_paths(
 
 pub(crate) fn log_overlapping_folders(app: &tauri::AppHandle, scan_result: &ScanResult) {
     for (folder, parent) in &scan_result.overlapping_folders {
-        log_to_ui(
+        let mut params = std::collections::HashMap::new();
+        params.insert("folder".to_string(), folder.display().to_string());
+        params.insert("parent".to_string(), parent.display().to_string());
+        log_to_ui_keyed(
             app,
             "WARN",
             &format!(
@@ -53,6 +56,8 @@ pub(crate) fn log_overlapping_folders(app: &tauri::AppHandle, scan_result: &Scan
                 folder.display(),
                 parent.display()
             ),
+            "log_skipping_overlapping_folder",
+            params,
         );
     }
 }

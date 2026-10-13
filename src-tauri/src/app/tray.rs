@@ -2,7 +2,7 @@ use crate::app::locale::{backend_translations, LocaleState};
 use crate::app::state::{TrayMenuState, TraySyncStatus, TrayTransferStatus};
 use crate::sync::progress::TransferStatsEvent;
 use crate::{
-    app::events::{emit_sync_error, log_to_ui},
+    app::events::{emit_sync_error, log_to_ui_error},
     commands::sync,
     db,
     sync::SyncCoordinator,
@@ -239,19 +239,23 @@ async fn handle_sync_action(app: tauri::AppHandle) {
     .await;
 
     if let Err(error) = result {
-        log_to_ui(
+        log_to_ui_error(
             &app,
             "ERROR",
             &format!("Tray synchronization action failed: {error}"),
+            "log_tray_sync_action_failed",
+            &error,
         );
         emit_sync_error(&app, &error);
     }
     match db::get_sync_snapshot(&pool).await {
         Ok(snapshot) => update_sync_action(&app, &snapshot),
-        Err(error) => log_to_ui(
+        Err(error) => log_to_ui_error(
             &app,
             "ERROR",
             &format!("Could not refresh tray sync state: {error}"),
+            "log_tray_refresh_failed",
+            &error.to_string(),
         ),
     }
 }

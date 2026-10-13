@@ -1,7 +1,9 @@
-export interface UiLogMessage {
+﻿export interface UiLogMessage {
   level?: string;
   message?: string;
   timestamp?: number;
+  key?: string;
+  params?: Record<string, string>;
 }
 
 export interface SyncSummary {

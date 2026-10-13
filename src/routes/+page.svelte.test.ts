@@ -651,6 +651,30 @@ describe("activity log", () => {
 
     expect(await screen.findByText("Unrecognized level")).toBeInTheDocument();
   });
+
+  it("renders the localized text for keyed payloads instead of the raw message", async () => {
+    const { locale } = await import("svelte-i18n");
+    renderAuthenticatedPage();
+    await waitFor(() => expect(logMessage).toBeTypeOf("function"));
+
+    try {
+      await locale.set("de");
+      logMessage?.({
+        payload: {
+          level: "INFO",
+          message: "raw backend message",
+          key: "log_scanning_folder",
+          params: { folder: "C:/Media" },
+          timestamp: 1_700_000_000_000,
+        },
+      });
+
+      expect(await screen.findByText("Ordner wird durchsucht: C:/Media")).toBeInTheDocument();
+      expect(screen.queryByText("raw backend message")).not.toBeInTheDocument();
+    } finally {
+      await locale.set("en");
+    }
+  });
 });
 
 describe("logout", () => {

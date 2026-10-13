@@ -1,7 +1,7 @@
 //! Hashing, bulk-check, and upload processor implementation.
 
 use crate::{
-    app::events::log_to_ui,
+    app::events::{log_to_ui_error, log_to_ui_file_error, log_to_ui_key},
     audit::{self, audit_event, upload_details, SyncAuditContext},
     db,
     immich::{ImmichClient, SidecarDirectoryCache},
@@ -46,10 +46,13 @@ pub(crate) async fn process_sync_block(
     } = scan_result;
     let mut queue_results = Vec::new();
     for failure in failures {
-        log_to_ui(
+        log_to_ui_file_error(
             &app,
             "ERROR",
-            &format!("{}: {}", failure.path, failure.error),
+            &format!("File scan failed for '{}': {}", failure.path, failure.error),
+            "log_file_scan_failed",
+            &failure.path,
+            &failure.error,
         );
         let _ = db::mark_sync_failed(&pool, &failure.path, 0, 0, &failure.error).await;
         queue_results.push((failure.path, "FAILED".to_string()));
@@ -360,7 +363,15 @@ async fn hash_unit(
                 )
                 .await;
             }
-            log_to_ui(&app, "ERROR", &error);
+            let path_list = paths.join(", ");
+            log_to_ui_file_error(
+                &app,
+                "ERROR",
+                &format!("File hashing failed for '{}': {}", path_list, error),
+                "log_file_hash_failed",
+                &path_list,
+                &error,
+            );
             audit_event(&app, audit_context.event("file.hash.failed", audit::Outcome::Failure, audit::Severity::Error, "File hashing failed", json!({ "local_paths": paths, "failure_reason": audit_context.safe_error(&error) })));
             progress.advance(&app, unit.assets().map(|asset| asset.size).sum());
             HashOutcome {
@@ -507,10 +518,11 @@ async fn upload_unit(
             .await
             {
                 Ok(true) => {
-                    log_to_ui(
+                    log_to_ui_key(
                         &app,
                         "INFO",
                         "Remote upload succeeded and local state persistence was reconciled.",
+                        "log_upload_persistence_reconciled",
                     );
                     audit_event(
                         &app,
@@ -525,7 +537,13 @@ async fn upload_unit(
                 }
                 Ok(false) => {}
                 Err(error) => {
-                    log_to_ui(&app, "ERROR", &error);
+                    log_to_ui_error(
+                        &app,
+                        "ERROR",
+                        &format!("Remote upload succeeded, but local state persistence could not be reconciled: {error}"),
+                        "log_upload_persistence_reconcile_failed",
+                        &error,
+                    );
                     audit_event(
                         &app,
                         audit_context.event(
@@ -546,10 +564,13 @@ async fn upload_unit(
             (unit.assets().count(), "SYNCED", None, Some(remote_id))
         }
         Err(error) => {
-            log_to_ui(
+            log_to_ui_file_error(
                 &app,
                 "ERROR",
                 &format!("Upload failed for {}: {}", unit.image.path, error),
+                "log_upload_failed",
+                &unit.image.path,
+                &error,
             );
             for asset in unit.assets() {
                 let _ = db::mark_sync_failed(

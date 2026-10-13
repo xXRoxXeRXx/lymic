@@ -1,4 +1,4 @@
-use crate::app::events::log_to_ui;
+use crate::app::events::log_to_ui_key;
 use crate::audit::{audit_event, audit_safe_error};
 use crate::{auth, immich};
 use serde_json::json;
@@ -26,7 +26,12 @@ pub(crate) async fn login(
 ) -> Result<(), String> {
     let (cloudflare_client_id, cloudflare_client_secret) =
         normalize_cloudflare_access_credentials(cloudflare_client_id, cloudflare_client_secret);
-    log_to_ui(&app, "INFO", "Attempting to connect to server");
+    log_to_ui_key(
+        &app,
+        "INFO",
+        "Attempting to connect to server",
+        "log_connecting_to_server",
+    );
     let operation_id = crate::audit::AuditEvent::operation_id();
     let actor_id = Some(crate::audit::actor_id(&server_url, &api_key));
     audit_event(

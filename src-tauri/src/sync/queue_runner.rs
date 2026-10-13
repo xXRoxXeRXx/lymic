@@ -2,7 +2,7 @@
 
 use crate::{
     app::{
-        events::send_notification,
+        events::send_notification_keyed,
         locale::{backend_translations, LocaleState},
     },
     audit::{self, audit_event, SyncAuditContext},
@@ -53,10 +53,11 @@ pub(crate) async fn run_sync_pipeline(
         Ok(guard) => guard,
         Err(_) => {
             if !is_auto {
-                crate::app::events::log_to_ui(
+                crate::app::events::log_to_ui_key(
                     &app,
                     "INFO",
                     "Sync queued, waiting for running synchronization.",
+                    "log_sync_queued_waiting",
                 );
             }
             coordinator.lock.lock().await
@@ -182,7 +183,18 @@ pub(crate) async fn run_sync_pipeline(
                     .replace("{processed}", &totals.processed.to_string())
                     .replace("{uploaded}", &totals.uploaded.to_string())
                     .replace("{failed}", &totals.failed.to_string());
-                send_notification(&app, &title, &body, "INFO");
+                let mut params = std::collections::HashMap::new();
+                params.insert("processed".to_string(), totals.processed.to_string());
+                params.insert("uploaded".to_string(), totals.uploaded.to_string());
+                params.insert("failed".to_string(), totals.failed.to_string());
+                send_notification_keyed(
+                    &app,
+                    &title,
+                    &body,
+                    "INFO",
+                    "notification_complete_body",
+                    params,
+                );
             }
             audit_event(&app, audit_context.event("sync.completed", if totals.failed == 0 { audit::Outcome::Success } else { audit::Outcome::Failure }, if totals.failed == 0 { audit::Severity::Info } else { audit::Severity::Warn }, "Synchronization completed", json!({ "processed": totals.processed, "uploaded": totals.uploaded, "failed": totals.failed })));
             return Ok(totals);

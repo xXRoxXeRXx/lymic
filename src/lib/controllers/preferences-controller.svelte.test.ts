@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+﻿import { describe, expect, it, vi } from "vitest";
 import { createPreferencesController } from "./preferences-controller.svelte";
 
 const tauri = vi.hoisted(() => ({ invoke: vi.fn(), enable: vi.fn(), disable: vi.fn(), isEnabled: vi.fn() }));
@@ -20,5 +20,33 @@ describe("preferences controller", () => {
     expect(controller.uploadParallelism).toBe(3);
     expect(controller.isSavingUploadParallelism).toBe(false);
     expect(reportError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it("adds structured database recovery notice to activity log", async () => {
+    tauri.invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_database_recovery_notice") {
+        return {
+          message: "Database rebuilt",
+          key: "log_database_repaired_notice",
+          reason: "disk corruption",
+          backup: "/backups/db.bak",
+          count: 2,
+        };
+      }
+      if (cmd === "get_upload_parallelism") return 3;
+      return null;
+    });
+    const addLog = vi.fn();
+    const controller = createPreferencesController({ reportError: vi.fn(), addLog, locale: () => "en", setLocale: vi.fn() });
+    await controller.hydrate();
+    expect(addLog).toHaveBeenCalledWith(expect.objectContaining({
+      level: "WARN",
+      key: "log_database_repaired_notice",
+      params: {
+        reason: "disk corruption",
+        backup: "/backups/db.bak",
+        count: "2",
+      },
+    }));
   });
 });

@@ -196,6 +196,47 @@ describe("FolderList and ActivityLog", () => {
     rerender({ logs: [{ id: 1, time: "10:00", level: "info", message: "Synced" }] });
     expect(screen.getByText("Synced")).toBeInTheDocument();
   });
+
+  it("translates keyed log entries across locales", async () => {
+    const { locale } = await import("svelte-i18n");
+    try {
+      await locale.set("de");
+      const { rerender } = render(ActivityLog, {
+        logs: [
+          { id: 1, time: "10:00", level: "info", message: "Starting manual synchronization...", key: "log_starting_sync" },
+          { id: 2, time: "10:01", level: "info", message: "Scanning folder: D:/Fotos", key: "log_scanning_folder", params: { folder: "D:/Fotos" } },
+          { id: 3, time: "10:02", level: "info", message: "Sync queued, waiting for running synchronization.", key: "log_sync_queued_waiting" },
+          { id: 4, time: "10:03", level: "warn", message: "Database notice", key: "log_database_repaired_notice", params: { reason: "corruption", backup: "C:/backup.db", count: "3" } },
+          { id: 5, time: "10:04", level: "error", message: "File scan failed", key: "log_file_scan_failed", params: { file: "photo.jpg", error: "I/O error" } },
+        ],
+      });
+      expect(screen.getByRole("heading", { name: "Aktivitätsverlauf" })).toBeInTheDocument();
+      expect(screen.getByText("Manuelle Synchronisierung wird gestartet...")).toBeInTheDocument();
+      expect(screen.getByText("Ordner wird durchsucht: D:/Fotos")).toBeInTheDocument();
+      expect(screen.getByText("Synchronisierung eingereiht, warte auf laufenden Vorgang.")).toBeInTheDocument();
+      expect(screen.getByText("Datenbank konnte nicht verwendet werden (corruption). Sie wurde in 'C:/backup.db' gesichert und neu erstellt; 3 Ordner wiederhergestellt. Andere App-Daten konnten nicht wiederhergestellt werden.")).toBeInTheDocument();
+      expect(screen.getByText("Dateiüberprüfung für 'photo.jpg' fehlgeschlagen: I/O error")).toBeInTheDocument();
+
+      await locale.set("en");
+      rerender({
+        logs: [
+          { id: 1, time: "10:00", level: "info", message: "Starting manual synchronization...", key: "log_starting_sync" },
+          { id: 2, time: "10:01", level: "info", message: "Scanning folder: D:/Fotos", key: "log_scanning_folder", params: { folder: "D:/Fotos" } },
+          { id: 3, time: "10:02", level: "info", message: "Sync queued, waiting for running synchronization.", key: "log_sync_queued_waiting" },
+          { id: 4, time: "10:03", level: "warn", message: "Database notice", key: "log_database_repaired_notice", params: { reason: "corruption", backup: "C:/backup.db", count: "3" } },
+          { id: 5, time: "10:04", level: "error", message: "File scan failed", key: "log_file_scan_failed", params: { file: "photo.jpg", error: "I/O error" } },
+        ],
+      });
+      expect(screen.getByRole("heading", { name: "Activity Log" })).toBeInTheDocument();
+      expect(screen.getByText("Starting manual synchronization...")).toBeInTheDocument();
+      expect(screen.getByText("Scanning folder: D:/Fotos")).toBeInTheDocument();
+      expect(screen.getByText("Sync queued, waiting for running synchronization.")).toBeInTheDocument();
+      expect(screen.getByText("Database could not be used (corruption). It was backed up to 'C:/backup.db' and rebuilt; restored 3 watched folder(s). Other stored app data could not be restored.")).toBeInTheDocument();
+      expect(screen.getByText("File scan failed for 'photo.jpg': I/O error")).toBeInTheDocument();
+    } finally {
+      await locale.set("en");
+    }
+  });
 });
 
 describe("SettingsView", () => {

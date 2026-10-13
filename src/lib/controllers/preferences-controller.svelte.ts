@@ -54,9 +54,26 @@ export function createPreferencesController(options: {
     }
 
     try {
-      const notice = await invoke<string | null>("get_database_recovery_notice");
-      if (notice) options.addLog({ level: "WARN", message: notice, timestamp: Date.now() });
-    } catch (error) {
+      const notice = await invoke<{
+        message: string;
+        key: string;
+        reason: string;
+        backup: string;
+        count: number;
+      } | null>("get_database_recovery_notice");
+      if (notice) {
+        options.addLog({
+          level: "WARN",
+          message: notice.message,
+          key: notice.key,
+          params: {
+            reason: notice.reason,
+            backup: notice.backup,
+            count: String(notice.count),
+          },
+          timestamp: Date.now(),
+        });
+      }    } catch (error) {
       console.warn("Failed to check database recovery notice", error);
     }
   }

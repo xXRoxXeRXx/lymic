@@ -1,4 +1,4 @@
-use crate::app::events::{emit_sync_error, log_to_ui};
+use crate::app::events::{emit_sync_error, log_to_ui_folder, log_to_ui_key};
 use crate::audit::{audit_event, audit_safe_error, SyncAuditContext};
 use crate::sync::{SyncCoordinator, SyncState};
 use crate::{
@@ -32,10 +32,11 @@ pub(crate) async fn start_sync(
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
     {
-        log_to_ui(
+        log_to_ui_key(
             &app,
             "WARN",
             "Manual sync already in progress. Ignoring request.",
+            "log_sync_already_in_progress",
         );
         return Err("Sync already in progress".to_string());
     }
@@ -48,7 +49,12 @@ pub(crate) async fn start_sync(
         }
     };
     crate::app::tray::update_sync_action(&app, &running_snapshot);
-    log_to_ui(&app, "INFO", "Starting manual synchronization...");
+    log_to_ui_key(
+        &app,
+        "INFO",
+        "Starting manual synchronization...",
+        "log_starting_sync",
+    );
     // Ensure we reset the state when we're done, even if we fail.
     let result = async {
         let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
@@ -57,7 +63,13 @@ pub(crate) async fn start_sync(
             create_authenticated_client(&app, credentials).ok_or("Invalid server configuration")?;
 
         for folder in &folders {
-            log_to_ui(&app, "INFO", &format!("Scanning folder: {}", folder.path));
+            log_to_ui_folder(
+                &app,
+                "INFO",
+                &format!("Scanning folder: {}", folder.path),
+                "log_scanning_folder",
+                &folder.path,
+            );
         }
         let folder_paths = folders
             .into_iter()

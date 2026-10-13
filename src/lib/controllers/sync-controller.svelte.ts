@@ -1,7 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
+﻿import { invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import type { FailedSyncEntry, LogEntry, SyncStatus, WatchedFolder } from "../components/types";
 import { subscribeToSyncEvents } from "../tauri/sync-event-subscription";
+import { toBcp47Locale } from "../i18n";
 import type { RemoveFolderResult, SyncSnapshot, SyncSummary, TransferStatsEvent, UiLogMessage } from "./types";
 
 export function createSyncController(options: {
@@ -10,7 +11,7 @@ export function createSyncController(options: {
   locale(): string;
 }) {
   let syncStatus = $state<SyncStatus>("idle");
-  let lastSync = $state("Noch nie");
+  let lastSync = $state<string | null>(null);
   let progress = $state(0);
   let processed = $state(0);
   let syncTotal = $state(0);
@@ -46,12 +47,19 @@ export function createSyncController(options: {
     const timestamp = typeof payload.timestamp === "number" && Number.isFinite(payload.timestamp)
       ? payload.timestamp
       : Date.now();
-    const time = new Date(timestamp).toLocaleTimeString(options.locale() === "de" ? "de-DE" : "en-US", {
+    const time = new Date(timestamp).toLocaleTimeString(toBcp47Locale(options.locale()), {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
     });
-    logs = [{ id: ++logCounter, time, level, message: payload.message ?? "" }, ...logs].slice(0, 50);
+    logs = [{
+      id: ++logCounter,
+      time,
+      level,
+      message: payload.message ?? "",
+      key: payload.key,
+      params: payload.params,
+    }, ...logs].slice(0, 50);
   }
 
   function applySyncSnapshot(snapshot: SyncSnapshot | null | undefined) {
@@ -113,7 +121,7 @@ export function createSyncController(options: {
 
     syncStatus = "idle";
     progress = 100;
-    lastSync = new Date().toLocaleTimeString(options.locale() === "de" ? "de-DE" : "en-US", {
+    lastSync = new Date().toLocaleTimeString(toBcp47Locale(options.locale()), {
       hour: "2-digit",
       minute: "2-digit",
     });

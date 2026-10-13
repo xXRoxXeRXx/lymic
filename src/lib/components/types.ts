@@ -1,8 +1,10 @@
-export interface LogEntry {
+﻿export interface LogEntry {
   id: number;
   time: string;
   level: "info" | "success" | "error" | "warn";
   message: string;
+  key?: string;
+  params?: Record<string, string>;
 }
 
 export interface WatchedFolder {

@@ -1,7 +1,7 @@
 //! Bulk existence-check retry handling.
 
 use crate::{
-    app::events::log_to_ui,
+    app::events::{log_to_ui_error, log_to_ui_keyed},
     audit::{self, audit_event, SyncAuditContext},
     immich::ImmichClient,
 };
@@ -22,7 +22,13 @@ pub(crate) async fn check_assets_exist_with_backoff(
             Ok(existing) => return Ok(existing),
             Err(error) if !error.is_retryable() => {
                 let message = format!("Bulk check cannot be retried; aborting sync: {}", error);
-                log_to_ui(app, "ERROR", &message);
+                log_to_ui_error(
+                    app,
+                    "ERROR",
+                    &message,
+                    "log_bulk_check_cannot_retry",
+                    &error.to_string(),
+                );
                 audit_event(
                     app,
                     audit_context.event(
@@ -43,7 +49,16 @@ pub(crate) async fn check_assets_exist_with_backoff(
                     "Bulk check failed after {} attempts; aborting sync: {}",
                     attempt, error
                 );
-                log_to_ui(app, "ERROR", &message);
+                let mut params = std::collections::HashMap::new();
+                params.insert("attempts".to_string(), attempt.to_string());
+                params.insert("error".to_string(), error.to_string());
+                log_to_ui_keyed(
+                    app,
+                    "ERROR",
+                    &message,
+                    "log_bulk_check_failed_max_attempts",
+                    params,
+                );
                 audit_event(
                     app,
                     audit_context.event(
@@ -61,7 +76,12 @@ pub(crate) async fn check_assets_exist_with_backoff(
             }
             Err(error) => {
                 let delay = BULK_CHECK_INITIAL_BACKOFF * (1 << (attempt - 1));
-                log_to_ui(
+                let mut params = std::collections::HashMap::new();
+                params.insert("attempt".to_string(), attempt.to_string());
+                params.insert("max".to_string(), BULK_CHECK_MAX_ATTEMPTS.to_string());
+                params.insert("error".to_string(), error.to_string());
+                params.insert("seconds".to_string(), delay.as_secs().to_string());
+                log_to_ui_keyed(
                     app,
                     "WARN",
                     &format!(
@@ -71,6 +91,8 @@ pub(crate) async fn check_assets_exist_with_backoff(
                         error,
                         delay.as_secs()
                     ),
+                    "log_bulk_check_retry",
+                    params,
                 );
                 audit_event(
                     app,

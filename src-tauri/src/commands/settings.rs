@@ -1,5 +1,5 @@
 use crate::app::locale::{backend_translations, is_supported_locale, LocaleState};
-use crate::app::state::{DatabaseRecoveryNotice, TrayMenuState};
+use crate::app::state::{DatabaseRecoveryNotice, DatabaseRecoveryNoticeData, TrayMenuState};
 use crate::audit::{audit_event, AuditEvent, Outcome, Severity};
 use serde_json::json;
 use tauri::{menu::MenuItemKind, Manager};
@@ -52,7 +52,7 @@ pub(crate) fn record_webview_startup_phase_probe(
 #[tauri::command]
 pub(crate) fn get_database_recovery_notice(
     state: tauri::State<'_, DatabaseRecoveryNotice>,
-) -> Option<String> {
+) -> Option<DatabaseRecoveryNoticeData> {
     state.0.lock().ok().and_then(|mut guard| guard.take())
 }
 

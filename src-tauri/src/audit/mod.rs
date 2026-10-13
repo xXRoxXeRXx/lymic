@@ -13,7 +13,15 @@ pub use writer::{
 };
 
 fn emit_audit_failure(app: &AppHandle, message: &str) {
-    crate::app::events::log_to_ui(app, "ERROR", message);
+    let mut params = std::collections::HashMap::new();
+    params.insert("error".to_string(), message.to_string());
+    crate::app::events::log_to_ui_keyed(
+        app,
+        "ERROR",
+        message,
+        "log_audit_failure",
+        params,
+    );
 }
 
 pub fn audit_event(app: &AppHandle, event: AuditEvent) {

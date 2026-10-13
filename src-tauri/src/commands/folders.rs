@@ -1,4 +1,4 @@
-use crate::app::events::log_to_ui;
+﻿use crate::app::events::{log_to_ui_error, log_to_ui_folder, log_to_ui_folder_error};
 use crate::app::tray::set_sync_enabled;
 use crate::audit::audit_event;
 use crate::media::paths::{normalize_folder_path, path_is_within};
@@ -107,13 +107,16 @@ pub(crate) async fn add_folder(
             if registration == watcher::WatchRegistration::Registered {
                 let mut w = watcher.lock().await;
                 if let Err(unwatch_error) = watcher::unwatch_path(&mut w, &path) {
-                    log_to_ui(
+                    log_to_ui_folder_error(
                         &app,
                         "ERROR",
                         &format!(
                             "Could not undo watcher registration for '{}': {}",
                             path, unwatch_error
                         ),
+                        "log_watcher_undo_failed",
+                        &path,
+                        &unwatch_error.to_string(),
                     );
                 }
             }
@@ -125,13 +128,15 @@ pub(crate) async fn add_folder(
     set_sync_enabled(&app, true);
 
     if registration == watcher::WatchRegistration::PathUnavailable {
-        log_to_ui(
+        log_to_ui_folder(
             &app,
             "WARN",
             &format!(
                 "Folder '{}' does not exist; watching deferred until it appears.",
                 path
             ),
+            "log_folder_deferred",
+            &path,
         );
     }
 
@@ -141,10 +146,17 @@ pub(crate) async fn add_folder(
         let path_clone = path.clone();
         let app_for_scan = app.clone();
         tauri::async_runtime::spawn(async move {
-            let scan_result = match scan_folders_for_media(vec![PathBuf::from(path_clone)]).await {
+            let scan_result = match scan_folders_for_media(vec![PathBuf::from(path_clone.clone())]).await {
                 Ok(result) => result,
                 Err(error) => {
-                    log_to_ui(&app_for_scan, "ERROR", &error);
+                    log_to_ui_folder_error(
+                        &app_for_scan,
+                        "ERROR",
+                        &format!("Folder scanning failed for '{}': {}", path_clone, error),
+                        "log_folder_scan_failed",
+                        &path_clone,
+                        &error,
+                    );
                     return;
                 }
             };
@@ -205,10 +217,13 @@ pub(crate) async fn remove_folder(
         {
             let mut w = watcher.lock().await;
             if let Err(e) = watcher::unwatch_path(&mut w, &path) {
-                log_to_ui(
+                log_to_ui_folder_error(
                     &app,
                     "WARN",
                     &format!("Failed to unwatch '{}': {}", path, e),
+                    "log_unwatch_failed",
+                    &path,
+                    &e.to_string(),
                 );
                 return Err(format!("Failed to unwatch '{}': {}", path, e));
             }
@@ -234,13 +249,16 @@ pub(crate) async fn remove_folder(
                 .unwrap_or(false);
             let mut w = watcher.lock().await;
             if let Err(rewatch_error) = w.reconcile_path(&path, is_available) {
-                log_to_ui(
+                log_to_ui_folder_error(
                     &app,
                     "ERROR",
                     &format!(
                         "Could not restore watcher registration for '{}': {}",
                         path, rewatch_error
                     ),
+                    "log_watcher_restore_failed",
+                    &path,
+                    &rewatch_error.to_string(),
                 );
             }
             return Err(error.to_string());
@@ -252,13 +270,15 @@ pub(crate) async fn remove_folder(
     }
     match db::get_folders(pool.inner()).await {
         Ok(folders) => set_sync_enabled(&app, !folders.is_empty()),
-        Err(error) => log_to_ui(
+        Err(error) => log_to_ui_error(
             &app,
             "ERROR",
             &format!(
                 "Folder was removed, but could not refresh tray sync availability: {}",
                 error
             ),
+            "log_tray_refresh_after_remove_failed",
+            &error.to_string(),
         ),
     }
     audit_event(
