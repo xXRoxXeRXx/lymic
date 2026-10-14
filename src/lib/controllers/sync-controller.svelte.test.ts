@@ -21,13 +21,80 @@ describe("sync controller", () => {
     const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
     controller.startLifecycle();
     await controller.hydrate();
-    await controller.syncAction();
+    await controller.dashboard.onSyncAction();
 
     expect(controller.progress).toBe(100);
     controller.destroy();
     vi.advanceTimersByTime(2000);
 
     expect(controller.progress).toBe(100);
+  });
+
+  it("exposes dashboard state and intentions through one view-state interface", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_folders") return Promise.resolve([{ id: 1, path: "C:/photos" }]);
+      if (command === "get_sync_status") return Promise.resolve({ status: "PAUSED", total: 4, succeeded: 1, failed: 0, currentPath: "C:/photos/two.jpg" });
+      return Promise.resolve();
+    });
+    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+    controller.startLifecycle();
+    await controller.hydrate();
+
+    expect(controller.dashboard).toMatchObject({
+      syncStatus: "paused",
+      processed: 1,
+      syncTotal: 4,
+      currentFile: "two.jpg",
+      watchedFolders: [{ id: 1, path: "C:/photos" }],
+      onSyncAction: expect.any(Function),
+      onRetryFailedSyncs: expect.any(Function),
+      onAddFolder: expect.any(Function),
+      onRemoveFolder: expect.any(Function),
+      onConfirmAddFolder: expect.any(Function),
+      onCancelAddFolder: expect.any(Function),
+    });
+  });
+
+  it("reflects synchronization event sequences through the dashboard interface", async () => {
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    tauri.listen.mockImplementation((event: string, handler: (event: { payload: unknown }) => void) => {
+      listeners.set(event, handler);
+      return Promise.resolve(() => {});
+    });
+    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+    controller.startLifecycle();
+    controller.startSubscriptions();
+
+    listeners.get("sync-progress-snapshot")?.({
+      payload: { status: "RUNNING", total: 3, succeeded: 1, failed: 0, currentPath: "C:/photos/one.jpg" },
+    });
+    expect(controller.dashboard).toMatchObject({ syncStatus: "syncing", processed: 1, syncTotal: 3, currentFile: "one.jpg" });
+
+    listeners.get("sync-paused")?.({
+      payload: { status: "PAUSED", total: 3, succeeded: 1, failed: 0, currentPath: "C:/photos/one.jpg" },
+    });
+    expect(controller.dashboard.syncStatus).toBe("paused");
+
+    listeners.get("sync-resumed")?.({
+      payload: { status: "RUNNING", total: 3, succeeded: 1, failed: 0, currentPath: "C:/photos/one.jpg" },
+    });
+    expect(controller.dashboard.syncStatus).toBe("syncing");
+  });
+
+  it("retries failed synchronization through the dashboard interface", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_failed_syncs") return Promise.resolve([]);
+      if (command === "retry_failed_syncs") return Promise.resolve({ processed: 1, uploaded: 1, failed: 0 });
+      return Promise.resolve();
+    });
+    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+    controller.startLifecycle();
+    controller.dashboard.failedSyncs.push({ localPath: "C:/photos/failed.jpg", failureReason: "temporary failure" });
+
+    await controller.dashboard.onRetryFailedSyncs();
+
+    expect(tauri.invoke).toHaveBeenCalledWith("retry_failed_syncs");
+    expect(controller.dashboard.syncStatus).toBe("idle");
   });
 
   it("uses the confirmed cancellation command only when required", async () => {
@@ -39,7 +106,7 @@ describe("sync controller", () => {
     tauri.confirm.mockResolvedValue(true);
     const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
 
-    await controller.removeFolder(4);
+    await controller.dashboard.onRemoveFolder(4);
 
     expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4 });
     expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4, confirmCancellation: true });
@@ -49,13 +116,13 @@ describe("sync controller", () => {
     tauri.open.mockResolvedValue("C:/media/photos");
     const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
 
-    await controller.addFolder();
+    await controller.dashboard.onAddFolder();
 
     expect(controller.isTargetAlbumModalOpen).toBe(true);
     expect(controller.pendingFolderPath).toBe("C:/media/photos");
     expect(tauri.invoke).not.toHaveBeenCalledWith("add_folder", expect.anything());
 
-    controller.cancelAddFolder();
+    controller.dashboard.onCancelAddFolder();
     expect(controller.isTargetAlbumModalOpen).toBe(false);
     expect(controller.pendingFolderPath).toBe(null);
   });
@@ -69,8 +136,8 @@ describe("sync controller", () => {
     });
     const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
 
-    await controller.addFolder();
-    await controller.confirmAddFolder("alb-99");
+    await controller.dashboard.onAddFolder();
+    await controller.dashboard.onConfirmAddFolder("alb-99");
 
     expect(tauri.invoke).toHaveBeenCalledWith("add_folder", { path: "C:/media/photos", targetAlbumId: "alb-99" });
     expect(controller.isTargetAlbumModalOpen).toBe(false);
@@ -78,4 +145,3 @@ describe("sync controller", () => {
     expect(controller.watchedFolders).toEqual([{ id: 1, path: "C:/media/photos", target_album_id: "alb-99" }]);
   });
 });
-

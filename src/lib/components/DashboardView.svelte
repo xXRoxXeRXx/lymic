@@ -5,57 +5,18 @@
   import FolderList from "./FolderList.svelte";
   import ActivityLog from "./ActivityLog.svelte";
   import TargetAlbumModal from "./TargetAlbumModal.svelte";
-  import type { FailedSyncEntry, LogEntry, SyncStatus, WatchedFolder } from "./types";
+  import type { DashboardViewState } from "../controllers/sync-controller.svelte";
 
   interface Props {
-    syncStatus: SyncStatus;
-    lastSync: string | null;
-    progress: number;
-    processed: number;
-    syncTotal: number;
-    currentFile: string;
-    transferredBytes?: number;
-    transferRateBytesPerSecond?: number | null;
-    estimatedSecondsRemaining?: number | null;
+    dashboard: DashboardViewState;
     serverUrl: string;
-    watchedFolders: WatchedFolder[];
-    failedSyncs: FailedSyncEntry[];
-    logs: LogEntry[];
-    isSyncActionPending: boolean;
-    onSyncAction: () => void;
-    onRetryFailedSyncs: () => void;
-    onAddFolder: () => void;
-    onRemoveFolder: (id: number) => void;
-    isTargetAlbumModalOpen?: boolean;
-    pendingFolderPath?: string | null;
-    onConfirmAddFolder?: (targetAlbumId: string | null) => void;
-    onCancelAddFolder?: () => void;
   }
 
-  let {
-    syncStatus,
-    lastSync,
-    progress,
-    processed,
-    syncTotal,
-    currentFile,
-    transferredBytes = 0,
-    transferRateBytesPerSecond = null,
-    estimatedSecondsRemaining = null,
-    serverUrl,
-    watchedFolders,
-    failedSyncs,
-    logs,
-    isSyncActionPending,
-    onSyncAction,
-    onRetryFailedSyncs,
-    onAddFolder,
-    onRemoveFolder,
-    isTargetAlbumModalOpen = false,
-    pendingFolderPath = null,
-    onConfirmAddFolder,
-    onCancelAddFolder
-  }: Props = $props();
+  let { dashboard, serverUrl }: Props = $props();
+
+  const transferredBytes = $derived(dashboard.transferredBytes);
+  const transferRateBytesPerSecond = $derived(dashboard.transferRateBytesPerSecond);
+  const estimatedSecondsRemaining = $derived(dashboard.estimatedSecondsRemaining);
 
   const numberLocale = $derived(toBcp47Locale($locale));
   function formatBytes(bytes: number) {
@@ -75,63 +36,63 @@
   <div class="flex items-center justify-between">
     <div class="space-y-1">
       <div class="flex items-center gap-2">
-        <div class="w-2 h-2 rounded-full {syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : syncStatus === 'paused' ? 'bg-amber-500' : syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500'}"></div>
+        <div class="w-2 h-2 rounded-full {dashboard.syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' : dashboard.syncStatus === 'paused' ? 'bg-amber-500' : dashboard.syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500'}"></div>
         <span class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('status')}</span>
       </div>
       <h3 class="text-3xl font-bold text-slate-900 dark:text-slate-100">
-        {syncStatus === 'syncing' ? $t('sync_running') : syncStatus === 'paused' ? $t('sync_paused') : syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
+        {dashboard.syncStatus === 'syncing' ? $t('sync_running') : dashboard.syncStatus === 'paused' ? $t('sync_paused') : dashboard.syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
       </h3>
     </div>
     <button
       class="btn-action"
-      onclick={onSyncAction}
-      disabled={isSyncActionPending || ((syncStatus !== 'syncing' && syncStatus !== 'paused') && watchedFolders.length === 0)}
-      title={watchedFolders.length === 0 ? $t('sync_requires_folder') : undefined}
-      aria-describedby={watchedFolders.length === 0 ? 'sync-requires-folder' : undefined}
+      onclick={dashboard.onSyncAction}
+      disabled={dashboard.isSyncActionPending || ((dashboard.syncStatus !== 'syncing' && dashboard.syncStatus !== 'paused') && dashboard.watchedFolders.length === 0)}
+      title={dashboard.watchedFolders.length === 0 ? $t('sync_requires_folder') : undefined}
+      aria-describedby={dashboard.watchedFolders.length === 0 ? 'sync-requires-folder' : undefined}
     >
-      {syncStatus === 'syncing' ? $t('pause_sync') : syncStatus === 'paused' ? $t('resume_sync') : $t('sync_now')}
+      {dashboard.syncStatus === 'syncing' ? $t('pause_sync') : dashboard.syncStatus === 'paused' ? $t('resume_sync') : $t('sync_now')}
     </button>
-    {#if watchedFolders.length === 0}
+    {#if dashboard.watchedFolders.length === 0}
       <span id="sync-requires-folder" class="sr-only">{$t('sync_requires_folder')}</span>
     {/if}
   </div>
-  {#if syncStatus === 'syncing' || syncStatus === 'paused'}
+  {#if dashboard.syncStatus === 'syncing' || dashboard.syncStatus === 'paused'}
     <div class="space-y-3">
-      <div class="glass-progress"><div class="glass-progress-fill" style="width: {progress}%;"></div></div>
+      <div class="glass-progress"><div class="glass-progress-fill" style="width: {dashboard.progress}%;"></div></div>
       <div class="flex justify-between text-xs font-medium text-slate-400 dark:text-slate-400">
-        <span>{progress}% {$t('completed')}</span>
-        <span class="truncate max-w-[250px]">{currentFile}</span>
+        <span>{dashboard.progress}% {$t('completed')}</span>
+        <span class="truncate max-w-[250px]">{dashboard.currentFile}</span>
       </div>
       <p class="text-xs font-medium text-slate-400 dark:text-slate-400">
-        {$t('processed')}: {processed.toLocaleString(numberLocale)} / {syncTotal.toLocaleString(numberLocale)}
+        {$t('processed')}: {dashboard.processed.toLocaleString(numberLocale)} / {dashboard.syncTotal.toLocaleString(numberLocale)}
       </p>
-      {#if transferredBytes > 0 || transferRateBytesPerSecond !== null || estimatedSecondsRemaining !== null}
+      {#if dashboard.transferredBytes > 0 || dashboard.transferRateBytesPerSecond !== null || dashboard.estimatedSecondsRemaining !== null}
         <p class="text-xs font-medium text-slate-400 dark:text-slate-400">
-          {#if transferredBytes > 0}{$t('transferred')}: {formatBytes(transferredBytes)}{/if}
+          {#if dashboard.transferredBytes > 0}{$t('transferred')}: {formatBytes(dashboard.transferredBytes)}{/if}
           {#if transferRateBytesPerSecond !== null} {transferredBytes > 0 ? ' Â· ' : ''}{$t('transfer_rate')}: {(transferRateBytesPerSecond / 1_000_000).toLocaleString(numberLocale, { maximumFractionDigits: 1 })} MB/s{/if}
           {#if estimatedSecondsRemaining !== null} {(transferredBytes > 0 || transferRateBytesPerSecond !== null) ? ' Â· ' : ''}{$t('remaining_time')}: {formatDuration(estimatedSecondsRemaining)}{/if}
         </p>
       {/if}
-      {#if syncStatus === 'paused'}
+      {#if dashboard.syncStatus === 'paused'}
         <p class="text-xs text-amber-600 dark:text-amber-400">{$t('sync_paused_hint')}</p>
       {/if}
     </div>
   {:else}
     <div class="flex gap-10 pt-2 border-t border-black/5 dark:border-white/10">
-      <div class="space-y-1"><p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('last_sync')}</p><p class="font-semibold text-slate-600 dark:text-slate-300">{lastSync ?? $t('never')}</p></div>
+      <div class="space-y-1"><p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('last_sync')}</p><p class="font-semibold text-slate-600 dark:text-slate-300">{dashboard.lastSync ?? $t('never')}</p></div>
       <div class="space-y-1"><p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">{$t('server')}</p><p class="font-semibold text-slate-600 dark:text-slate-300">{serverUrl.replace(/https?:\/\//, '')}</p></div>
     </div>
   {/if}
-  <FailedSyncsModal {failedSyncs} {syncStatus} onRetry={onRetryFailedSyncs} />
+  <FailedSyncsModal failedSyncs={dashboard.failedSyncs} syncStatus={dashboard.syncStatus} onRetry={dashboard.onRetryFailedSyncs} />
 </section>
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
-  <FolderList {watchedFolders} {onAddFolder} {onRemoveFolder} />
-  <ActivityLog {logs} />
+  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} />
+  <ActivityLog logs={dashboard.logs} />
 </div>
 
 <TargetAlbumModal
-  isOpen={isTargetAlbumModalOpen}
-  folderPath={pendingFolderPath ?? ""}
-  onConfirm={onConfirmAddFolder ?? (() => {})}
-  onCancel={onCancelAddFolder ?? (() => {})}
+  isOpen={dashboard.isTargetAlbumModalOpen}
+  folderPath={dashboard.pendingFolderPath ?? ""}
+  onConfirm={dashboard.onConfirmAddFolder}
+  onCancel={dashboard.onCancelAddFolder}
 />
