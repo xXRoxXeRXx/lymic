@@ -52,7 +52,7 @@
     }
     isCreating = true;
     try {
-      const created = await invoke<Album>("create_album", { albumName: trimmed });
+      const created = await invoke<Album>("create_album", { name: trimmed });
       albums = [...albums, created].sort((a, b) => a.albumName.toLowerCase().localeCompare(b.albumName.toLowerCase()));
       selectedAlbumId = created.id;
       newAlbumName = "";

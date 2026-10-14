@@ -351,15 +351,16 @@ describe("TargetAlbumModal", () => {
     await fireEvent.click(createBtn);
     expect(screen.getByText("Album name cannot be empty")).toBeInTheDocument();
 
-    tauri.invoke.mockImplementation((command: string, args?: { albumName?: string }) => {
+    tauri.invoke.mockImplementation((command: string, args?: { name?: string }) => {
       if (command === "create_album") {
-        return Promise.resolve({ id: "new-alb", albumName: args?.albumName ?? "" });
+        return Promise.resolve({ id: "new-alb", albumName: args?.name ?? "" });
       }
       return Promise.resolve();
     });
 
     await fireEvent.input(input, { target: { value: "Roadtrip" } });
     await fireEvent.click(createBtn);
+    expect(tauri.invoke).toHaveBeenCalledWith("create_album", { name: "Roadtrip" });
     expect(await screen.findByText("Roadtrip")).toBeInTheDocument();
   });
 
