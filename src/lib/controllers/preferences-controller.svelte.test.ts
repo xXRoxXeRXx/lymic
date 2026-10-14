@@ -1,5 +1,6 @@
 ﻿import { describe, expect, it, vi } from "vitest";
 import { createPreferencesController } from "./preferences-controller.svelte";
+import { localeCatalog } from "../i18n/locale-catalog";
 
 const tauri = vi.hoisted(() => ({ invoke: vi.fn(), enable: vi.fn(), disable: vi.fn(), isEnabled: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
@@ -34,11 +35,15 @@ describe("preferences controller", () => {
         };
       }
       if (cmd === "get_upload_parallelism") return 3;
+      if (cmd === "get_locale_catalog") {
+        return localeCatalog;
+      }
       return null;
     });
     const addLog = vi.fn();
     const controller = createPreferencesController({ reportError: vi.fn(), addLog, locale: () => "en", setLocale: vi.fn() });
     await controller.hydrate();
+    expect(controller.locales).toEqual(localeCatalog);
     expect(addLog).toHaveBeenCalledWith(expect.objectContaining({
       level: "WARN",
       key: "log_database_repaired_notice",

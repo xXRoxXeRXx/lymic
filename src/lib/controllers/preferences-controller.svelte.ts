@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { ThemePreference } from "../components/types";
 import { isSupportedLocale } from "../i18n";
+import { localeCatalog, type LocaleCatalogEntry } from "../i18n/locale-catalog";
 import type { UiLogMessage } from "./types";
 
 export function createPreferencesController(options: {
@@ -21,6 +22,7 @@ export function createPreferencesController(options: {
   let isSavingUploadParallelism = $state(false);
   let colorSchemeQuery: MediaQueryList | undefined;
   let listener: (() => void) | undefined;
+  let locales = $state<readonly LocaleCatalogEntry[]>(localeCatalog);
 
   if (savedTheme && savedTheme !== initialTheme && typeof localStorage !== "undefined") {
     localStorage.removeItem(themeStorageKey);
@@ -40,6 +42,13 @@ export function createPreferencesController(options: {
   }
 
   async function hydrate() {
+    try {
+      const catalog = await invoke<LocaleCatalogEntry[]>("get_locale_catalog");
+      if (Array.isArray(catalog)) locales = catalog;
+    } catch (error) {
+      options.reportError(error);
+    }
+
     try {
       isAutostartEnabled = await isEnabled();
     } catch (error) {
@@ -143,6 +152,7 @@ export function createPreferencesController(options: {
     get isAutostartEnabled() { return isAutostartEnabled; },
     get uploadParallelism() { return uploadParallelism; },
     get isSavingUploadParallelism() { return isSavingUploadParallelism; },
+    get locales() { return locales; },
     hydrate,
     startLifecycle,
     stopLifecycle,

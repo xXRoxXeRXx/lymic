@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Monitor, Moon, Sun, User } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
-  import { locales } from "../i18n";
+  import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
   import type { ThemePreference } from "./types";
 
   interface Props {
@@ -13,6 +13,7 @@
     isSavingUploadParallelism: boolean;
     updateStatus: "unknown" | "current" | "available";
     isCheckingForUpdates: boolean;
+    locales: readonly LocaleCatalogEntry[];
     onToggleAutostart: () => void;
     onLocaleChange: (locale: string) => void;
     onThemeChange: (preference: ThemePreference) => void;
@@ -30,6 +31,7 @@
     isSavingUploadParallelism,
     updateStatus,
     isCheckingForUpdates,
+    locales,
     onToggleAutostart,
     onLocaleChange,
     onThemeChange,
