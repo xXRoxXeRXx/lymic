@@ -26,7 +26,7 @@ mod database_tests {
 
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
-        add_folder(&pool, "C:/photos").await.unwrap();
+        add_folder(&pool, "C:/photos", None).await.unwrap();
         update_sync_state(&pool, "photo.jpg", "hash", 42, 123, "SYNCED", None)
             .await
             .unwrap();
@@ -54,11 +54,13 @@ mod database_tests {
                 path: "b.jpg",
                 size: 2,
                 mtime: 2,
+                target_album_id: None,
             },
             QueueAsset {
                 path: "a.jpg",
                 size: 1,
                 mtime: 1,
+                target_album_id: None,
             },
         ];
         enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
@@ -66,6 +68,7 @@ mod database_tests {
             path: "b.jpg",
             size: 3,
             mtime: 3,
+            target_album_id: None,
         }];
         let snapshot = enqueue_sync_assets(&pool, &changed, &[]).await.unwrap();
 
@@ -92,6 +95,7 @@ mod database_tests {
                 path,
                 size: 1,
                 mtime: 1,
+                target_album_id: None,
             })
             .collect();
         enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
@@ -121,6 +125,7 @@ mod database_tests {
             path: "later.jpg",
             size: 7,
             mtime: 9,
+            target_album_id: None,
         }];
 
         let snapshot = enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
@@ -141,11 +146,13 @@ mod database_tests {
                 path: "completed.jpg",
                 size: 1,
                 mtime: 1,
+                target_album_id: None,
             },
             QueueAsset {
                 path: "failed.jpg",
                 size: 2,
                 mtime: 2,
+                target_album_id: None,
             },
         ];
         crate::db::enqueue_sync_assets(&pool, &terminal_assets, &[])
@@ -166,6 +173,7 @@ mod database_tests {
             path: "new.jpg",
             size: 3,
             mtime: 3,
+            target_album_id: None,
         }];
         let snapshot = crate::db::enqueue_sync_assets(&pool, &new_asset, &[])
             .await
@@ -198,11 +206,13 @@ mod database_tests {
                 path: "one.jpg",
                 size: 1,
                 mtime: 1,
+                target_album_id: None,
             },
             QueueAsset {
                 path: "two.jpg",
                 size: 2,
                 mtime: 2,
+                target_album_id: None,
             },
         ];
         enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
@@ -235,11 +245,13 @@ mod database_tests {
                 path: "one.jpg",
                 size: 1,
                 mtime: 1,
+                target_album_id: None,
             },
             QueueAsset {
                 path: "two.jpg",
                 size: 1,
                 mtime: 1,
+                target_album_id: None,
             },
         ];
         enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
@@ -264,11 +276,13 @@ mod database_tests {
                 path: "small.jpg",
                 size: 1_000,
                 mtime: 1,
+                target_album_id: None,
             },
             QueueAsset {
                 path: "large.mov",
                 size: 9_000,
                 mtime: 2,
+                target_album_id: None,
             },
         ];
         let snapshot = enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
@@ -578,11 +592,13 @@ mod database_tests {
                 path: "missing.jpg",
                 size: 1,
                 mtime: 1,
+                target_album_id: None,
             },
             QueueAsset {
                 path: "retry.jpg",
                 size: 2,
                 mtime: 2,
+                target_album_id: None,
             },
         ];
         enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
@@ -641,16 +657,19 @@ mod database_tests {
                 path: "C:/Photos/one.jpg",
                 size: 1,
                 mtime: 1,
+                target_album_id: None,
             },
             QueueAsset {
                 path: "C:/Photos/nested/two.jpg",
                 size: 2,
                 mtime: 2,
+                target_album_id: None,
             },
             QueueAsset {
                 path: "C:/Photos-alt/keep.jpg",
                 size: 3,
                 mtime: 3,
+                target_album_id: None,
             },
         ];
         enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
@@ -740,7 +759,7 @@ mod database_tests {
         }
 
         // New database should be fully functional
-        add_folder(&result.pool, "C:/test_photos").await.unwrap();
+        add_folder(&result.pool, "C:/test_photos", None).await.unwrap();
         let folders = get_folders(&result.pool).await.unwrap();
         assert_eq!(folders.len(), 1);
         assert_eq!(folders[0].path, "C:/test_photos");
@@ -758,7 +777,7 @@ mod database_tests {
         // 1. Create a healthy DB, add a folder and add sync_state rows
         let result1 = init_at_path(&db_path).await.unwrap();
         assert_eq!(result1.status, DatabaseStatus::Ready);
-        add_folder(&result1.pool, "C:/my_important_photos")
+        add_folder(&result1.pool, "C:/my_important_photos", None)
             .await
             .unwrap();
         for i in 0..50 {
@@ -828,7 +847,7 @@ mod database_tests {
         // 1. Create a healthy DB
         let init_res = init_at_path(&db_path).await.unwrap();
         assert_eq!(init_res.status, DatabaseStatus::Ready);
-        add_folder(&init_res.pool, "C:/photos").await.unwrap();
+        add_folder(&init_res.pool, "C:/photos", None).await.unwrap();
         init_res.pool.close().await;
         tokio::time::sleep(Duration::from_millis(150)).await;
 
@@ -862,7 +881,7 @@ mod database_tests {
         // 1. Create a valid DB
         let result = init_at_path(&db_path).await.unwrap();
         assert_eq!(result.status, DatabaseStatus::Ready);
-        add_folder(&result.pool, "C:/photos").await.unwrap();
+        add_folder(&result.pool, "C:/photos", None).await.unwrap();
         result.pool.close().await;
         tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -955,7 +974,7 @@ mod database_tests {
         let db_path = temp_dir.join("checksum_mismatch_test.db");
 
         let initial = init_at_path(&db_path).await.unwrap();
-        add_folder(&initial.pool, "C:/important_photos")
+        add_folder(&initial.pool, "C:/important_photos", None)
             .await
             .unwrap();
         initial.pool.close().await;
@@ -1004,7 +1023,7 @@ mod database_tests {
         // 1. Create a healthy DB
         let result = init_at_path(&db_path).await.unwrap();
         assert_eq!(result.status, DatabaseStatus::Ready);
-        add_folder(&result.pool, "C:/important_photos")
+        add_folder(&result.pool, "C:/important_photos", None)
             .await
             .unwrap();
         result.pool.close().await;
@@ -1043,5 +1062,94 @@ mod database_tests {
         );
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn target_album_id_persists_on_watched_folder_and_is_retrieved() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let album_id = crate::immich::AlbumId::new("album-123");
+        let id = add_folder(&pool, "C:/vacation", Some(&album_id)).await.unwrap();
+        let folders = get_folders(&pool).await.unwrap();
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].id, id);
+        assert_eq!(folders[0].path, "C:/vacation");
+        assert_eq!(folders[0].target_album_id.as_deref(), Some("album-123"));
+    }
+
+    #[tokio::test]
+    async fn target_album_id_and_remote_id_persist_in_sync_queue() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let album_id = crate::immich::AlbumId::new("album-123");
+        let asset = [QueueAsset {
+            path: "beach.jpg",
+            size: 100,
+            mtime: 10,
+            target_album_id: Some(&album_id),
+        }];
+        enqueue_sync_assets(&pool, &asset, &[]).await.unwrap();
+
+        let queued = next_sync_queue_block(&pool, 10).await.unwrap();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].local_path, "beach.jpg");
+        assert_eq!(queued[0].target_album_id.as_deref(), Some("album-123"));
+        assert_eq!(queued[0].remote_id, None);
+
+        let remote_id = crate::immich::RemoteAssetId::new("remote-asset-uuid-789");
+        update_sync_queue_remote_id(&pool, "beach.jpg", &remote_id)
+            .await
+            .unwrap();
+
+        let queued = next_sync_queue_block(&pool, 10).await.unwrap();
+        assert_eq!(queued[0].remote_id.as_deref(), Some("remote-asset-uuid-789"));
+    }
+
+    #[tokio::test]
+    async fn target_album_id_is_immutable_on_queue_upsert_conflict() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let original_album = crate::immich::AlbumId::new("album-original");
+        let initial_asset = [QueueAsset {
+            path: "beach.jpg",
+            size: 100,
+            mtime: 10,
+            target_album_id: Some(&original_album),
+        }];
+        enqueue_sync_assets(&pool, &initial_asset, &[]).await.unwrap();
+
+        let queued = next_sync_queue_block(&pool, 10).await.unwrap();
+        assert_eq!(queued[0].target_album_id.as_deref(), Some("album-original"));
+
+        // Attempting to re-enqueue the same path with a different album or None must preserve original album
+        let different_album = crate::immich::AlbumId::new("album-changed");
+        let updated_asset = [QueueAsset {
+            path: "beach.jpg",
+            size: 200,
+            mtime: 20,
+            target_album_id: Some(&different_album),
+        }];
+        enqueue_sync_assets(&pool, &updated_asset, &[]).await.unwrap();
+
+        let queued = next_sync_queue_block(&pool, 10).await.unwrap();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].target_album_id.as_deref(), Some("album-original"));
+        assert_eq!(queued[0].size, 200);
+        assert_eq!(queued[0].last_modified, 20);
+
+        let none_asset = [QueueAsset {
+            path: "beach.jpg",
+            size: 300,
+            mtime: 30,
+            target_album_id: None,
+        }];
+        enqueue_sync_assets(&pool, &none_asset, &[]).await.unwrap();
+
+        let queued = next_sync_queue_block(&pool, 10).await.unwrap();
+        assert_eq!(queued[0].target_album_id.as_deref(), Some("album-original"));
+        assert_eq!(queued[0].size, 300);
     }
 }

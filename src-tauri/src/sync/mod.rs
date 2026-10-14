@@ -3,6 +3,7 @@
 //! Commands and application tasks enter synchronization through this module so
 //! the Tauri surface remains separate from queue coordination and processing.
 
+pub(crate) mod album_batch;
 pub(crate) mod coordinator;
 pub(crate) mod processor;
 pub(crate) mod progress;

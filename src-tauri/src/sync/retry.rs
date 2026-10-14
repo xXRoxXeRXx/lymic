@@ -3,7 +3,7 @@
 use crate::{
     app::events::{log_to_ui_error, log_to_ui_keyed},
     audit::{self, audit_event, SyncAuditContext},
-    immich::ImmichClient,
+    immich::{BulkCheckDuplicate, ImmichClient},
 };
 use serde_json::json;
 
@@ -16,7 +16,7 @@ pub(crate) async fn check_assets_exist_with_backoff(
     hashes: Vec<String>,
     app: &tauri::AppHandle,
     audit_context: &SyncAuditContext,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<BulkCheckDuplicate>, String> {
     for attempt in 1..=BULK_CHECK_MAX_ATTEMPTS {
         match client.check_assets_exist(hashes.clone()).await {
             Ok(existing) => return Ok(existing),

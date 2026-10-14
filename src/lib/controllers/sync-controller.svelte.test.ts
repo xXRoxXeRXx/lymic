@@ -44,4 +44,38 @@ describe("sync controller", () => {
     expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4 });
     expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4, confirmCancellation: true });
   });
+
+  it("opens the target album modal when a folder is selected from native picker", async () => {
+    tauri.open.mockResolvedValue("C:/media/photos");
+    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+
+    await controller.addFolder();
+
+    expect(controller.isTargetAlbumModalOpen).toBe(true);
+    expect(controller.pendingFolderPath).toBe("C:/media/photos");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("add_folder", expect.anything());
+
+    controller.cancelAddFolder();
+    expect(controller.isTargetAlbumModalOpen).toBe(false);
+    expect(controller.pendingFolderPath).toBe(null);
+  });
+
+  it("persists target album ID and refreshes folders on confirmAddFolder", async () => {
+    tauri.open.mockResolvedValue("C:/media/photos");
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "add_folder") return Promise.resolve(1);
+      if (command === "get_folders") return Promise.resolve([{ id: 1, path: "C:/media/photos", target_album_id: "alb-99" }]);
+      return Promise.resolve();
+    });
+    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+
+    await controller.addFolder();
+    await controller.confirmAddFolder("alb-99");
+
+    expect(tauri.invoke).toHaveBeenCalledWith("add_folder", { path: "C:/media/photos", targetAlbumId: "alb-99" });
+    expect(controller.isTargetAlbumModalOpen).toBe(false);
+    expect(controller.pendingFolderPath).toBe(null);
+    expect(controller.watchedFolders).toEqual([{ id: 1, path: "C:/media/photos", target_album_id: "alb-99" }]);
+  });
 });
+

@@ -9,7 +9,7 @@ pub use init::{init, DatabaseStatus};
 pub use queue::{
     complete_sync_job_if_finished, enqueue_sync_assets, finalize_queued_block, get_sync_snapshot,
     has_pending_sync_queue_items, next_sync_queue_block, recover_sync_job, set_sync_status,
-    QueueAsset, SyncSnapshot,
+    update_sync_queue_failure, update_sync_queue_remote_id, QueueAsset, SyncSnapshot,
 };
 pub use settings::{get_upload_parallelism, set_upload_parallelism};
 pub use sync_state::{

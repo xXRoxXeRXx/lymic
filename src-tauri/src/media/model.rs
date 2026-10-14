@@ -35,6 +35,8 @@ pub(crate) struct SyncAsset {
     pub(crate) size: u64,
     pub(crate) checksums: Option<Checksums>,
     pub(crate) mtime: i64,
+    pub(crate) target_album_id: Option<crate::immich::AlbumId>,
+    pub(crate) remote_id: Option<crate::immich::RemoteAssetId>,
 }
 
 #[derive(Debug, Clone)]
@@ -42,15 +44,17 @@ pub(crate) struct Asset {
     pub(crate) path: String,
     pub(crate) size: u64,
     pub(crate) mtime: i64,
+    pub(crate) target_album_id: Option<crate::immich::AlbumId>,
+    pub(crate) remote_id: Option<crate::immich::RemoteAssetId>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct UploadUnit {
     pub(crate) image: Asset,
     pub(crate) live_photo_video: Option<Asset>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct HashedUploadUnit {
     pub(crate) image: SyncAsset,
     pub(crate) live_photo_video: Option<SyncAsset>,
@@ -159,6 +163,8 @@ mod tests {
             path: path.to_string(),
             size: 1,
             mtime: 1,
+            target_album_id: None,
+            remote_id: None,
         }
     }
 

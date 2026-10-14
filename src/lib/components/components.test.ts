@@ -8,6 +8,10 @@ import FailedSyncsModal from "./FailedSyncsModal.svelte";
 import FolderList from "./FolderList.svelte";
 import LoginView from "./LoginView.svelte";
 import SettingsView from "./SettingsView.svelte";
+import TargetAlbumModal from "./TargetAlbumModal.svelte";
+
+const tauri = vi.hoisted(() => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
 
 afterEach(cleanup);
 
@@ -37,6 +41,9 @@ describe("LoginView", () => {
     expect(screen.getByText("In Immich, create an API key under Account Settings -> API Keys.")).toBeInTheDocument();
     expect(screen.getByText("asset.upload")).toBeInTheDocument();
     expect(screen.getByText("asset.read")).toBeInTheDocument();
+    expect(screen.getByText("album.read")).toBeInTheDocument();
+    expect(screen.getByText("album.create")).toBeInTheDocument();
+    expect(screen.getByText("album.update")).toBeInTheDocument();
     expect(screen.getByText("user.read")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Close API key help" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -262,5 +269,137 @@ describe("SettingsView", () => {
     expect(onUploadParallelismChange).toHaveBeenCalledOnce();
     expect(onCheckForUpdates).toHaveBeenCalledOnce();
     expect(onLogout).toHaveBeenCalledOnce();
+  });
+});
+
+describe("TargetAlbumModal", () => {
+  it("renders with 'No album' selected by default and fetches existing albums", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") {
+        return Promise.resolve([
+          { id: "1", albumName: "Vacation" },
+          { id: "2", albumName: "Family" },
+        ]);
+      }
+      return Promise.resolve();
+    });
+
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "C:/Users/test/Pictures/Holiday",
+      onConfirm,
+      onCancel,
+    });
+
+    expect(screen.getByRole("heading", { name: "Select Target Album" })).toBeInTheDocument();
+    expect(screen.getByText('Select an optional Immich album for "Holiday"')).toBeInTheDocument();
+    expect(screen.getByText("No album (Default)")).toBeInTheDocument();
+
+    expect(await screen.findByText("Family")).toBeInTheDocument();
+    expect(screen.getByText("Vacation")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Add folder" }));
+    expect(onConfirm).toHaveBeenCalledWith(null);
+  });
+
+  it("selects an existing album and confirms", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") {
+        return Promise.resolve([
+          { id: "alb-1", albumName: "Summer 2026" },
+        ]);
+      }
+      return Promise.resolve();
+    });
+
+    const onConfirm = vi.fn();
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "D:/Photos",
+      onConfirm,
+      onCancel: vi.fn(),
+    });
+
+    const albumBtn = await screen.findByText("Summer 2026");
+    await fireEvent.click(albumBtn);
+    await fireEvent.click(screen.getByRole("button", { name: "Add folder" }));
+    expect(onConfirm).toHaveBeenCalledWith("alb-1");
+  });
+
+  it("validates album creation rejecting empty or whitespace names", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") return Promise.resolve([]);
+      return Promise.resolve();
+    });
+
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "D:/Photos",
+      onConfirm: vi.fn(),
+      onCancel: vi.fn(),
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Create new album" }));
+    const input = screen.getByPlaceholderText("Album name...");
+    const createBtn = screen.getByRole("button", { name: "Create" });
+
+    await fireEvent.input(input, { target: { value: "   " } });
+    await fireEvent.click(createBtn);
+    expect(screen.getByText("Album name cannot be empty")).toBeInTheDocument();
+
+    tauri.invoke.mockImplementation((command: string, args?: { albumName?: string }) => {
+      if (command === "create_album") {
+        return Promise.resolve({ id: "new-alb", albumName: args?.albumName ?? "" });
+      }
+      return Promise.resolve();
+    });
+
+    await fireEvent.input(input, { target: { value: "Roadtrip" } });
+    await fireEvent.click(createBtn);
+    expect(await screen.findByText("Roadtrip")).toBeInTheDocument();
+  });
+
+  it("handles loading failure with retry and proceed without album", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") return Promise.reject(new Error("Network offline"));
+      return Promise.resolve();
+    });
+
+    const onConfirm = vi.fn();
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "D:/Photos",
+      onConfirm,
+      onCancel: vi.fn(),
+    });
+
+    expect(await screen.findByText("Failed to load albums")).toBeInTheDocument();
+    expect(screen.getByText("Network offline")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Proceed without album" }));
+    expect(onConfirm).toHaveBeenCalledWith(null);
+  });
+
+  it("aborts folder addition on cancel or Escape", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") return Promise.resolve([]);
+      return Promise.resolve();
+    });
+
+    const onCancel = vi.fn();
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "D:/Photos",
+      onConfirm: vi.fn(),
+      onCancel,
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancel).toHaveBeenCalledOnce();
+
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(onCancel).toHaveBeenCalledTimes(2);
   });
 });

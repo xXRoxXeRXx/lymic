@@ -1,4 +1,4 @@
-﻿export interface LogEntry {
+export interface LogEntry {
   id: number;
   time: string;
   level: "info" | "success" | "error" | "warn";
@@ -22,3 +22,8 @@ export interface FailedSyncEntry {
 export type SyncStatus = "idle" | "syncing" | "paused" | "error";
 
 export type ThemePreference = "system" | "light" | "dark";
+
+export interface Album {
+  id: string;
+  albumName: string;
+}

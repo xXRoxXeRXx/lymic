@@ -213,7 +213,7 @@ async fn repair_unusable_db(
             &new_pool,
             &folder.path,
             folder.recursive,
-            folder.target_album_id.as_deref(),
+            folder.target_album_id.as_ref(),
         )
         .await
         .is_ok()

@@ -35,6 +35,11 @@
           <div class="min-w-0">
             <p class="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{folder.path.split(/[/\\]/).pop()}</p>
             <p class="text-[10px] font-mono text-slate-400 dark:text-slate-400 truncate">{folder.path}</p>
+            {#if folder.target_album_id}
+              <p class="text-[10px] font-medium text-blue-600 dark:text-blue-400 truncate">
+                {$t('target_album')}: {folder.target_album_id}
+              </p>
+            {/if}
           </div>
         </div>
         <button

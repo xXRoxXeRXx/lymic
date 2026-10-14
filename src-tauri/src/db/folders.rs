@@ -1,3 +1,4 @@
+use crate::immich::AlbumId;
 use sqlx::SqlitePool;
 
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]
@@ -5,12 +6,17 @@ pub struct WatchedFolder {
     pub id: i64,
     pub path: String,
     pub recursive: bool,
-    pub target_album_id: Option<String>,
+    pub target_album_id: Option<AlbumId>,
 }
 
-pub async fn add_folder(pool: &SqlitePool, path: &str) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query("INSERT INTO watched_folders (path) VALUES (?)")
+pub async fn add_folder(
+    pool: &SqlitePool,
+    path: &str,
+    target_album_id: Option<&AlbumId>,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query("INSERT INTO watched_folders (path, target_album_id) VALUES (?, ?)")
         .bind(path)
+        .bind(target_album_id.map(|id| id.as_str()))
         .execute(pool)
         .await?;
     Ok(result.last_insert_rowid())
@@ -20,14 +26,14 @@ pub async fn restore_folder(
     pool: &SqlitePool,
     path: &str,
     recursive: bool,
-    target_album_id: Option<&str>,
+    target_album_id: Option<&AlbumId>,
 ) -> Result<i64, sqlx::Error> {
     let result = sqlx::query(
         "INSERT OR IGNORE INTO watched_folders (path, recursive, target_album_id) VALUES (?, ?, ?)",
     )
     .bind(path)
     .bind(recursive)
-    .bind(target_album_id)
+    .bind(target_album_id.map(|id| id.as_str()))
     .execute(pool)
     .await?;
     Ok(result.last_insert_rowid())
