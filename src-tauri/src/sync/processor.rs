@@ -1,7 +1,7 @@
 //! Hashing, bulk-check, and upload processor implementation.
 
 use crate::{
-    app::events::{log_to_ui_error, log_to_ui_file_error, log_to_ui_key},
+    app::events::log_to_ui_file_error,
     audit::{self, audit_event, upload_details, SyncAuditContext},
     db,
     immich::{ImmichClient, SidecarDirectoryCache},
@@ -10,7 +10,8 @@ use crate::{
         scanner::{calculate_stable_checksums, reuse_cached_checksums},
     },
     sync::{
-        album_batch::{self, PendingAlbumUnit},
+        album_batch,
+        completion::{self, PendingAlbumUnit, UploadUnitCompletion},
         retry::check_assets_exist_with_backoff,
         JobByteProgress, SyncCoordinatorInner,
     },
@@ -109,44 +110,23 @@ pub(crate) async fn process_sync_block(
             }
 
             if let Some(remote_id) = &unit.image.remote_id {
-                if let Some(album_id) = &unit.image.target_album_id {
-                    pending_album_units.push(PendingAlbumUnit {
-                        album_id: album_id.clone(),
-                        remote_id: remote_id.clone(),
-                        unit: unit.clone(),
-                        uploaded_count: unit.assets().count(),
-                    });
-                    progress.advance(&app, unit.byte_size());
-                } else {
-                    let image_hash = &unit.image.checksums.as_ref().unwrap().sha1_base64;
-                    let _ = db::update_sync_state(
-                        &pool,
-                        &unit.image.path,
-                        image_hash,
-                        unit.image.mtime,
-                        unit.image.size as i64,
-                        "SYNCED",
-                        Some(remote_id.as_str()),
-                    )
-                    .await;
-                    if let Some(video) = &unit.live_photo_video {
-                        let video_hash = &video.checksums.as_ref().unwrap().sha1_base64;
-                        let _ = db::update_sync_state(
-                            &pool,
-                            &video.path,
-                            video_hash,
-                            video.mtime,
-                            video.size as i64,
-                            "SYNCED",
-                            None,
-                        )
-                        .await;
+                match completion::begin_upload_unit_completion(
+                    &pool,
+                    unit.clone(),
+                    remote_id.clone(),
+                    0,
+                )
+                .await?
+                {
+                    UploadUnitCompletion::PendingAlbum(pending) => {
+                        pending_album_units.push(*pending)
                     }
-                    for asset in unit.assets() {
-                        queue_results.push((asset.path.clone(), "SYNCED".to_string()));
+                    UploadUnitCompletion::Complete(completion) => {
+                        queue_results.extend_from_slice(completion.queue_results());
+                        uploaded += completion.uploaded_count();
                     }
-                    progress.advance(&app, unit.byte_size());
                 }
+                progress.advance(&app, unit.byte_size());
             } else {
                 units_to_check.push(unit.clone());
             }
@@ -166,7 +146,8 @@ pub(crate) async fn process_sync_block(
             let mut cancellations = Vec::new();
             for unit in &units_to_check {
                 if let Some(asset) = unit.assets().next() {
-                    if let Some(cancellation) = coordinator.cancellation_for_path(&asset.path).await {
+                    if let Some(cancellation) = coordinator.cancellation_for_path(&asset.path).await
+                    {
                         cancellations.push(cancellation);
                     }
                 }
@@ -200,87 +181,62 @@ pub(crate) async fn process_sync_block(
             let is_duplicate = existing.iter().any(|d| &d.hash == image_hash);
 
             if is_duplicate {
-                if let Some(album_id) = &unit.image.target_album_id {
-                    match album_batch::resolve_duplicate_for_album(
-                        &client,
-                        &pool,
-                        &unit,
-                        &existing,
-                        album_id,
-                    )
-                    .await
-                    {
-                        Ok(pending) => {
-                            progress.advance(&app, unit.byte_size());
-                            pending_album_units.push(pending);
-                        }
-                        Err(error_msg) => {
-                            log_to_ui_file_error(
-                                &app,
-                                "ERROR",
-                                &error_msg,
-                                "log_duplicate_resolve_failed",
-                                &unit.image.path,
-                                &error_msg,
-                            );
-                            audit_event(
-                                &app,
-                                audit_context.event(
-                                    "album.duplicate.resolution.failed",
-                                    audit::Outcome::Failure,
-                                    audit::Severity::Error,
-                                    "Failed to resolve duplicate asset remote ID for target album",
-                                    json!({
-                                        "local_path": unit.image.path,
-                                        "album_id": album_id.to_string(),
-                                        "failure_reason": audit_context.safe_error(&error_msg),
-                                    }),
-                                ),
-                            );
-                            for asset in unit.assets() {
-                                let _ = db::mark_sync_failed(
-                                    &pool,
-                                    &asset.path,
-                                    asset.mtime,
-                                    asset.size as i64,
-                                    &error_msg,
-                                )
-                                .await;
-                                let _ = db::update_sync_queue_failure(&pool, &asset.path, &error_msg).await;
-                                queue_results.push((asset.path.clone(), "FAILED".to_string()));
-                            }
-                            progress.advance(&app, unit.byte_size());
-                        }
-                    }
-                } else {
-                    for asset in unit.assets() {
-                        let hash = &asset.checksums.as_ref().unwrap().sha1_base64;
-                        let status = if db::update_sync_state(
+                match album_batch::resolve_duplicate_remote_id(&client, &unit, &existing).await {
+                    Ok(remote_id) => {
+                        match completion::begin_upload_unit_completion(
                             &pool,
-                            &asset.path,
-                            hash,
-                            asset.mtime,
-                            asset.size as i64,
-                            "SYNCED",
-                            None,
+                            unit.clone(),
+                            remote_id,
+                            0,
                         )
-                        .await
-                        .is_ok()
+                        .await?
                         {
-                            "SYNCED"
-                        } else {
+                            UploadUnitCompletion::PendingAlbum(pending) => {
+                                pending_album_units.push(*pending)
+                            }
+                            UploadUnitCompletion::Complete(completion) => {
+                                queue_results.extend_from_slice(completion.queue_results());
+                                uploaded += completion.uploaded_count();
+                            }
+                        }
+                        progress.advance(&app, unit.byte_size());
+                    }
+                    Err(error_msg) => {
+                        log_to_ui_file_error(
+                            &app,
+                            "ERROR",
+                            &error_msg,
+                            "log_duplicate_resolve_failed",
+                            &unit.image.path,
+                            &error_msg,
+                        );
+                        audit_event(
+                            &app,
+                            audit_context.event(
+                                "album.duplicate.resolution.failed",
+                                audit::Outcome::Failure,
+                                audit::Severity::Error,
+                                "Failed to resolve duplicate asset remote ID for target album",
+                                json!({
+                                    "local_path": unit.image.path,
+                                "failure_reason": audit_context.safe_error(&error_msg),
+                                }),
+                            ),
+                        );
+                        for asset in unit.assets() {
                             let _ = db::mark_sync_failed(
                                 &pool,
                                 &asset.path,
                                 asset.mtime,
                                 asset.size as i64,
-                                "Could not persist synced state",
+                                &error_msg,
                             )
                             .await;
-                            "FAILED"
-                        };
-                        queue_results.push((asset.path.clone(), status.to_string()));
-                        progress.advance(&app, asset.size);
+                            let _ =
+                                db::update_sync_queue_failure(&pool, &asset.path, &error_msg).await;
+                            queue_results.push((asset.path.clone(), "FAILED".to_string()));
+                        }
+                        progress.advance(&app, unit.byte_size());
                     }
                 }
             } else {
@@ -528,17 +484,7 @@ struct UploadOutcome {
     pending_album_unit: Option<PendingAlbumUnit>,
 }
 
-pub(crate) fn uploaded_asset_states(unit: &HashedUploadUnit) -> Vec<db::UploadedAssetState<'_>> {
-    unit.assets()
-        .map(|asset| db::UploadedAssetState {
-            path: &asset.path,
-            hash: &asset.checksums.as_ref().unwrap().sha1_base64,
-            mtime: asset.mtime,
-            size: asset.size as i64,
-        })
-        .collect()
-}
-
+#[cfg(test)]
 async fn persist_with_reconciliation<Persist, PersistFuture, Check, CheckFuture>(
     hashes: &[String],
     mut persist: Persist,
@@ -548,7 +494,8 @@ where
     Persist: FnMut() -> PersistFuture,
     PersistFuture: std::future::Future<Output = Result<(), String>>,
     Check: FnMut(Vec<String>) -> CheckFuture,
-    CheckFuture: std::future::Future<Output = Result<Vec<crate::immich::BulkCheckDuplicate>, String>>,
+    CheckFuture:
+        std::future::Future<Output = Result<Vec<crate::immich::BulkCheckDuplicate>, String>>,
 {
     let initial_error = match persist().await {
         Ok(()) => return Ok(false),
@@ -560,7 +507,10 @@ where
             initial_error, error
         )
     })?;
-    if !hashes.iter().all(|hash| existing.iter().any(|d| &d.hash == hash)) {
+    if !hashes
+        .iter()
+        .all(|hash| existing.iter().any(|d| &d.hash == hash))
+    {
         return Err(format!(
             "Remote upload succeeded but local state persistence could not be reconciled (initial persistence error: {}; not every upload-unit asset was found remotely).",
             initial_error
@@ -633,97 +583,24 @@ async fn upload_unit(
     let (uploaded, status, failure_reason, remote_id, pending_album_unit) = match upload_result {
         Ok(remote_id_str) => {
             let remote_id = crate::immich::RemoteAssetId::new(remote_id_str);
-            if let Some(album_id) = unit.image.target_album_id.clone() {
-                db::update_sync_queue_remote_id(&pool, &unit.image.path, &remote_id)
-                    .await
-                    .map_err(|err| {
-                        format!(
-                            "Failed to persist remote ID in queue for uploaded asset '{}': {}",
-                            unit.image.path, err
-                        )
-                    })?;
-                (
-                    0,
-                    "PENDING",
-                    None,
-                    Some(remote_id.clone()),
-                    Some(PendingAlbumUnit {
-                        album_id,
-                        remote_id,
-                        unit: unit.clone(),
-                        uploaded_count: unit.assets().count(),
-                    }),
-                )
-            } else {
-                let states = uploaded_asset_states(&unit);
-                let hashes = states
-                    .iter()
-                    .map(|state| state.hash.to_string())
-                    .collect::<Vec<_>>();
-                let persistence_pool = pool.clone();
-                let persistence_states = states.clone();
-                let persistence_remote_id = remote_id.clone();
-                match persist_with_reconciliation(
-                    &hashes,
-                    move || {
-                        let pool = persistence_pool.clone();
-                        let states = persistence_states.clone();
-                        let remote_id = persistence_remote_id.clone();
-                        async move {
-                            db::persist_uploaded_unit(&pool, &states, &remote_id)
-                                .await
-                                .map_err(|error| error.to_string())
-                        }
-                    },
-                    |hashes| check_assets_exist_with_backoff(&client, hashes, &app, &audit_context),
-                )
-                .await
-                {
-                    Ok(true) => {
-                        log_to_ui_key(
-                            &app,
-                            "INFO",
-                            "Remote upload succeeded and local state persistence was reconciled.",
-                            "log_upload_persistence_reconciled",
-                        );
-                        audit_event(
-                            &app,
-                            audit_context.event(
-                                "file.upload.local_persistence.reconciliation.completed",
-                                audit::Outcome::Success,
-                                audit::Severity::Info,
-                                "Remote upload succeeded and local state persistence was reconciled",
-                                json!({ "remote_asset_id": remote_id }),
-                            ),
-                        );
-                    }
-                    Ok(false) => {}
-                    Err(error) => {
-                        log_to_ui_error(
-                            &app,
-                            "ERROR",
-                            &format!("Remote upload succeeded, but local state persistence could not be reconciled: {error}"),
-                            "log_upload_persistence_reconcile_failed",
-                            &error,
-                        );
-                        audit_event(
-                            &app,
-                            audit_context.event(
-                                "file.upload.local_persistence.reconciliation.failed",
-                                audit::Outcome::Failure,
-                                audit::Severity::Error,
-                                "Remote upload succeeded but local state persistence could not be reconciled",
-                                json!({
-                                    "local_paths": unit.assets().map(|asset| asset.path.clone()).collect::<Vec<_>>(),
-                                    "remote_asset_id": remote_id.to_string(),
-                                    "failure_reason": audit_context.safe_error(&error),
-                                }),
-                            ),
-                        );
-                        return Err(error);
-                    }
+            match completion::begin_upload_unit_completion(
+                &pool,
+                unit.clone(),
+                remote_id.clone(),
+                unit.assets().count(),
+            )
+            .await?
+            {
+                UploadUnitCompletion::PendingAlbum(pending) => {
+                    (0, "PENDING", None, Some(remote_id), Some(*pending))
                 }
-                (unit.assets().count(), "SYNCED", None, Some(remote_id), None)
+                UploadUnitCompletion::Complete(completion) => (
+                    completion.uploaded_count(),
+                    "SYNCED",
+                    None,
+                    Some(remote_id),
+                    None,
+                ),
             }
         }
         Err(error) => {

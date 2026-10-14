@@ -1,9 +1,9 @@
 //! Dedicated batching, assignment, duplicate resolution, and auditing for Immich target albums.
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
 use serde_json::json;
 use sqlx::SqlitePool;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use crate::{
     app::events::log_to_ui_file_error,
@@ -11,28 +11,17 @@ use crate::{
     db,
     immich::{AlbumId, BulkCheckDuplicate, ImmichClient, RemoteAssetId},
     media::model::HashedUploadUnit,
-    sync::processor::uploaded_asset_states,
+    sync::completion::{complete_album_assignment, PendingAlbumUnit},
 };
 
-#[derive(Debug, Clone)]
-pub(crate) struct PendingAlbumUnit {
-    pub album_id: AlbumId,
-    pub remote_id: RemoteAssetId,
-    pub unit: HashedUploadUnit,
-    pub uploaded_count: usize,
-}
-
-/// Resolves the remote asset ID for a duplicate file and returns a `PendingAlbumUnit`.
+/// Resolves the Remote Asset ID for a Duplicate Upload Unit.
 ///
-/// If `update_sync_queue_remote_id` fails to persist the ID to SQLite,
-/// this returns `Err(...)` to abort the processing step.
-pub(crate) async fn resolve_duplicate_for_album(
+/// Completion persists the returned ID before it can report the Upload Unit as synchronized.
+pub(crate) async fn resolve_duplicate_remote_id(
     client: &ImmichClient,
-    pool: &SqlitePool,
     unit: &HashedUploadUnit,
     existing: &[BulkCheckDuplicate],
-    album_id: &AlbumId,
-) -> Result<PendingAlbumUnit, String> {
+) -> Result<RemoteAssetId, String> {
     let image_hash = &unit
         .image
         .checksums
@@ -50,23 +39,7 @@ pub(crate) async fn resolve_duplicate_for_album(
     };
 
     match resolved {
-        Ok(Some(remote_id)) => {
-            db::update_sync_queue_remote_id(pool, &unit.image.path, &remote_id)
-                .await
-                .map_err(|err| {
-                    format!(
-                        "Failed to persist remote ID in queue for duplicate asset '{}': {}",
-                        unit.image.path, err
-                    )
-                })?;
-
-            Ok(PendingAlbumUnit {
-                album_id: album_id.clone(),
-                remote_id,
-                unit: unit.clone(),
-                uploaded_count: 0,
-            })
-        }
+        Ok(Some(remote_id)) => Ok(remote_id),
         Ok(None) => Err(format!(
             "Duplicate asset '{}' could not be resolved to a unique remote ID for album assignment",
             unit.image.path
@@ -95,22 +68,30 @@ pub(crate) async fn assign_pending_album_units(
 
     let mut by_album: BTreeMap<AlbumId, Vec<PendingAlbumUnit>> = BTreeMap::new();
     for item in pending_units {
-        by_album.entry(item.album_id.clone()).or_default().push(item);
+        by_album
+            .entry(item.album_id.clone())
+            .or_default()
+            .push(item);
     }
 
     for (album_id, items) in by_album {
-        let asset_ids: Vec<RemoteAssetId> = items.iter().map(|item| item.remote_id.clone()).collect();
+        let asset_ids: Vec<RemoteAssetId> =
+            items.iter().map(|item| item.remote_id.clone()).collect();
         let album_result = client.add_assets_to_album(&album_id, &asset_ids).await;
 
         match album_result {
             Ok(()) => {
                 for item in items {
-                    let states = uploaded_asset_states(&item.unit);
-                    let _ = db::persist_uploaded_unit(pool, &states, &item.remote_id).await;
-                    for asset in item.unit.assets() {
-                        queue_results.push((asset.path.clone(), "SYNCED".to_string()));
+                    match complete_album_assignment(pool, item.clone()).await {
+                        Ok(completion) => {
+                            queue_results.extend_from_slice(completion.queue_results());
+                            *uploaded += completion.uploaded_count();
+                        }
+                        Err(error) => {
+                            mark_pending_unit_failed(pool, &item, &error, queue_results).await;
+                            continue;
+                        }
                     }
-                    *uploaded += item.uploaded_count;
                     audit_event(
                         app,
                         audit_context.event(
@@ -159,25 +140,23 @@ pub(crate) async fn assign_pending_album_units(
                             }),
                         ),
                     );
-                    for asset in item.unit.assets() {
-                        let _ = db::mark_sync_failed(
-                            pool,
-                            &asset.path,
-                            asset.mtime,
-                            asset.size as i64,
-                            &failure_reason,
-                        )
-                        .await;
-                        let _ = db::update_sync_queue_failure(
-                            pool,
-                            &asset.path,
-                            &failure_reason,
-                        )
-                        .await;
-                        queue_results.push((asset.path.clone(), "FAILED".to_string()));
-                    }
+                    mark_pending_unit_failed(pool, &item, &failure_reason, queue_results).await;
                 }
             }
         }
+    }
+}
+
+async fn mark_pending_unit_failed(
+    pool: &SqlitePool,
+    item: &PendingAlbumUnit,
+    reason: &str,
+    queue_results: &mut Vec<(String, String)>,
+) {
+    for asset in item.unit.assets() {
+        let _ =
+            db::mark_sync_failed(pool, &asset.path, asset.mtime, asset.size as i64, reason).await;
+        let _ = db::update_sync_queue_failure(pool, &asset.path, reason).await;
+        queue_results.push((asset.path.clone(), "FAILED".to_string()));
     }
 }
