@@ -130,7 +130,17 @@ describe("LoginView", () => {
 });
 
 describe("DashboardView", () => {
-  const props = { syncStatus: "idle" as const, lastSync: "10:00", progress: 0, processed: 0, syncTotal: 0, currentFile: "", serverUrl: "https://immich.example", watchedFolders: [], failedSyncs: [], logs: [], isSyncActionPending: false, onSyncAction: vi.fn(), onRetryFailedSyncs: vi.fn(), onAddFolder: vi.fn(), onRemoveFolder: vi.fn() };
+  const props = {
+    serverUrl: "https://immich.example",
+    dashboard: {
+      syncStatus: "idle" as const, lastSync: "10:00", progress: 0, processed: 0, syncTotal: 0, currentFile: "",
+      transferredBytes: 0, transferRateBytesPerSecond: null, estimatedSecondsRemaining: null,
+      watchedFolders: [], failedSyncs: [], logs: [], isSyncActionPending: false,
+      isTargetAlbumModalOpen: false, pendingFolderPath: null,
+      onSyncAction: vi.fn(), onRetryFailedSyncs: vi.fn(), onAddFolder: vi.fn(), onRemoveFolder: vi.fn(),
+      onConfirmAddFolder: vi.fn(), onCancelAddFolder: vi.fn(),
+    },
+  };
 
   it("disables sync without folders", () => {
     render(DashboardView, props);
@@ -142,13 +152,16 @@ describe("DashboardView", () => {
     const onSyncAction = vi.fn();
     render(DashboardView, {
       ...props,
-      syncStatus: "syncing",
-      progress: 45,
-      processed: 9,
-      syncTotal: 20,
-      currentFile: "photo.jpg",
-      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
-      onSyncAction
+      dashboard: {
+        ...props.dashboard,
+        syncStatus: "syncing",
+        progress: 45,
+        processed: 9,
+        syncTotal: 20,
+        currentFile: "photo.jpg",
+        watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+        onSyncAction,
+      },
     });
     expect(screen.getByText("45% completed")).toBeInTheDocument();
     expect(screen.getByText("Processed: 9 / 20")).toBeInTheDocument();
@@ -160,11 +173,12 @@ describe("DashboardView", () => {
   it("renders available transfer statistics and hides unavailable rate and ETA", () => {
     render(DashboardView, {
       ...props,
-      syncStatus: "syncing",
-      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
-      transferredBytes: 1_024,
-      transferRateBytesPerSecond: null,
-      estimatedSecondsRemaining: null,
+      dashboard: {
+        ...props.dashboard,
+        syncStatus: "syncing",
+        watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+        transferredBytes: 1_024,
+      },
     });
     expect(screen.getByText("Transferred: 1 KiB")).toBeInTheDocument();
     expect(screen.queryByText(/Rate:/)).not.toBeInTheDocument();

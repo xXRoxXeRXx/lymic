@@ -143,28 +143,8 @@
       <!-- ===== DASHBOARD VIEW ===== -->
       {:else if currentView === "dashboard"}
         <DashboardView
-          syncStatus={sync.syncStatus}
-          lastSync={sync.lastSync}
-          progress={sync.progress}
-          processed={sync.processed}
-          syncTotal={sync.syncTotal}
-          currentFile={sync.currentFile}
-          transferredBytes={sync.transferredBytes}
-          transferRateBytesPerSecond={sync.transferRateBytesPerSecond}
-          estimatedSecondsRemaining={sync.estimatedSecondsRemaining}
+          dashboard={sync.dashboard}
           serverUrl={auth.serverUrl}
-          watchedFolders={sync.watchedFolders}
-          failedSyncs={sync.failedSyncs}
-          logs={sync.logs}
-          isSyncActionPending={sync.isSyncActionPending}
-          onSyncAction={sync.syncAction}
-          onRetryFailedSyncs={sync.retryFailedSyncs}
-          onAddFolder={sync.addFolder}
-          onRemoveFolder={sync.removeFolder}
-          isTargetAlbumModalOpen={sync.isTargetAlbumModalOpen}
-          pendingFolderPath={sync.pendingFolderPath}
-          onConfirmAddFolder={sync.confirmAddFolder}
-          onCancelAddFolder={sync.cancelAddFolder}
         />
       <!-- ===== SETTINGS VIEW ===== -->
       {:else if currentView === "settings"}

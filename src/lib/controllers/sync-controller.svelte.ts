@@ -5,6 +5,30 @@ import { subscribeToSyncEvents } from "../tauri/sync-event-subscription";
 import { toBcp47Locale } from "../i18n";
 import type { RemoveFolderResult, SyncSnapshot, SyncSummary, TransferStatsEvent, UiLogMessage } from "./types";
 
+export interface DashboardViewState {
+  syncStatus: SyncStatus;
+  lastSync: string | null;
+  progress: number;
+  processed: number;
+  syncTotal: number;
+  currentFile: string;
+  transferredBytes: number;
+  transferRateBytesPerSecond: number | null;
+  estimatedSecondsRemaining: number | null;
+  watchedFolders: WatchedFolder[];
+  failedSyncs: FailedSyncEntry[];
+  logs: LogEntry[];
+  isSyncActionPending: boolean;
+  isTargetAlbumModalOpen: boolean;
+  pendingFolderPath: string | null;
+  onSyncAction(): Promise<void>;
+  onRetryFailedSyncs(): Promise<void>;
+  onAddFolder(): Promise<void>;
+  onRemoveFolder(id: number): Promise<void>;
+  onConfirmAddFolder(targetAlbumId: string | null): Promise<void>;
+  onCancelAddFolder(): void;
+}
+
 export function createSyncController(options: {
   reportError(error: unknown): void;
   t(key: string): string;
@@ -299,6 +323,20 @@ export function createSyncController(options: {
   }
 
   return {
+    get dashboard(): DashboardViewState {
+      return {
+        syncStatus, lastSync, progress, processed, syncTotal, currentFile,
+        transferredBytes, transferRateBytesPerSecond, estimatedSecondsRemaining,
+        watchedFolders, failedSyncs, logs, isSyncActionPending,
+        isTargetAlbumModalOpen, pendingFolderPath,
+        onSyncAction: syncAction,
+        onRetryFailedSyncs: retryFailedSyncs,
+        onAddFolder: addFolder,
+        onRemoveFolder: removeFolder,
+        onConfirmAddFolder: confirmAddFolder,
+        onCancelAddFolder: cancelAddFolder,
+      };
+    },
     get syncStatus() { return syncStatus; },
     get isActive() { return isSyncActive(); },
     get lastSync() { return lastSync; },
