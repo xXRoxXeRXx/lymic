@@ -145,11 +145,15 @@ pub async fn update_sync_queue_remote_id(
     path: &str,
     remote_id: &crate::immich::RemoteAssetId,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE sync_queue SET remote_id = ? WHERE job_id = 1 AND local_path = ?")
-        .bind(remote_id.as_str())
-        .bind(path)
-        .execute(pool)
-        .await?;
+    let result =
+        sqlx::query("UPDATE sync_queue SET remote_id = ? WHERE job_id = 1 AND local_path = ?")
+            .bind(remote_id.as_str())
+            .bind(path)
+            .execute(pool)
+            .await?;
+    if result.rows_affected() != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
     Ok(())
 }
 
