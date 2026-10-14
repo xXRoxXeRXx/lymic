@@ -1,4 +1,7 @@
-use crate::app::locale::{backend_translations, is_supported_locale, LocaleState};
+use crate::app::locale::{
+    backend_translations, is_supported_locale, locale_catalog_entries, LocaleCatalogEntry,
+    LocaleState,
+};
 use crate::app::state::{DatabaseRecoveryNotice, DatabaseRecoveryNoticeData, TrayMenuState};
 use crate::audit::{audit_event, AuditEvent, Outcome, Severity};
 use serde_json::json;
@@ -20,6 +23,11 @@ const WEBVIEW_STARTUP_PHASES: &[&str] = &[
     "upload_parallelism_complete",
     "listeners_complete",
 ];
+
+#[tauri::command]
+pub(crate) fn get_locale_catalog() -> Vec<LocaleCatalogEntry> {
+    locale_catalog_entries()
+}
 
 fn record_webview_startup_phase(app: &tauri::AppHandle, phase: &str) {
     audit_event(

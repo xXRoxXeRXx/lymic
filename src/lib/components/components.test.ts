@@ -8,6 +8,7 @@ import FailedSyncsModal from "./FailedSyncsModal.svelte";
 import FolderList from "./FolderList.svelte";
 import LoginView from "./LoginView.svelte";
 import SettingsView from "./SettingsView.svelte";
+import { localeCatalog } from "../i18n/locale-catalog";
 import TargetAlbumModal from "./TargetAlbumModal.svelte";
 
 const tauri = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -277,7 +278,7 @@ describe("SettingsView", () => {
     const onUploadParallelismChange = vi.fn();
     const onCheckForUpdates = vi.fn();
     const onLogout = vi.fn();
-    const { rerender } = render(SettingsView, { currentUserName: "Meyer", serverUrl: "https://immich.example", isAutostartEnabled: false, themePreference: "system", uploadParallelism: 3, isSavingUploadParallelism: true, updateStatus: "unknown", isCheckingForUpdates: false, onToggleAutostart, onLocaleChange, onThemeChange, onUploadParallelismChange, onCheckForUpdates, onLogout });
+    const { rerender } = render(SettingsView, { currentUserName: "Meyer", serverUrl: "https://immich.example", isAutostartEnabled: false, themePreference: "system", uploadParallelism: 3, isSavingUploadParallelism: true, updateStatus: "unknown", isCheckingForUpdates: false, locales: localeCatalog, onToggleAutostart, onLocaleChange, onThemeChange, onUploadParallelismChange, onCheckForUpdates, onLogout });
     expect(screen.getByLabelText("Parallel uploads")).toBeDisabled();
     rerender({ currentUserName: "Meyer", serverUrl: "https://immich.example", isAutostartEnabled: false, themePreference: "system", uploadParallelism: 3, isSavingUploadParallelism: false, updateStatus: "current", isCheckingForUpdates: false, onToggleAutostart, onLocaleChange, onThemeChange, onUploadParallelismChange, onCheckForUpdates, onLogout });
     await fireEvent.click(screen.getByRole("button", { name: "Enable autostart" }));

@@ -107,6 +107,7 @@ pub(crate) fn run() {
             crate::commands::sync::retry_failed_syncs,
             crate::commands::sync::get_upload_parallelism,
             crate::commands::sync::set_upload_parallelism,
+            crate::commands::settings::get_locale_catalog,
             crate::commands::settings::update_locale,
             crate::commands::settings::record_webview_startup_phase_probe,
             crate::commands::settings::get_database_recovery_notice

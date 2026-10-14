@@ -177,6 +177,7 @@
           isSavingUploadParallelism={preferences.isSavingUploadParallelism}
           updateStatus={updater.updateStatus}
           isCheckingForUpdates={updater.isCheckingForUpdates}
+          locales={preferences.locales}
           onToggleAutostart={preferences.toggleAutostart}
           onLocaleChange={preferences.setLocale}
           onThemeChange={preferences.setThemePreference}

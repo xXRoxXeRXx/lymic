@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { localeCatalog } from './locale-catalog';
 import { isSupportedLocale, locales, supportedLocales } from './index';
 import de from './de.json';
 import en from './en.json';
@@ -25,6 +26,21 @@ const catalog = {
 } as const;
 
 describe('i18n catalogs', () => {
+  it('defines each locale once with its display name, BCP-47 tag, and translation source', () => {
+    expect(localeCatalog).toEqual([
+      { code: 'en', name: 'English', bcp47: 'en-US', translationSource: 'en.json' },
+      { code: 'de', name: 'Deutsch', bcp47: 'de-DE', translationSource: 'de.json' },
+      { code: 'zh', name: '中文', bcp47: 'zh-CN', translationSource: 'zh.json' },
+      { code: 'hi', name: 'हिन्दी', bcp47: 'hi-IN', translationSource: 'hi.json' },
+      { code: 'es', name: 'Español', bcp47: 'es-ES', translationSource: 'es.json' },
+      { code: 'fr', name: 'Français', bcp47: 'fr-FR', translationSource: 'fr.json' },
+      { code: 'ar', name: 'العربية', bcp47: 'ar-SA', translationSource: 'ar.json' },
+      { code: 'bn', name: 'বাংলা', bcp47: 'bn-BD', translationSource: 'bn.json' },
+      { code: 'pt', name: 'Português', bcp47: 'pt-PT', translationSource: 'pt.json' },
+      { code: 'ru', name: 'Русский', bcp47: 'ru-RU', translationSource: 'ru.json' },
+    ]);
+  });
+
   it('registers all 10 supported locales', () => {
     const expected = ['en', 'de', 'zh', 'hi', 'es', 'fr', 'ar', 'bn', 'pt', 'ru'];
     expect(supportedLocales).toEqual(expected);
