@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
   import { Folder, FolderPlus, Trash2 } from "lucide-svelte";
+  import { onMount } from "svelte";
   import { t } from "svelte-i18n";
-  import type { WatchedFolder } from "./types";
+  import type { Album, WatchedFolder } from "./types";
 
   interface Props {
     watchedFolders: WatchedFolder[];
@@ -10,6 +12,17 @@
   }
 
   let { watchedFolders, onAddFolder, onRemoveFolder }: Props = $props();
+  let albums = $state<Album[]>([]);
+
+  const albumNamesById = $derived(new Map(albums.map((album) => [album.id, album.albumName])));
+
+  onMount(() => {
+    void invoke<Album[]>("get_albums")
+      .then((loadedAlbums) => albums = loadedAlbums)
+      .catch(() => {
+        // Retain the persisted ID if the album list is temporarily unavailable.
+      });
+  });
 </script>
 
 <div class="space-y-6 animate-in" style="animation-delay: 100ms">
@@ -37,7 +50,7 @@
             <p class="text-[10px] font-mono text-slate-400 dark:text-slate-400 truncate">{folder.path}</p>
             {#if folder.target_album_id}
               <p class="text-[10px] font-medium text-blue-600 dark:text-blue-400 truncate">
-                {$t('target_album')}: {folder.target_album_id}
+                {$t('target_album')}: {albumNamesById.get(folder.target_album_id) ?? folder.target_album_id}
               </p>
             {/if}
           </div>

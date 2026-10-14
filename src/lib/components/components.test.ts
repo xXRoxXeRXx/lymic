@@ -185,7 +185,9 @@ describe("FolderList and ActivityLog", () => {
   it("renders data and forwards folder callbacks", async () => {
     const onAddFolder = vi.fn();
     const onRemoveFolder = vi.fn();
-    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }], onAddFolder, onRemoveFolder });
+    tauri.invoke.mockResolvedValue([{ id: "album-1", albumName: "Summer holidays" }]);
+    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder });
+    expect(await screen.findByText("Target album: Summer holidays")).toBeInTheDocument();
     await fireEvent.click(screen.getAllByRole("button")[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Remove folder: C:/photos" }));
     expect(onAddFolder).toHaveBeenCalledOnce();
