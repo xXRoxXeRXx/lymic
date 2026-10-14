@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import ActivityLog from "./ActivityLog.svelte";
 import DashboardView from "./DashboardView.svelte";
@@ -13,6 +13,7 @@ import TargetAlbumModal from "./TargetAlbumModal.svelte";
 const tauri = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
 
+beforeEach(() => tauri.invoke.mockResolvedValue([]));
 afterEach(cleanup);
 
 describe("LoginView", () => {
@@ -187,11 +188,31 @@ describe("FolderList and ActivityLog", () => {
     const onRemoveFolder = vi.fn();
     tauri.invoke.mockResolvedValue([{ id: "album-1", albumName: "Summer holidays" }]);
     render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder });
-    expect(await screen.findByText("Target album: Summer holidays")).toBeInTheDocument();
+    expect(await screen.findByText("Target Album: Summer holidays")).toBeInTheDocument();
     await fireEvent.click(screen.getAllByRole("button")[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Remove folder: C:/photos" }));
     expect(onAddFolder).toHaveBeenCalledOnce();
     expect(onRemoveFolder).toHaveBeenCalledWith(1);
+  });
+
+  it("loads the name when a folder is assigned an album created after mount", async () => {
+    tauri.invoke
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "new-album", albumName: "Roadtrip" }]);
+    const { rerender } = render(FolderList, {
+      watchedFolders: [],
+      onAddFolder: vi.fn(),
+      onRemoveFolder: vi.fn(),
+    });
+
+    await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("get_albums"));
+    rerender({
+      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "new-album" }],
+      onAddFolder: vi.fn(),
+      onRemoveFolder: vi.fn(),
+    });
+
+    expect(await screen.findByText("Target Album: Roadtrip")).toBeInTheDocument();
   });
 
   it("renders the empty folder state", () => {
