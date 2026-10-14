@@ -140,7 +140,7 @@
         <li><code class="font-semibold text-slate-800 dark:text-slate-100">asset.read</code>: {$t('api_key_help_permission_read')}</li>
         <li><code class="font-semibold text-slate-800 dark:text-slate-100">album.read</code>: {$t('api_key_help_permission_album_read')}</li>
         <li><code class="font-semibold text-slate-800 dark:text-slate-100">album.create</code>: {$t('api_key_help_permission_album_create')}</li>
-        <li><code class="font-semibold text-slate-800 dark:text-slate-100">album.update</code>: {$t('api_key_help_permission_album_update')}</li>
+        <li><code class="font-semibold text-slate-800 dark:text-slate-100">albumAsset.create</code>: {$t('api_key_help_permission_album_update')}</li>
         <li><code class="font-semibold text-slate-800 dark:text-slate-100">user.read</code>: {$t('api_key_help_permission_user_read')}</li>
       </ul>
     </dialog>

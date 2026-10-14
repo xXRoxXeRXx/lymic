@@ -43,7 +43,7 @@ describe("LoginView", () => {
     expect(screen.getByText("asset.read")).toBeInTheDocument();
     expect(screen.getByText("album.read")).toBeInTheDocument();
     expect(screen.getByText("album.create")).toBeInTheDocument();
-    expect(screen.getByText("album.update")).toBeInTheDocument();
+    expect(screen.getByText("albumAsset.create")).toBeInTheDocument();
     expect(screen.getByText("user.read")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Close API key help" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
