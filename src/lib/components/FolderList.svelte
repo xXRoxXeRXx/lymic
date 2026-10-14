@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
   import { Folder, FolderPlus, Trash2 } from "lucide-svelte";
   import { t } from "svelte-i18n";
-  import type { WatchedFolder } from "./types";
+  import type { Album, WatchedFolder } from "./types";
 
   interface Props {
     watchedFolders: WatchedFolder[];
@@ -10,6 +11,33 @@
   }
 
   let { watchedFolders, onAddFolder, onRemoveFolder }: Props = $props();
+  let albums = $state<Album[]>([]);
+  let latestAlbumRequest = 0;
+  let targetAlbumIds = new Set<string>();
+
+  const albumNamesById = $derived(new Map(albums.map((album) => [album.id, album.albumName])));
+
+  async function fetchAlbums() {
+    const request = ++latestAlbumRequest;
+    try {
+      const loadedAlbums = await invoke<Album[]>("get_albums");
+      if (request === latestAlbumRequest) albums = loadedAlbums;
+    } catch {
+      // Retain the persisted ID if the album list is temporarily unavailable.
+    }
+  }
+
+  $effect(() => {
+    const nextTargetAlbumIds = new Set(
+      watchedFolders.flatMap((folder) => folder.target_album_id ? [folder.target_album_id] : [])
+    );
+    const hasNewTargetAlbum = [...nextTargetAlbumIds].some((id) => !targetAlbumIds.has(id));
+    targetAlbumIds = nextTargetAlbumIds;
+
+    if (hasNewTargetAlbum || latestAlbumRequest === 0) {
+      void fetchAlbums();
+    }
+  });
 </script>
 
 <div class="space-y-6 animate-in" style="animation-delay: 100ms">
@@ -35,6 +63,11 @@
           <div class="min-w-0">
             <p class="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{folder.path.split(/[/\\]/).pop()}</p>
             <p class="text-[10px] font-mono text-slate-400 dark:text-slate-400 truncate">{folder.path}</p>
+            {#if folder.target_album_id}
+              <p class="text-[10px] font-medium text-blue-600 dark:text-blue-400 truncate">
+                {$t('target_album')}: {albumNamesById.get(folder.target_album_id) ?? folder.target_album_id}
+              </p>
+            {/if}
           </div>
         </div>
         <button

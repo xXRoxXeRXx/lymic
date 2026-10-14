@@ -94,6 +94,8 @@ pub(crate) fn run() {
             crate::commands::auth::get_auth_status,
             crate::commands::auth::get_server_url,
             crate::commands::auth::get_current_user_name,
+            crate::commands::albums::get_albums,
+            crate::commands::albums::create_album,
             crate::commands::folders::add_folder,
             crate::commands::folders::get_folders,
             crate::commands::folders::remove_folder,

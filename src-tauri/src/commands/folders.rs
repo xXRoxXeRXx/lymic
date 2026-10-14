@@ -31,6 +31,7 @@ pub(crate) async fn add_folder(
     pool: tauri::State<'_, sqlx::SqlitePool>,
     watcher: tauri::State<'_, tokio::sync::Mutex<watcher::WatcherState>>,
     path: String,
+    target_album_id: Option<String>,
 ) -> Result<i64, String> {
     let folders = db::get_folders(pool.inner())
         .await
@@ -101,7 +102,17 @@ pub(crate) async fn add_folder(
         watcher::WatchRegistration::PathUnavailable
     };
 
-    let id = match db::add_folder(pool.inner(), &path).await {
+    let target_album_id = target_album_id.and_then(|id| {
+        let trimmed = id.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+
+    let album_id = target_album_id.as_deref().map(crate::immich::AlbumId::new);
+    let id = match db::add_folder(pool.inner(), &path, album_id.as_ref()).await {
         Ok(id) => id,
         Err(error) => {
             if registration == watcher::WatchRegistration::Registered {
@@ -176,7 +187,7 @@ pub(crate) async fn add_folder(
             None,
             "command",
             "Watched folder added",
-            json!({ "folder_id": id, "local_path": path }),
+            json!({ "folder_id": id, "local_path": path, "target_album_id": target_album_id }),
         ),
     );
     Ok(id)

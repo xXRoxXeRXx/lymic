@@ -12,11 +12,13 @@ pub struct SyncSnapshot {
     pub completed_bytes: i64,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct QueuedAsset {
     pub local_path: String,
     pub size: i64,
     pub last_modified: i64,
+    pub target_album_id: Option<crate::immich::AlbumId>,
+    pub remote_id: Option<crate::immich::RemoteAssetId>,
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +26,7 @@ pub struct QueueAsset<'a> {
     pub path: &'a str,
     pub size: i64,
     pub mtime: i64,
+    pub target_album_id: Option<&'a crate::immich::AlbumId>,
 }
 
 const SNAPSHOT_SELECT: &str = "SELECT status, total_count AS total, success_count AS succeeded, failure_count AS failed, current_path, \
@@ -80,8 +83,8 @@ pub async fn enqueue_sync_assets(
             .fetch_one(&mut *tx)
             .await?;
         sqlx::query(
-            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status)
-             VALUES (1, ?, ?, ?, ?, 'PENDING')
+            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, target_album_id)
+             VALUES (1, ?, ?, ?, ?, 'PENDING', ?)
              ON CONFLICT(job_id, local_path) DO UPDATE SET
                size = excluded.size, last_modified = excluded.last_modified,
                status = CASE WHEN sync_queue.status = 'SYNCED' THEN 'SYNCED' ELSE 'PENDING' END,
@@ -91,6 +94,7 @@ pub async fn enqueue_sync_assets(
         .bind(asset.path)
         .bind(asset.size)
         .bind(asset.mtime)
+        .bind(asset.target_album_id.map(|id| id.as_str()))
         .execute(&mut *tx)
         .await?;
         if !exists {
@@ -128,12 +132,40 @@ pub async fn next_sync_queue_block(
     limit: i64,
 ) -> Result<Vec<QueuedAsset>, sqlx::Error> {
     sqlx::query_as::<_, QueuedAsset>(
-        "SELECT local_path, size, last_modified FROM sync_queue
+        "SELECT local_path, size, last_modified, target_album_id, remote_id FROM sync_queue
          WHERE job_id = 1 AND status = 'PENDING' ORDER BY sequence LIMIT ?",
     )
     .bind(limit)
     .fetch_all(pool)
     .await
+}
+
+pub async fn update_sync_queue_remote_id(
+    pool: &SqlitePool,
+    path: &str,
+    remote_id: &crate::immich::RemoteAssetId,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE sync_queue SET remote_id = ? WHERE job_id = 1 AND local_path = ?")
+        .bind(remote_id.as_str())
+        .bind(path)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn update_sync_queue_failure(
+    pool: &SqlitePool,
+    path: &str,
+    failure_reason: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE sync_queue SET status = 'FAILED', failure_reason = ? WHERE job_id = 1 AND local_path = ?",
+    )
+    .bind(failure_reason)
+    .bind(path)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn has_pending_sync_queue_items(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
@@ -165,7 +197,7 @@ pub async fn finalize_queued_block(
             .push_bind(status)
             .push(' ');
     }
-    query.push("END, failure_reason = NULL WHERE job_id = 1 AND local_path IN (");
+    query.push("END, failure_reason = CASE WHEN status = 'SYNCED' THEN NULL ELSE failure_reason END WHERE job_id = 1 AND local_path IN (");
     {
         let mut separated = query.separated(", ");
         for (path, _) in results {

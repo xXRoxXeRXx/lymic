@@ -50,6 +50,43 @@ fn authenticated_client(credentials: auth::AuthConfig) -> Result<ImmichClient, S
     )
 }
 
+pub(crate) fn prepare_scan_for_queue<'a>(
+    scan_result: &'a ScanResult,
+    folders: &'a [db::WatchedFolder],
+) -> (Vec<db::QueueAsset<'a>>, Vec<(String, String)>) {
+    let assets = scan_result
+        .files
+        .iter()
+        .map(|asset| {
+            let asset_path = std::path::PathBuf::from(&asset.path);
+            let target_album_id = asset.target_album_id.as_ref().or_else(|| {
+                folders.iter().find_map(|f| {
+                    let folder_path = std::path::PathBuf::from(&f.path);
+                    if crate::media::paths::path_is_within(&asset_path, &folder_path) {
+                        f.target_album_id.as_ref()
+                    } else {
+                        None
+                    }
+                })
+            });
+            db::QueueAsset {
+                path: &asset.path,
+                size: asset.size as i64,
+                mtime: asset.mtime,
+                target_album_id,
+            }
+        })
+        .collect();
+
+    let failures = scan_result
+        .failures
+        .iter()
+        .map(|failure| (failure.path.clone(), failure.error.clone()))
+        .collect();
+
+    (assets, failures)
+}
+
 pub(crate) async fn sync_scan_result_if_authenticated(
     app: tauri::AppHandle,
     pool: sqlx::SqlitePool,
@@ -63,20 +100,8 @@ pub(crate) async fn sync_scan_result_if_authenticated(
 
     // Persist before scheduling the runner. This keeps the watcher receiver free to
     // keep draining events while another run is active or the queue is paused.
-    let assets: Vec<_> = scan_result
-        .files
-        .iter()
-        .map(|asset| db::QueueAsset {
-            path: &asset.path,
-            size: asset.size as i64,
-            mtime: asset.mtime,
-        })
-        .collect();
-    let failures: Vec<_> = scan_result
-        .failures
-        .iter()
-        .map(|failure| (failure.path.clone(), failure.error.clone()))
-        .collect();
+    let folders = db::get_folders(&pool).await.unwrap_or_default();
+    let (assets, failures) = prepare_scan_for_queue(&scan_result, &folders);
     match db::enqueue_sync_assets(&pool, &assets, &failures).await {
         Ok(snapshot) => {
             crate::app::tray::update_sync_action(&app, &snapshot);
@@ -143,7 +168,7 @@ mod tests {
             Err("Add at least one folder before starting a sync.".to_string())
         );
 
-        db::add_folder(&pool, "C:/photos").await.unwrap();
+        db::add_folder(&pool, "C:/photos", None).await.unwrap();
         let folders = db::get_folders(&pool).await.unwrap();
         assert!(ensure_sync_has_folders(&folders).is_ok());
     }

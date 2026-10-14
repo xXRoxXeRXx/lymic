@@ -155,6 +155,8 @@ fn scan_folder_for_media(path: &Path) -> ScanResult {
                             path: file_path,
                             size: metadata.len(),
                             mtime: metadata_mtime(&metadata),
+                            target_album_id: None,
+                            remote_id: None,
                         });
                     }
                     Err(error) => result.failures.push(FileFailure {
@@ -206,6 +208,8 @@ pub(crate) async fn scan_paths_for_media(paths: Vec<PathBuf>) -> Result<ScanResu
                     path: path.to_string_lossy().to_string(),
                     size: metadata.len(),
                     mtime: metadata_mtime(&metadata),
+                    target_album_id: None,
+                    remote_id: None,
                 }),
                 Ok(_) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -239,6 +243,8 @@ pub(crate) async fn prepare_failed_sync_retry(paths: Vec<String>) -> Result<Scan
                         path,
                         size: metadata.len(),
                         mtime: metadata_mtime(&metadata),
+                        target_album_id: None,
+                        remote_id: None,
                     }),
                     Err(error) => result.failures.push(FileFailure {
                         path,

@@ -1,4 +1,6 @@
-use super::bulk_check::{bulk_check_response_error, parse_bulk_check_response, BulkCheckError};
+use super::bulk_check::{
+    bulk_check_response_error, parse_bulk_check_response, BulkCheckDuplicate, BulkCheckError,
+};
 use super::response::{
     read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
 };
@@ -164,7 +166,7 @@ impl ImmichClient {
     pub(crate) async fn check_assets_exist(
         &self,
         hashes: Vec<String>,
-    ) -> Result<Vec<String>, BulkCheckError> {
+    ) -> Result<Vec<BulkCheckDuplicate>, BulkCheckError> {
         if hashes.is_empty() {
             return Ok(Vec::new());
         }
@@ -254,7 +256,7 @@ fn is_loopback_host(host: Option<Host<&str>>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        upload_timeout, ImmichClient, SidecarDirectoryCache, GIB_BYTES,
+        upload_timeout, BulkCheckDuplicate, ImmichClient, SidecarDirectoryCache, GIB_BYTES,
         LOCAL_HTTP_NOT_ALLOWED_ERROR, UPLOAD_TIMEOUT_BASE_SECONDS,
     };
     use reqwest::Client;
@@ -501,7 +503,10 @@ mod tests {
                 .check_assets_exist(vec!["already-there".to_string(), "new-file".to_string()])
                 .await
                 .unwrap(),
-            vec!["already-there"]
+            vec![BulkCheckDuplicate {
+                hash: "already-there".to_string(),
+                asset_id: None,
+            }]
         );
         let asset_path = temporary_file(b"image data");
         assert_eq!(

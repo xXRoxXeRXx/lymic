@@ -31,20 +31,8 @@ pub(crate) async fn run_sync_pipeline(
 ) -> Result<SyncSummary, String> {
     // Scans are merely producers. The durable queue is the sole source used by the
     // runner, including after recovery, so no completed item is re-scanned to resume.
-    let queue_assets: Vec<_> = scan_result
-        .files
-        .iter()
-        .map(|asset| db::QueueAsset {
-            path: &asset.path,
-            size: asset.size as i64,
-            mtime: asset.mtime,
-        })
-        .collect();
-    let queue_failures: Vec<_> = scan_result
-        .failures
-        .iter()
-        .map(|failure| (failure.path.clone(), failure.error.clone()))
-        .collect();
+    let folders = db::get_folders(&pool).await.unwrap_or_default();
+    let (queue_assets, queue_failures) = crate::sync::service::prepare_scan_for_queue(&scan_result, &folders);
     let snapshot = db::enqueue_sync_assets(&pool, &queue_assets, &queue_failures)
         .await
         .map_err(|error| format!("Could not persist sync queue: {}", error))?;
@@ -206,6 +194,8 @@ pub(crate) async fn run_sync_pipeline(
                     path: asset.local_path,
                     size: asset.size as u64,
                     mtime: asset.last_modified,
+                    target_album_id: asset.target_album_id,
+                    remote_id: asset.remote_id,
                 })
                 .collect(),
             ..Default::default()

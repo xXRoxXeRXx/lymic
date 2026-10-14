@@ -1,9 +1,10 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { t, locale } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import FailedSyncsModal from "./FailedSyncsModal.svelte";
   import FolderList from "./FolderList.svelte";
   import ActivityLog from "./ActivityLog.svelte";
+  import TargetAlbumModal from "./TargetAlbumModal.svelte";
   import type { FailedSyncEntry, LogEntry, SyncStatus, WatchedFolder } from "./types";
 
   interface Props {
@@ -25,6 +26,10 @@
     onRetryFailedSyncs: () => void;
     onAddFolder: () => void;
     onRemoveFolder: (id: number) => void;
+    isTargetAlbumModalOpen?: boolean;
+    pendingFolderPath?: string | null;
+    onConfirmAddFolder?: (targetAlbumId: string | null) => void;
+    onCancelAddFolder?: () => void;
   }
 
   let {
@@ -45,7 +50,11 @@
     onSyncAction,
     onRetryFailedSyncs,
     onAddFolder,
-    onRemoveFolder
+    onRemoveFolder,
+    isTargetAlbumModalOpen = false,
+    pendingFolderPath = null,
+    onConfirmAddFolder,
+    onCancelAddFolder
   }: Props = $props();
 
   const numberLocale = $derived(toBcp47Locale($locale));
@@ -119,3 +128,10 @@
   <FolderList {watchedFolders} {onAddFolder} {onRemoveFolder} />
   <ActivityLog {logs} />
 </div>
+
+<TargetAlbumModal
+  isOpen={isTargetAlbumModalOpen}
+  folderPath={pendingFolderPath ?? ""}
+  onConfirm={onConfirmAddFolder ?? (() => {})}
+  onCancel={onCancelAddFolder ?? (() => {})}
+/>

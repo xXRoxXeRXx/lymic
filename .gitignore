@@ -24,3 +24,7 @@ Thumbs.db
 immich_sync.db
 .agents
 .kilo/
+/docs/agents*
+/docs/adr/*
+AGENTS*
+GLOSSARY.md

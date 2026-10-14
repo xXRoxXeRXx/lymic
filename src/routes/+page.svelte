@@ -161,6 +161,10 @@
           onRetryFailedSyncs={sync.retryFailedSyncs}
           onAddFolder={sync.addFolder}
           onRemoveFolder={sync.removeFolder}
+          isTargetAlbumModalOpen={sync.isTargetAlbumModalOpen}
+          pendingFolderPath={sync.pendingFolderPath}
+          onConfirmAddFolder={sync.confirmAddFolder}
+          onCancelAddFolder={sync.cancelAddFolder}
         />
       <!-- ===== SETTINGS VIEW ===== -->
       {:else if currentView === "settings"}

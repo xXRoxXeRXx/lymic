@@ -1,4 +1,4 @@
-﻿import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import type { FailedSyncEntry, LogEntry, SyncStatus, WatchedFolder } from "../components/types";
 import { subscribeToSyncEvents } from "../tauri/sync-event-subscription";
@@ -23,6 +23,8 @@ export function createSyncController(options: {
   let failedSyncs = $state<FailedSyncEntry[]>([]);
   let logs = $state<LogEntry[]>([]);
   let isSyncActionPending = $state(false);
+  let isTargetAlbumModalOpen = $state(false);
+  let pendingFolderPath = $state<string | null>(null);
   let mounted = false;
   let logCounter = 0;
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -186,13 +188,32 @@ export function createSyncController(options: {
     try {
       const selected = await open({ directory: true, multiple: false, title: options.t("select_folder") });
       if (typeof selected === "string") {
-        await invoke<number>("add_folder", { path: selected });
-        await refreshFolders();
+        pendingFolderPath = selected;
+        isTargetAlbumModalOpen = true;
       }
     } catch (error) {
       console.error("Failed to add folder", error);
       options.reportError(error);
     }
+  }
+
+  async function confirmAddFolder(targetAlbumId: string | null) {
+    if (!pendingFolderPath) return;
+    const path = pendingFolderPath;
+    isTargetAlbumModalOpen = false;
+    pendingFolderPath = null;
+    try {
+      await invoke<number>("add_folder", { path, targetAlbumId });
+      await refreshFolders();
+    } catch (error) {
+      console.error("Failed to add folder", error);
+      options.reportError(error);
+    }
+  }
+
+  function cancelAddFolder() {
+    isTargetAlbumModalOpen = false;
+    pendingFolderPath = null;
   }
 
   async function removeFolder(id: number) {
@@ -264,6 +285,8 @@ export function createSyncController(options: {
     resetTransferStats();
     failedSyncs = [];
     logs = [];
+    isTargetAlbumModalOpen = false;
+    pendingFolderPath = null;
     if (progressResetTimer) clearTimeout(progressResetTimer);
     progressResetTimer = undefined;
   }
@@ -290,6 +313,8 @@ export function createSyncController(options: {
     get failedSyncs() { return failedSyncs; },
     get logs() { return logs; },
     get isSyncActionPending() { return isSyncActionPending; },
+    get isTargetAlbumModalOpen() { return isTargetAlbumModalOpen; },
+    get pendingFolderPath() { return pendingFolderPath; },
     startLifecycle,
     addLog,
     refreshFailedSyncs,
@@ -300,6 +325,8 @@ export function createSyncController(options: {
     syncAction,
     retryFailedSyncs,
     addFolder,
+    confirmAddFolder,
+    cancelAddFolder,
     removeFolder,
   };
 }

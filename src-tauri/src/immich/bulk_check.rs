@@ -53,10 +53,16 @@ pub(super) async fn bulk_check_response_error(response: Response) -> BulkCheckEr
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BulkCheckDuplicate {
+    pub hash: String,
+    pub asset_id: Option<super::ids::RemoteAssetId>,
+}
+
 pub(super) fn parse_bulk_check_response(
     data: &serde_json::Value,
     requested_hashes: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<BulkCheckDuplicate>, String> {
     let results = data
         .get("results")
         .and_then(serde_json::Value::as_array)
@@ -94,7 +100,18 @@ pub(super) fn parse_bulk_check_response(
             result.get("reason").and_then(serde_json::Value::as_str),
         ) {
             ("accept", None) | ("accept", Some(_)) => {}
-            ("reject", None) | ("reject", Some("duplicate")) => existing.push(id.to_string()),
+            ("reject", None) | ("reject", Some("duplicate")) => {
+                let asset_id = result
+                    .get("assetId")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(super::ids::RemoteAssetId::new);
+                existing.push(BulkCheckDuplicate {
+                    hash: id.to_string(),
+                    asset_id,
+                });
+            }
             ("reject", Some("unsupported-format")) => {
                 return Err(format!("Asset rejected as unsupported format: {}", id))
             }
@@ -120,9 +137,35 @@ pub(super) fn parse_bulk_check_response(
 
 #[cfg(test)]
 mod tests {
-    use super::{bulk_check_status_error, parse_bulk_check_response};
+    use super::{bulk_check_status_error, parse_bulk_check_response, BulkCheckDuplicate};
+    use crate::immich::RemoteAssetId;
     use reqwest::StatusCode;
     use serde_json::json;
+
+    #[test]
+    fn bulk_check_extracts_duplicate_asset_id_when_present() {
+        let hashes = vec!["first".to_string(), "second".to_string()];
+        let response = json!({
+            "results": [
+                { "id": "first", "action": "reject", "reason": "duplicate", "assetId": "asset-uuid-1" },
+                { "id": "second", "action": "reject", "reason": "duplicate" }
+            ]
+        });
+        let duplicates = parse_bulk_check_response(&response, &hashes).unwrap();
+        assert_eq!(
+            duplicates,
+            vec![
+                BulkCheckDuplicate {
+                    hash: "first".to_string(),
+                    asset_id: Some(RemoteAssetId::new("asset-uuid-1")),
+                },
+                BulkCheckDuplicate {
+                    hash: "second".to_string(),
+                    asset_id: None,
+                }
+            ]
+        );
+    }
 
     #[test]
     fn bulk_check_requires_a_complete_valid_response() {
@@ -130,7 +173,10 @@ mod tests {
         let valid = json!({ "results": [{ "id": "first", "action": "reject" }, { "id": "second", "action": "accept" }] });
         assert_eq!(
             parse_bulk_check_response(&valid, &hashes).unwrap(),
-            vec!["first".to_string()]
+            vec![BulkCheckDuplicate {
+                hash: "first".to_string(),
+                asset_id: None,
+            }]
         );
         for invalid in [
             json!({}),

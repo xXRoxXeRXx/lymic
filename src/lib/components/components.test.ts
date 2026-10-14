@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import ActivityLog from "./ActivityLog.svelte";
 import DashboardView from "./DashboardView.svelte";
@@ -8,7 +8,12 @@ import FailedSyncsModal from "./FailedSyncsModal.svelte";
 import FolderList from "./FolderList.svelte";
 import LoginView from "./LoginView.svelte";
 import SettingsView from "./SettingsView.svelte";
+import TargetAlbumModal from "./TargetAlbumModal.svelte";
 
+const tauri = vi.hoisted(() => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
+
+beforeEach(() => tauri.invoke.mockResolvedValue([]));
 afterEach(cleanup);
 
 describe("LoginView", () => {
@@ -37,6 +42,9 @@ describe("LoginView", () => {
     expect(screen.getByText("In Immich, create an API key under Account Settings -> API Keys.")).toBeInTheDocument();
     expect(screen.getByText("asset.upload")).toBeInTheDocument();
     expect(screen.getByText("asset.read")).toBeInTheDocument();
+    expect(screen.getByText("album.read")).toBeInTheDocument();
+    expect(screen.getByText("album.create")).toBeInTheDocument();
+    expect(screen.getByText("albumAsset.create")).toBeInTheDocument();
     expect(screen.getByText("user.read")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Close API key help" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -178,11 +186,33 @@ describe("FolderList and ActivityLog", () => {
   it("renders data and forwards folder callbacks", async () => {
     const onAddFolder = vi.fn();
     const onRemoveFolder = vi.fn();
-    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }], onAddFolder, onRemoveFolder });
+    tauri.invoke.mockResolvedValue([{ id: "album-1", albumName: "Summer holidays" }]);
+    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder });
+    expect(await screen.findByText("Target Album: Summer holidays")).toBeInTheDocument();
     await fireEvent.click(screen.getAllByRole("button")[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Remove folder: C:/photos" }));
     expect(onAddFolder).toHaveBeenCalledOnce();
     expect(onRemoveFolder).toHaveBeenCalledWith(1);
+  });
+
+  it("loads the name when a folder is assigned an album created after mount", async () => {
+    tauri.invoke
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "new-album", albumName: "Roadtrip" }]);
+    const { rerender } = render(FolderList, {
+      watchedFolders: [],
+      onAddFolder: vi.fn(),
+      onRemoveFolder: vi.fn(),
+    });
+
+    await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("get_albums"));
+    rerender({
+      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "new-album" }],
+      onAddFolder: vi.fn(),
+      onRemoveFolder: vi.fn(),
+    });
+
+    expect(await screen.findByText("Target Album: Roadtrip")).toBeInTheDocument();
   });
 
   it("renders the empty folder state", () => {
@@ -262,5 +292,138 @@ describe("SettingsView", () => {
     expect(onUploadParallelismChange).toHaveBeenCalledOnce();
     expect(onCheckForUpdates).toHaveBeenCalledOnce();
     expect(onLogout).toHaveBeenCalledOnce();
+  });
+});
+
+describe("TargetAlbumModal", () => {
+  it("renders with 'No album' selected by default and fetches existing albums", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") {
+        return Promise.resolve([
+          { id: "1", albumName: "Vacation" },
+          { id: "2", albumName: "Family" },
+        ]);
+      }
+      return Promise.resolve();
+    });
+
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "C:/Users/test/Pictures/Holiday",
+      onConfirm,
+      onCancel,
+    });
+
+    expect(screen.getByRole("heading", { name: "Select Target Album" })).toBeInTheDocument();
+    expect(screen.getByText('Select an optional Immich album for "Holiday"')).toBeInTheDocument();
+    expect(screen.getByText("No album (Default)")).toBeInTheDocument();
+
+    expect(await screen.findByText("Family")).toBeInTheDocument();
+    expect(screen.getByText("Vacation")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Add folder" }));
+    expect(onConfirm).toHaveBeenCalledWith(null);
+  });
+
+  it("selects an existing album and confirms", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") {
+        return Promise.resolve([
+          { id: "alb-1", albumName: "Summer 2026" },
+        ]);
+      }
+      return Promise.resolve();
+    });
+
+    const onConfirm = vi.fn();
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "D:/Photos",
+      onConfirm,
+      onCancel: vi.fn(),
+    });
+
+    const albumBtn = await screen.findByText("Summer 2026");
+    await fireEvent.click(albumBtn);
+    await fireEvent.click(screen.getByRole("button", { name: "Add folder" }));
+    expect(onConfirm).toHaveBeenCalledWith("alb-1");
+  });
+
+  it("validates album creation rejecting empty or whitespace names", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") return Promise.resolve([]);
+      return Promise.resolve();
+    });
+
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "D:/Photos",
+      onConfirm: vi.fn(),
+      onCancel: vi.fn(),
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Create new album" }));
+    const input = screen.getByPlaceholderText("Album name...");
+    const createBtn = screen.getByRole("button", { name: "Create" });
+
+    await fireEvent.input(input, { target: { value: "   " } });
+    await fireEvent.click(createBtn);
+    expect(screen.getByText("Album name cannot be empty")).toBeInTheDocument();
+
+    tauri.invoke.mockImplementation((command: string, args?: { name?: string }) => {
+      if (command === "create_album") {
+        return Promise.resolve({ id: "new-alb", albumName: args?.name ?? "" });
+      }
+      return Promise.resolve();
+    });
+
+    await fireEvent.input(input, { target: { value: "Roadtrip" } });
+    await fireEvent.click(createBtn);
+    expect(tauri.invoke).toHaveBeenCalledWith("create_album", { name: "Roadtrip" });
+    expect(await screen.findByText("Roadtrip")).toBeInTheDocument();
+  });
+
+  it("handles loading failure with retry and proceed without album", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") return Promise.reject(new Error("Network offline"));
+      return Promise.resolve();
+    });
+
+    const onConfirm = vi.fn();
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "D:/Photos",
+      onConfirm,
+      onCancel: vi.fn(),
+    });
+
+    expect(await screen.findByText("Failed to load albums")).toBeInTheDocument();
+    expect(screen.getByText("Network offline")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Proceed without album" }));
+    expect(onConfirm).toHaveBeenCalledWith(null);
+  });
+
+  it("aborts folder addition on cancel or Escape", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") return Promise.resolve([]);
+      return Promise.resolve();
+    });
+
+    const onCancel = vi.fn();
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "D:/Photos",
+      onConfirm: vi.fn(),
+      onCancel,
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancel).toHaveBeenCalledOnce();
+
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(onCancel).toHaveBeenCalledTimes(2);
   });
 });
