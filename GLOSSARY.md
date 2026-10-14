@@ -8,6 +8,14 @@ Lymic is a desktop client that brings local media into an Immich library. It own
 A configured local directory whose supported media Lymic discovers and keeps under observation. A Watched Folder may have one Target Album.
 _Avoid_: sync folder, source folder, monitored folder
 
+**Removable Watched Folder**:
+A Watched Folder located on removable storage, bound to a Volume Identifier and relative path so Lymic can follow mount point changes.
+_Avoid_: removable source, external folder, camera source
+
+**Volume Identifier**:
+An opaque, operating-system-provided stable identifier for a storage volume that persists across reboots, mount paths, and drive letters.
+_Avoid_: drive letter, mount point, volume label
+
 **Immich Server**:
 The configured Immich deployment that receives media from Lymic.
 _Avoid_: cloud, backend, remote folder

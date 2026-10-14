@@ -8,7 +8,7 @@ Lymic is a cross-platform Tauri desktop client that **uploads** media from local
 
 It is not a bidirectional filesystem mirror: it neither downloads remote assets nor applies remote deletions or renames locally. Preserve that boundary unless the product decision explicitly changes it.
 
-Use the defined terms in [`GLOSSARY.md`](../../GLOSSARY.md): **Watched Folder**, **Target Album**, **Album Assignment**, and **Upload Unit**. Target-album behaviour is governed by [ADR-0001](../adr/0001-folder-target-albums.md).
+Use the defined terms in [`GLOSSARY.md`](../../GLOSSARY.md): **Watched Folder**, **Removable Watched Folder**, **Target Album**, **Album Assignment**, and **Upload Unit**. Target-album behaviour is governed by [ADR-0001](../adr/0001-folder-target-albums.md); removable-volume behaviour is governed by [ADR-0002](../adr/0002-removable-watched-folders.md).
 
 ## Runtime shape
 
