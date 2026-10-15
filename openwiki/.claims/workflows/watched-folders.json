@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:2c990b8c2f33acc35ee04db29860559c2d8fc93dcbe68fc1db937681dd7391fc",
+  "claims": [
+    {
+      "id": "claim_addffc2e2a704657a6384177bd1284dc",
+      "statement": "Adding a folder normalizes its path, rejects duplicate or overlapping roots, persists unavailable folders with deferred watching, and asynchronously scans available folders.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/folders.rs",
+          "version": "repo-file-v1:sha256:dd2f2722a390fe7c82b94b1c9534d115f231724cb38612faa482484c922a63d1"
+        }
+      ]
+    },
+    {
+      "id": "claim_540cf35b943f45a2b59fddf90011ffea",
+      "statement": "Media assets are grouped into an Upload Unit only when an allowed image/video live-photo pair is found; otherwise assets remain single units.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/media/model.rs",
+          "version": "repo-file-v1:sha256:1592c787630cc8d2e1f025ffc9dc8a6896dbaaf0784e2e5c7f1274d27e21eb46"
+        }
+      ]
+    },
+    {
+      "id": "claim_6a825609ed4841ccaf8ae8eb8b4e5c29",
+      "statement": "The removable-folder ADR specifies a stable volume identifier and volume-relative path, remapping persisted paths after reconnect.",
+      "evidence": [
+        {
+          "resource": "repo://docs/adr/0002-removable-watched-folders.md",
+          "version": "repo-file-v1:sha256:7c1b9f147930e595491c11c8aae6662affb2a9873891f31d921aa03075860ad2"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T07:26:54.164Z"
+  }
+}

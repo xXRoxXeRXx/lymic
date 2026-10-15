@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:69b0dbb36249b35235274643b974ecf1938bb6430d5ba049fd474b2499ab5234",
+  "claims": [
+    {
+      "id": "claim_8700b87e268a445eb47167da9857e8a3",
+      "statement": "The durable synchronization model uses one job with RUNNING, PAUSED, or IDLE status and ordered queue entries with PENDING, SYNCED, or FAILED status.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/migrations/0004_sync_queue.sql#L1-L27",
+          "version": "repo-lines-v1:sha256:2c1c7fce0f193b9dbd00d5a5d141556942cb48d9608b7436b900e371e3797d6c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA0NTE3OWYyM2MwYjJiYWM1ZTlhMTA5ODdiYWQ2MmM3NmFmZWM4MTcxNWY3OTZkZjQxMzRiNDQ5NGYyNWQ3YzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwYzZjYTY0ODJkZGRiODY0OGQxYmVlMjkyOWJkYzdkNjFhNzY1NzMzZDgwOTE0ODQzOGVhNjNmNjRkNjY5M2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUwZDg2ZGMyNjgxMmRjZDMzM2VhNjRkMzg4ZmJkMzYyNmE5M2Y2YzU5ZWNkYmMwYTljNDQ3YTY5MTUxYmFlMDkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1387133bd80d4a8cb4def7ec3c7f04e7",
+      "statement": "Database initialization verifies SQLite before running migrations and can quarantine, rebuild, and restore watched folders from an unusable database.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/db/init.rs#L71-L226",
+          "version": "repo-lines-v1:sha256:5ed21db31c54b358b38c029c7f56d96eede08aec571ce7d084ee7f30ff8ad08d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTU2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmOWFhMzQ2ODlkYzY0MDdhODA3ZThmNmVkYjMwOThhOTRkYmQ3YTE3MzVlNDU5Nzg4MzJjM2RjOGQ2N2NkOTc4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzM2I0YjQ3OWJlNTg2YzM4NWI2NDUwYjFmYWNjOWYwMjc1ZTc5NTNmMTZkZjI0YTYxZmE3ZDJmYTUyZjFmYjNmIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhMjRmNzQ0YWZiZDE2OTg3ODBiNzk4ZjAyOGM0NzQwNjc0ZWJhNTM1MzA2MzExYThjMWVlMDFiNmIyOGM2MGNiIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIyN2UwMzg2MGZmMmZhMWFlZjEwYzZjMTE5YTcyZWFkNTM5ZWJkMmQ2YmEzOGRmYjU0MWMyM2E5NzdhOTEwYzU5In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_ee440c20049541f7a5b6c234fab5ac9d",
+      "statement": "Startup recovers synchronization state and initializes the coordinator paused when the recovered snapshot is PAUSED.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/startup.rs#L184-L192",
+          "version": "repo-lines-v1:sha256:8b366e653e535b60e3c80b973ecf96628e5355c29d76496a49c4de92c5b327b6:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzFhM2QwZTNiM2RiNmQxNmZmMDg4ZDMzMjkwMzA4ZTgxOGQ4MjY5NmEzN2U3OGZlMTA4YzhkM2ZmMDQyMDkyNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzcyNWI0OTU3ODdkOGQxM2M0ZGZhOWQ0YTk1MzU4ZDk1MGIyY2YzMzI3YzI4NmY2YTU2NThhYTE5MTA2OTNiYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTVmNzAzMTI1ZjhlNGQzZGEzN2NiOTMwMmU1NTZlNWFmYzdmNWNkMTQ5OTI0ZTNmNTBkMDdjZTcyYmE2MDQ2OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTYyYzg3YjEzNzM5ZjFkNjgyY2NkYzIzM2M1YmZmN2FhOTZkZDE1ZTQ4NWNhZWIyZDc2MjUxNTRhYTk1ZmVkYyJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/app/startup.rs#L56-L72",
+          "version": "repo-lines-v1:sha256:fdfd947dd879c9bac232bfd486354b852671bdb58621232d24e5663e06400e61:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZTQyMDhjZDZmZmI4YzRhMzU0N2IyZjU0YWRhMTk5NzhjM2YzNjVlNzhmOTUwMmVmNTE0NWNkZDJhYTg1NDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdkOTE2MWMyMGE5ZjhkMTMyYmQ5OWMxMDY4ZWJkNjkyYTdkMWM2MmU1ZWQ5NWQ4MjEyNjE5ZmEyMjFiNGFiMDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiMmEyNTNlZDMzNjc1OTMwNWE4N2ZmYzE3OGUxYjM3N2ViZDA4MDAyY2NjMzU1ZjQ4ZDk5M2RkYjViZGUwNmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2ZDIwNzJlMDU1MThmNjhmMDUyNzE0NjViMTIzOTkxMDQ5M2E4OWJkMGY2ODg1M2UxN2NmYzExZDY3MWY2NDEifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T07:26:54.164Z"
+  }
+}

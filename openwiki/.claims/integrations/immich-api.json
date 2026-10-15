@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:3b6d8662106fb2d98ae76d4999bd68b6ad9ebb47c287ac3240184dd738975546",
+  "claims": [
+    {
+      "id": "claim_5986f8a42bb040b58fd6602e16258dae",
+      "statement": "Bulk-check parsing requires a complete response for the requested hashes and classifies unauthorized and forbidden responses as non-retryable.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/immich/bulk_check.rs",
+          "version": "repo-file-v1:sha256:1c840f9d1b2a634425b9fd7007e3df46ea675ca390de18dc33876965b791a978"
+        }
+      ]
+    },
+    {
+      "id": "claim_f247cf043b6b4823bf0639be9310aa3d",
+      "statement": "Upload payload construction streams asset, live-photo, and optional XMP sidecar files from disk and rejects a sidecar larger than 10 MiB.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/immich/upload.rs",
+          "version": "repo-file-v1:sha256:6e00ee1e67adcd0e067261627bd9dacf3c61cb5a8eb39f62dfbc5dafe062470b"
+        }
+      ]
+    },
+    {
+      "id": "claim_b02eecf308b44e4baa1cb9532d9a4451",
+      "statement": "Target-album assignment batches pending units by album and marks affected queue work failed when the album operation fails.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/sync/album_batch.rs",
+          "version": "repo-file-v1:sha256:c2503ee9a857654d77aa40dd9a7db0535932ca5801dd688d21c132b1f0cead8a"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T07:26:54.164Z"
+  }
+}

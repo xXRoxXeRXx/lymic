@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:b00fd36974b7d231c96e1bad925bde46059fb2d1fa146e298c9f4e5bfe4ecf5b",
+  "claims": [
+    {
+      "id": "claim_afeedd4cb859431c9a37bc5a7e691a7d",
+      "statement": "Credential configuration is serialized to a native keyring entry and its Debug implementation redacts the API key and Cloudflare client secret.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/auth.rs",
+          "version": "repo-file-v1:sha256:8d1d3a480cfb67393fd23af76a308262d3bd3ae8e7606ae61c31eaf7a6b0b58c"
+        }
+      ]
+    },
+    {
+      "id": "claim_3ef84c1f928e4d2f85d471eaab957143",
+      "statement": "ImmichClient requires HTTPS except for explicitly enabled loopback HTTP, rejects credentials/query/fragments in URLs, and disables redirects.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/immich/client.rs",
+          "version": "repo-file-v1:sha256:faf94a399bfce8eb6a619d4cd45184ac250cd23d0fb6d502fdfd4c95fc9de7d9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b630f42f51e14431876b7c0916ad14db",
+      "statement": "Login validates the connection before storing credentials and sanitizes credential values from audit failure records.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs",
+          "version": "repo-file-v1:sha256:a95e006b6627de464b3b5bfac412ff7c5e7d5cbc492d3018e5c0acc96bf9f6dc"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T07:26:54.164Z"
+  }
+}

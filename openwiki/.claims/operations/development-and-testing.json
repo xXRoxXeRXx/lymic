@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:75ef81918ac8fe2f4f840e7df1e83c94164358012497301fa92fd771e0b3abed",
+  "claims": [
+    {
+      "id": "claim_cfbbe8313c3d41da8e6f2258cee78de1",
+      "statement": "The package scripts provide Vite development, Vitest, Svelte checking, and Tauri CLI entrypoints.",
+      "evidence": [
+        {
+          "resource": "repo://package.json",
+          "version": "repo-file-v1:sha256:d25a90805cab901ff64ea307c5031f655c764add49f17e26000571971f21563a"
+        }
+      ]
+    },
+    {
+      "id": "claim_2498614b4e644df5ad595dcb332f8f65",
+      "statement": "The application audit facade obtains the managed AuditLogger and emits a UI error log if logging is unavailable or append fails.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/audit/mod.rs",
+          "version": "repo-file-v1:sha256:b22e7e6488a7778674ab17ec4b0c380210c1e1fb90a9d75890f2b78bc740e36f"
+        }
+      ]
+    },
+    {
+      "id": "claim_662dc0028cb645eb85ae54a37538837a",
+      "statement": "The application map specifies frontend and Rust verification commands and calls out migrations, pause/recovery, credentials, queue retry, duplicates, and target-album failures as high-risk behavior.",
+      "evidence": [
+        {
+          "resource": "repo://docs/agents/application-map.md",
+          "version": "repo-file-v1:sha256:c76e136a52aec96ff1cd27bcb2a411d6b9a3e79c36f84666f84eef2f00938b68"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T07:26:54.164Z"
+  }
+}

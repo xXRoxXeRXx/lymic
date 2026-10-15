@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:3f25ab7e9d8e0509274dcd5c35b744118c909122d00806ee11844e34daa19b96",
+  "claims": [
+    {
+      "id": "claim_99287093a01f4ccfb333967e8eab9e3d",
+      "statement": "The Tauri composition root installs desktop plugins, initializes startup state, spawns background work, sets up the tray, registers IPC commands, and hides the main window on close.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/mod.rs#L18-L116",
+          "version": "repo-lines-v1:sha256:c5005b7cc56db0416fc2add019c9a18071c5f96b2859a3a06be05a3f29c3940e:eyJzZWxlY3RlZExpbmVDb3VudCI6OTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhOGRhNzUxNTdmNDk5MWFlZmExMGE4OTM5ODczM2FlNzg0NzI1YTRiODFlYmExYzYxOGQ2MmNmZTMzZGJhNWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjY2E1ZTdmNTUxMmNkOTNjYTc5MWMxOWYyMmUxNTQzYjFkN2E2YjgzYWM5OGZiNjZmNjZmMmRiMGE4YmRlZTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRiN2UxMDM5OTEwNjMyZDE3MGEwY2IxZjE3MmJlMzg2ZjA2OTU3YTJhNzYyZGViNTg3YzRhNWRhZjFkYzIxYzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljYjhiODg3ODQ1Mzg1OGNiNDgwNDM0ZGJkMDc2MTZlYTdmMjFhMjhiMzhjMGNmNzFjNGE5NzNmZjIyZmRiZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fd760f7b1e0a45cf8791178d3029709e",
+      "statement": "The root Svelte route creates controllers for feedback, synchronization, authentication, preferences, and updates; on mount it hydrates backend state and installs synchronization subscriptions.",
+      "evidence": [
+        {
+          "resource": "repo://src/routes/%2Bpage.svelte#L1-L55",
+          "version": "repo-lines-v1:sha256:d9a458aea2b59e35599d956527b9a2cf434e05a2c2a7822ba7509bc7a1793b8d:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk0YWJjOGVkNzU0MzgyMjA2NWMwMjlmNWVhMjUyZDEyMjNkNzZhYTdkMmQzZDRmYjEyNTgxMmY2YjVhOTlkZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQwZmUxYzBhZmE5NzFmY2EwY2M2NzZiNDBmMzdlY2YyYzRkZGU4ZDEyNzc1YzZiNTI0NTU2NzNiOTE1OTM4MTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_64242c3105b041369dea2b47f9d737c3",
+      "statement": "Automatic scan results are persisted to the queue before a runner is scheduled, and a restored pause prevents the runner from starting.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L77-L122",
+          "version": "repo-lines-v1:sha256:3079aa503aa33e96d53dcd8e04ab6ff31df2b54a4ade0b43dabfab677096d331:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MjJjNDJjZDE5YzZkMDNkODA4YzQ1MjcyMDU1MjgyNWI3ZWExYzViNDkxYjIxODUxMWNhYzc0MTVjZjlkOWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyYjQwNWJhMWE0ZGQyMmNiZDc3OTBjMDczNzJlNDI3YThhMzk0OTJiZmU3NDIyMGQ4MWFiYTIxOWQ3MTZmNGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZkZjQ3OTE3OWI1YTIwZTliM2M4MjFjOTZmNzdmOWJjM2M4M2VmMGVlMDcyZGZhY2Y2NGE0YmYzZjQzMTQ0ODQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFmODc1YjE4ZjVkY2QxZTEyNGFhMGI2Mzg5NWNlMjYzYmQwMjBmYjk3OGZmNjdiNmMyZDM4YTQzZjFkNmYxMzUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T07:26:54.164Z"
+  }
+}

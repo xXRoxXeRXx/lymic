@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:8d8e21ee92032a276ab262b279d9e796926a25e788b7bc2994fcf11a32e368f6",
+  "claims": [
+    {
+      "id": "claim_307a20f803294b5582675f834f48ba0a",
+      "statement": "The frontend subscription helper registers the synchronization event names and removes resolved listeners when disposed.",
+      "evidence": [
+        {
+          "resource": "repo://src/lib/tauri/sync-event-subscription.ts",
+          "version": "repo-file-v1:sha256:48e489a9b7c006ce4a4341cf769abc18bb00b51147b00984194af57e0e4a032b"
+        }
+      ]
+    },
+    {
+      "id": "claim_0fbffafac8db4fe8a17333796745cff8",
+      "statement": "The manual sync command prevents concurrent starts, persists RUNNING status, scans folders, and delegates execution to the synchronization pipeline.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/sync.rs",
+          "version": "repo-file-v1:sha256:2275ad3332e53a6798afca4f55cee7e4d421d715c62e1e15ed8ead89f346f951"
+        }
+      ]
+    },
+    {
+      "id": "claim_f16f7ec707b245be9194f234f425cc32",
+      "statement": "The backend emits a structured log-message event with normalized log level, timestamp, optional translation key, and parameters.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/events.rs",
+          "version": "repo-file-v1:sha256:3685360200f06fc82a0c6fe87ea94a9a601a94916f5cbca7a6f97ebe03638e13"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T07:26:54.164Z"
+  }
+}

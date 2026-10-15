@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:dfa8c510246c5c03a5b673434624d8981db72e92dd0ed4e5250780884dfb82a7",
+  "claims": [
+    {
+      "id": "claim_655ad282a57142a1afaa65a72307e791",
+      "statement": "Lymic is an upload-oriented desktop client for bringing media from local folders into an Immich library and does not mirror remote assets back to the filesystem.",
+      "evidence": [
+        {
+          "resource": "repo://README.md",
+          "version": "repo-file-v1:sha256:058aca663459392e0cacee26e93d9cf3af4a3752fc849531ffc59cde11364c49"
+        }
+      ]
+    },
+    {
+      "id": "claim_22a2e9a81a8f4cf386fae118420a7d76",
+      "statement": "The application map identifies app/mod.rs as the runtime composition root and +page.svelte as the UI composition entrypoint.",
+      "evidence": [
+        {
+          "resource": "repo://docs/agents/application-map.md",
+          "version": "repo-file-v1:sha256:c76e136a52aec96ff1cd27bcb2a411d6b9a3e79c36f84666f84eef2f00938b68"
+        }
+      ]
+    },
+    {
+      "id": "claim_a1da27f401ce4f00a19dd267f3adc1d4",
+      "statement": "The package provides a Tauri development command as npm run tauri dev.",
+      "evidence": [
+        {
+          "resource": "repo://package.json",
+          "version": "repo-file-v1:sha256:d25a90805cab901ff64ea307c5031f655c764add49f17e26000571971f21563a"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T07:26:54.164Z"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d474326a9b3e1c83c30b898bf4b750b687b216558ec1972009347d3ac94c6eb1",
+  "claims": [
+    {
+      "id": "claim_848996a20edf4179920298c99a8f4a33",
+      "statement": "The manual sync command scans configured folders and passes its result into the synchronization pipeline after durable status is set to RUNNING.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/sync.rs",
+          "version": "repo-file-v1:sha256:2275ad3332e53a6798afca4f55cee7e4d421d715c62e1e15ed8ead89f346f951"
+        }
+      ]
+    },
+    {
+      "id": "claim_6f16f126bf464dedbd3da8ecfe97f73e",
+      "statement": "Resume starts recovered work from pending persisted queue items with an empty scan result when no in-memory runner owns the coordinator lock.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/sync.rs",
+          "version": "repo-file-v1:sha256:2275ad3332e53a6798afca4f55cee7e4d421d715c62e1e15ed8ead89f346f951"
+        }
+      ]
+    },
+    {
+      "id": "claim_1c0901319e0f4cfaa33cfc097df727a8",
+      "statement": "The application map defines discovery, hashing, bulk checking, durable queue processing, and target-album assignment as the synchronization lifecycle.",
+      "evidence": [
+        {
+          "resource": "repo://docs/agents/application-map.md",
+          "version": "repo-file-v1:sha256:c76e136a52aec96ff1cd27bcb2a411d6b9a3e79c36f84666f84eef2f00938b68"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T07:26:54.164Z"
+  }
+}
