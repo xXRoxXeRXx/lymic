@@ -67,6 +67,7 @@
   "logout_confirmation": "Вы действительно хотите выйти?",
   "select_folder": "Выбрать папку",
   "target_album": "Целевой альбом",
+  "target_album_unavailable": "Альбом недоступен",
   "target_album_modal_title": "Выбор целевого альбома",
   "target_album_modal_subtitle": "Выберите необязательный альбом Immich для папки «{folder}»",
   "target_album_none": "Без альбома (по умолчанию)",

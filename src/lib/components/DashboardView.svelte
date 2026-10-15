@@ -5,6 +5,7 @@
   import FolderList from "./FolderList.svelte";
   import ActivityLog from "./ActivityLog.svelte";
   import TargetAlbumModal from "./TargetAlbumModal.svelte";
+  import { createTargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { DashboardViewState } from "../controllers/sync-controller.svelte";
 
   interface Props {
@@ -13,6 +14,7 @@
   }
 
   let { dashboard, serverUrl }: Props = $props();
+  const targetAlbumCatalogue = createTargetAlbumCatalogue();
 
   const transferredBytes = $derived(dashboard.transferredBytes);
   const transferRateBytesPerSecond = $derived(dashboard.transferRateBytesPerSecond);
@@ -86,7 +88,7 @@
   <FailedSyncsModal failedSyncs={dashboard.failedSyncs} syncStatus={dashboard.syncStatus} onRetry={dashboard.onRetryFailedSyncs} />
 </section>
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
-  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} />
+  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} catalogue={targetAlbumCatalogue} />
   <ActivityLog logs={dashboard.logs} />
 </div>
 
@@ -95,4 +97,5 @@
   folderPath={dashboard.pendingFolderPath ?? ""}
   onConfirm={dashboard.onConfirmAddFolder}
   onCancel={dashboard.onCancelAddFolder}
+  catalogue={targetAlbumCatalogue}
 />

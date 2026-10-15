@@ -1,21 +1,18 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { AlertCircle, Check, Loader2, Plus, RefreshCw, Search, X } from "lucide-svelte";
   import { t } from "svelte-i18n";
-  import type { Album } from "./types";
+  import { createTargetAlbumCatalogue, type TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
   interface Props {
     isOpen: boolean;
     folderPath: string;
     onConfirm: (targetAlbumId: string | null) => void;
     onCancel: () => void;
+    catalogue?: TargetAlbumCatalogue;
   }
 
-  let { isOpen, folderPath, onConfirm, onCancel }: Props = $props();
+  let { isOpen, folderPath, onConfirm, onCancel, catalogue = createTargetAlbumCatalogue() }: Props = $props();
 
-  let albums = $state<Album[]>([]);
-  let isLoading = $state(true);
-  let loadError = $state<string | null>(null);
   let selectedAlbumId = $state<string | null>(null);
   let searchQuery = $state("");
   let newAlbumName = $state("");
@@ -27,21 +24,9 @@
 
   const filteredAlbums = $derived(
     searchQuery.trim() === ""
-      ? albums
-      : albums.filter((a) => a.albumName.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+      ? catalogue.albums
+      : catalogue.albums.filter((a) => a.albumName.toLowerCase().includes(searchQuery.trim().toLowerCase()))
   );
-
-  async function fetchAlbums() {
-    isLoading = true;
-    loadError = null;
-    try {
-      albums = await invoke<Album[]>("get_albums");
-    } catch (error) {
-      loadError = typeof error === "string" ? error : (error as Error)?.message || "Failed to load albums";
-    } finally {
-      isLoading = false;
-    }
-  }
 
   async function handleCreateAlbum() {
     createError = null;
@@ -52,8 +37,7 @@
     }
     isCreating = true;
     try {
-      const created = await invoke<Album>("create_album", { name: trimmed });
-      albums = [...albums, created].sort((a, b) => a.albumName.toLowerCase().localeCompare(b.albumName.toLowerCase()));
+      const created = await catalogue.create(trimmed);
       selectedAlbumId = created.id;
       newAlbumName = "";
       isCreatingOpen = false;
@@ -85,7 +69,7 @@
       newAlbumName = "";
       createError = null;
       isCreatingOpen = false;
-      void fetchAlbums();
+      void catalogue.refresh();
     }
   });
 </script>
@@ -123,20 +107,20 @@
         </button>
       </div>
 
-      {#if loadError}
+      {#if catalogue.error}
         <div class="p-4 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 space-y-3">
           <div class="flex items-start gap-2.5 text-xs text-red-600 dark:text-red-400">
             <AlertCircle class="w-4 h-4 mt-0.5 shrink-0" />
             <div class="space-y-1">
               <p class="font-bold">{$t("target_album_load_error")}</p>
-              <p class="text-slate-600 dark:text-slate-300">{loadError}</p>
+              <p class="text-slate-600 dark:text-slate-300">{catalogue.error}</p>
             </div>
           </div>
           <div class="flex items-center gap-3 pt-1">
             <button
               type="button"
               class="flex items-center gap-1.5 rounded-lg bg-red-100 dark:bg-red-900/60 px-3 py-1.5 text-xs font-bold text-red-700 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900"
-              onclick={fetchAlbums}
+              onclick={catalogue.refresh}
             >
               <RefreshCw class="w-3.5 h-3.5" />
               {$t("target_album_retry")}
@@ -183,7 +167,7 @@
             {/if}
           </button>
 
-          {#if isLoading}
+          {#if catalogue.isLoading}
             <div class="py-6 flex items-center justify-center gap-2 text-xs text-slate-400">
               <Loader2 class="w-4 h-4 animate-spin" />
               <span>{$t("target_album_loading")}</span>

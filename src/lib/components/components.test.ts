@@ -388,6 +388,9 @@ describe("TargetAlbumModal", () => {
     expect(screen.getByText("Album name cannot be empty")).toBeInTheDocument();
 
     tauri.invoke.mockImplementation((command: string, args?: { name?: string }) => {
+      if (command === "get_albums") {
+        return Promise.resolve([{ id: "new-alb", albumName: "Roadtrip" }]);
+      }
       if (command === "create_album") {
         return Promise.resolve({ id: "new-alb", albumName: args?.name ?? "" });
       }

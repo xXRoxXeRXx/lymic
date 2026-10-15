@@ -67,6 +67,7 @@
   "logout_confirmation": "هل أنت متأكد من رغبتك في تسجيل الخروج؟",
   "select_folder": "تحديد مجلد",
   "target_album": "الألبوم المستهدف",
+  "target_album_unavailable": "الألبوم غير متاح",
   "target_album_modal_title": "تحديد الألبوم المستهدف",
   "target_album_modal_subtitle": "حدد ألبوم Immich اختياري للمجلد \"{folder}\"",
   "target_album_none": "بدون ألبوم (افتراضي)",

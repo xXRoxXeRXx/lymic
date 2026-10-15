@@ -67,6 +67,7 @@
   "logout_confirmation": "Tem certeza de que deseja sair?",
   "select_folder": "Selecionar pasta",
   "target_album": "Álbum de destino",
+  "target_album_unavailable": "Álbum indisponível",
   "target_album_modal_title": "Selecionar álbum de destino",
   "target_album_modal_subtitle": "Selecione um álbum opcional do Immich para \"{folder}\"",
   "target_album_none": "Nenhum álbum (Padrão)",
