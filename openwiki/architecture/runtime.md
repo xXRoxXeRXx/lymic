@@ -7,13 +7,25 @@ verified:
   - by: openwiki/0.7.2
     at: 2026-10-15T14:38:41.442Z
 sources:
+  - id: openwiki-source-3638749eb6f61a23896edb4d
+    resource: repo://src-tauri/src/app/background.rs
+  - id: openwiki-source-11d0a4fc3a0d3b69fb50a64d
+    resource: repo://src-tauri/src/app/events.rs
   - id: openwiki-source-4e434927bce2240ac81949ac
     resource: repo://src-tauri/src/app/mod.rs
+  - id: openwiki-source-2fd48a041dfbcb39bc092be1
+    resource: repo://src-tauri/src/app/startup.rs
+  - id: openwiki-source-ccc0cb371a1c02a3941c4ffb
+    resource: repo://src-tauri/src/app/tray.rs
   - id: openwiki-source-d86d6ce7cb2c85ce2672a18b
     resource: repo://src-tauri/src/sync/service.rs
+  - id: openwiki-source-9d08ef4075c63d08906a8b88
+    resource: repo://src/lib/controllers/sync-controller.svelte.ts
+  - id: openwiki-source-88425a733aa79bac537f50d8
+    resource: repo://src/lib/tauri/sync-event-subscription.ts
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
-generated: { by: "codex", at: "2026-10-15T07:26:54.164Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-10-15T14:38:41.442Z" }
 ---
 
 # Desktop Runtime and Lifecycle

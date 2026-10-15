@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:3b6d8662106fb2d98ae76d4999bd68b6ad9ebb47c287ac3240184dd738975546",
+  "pageVersion": "sha256:f47d2bbd743aab39f50c80c636d3d9e6ce26751b74cc9a3f54787c2197d1d271",
   "claims": [
     {
       "id": "claim_5986f8a42bb040b58fd6602e16258dae",
@@ -28,13 +28,115 @@
       "evidence": [
         {
           "resource": "repo://src-tauri/src/sync/album_batch.rs",
-          "version": "repo-file-v1:sha256:c2503ee9a857654d77aa40dd9a7db0535932ca5801dd688d21c132b1f0cead8a"
+          "version": "repo-file-v1:sha256:e5ffc8eca9a3f7f1c89aad4fd349806fb4e59bdfae2c7044a6686d90406685bf"
+        }
+      ]
+    },
+    {
+      "id": "claim_ffc44aabd30b410e983fd53dc518c10a",
+      "statement": "Login validates an Immich client with `GET users/me` before storing credentials in the OS keyring; credentials include the server URL, API key, local-HTTP option, and optional Cloudflare Access pair, while debug output redacts the API key and Cloudflare secret.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/auth.rs#L35-L52",
+          "version": "repo-lines-v1:sha256:08b44457c7fc3efe577c765a8748d795ab6a18aa46645a38ecd2fae746a66f9e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhZDg0YjBkZmViYzVhYmVhY2EyYjI5YzI3ZTdmMDU1NmFmMzY5ZmQ2NTgwNjkzM2ViYzYzNzUwM2IxYTM0OGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4OTc3MWZlMWI2NjI4ODc1YWEyM2U3ZGJlNGFhNzE0NjFkMDBjZGZiNjZkZGYxMWI5ZDgyMGFjNTg5N2ZkZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRhZTc1NmEzZjY5ZWY2Y2IxZjU4NTQxZGJkOTAzODc0NDg2NzkxZDQxOTQ3MTQzZDQ1YzJkM2NmNTI0OTZmMTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/auth.rs#L5-L29",
+          "version": "repo-lines-v1:sha256:8cdcca7a9a1b0d6e157b1342c1da75544587a0494440beab29129be872aa2c55:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiMzE1MjhmOGE0YWZhNTNkMDdjMTQzODc1YTZmMTkzMDg1NDJiNmQ4M2I0N2ZiNjE3Y2Y2YjU5NDIyODk3OGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNlN2QwY2FhYWM2YzI0NTk2Nzc1NzdhZTMxMTBlMTU0MTgzNjZmMmZjMWZmZTQ4ZTgwZjA2ZjZhODQwYTBiNTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQyNWZmNDUzMDM5NGUyNjI5ZGU4MDY2MTRhZWUxMGI4MjY3NzMzYjRkY2E3NDE0Mzg4ZGU2YzE0ZTRhNzA4YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs#L19-L69",
+          "version": "repo-lines-v1:sha256:ab1ccedec3c47a7a35aeaacdb4c0ebd6d23c94572edd8a1b5015c691a269dcdb:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlNGY4OWNmOWQ0ZDdhNTdmMDZiOGE1OGJhYmIwMGMxNWE0ZDIyZDQ2ODI4NmI5MmUzYWNiNjQyYjM3M2JhZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlNmRjMTUwZmIwZjg2NzVkM2U2YTVlNTdjNTlhODM5NWIyMjQ1NDJhMTExMWJhZDBmMDZmNTlhMDA5ZGJhZWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3YmJiYzcyYzgxYmRlZWIwOTcyMjNiYzkzMzgzOTc3NGVkMTEwODc2NGNmZjZkMDI2NzU5ZmQyMzJhMzE2YjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ee4014a2f5834211a1f03836754502e8",
+      "statement": "ImmichClient normalizes the configured server URL to an `/api/` base, requires HTTPS except for explicitly enabled loopback HTTP, rejects embedded credentials/query/fragment URLs, disables redirects, and requires both Cloudflare Access credentials when that integration is configured.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/immich/client.rs#L46-L120",
+          "version": "repo-lines-v1:sha256:bb84efa645ba32e38f04001d003f52020f51f9f4ea5baba9ab4ac2b17f531974:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1OWZjNDAwMWJhZDNiZTg5NDEyNmMyZGZkNzUxNmI2ZWU1YTQ0MDg2ODQzNGQ2NTFkYmFiZTc4MGIzODU1YjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFlOTBlMzExZDY1NmQ3MjFiNDA0NmFmNjNhMTkyZTdhYThiMjJiZjllOGMwOWVjNTRiYjE0MTdjM2JlZGIzMDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0NjExOTU4ZDJmMDBmNzQzYTY3ZDhiNjVkOWUwODc2NTEyOTRiYWMzYTdhMTRhZWFkY2RmMjQ0MDg2MzUzZmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9b61f94b089741939db297e32e06e36f",
+      "statement": "ImmichClient bounds parsed successful response bodies to 1 MiB and error diagnostics to 8 KiB, marking truncated error detail.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/immich/response.rs#L3-L74",
+          "version": "repo-lines-v1:sha256:bb292a335c1434e48a33545627642a36aa18fd8d2e96edf521c745dd2d661fc9:eyJzZWxlY3RlZExpbmVDb3VudCI6NzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZDRiZWY3MWUwNzRlNWU2MDIwMjczM2U3ZTVkZWUwODMxZGQyZGIyNzc0YzQxM2NlMjg4MDA1NDYwMGU0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI5MDcwNGU1ZGE1ZTlmYTA4ODY1MDhmYTllMmJhOTk3YTI2M2UxZGM3Mzg3MmQ5MDZmZjVhMTZjNmFjZWEyNzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiYzk4ZDZiMGRjNDkyYzUwMTZkZjEwODA1YTNhNTRlYjljMTg0YTVhNjEzN2U3ZjRiZWNmYTBjMjIwNTUwZDAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dff2db48a2ce43f093a5b9205c305531",
+      "statement": "The album client lists albums sorted case-insensitively, creates only nonblank trimmed names, and sends grouped asset IDs to `PUT albums/{albumId}/assets`; client-level success for assignment is any successful HTTP status because its response body is not parsed.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/immich/album.rs#L15-L94",
+          "version": "repo-lines-v1:sha256:cc0b5204f0ce13112d0a0f5080e65dc2e2f519b2f74db8d03ccc4f83eae2c229:eyJzZWxlY3RlZExpbmVDb3VudCI6ODAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1OWZjNDAwMWJhZDNiZTg5NDEyNmMyZGZkNzUxNmI2ZWU1YTQ0MDg2ODQzNGQ2NTFkYmFiZTc4MGIzODU1YjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZiYzMyNDE0MDkxMmE0MmFlNTFkNzUxZjNlYzFjODkyMWIzMDIyNmRkNzA0MmQ3NDFhOTBjOGQ5Yjc2YTdlMDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5YjA0ZGZkMmZmY2VlYzJhOTJkYWU3MWViYTVhYzE5NzUxOWYzNGUwY2QxZDliOWY2MDUzOTY2ZTFhZDQxZGEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_089394b65e99459aafe374e6a71b5340",
+      "statement": "A duplicate lacking an asset ID is resolved through checksum search only when exactly one remote asset matches; zero or multiple matches prevent target-album assignment.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/immich/album.rs#L96-L147",
+          "version": "repo-lines-v1:sha256:d98599dcf51823220a63b6446d5f8b28a94f320b421484cd43b254d17cc01a70:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlZTFiMDZmZmEyMTE5NzVmYmM2MDBjYWExZGQ3ZmZiOWM1NzIzZmExZGU5NzNjNWExOWMzM2MzMjYwZDgyNzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2MmVlNTdlNDFhOGMyMGFlMDE2NGRmMjYxNDM5ZGNjNDk5ZDM1MjA4MzQxNTE1MTZkMDQ3ZThkZWFlOGE0NjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/album_batch.rs#L16-L50",
+          "version": "repo-lines-v1:sha256:8603638922717eb2ddae7cab1853e3a751804ce42330978b026dbeb3cd93a714:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlYWQ3ZWZkYzk3NGRkNDE5ZmE0ZmQ5YmQ2ZDUyN2U2ZTE3N2I2ZTYxZDdjZmNlNDAwNGQ2ZjY3MmJhOTNmMTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNkNDBlYzQ5YjE4YzYxYTY2MDU0ODEyYjljNDU1OGY1ODk4YWQ2Mzk1YjJmYmEzZGU3ZTM2YzUwZmNhY2E5MzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQwY2YwMjQ5YTVmNWQzNzE3ZTkzYWMxMzRhZDMxOGM2ZDE0Yjc1MzEwNjk0MGJjZmJiYjQwNGFlMmM4MzE0YTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3ad4be5f36a84297a7d7799af15e923c",
+      "statement": "For target-album work, local completion persists the remote asset ID before deferring terminal state, and writes `SYNCED` only after the grouped album API call succeeds; failure paths mark the queue unit failed while preserving the remote ID as a recovery boundary.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/sync/album_batch.rs#L76-L173",
+          "version": "repo-lines-v1:sha256:e971562f53ed64b07530cec8d73fb6018b1d6f784ba00b925a8dac704c5792ef:eyJzZWxlY3RlZExpbmVDb3VudCI6OTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxY2E5NGJlMjUyMmIxNGQyNTUxMWY3NTUwMWU4MWFmNTUzYjI1ZDI2NGY4ZWRiZDYxYmVmMzIzMWU1NmY2Y2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4OTc3MWZlMWI2NjI4ODc1YWEyM2U3ZGJlNGFhNzE0NjFkMDBjZGZiNjZkZGYxMWI5ZDgyMGFjNTg5N2ZkZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI1ZDFkMTE3NzgwY2RhNDlhMWUxYjFiMWU2MThkMGNkNTUzODA3YWQ1MDU1NjVkN2E3Y2IzM2ZhN2YwMDcyMTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwMWNiZDVlYjk4ZGY1MGRkMzMwNTM4N2U3ZmU0M2Q2ODUxMDAzMGY0NWZiNTc0NDYyOTFmYmJmYjU2YmQxYzEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/completion.rs#L116-L177",
+          "version": "repo-lines-v1:sha256:c379a404466ed2ed503941ff76e3fc6aa9c70b82b4eb3039d3123f2cb7517a99:eyJzZWxlY3RlZExpbmVDb3VudCI6NjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNlYTRlYjk0Yjg1NzM5ZTc4MTY0YzNkZGIzYjhjZTdlOTY3MjQ4M2U1YWFjOGFmODc4M2FmY2IwODM3ODRkMDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0NzVlOTRhOTA0YWM0OWIzMTU0ZDQ2NzJhNjZlODYyOWI4NmRhYzc0ZTNlMjkzN2JlNjkyN2FlM2RhMTFjNTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIzOTdmZWRjZWNjMGJjMjMxZGVmNzdiZGNiMWEyMTljY2QzZjUyNjNmMjg2NjFlNzJlNGRkZDAzMTc1ZDgxYmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/completion.rs#L60-L115",
+          "version": "repo-lines-v1:sha256:9f03afd0e52916f19b024e9d8fd74dff04790f26d22418e81e674c7c44917198:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlZDVjOTg1ODdhMDAxZDg0NDNiOGFkZDhhN2YxMTdkMDlhYTlhYWU5MDk4OWJlNzFkZDM4YTJmMzFhNjdiYWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5ZmJjMzkwNGM3N2ExYzIzNTg0NzNhMDJhNDlhYTE3ZGJjNWI0ZDI3OThjY2EwMWFlZmM2ZTVlZWZhNDU1NjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEwN2E3MzIzMzVjOGY4YTFkODY5ZTRmNmRiOGM2ZjY3YzgwNWU5ZWRhZmFiMzIyMWFmMjQyYmY3OGM5YjZkYmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI1OGNjMzYzYzQxYTFjMDVlMWJkZmFjNWJiYmVmMGEwOTBhNDdlOGMzMzMyNzY5MWVlM2EyZGFhZGZhZWIxODMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6b618002fa1d4903b0cad3f387b1769e",
+      "statement": "The processor bulk-checks hashed units in chunks of at most 100, runs uploads up to configured parallelism, and avoids a second upload when local persistence can be reconciled by confirming every unit hash remotely and retrying persistence.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L117-L335",
+          "version": "repo-lines-v1:sha256:9eadd99b5ef45f9711701b641be56d3e7949681d591afdbd1789666337c5d2c0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjE5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzM2NkM2Q3Mzg2MzU3MjdiYWNlZDVkNjUwZGVlOTIzODg5NGVhMDQ4N2E1YTMyMTA2Y2EzOTFiMzI5MDdhMTc4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJlNmIwNDQ5MTQ2OTcyMmU4MzYzYTk0ZTQwNDQ1MzhlMDEzYTJhMjE3ZTM2YjFlNTY4YmE2MGFjYjdiNGM4ZjJlIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5OTliZGVmZWVhY2E2MzQwZTAyOTBkYzg2ZTg4OWM4OWQ1ZTE4OWFhNWJhNDRiNTg1YjNiNzA3MzRmNGE2MmQ4IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlZjUxOGZjMmE0Y2JlMGY4ZDcxZjZhMDBlZmJkZTQwNzhjNjQwYzUwMDNiMjk1NGNlNjc0ZmNkZmIyYzc5MDNmIn0"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L35-L35",
+          "version": "repo-lines-v1:sha256:5512cfd3aab7fb662482eca67945ec774b9e9b4bd1e530c860907071c3c62dd3:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTUxMmNmZDNhYWI3ZmI2NjI0ODJlY2E2Nzk0NWVjNzc0YjllOWI0YmQxZTUzMGM4NjA5MDcwNzFjM2M2MmRkMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTUxMmNmZDNhYWI3ZmI2NjI0ODJlY2E2Nzk0NWVjNzc0YjllOWI0YmQxZTUzMGM4NjA5MDcwNzFjM2M2MmRkMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWE1ZjRiMzc5NDZkOTNjM2JhN2FhYzU3MzhjMTI3ZjlmYzRiYmNjYTcyZGNlNmU5OTM4ZTNmMDIyYmI3NjIwNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTE2MGYxODE4NjU1OWM0M2VkNmE1MDc1NGNhOTMyY2Y5NzgyMmNkZDg3Y2MyZTgyMGI1OWVlYjQxYjFhNTZmYiJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L508-L545",
+          "version": "repo-lines-v1:sha256:6d2fab25d3b801f9f3c2b946b7d527d9d59a9ab5b1fd8cb2d7e180add70deb15:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1Y2Y1ZmMyM2YyYTZkMjNjM2VhNTFlNzJmNWU4OTZjNzU1NWZiYWEwNWNkNWIxZWExODJiZjk2MThhOGU4MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0NzVlOTRhOTA0YWM0OWIzMTU0ZDQ2NzJhNjZlODYyOWI4NmRhYzc0ZTNlMjkzN2JlNjkyN2FlM2RhMTFjNTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNjM2YyYzRjNTkzNjcwMTQ0N2ZiYjI5NDYwYjRkNTFlMjg2YmU3ZTRiYzUwNjIzNjkwZWMxNTRjMzMzZmE0MWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVjMjJmYzliNjA2M2I3YmE3MWQxN2UyY2RlNzAzODdhMTM2MTUxZDk0MzJhM2FlNjZmOTgwZjhhZGE2OTg3ZWIifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L772-L775",
+          "version": "repo-lines-v1:sha256:c3d6130ab3eb4228855038cbe818b9c7c626af33c6bd770e63e6255486fe8706:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzdiZTdiNTdjNzc0ZTA1Zjc5MjEwM2FiMzc4Y2M1ZjVjM2YwNGViMjI2ODJhZTNkYzhlNDk2YzE2MWNkNDZmYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjgwYmI5MDM1ODM2MjZhYjg1NzNiMzE2YTc2Y2Y3OWZiNzMzZTVjN2YyMTExMDViNDc5YTk5NjdlYjgxNTFhYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTllNzYzNTVjZjExOTk0ODBjM2Y5OTgzNmIxNDg2Yzg0MWQ4OTFmYWFkOTA0YzYwOGUwOTMwMjJkMzc1N2FlZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTUyMTYwNGIzNWZjNDBhZjAwY2JhNGVlYTJmZDVlMmMzYWYxODYzYjM5MTE4NWQ3YmY0YmIwOWU3MmQwYzhiMyJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-15T07:26:54.164Z"
+    "at": "2026-10-15T14:38:41.442Z"
   }
 }
