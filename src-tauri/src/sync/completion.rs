@@ -9,6 +9,10 @@ use sqlx::SqlitePool;
 #[derive(Debug)]
 pub(crate) enum UploadUnitCompletion {
     Complete(CompletionResult),
+    Failed {
+        completion: CompletionResult,
+        reason: String,
+    },
     PendingAlbum(Box<PendingAlbumUnit>),
 }
 
@@ -33,14 +37,14 @@ impl UploadUnitCompletion {
     pub(crate) fn into_pending_album(self) -> Option<PendingAlbumUnit> {
         match self {
             Self::PendingAlbum(pending) => Some(*pending),
-            Self::Complete(_) => None,
+            Self::Complete(_) | Self::Failed { .. } => None,
         }
     }
 
     pub(crate) fn into_complete(self) -> Option<CompletionResult> {
         match self {
             Self::Complete(completion) => Some(completion),
-            Self::PendingAlbum(_) => None,
+            Self::PendingAlbum(_) | Self::Failed { .. } => None,
         }
     }
 }
@@ -101,6 +105,39 @@ pub(crate) async fn complete_album_assignment(
         pending.uploaded_count,
     )
     .await
+}
+
+/// Durably records an Upload Unit as failed when its successful completion cannot persist.
+///
+/// The queue is the recovery boundary, so a failure result is only returned once every
+/// queue member has been updated. Sync-state writes are best-effort here: their original
+/// failure is already what triggered this path, while the queue status prevents a false
+/// synchronized result and preserves a retryable Remote Asset ID.
+pub(crate) async fn fail_upload_unit(
+    pool: &SqlitePool,
+    unit: &HashedUploadUnit,
+    reason: &str,
+) -> Result<CompletionResult, String> {
+    for asset in unit.assets() {
+        let _ =
+            db::mark_sync_failed(pool, &asset.path, asset.mtime, asset.size as i64, reason).await;
+        db::update_sync_queue_failure(pool, &asset.path, reason)
+            .await
+            .map_err(|error| {
+                format!(
+                    "Could not persist failed queue state for '{}': {error}",
+                    asset.path
+                )
+            })?;
+    }
+
+    Ok(CompletionResult {
+        queue_results: unit
+            .assets()
+            .map(|asset| (asset.path.clone(), "FAILED".to_string()))
+            .collect(),
+        uploaded_count: 0,
+    })
 }
 
 async fn complete_terminal_unit(
@@ -360,5 +397,18 @@ mod tests {
         .expect_err("a terminal persistence failure must not produce SYNCED results");
 
         assert!(error.contains("Could not persist synchronized state"));
+        let failed = fail_upload_unit(&pool, &upload_unit(None), &error)
+            .await
+            .expect("the queue must persist the failure outcome");
+        assert_eq!(
+            failed.queue_results(),
+            [("photo.jpg".to_string(), "FAILED".to_string())]
+        );
+        let queue_status: String =
+            sqlx::query_scalar("SELECT status FROM sync_queue WHERE local_path = 'photo.jpg'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(queue_status, "FAILED");
     }
 }
