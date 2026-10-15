@@ -9,6 +9,7 @@ const tauri = vi.hoisted(() => ({
   listen: vi.fn(),
   isEnabled: vi.fn(),
   confirm: vi.fn(),
+  open: vi.fn(),
   check: vi.fn(),
   relaunch: vi.fn(),
 }));
@@ -35,6 +36,7 @@ let syncResumed: ((event: { payload: unknown }) => void) | undefined;
 let syncProgressSnapshot: ((event: { payload: unknown }) => void) | undefined;
 let syncTransferStats: ((event: { payload: unknown }) => void) | undefined;
 let logMessage: ((event: { payload: unknown }) => void) | undefined;
+let removableVolumeDetected: ((event: { payload: unknown }) => void) | undefined;
 let systemThemeIsDark = false;
 let colorSchemeListeners = new Set<(event: MediaQueryListEvent) => void>();
 
@@ -46,9 +48,10 @@ vi.mock("@tauri-apps/plugin-autostart", () => ({
   disable: vi.fn(),
   isEnabled: tauri.isEnabled,
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), confirm: tauri.confirm }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: tauri.open, confirm: tauri.confirm }));
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: tauri.check }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: tauri.relaunch }));
+
 
 function renderAuthenticatedPage() {
   tauri.invoke.mockImplementation((command: string) => {
@@ -103,6 +106,7 @@ beforeEach(() => {
   syncProgressSnapshot = undefined;
   syncTransferStats = undefined;
   logMessage = undefined;
+  removableVolumeDetected = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
     if (event === "trigger-sync") triggerSync = handler;
     if (event === "sync-started") syncStarted = handler;
@@ -111,8 +115,10 @@ beforeEach(() => {
     if (event === "sync-progress-snapshot") syncProgressSnapshot = handler as (event: { payload: unknown }) => void;
     if (event === "sync-transfer-stats") syncTransferStats = handler as (event: { payload: unknown }) => void;
     if (event === "log-message") logMessage = handler as (event: { payload: unknown }) => void;
+    if (event === "removable-volume-detected") removableVolumeDetected = handler as (event: { payload: unknown }) => void;
     return Promise.resolve(() => {});
   });
+
   tauri.isEnabled.mockResolvedValue(false);
   tauri.confirm.mockResolvedValue(true);
   tauri.getVersion.mockResolvedValue("0.0.0");
@@ -860,3 +866,151 @@ describe("theme preference", () => {
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
   });
 });
+
+describe("removable volume setup flow", () => {
+  it("detects removable card, prompts user, opens picker with mount path, and invokes accept_removable_media_folder", async () => {
+    tauri.open.mockResolvedValue("E:/DCIM");
+    renderAuthenticatedPage();
+    await screen.findByText("Dashboard", { selector: "h1" });
+
+    tauri.invoke.mockImplementation((command: string) => {
+      switch (command) {
+        case "get_auth_status":
+          return Promise.resolve(true);
+        case "get_server_url":
+          return Promise.resolve("https://immich.example");
+        case "get_current_user_name":
+          return Promise.resolve("Meyer");
+        case "get_folders":
+          return Promise.resolve(watchedFolders);
+        case "get_failed_syncs":
+          return Promise.resolve(failedSyncs);
+        case "get_upload_parallelism":
+          return Promise.resolve(uploadParallelism);
+        case "get_sync_status":
+          return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
+        case "get_albums":
+          return Promise.resolve([{ id: "alb-holiday", albumName: "Holiday 2026" }]);
+        case "accept_removable_media_folder":
+          watchedFolders = [{ id: 10, path: "E:/DCIM", recursive: true, target_album_id: "alb-holiday" }];
+          return Promise.resolve(10);
+        default:
+          return Promise.resolve();
+      }
+    });
+
+    expect(removableVolumeDetected).toBeDefined();
+    removableVolumeDetected!({
+      payload: {
+        volumeId: "vol-eos-123",
+        mountPath: "E:\\",
+        displayName: "EOS_DIGITAL",
+      },
+    });
+
+    expect(await screen.findByText(/EOS_DIGITAL/)).toBeInTheDocument();
+    expect(screen.getByText(/E:\\/)).toBeInTheDocument();
+
+    const syncButton = screen.getByRole("button", { name: "Sync Card" });
+    await fireEvent.click(syncButton);
+
+    expect(tauri.open).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      defaultPath: "E:\\",
+      title: "Select Folder",
+    });
+
+    expect(await screen.findByText('Select an optional Immich album for "DCIM"')).toBeInTheDocument();
+    expect(await screen.findByText("Holiday 2026")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByText("Holiday 2026"));
+
+    const confirmButton = screen.getByRole("button", { name: "Add folder" });
+    await fireEvent.click(confirmButton);
+
+    expect(tauri.invoke).toHaveBeenCalledWith("accept_removable_media_folder", {
+      volumeId: "vol-eos-123",
+      path: "E:/DCIM",
+      targetAlbumId: "alb-holiday",
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/EOS_DIGITAL/)).not.toBeInTheDocument();
+    });
+
+    expect(await screen.findByText("E:/DCIM")).toBeInTheDocument();
+  });
+
+  it("surfaces typed backend errors in feedback banner when accepting outside volume", async () => {
+    tauri.open.mockResolvedValue("C:/NotOnCard");
+    renderAuthenticatedPage();
+    await screen.findByText("Dashboard", { selector: "h1" });
+
+    tauri.invoke.mockImplementation((command: string) => {
+      switch (command) {
+        case "get_auth_status":
+          return Promise.resolve(true);
+        case "get_server_url":
+          return Promise.resolve("https://immich.example");
+        case "get_current_user_name":
+          return Promise.resolve("Meyer");
+        case "get_folders":
+          return Promise.resolve(watchedFolders);
+        case "get_failed_syncs":
+          return Promise.resolve(failedSyncs);
+        case "get_upload_parallelism":
+          return Promise.resolve(uploadParallelism);
+        case "get_sync_status":
+          return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
+        case "get_albums":
+          return Promise.resolve([]);
+        case "accept_removable_media_folder":
+          return Promise.reject(new Error("Path 'C:/NotOnCard' does not reside within removable volume 'vol-eos-123' (mounted at 'E:\\')."));
+        default:
+          return Promise.resolve();
+      }
+    });
+
+    removableVolumeDetected!({
+      payload: {
+        volumeId: "vol-eos-123",
+        mountPath: "E:\\",
+        displayName: "EOS_DIGITAL",
+      },
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Sync Card" }));
+    await screen.findByText('Select an optional Immich album for "NotOnCard"');
+    await fireEvent.click(screen.getByRole("button", { name: "Add folder" }));
+
+
+
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("does not reside within removable volume");
+  });
+
+  it("dismisses prompt without opening dialog when dismiss button is clicked", async () => {
+    renderAuthenticatedPage();
+    await screen.findByText("Dashboard", { selector: "h1" });
+
+    removableVolumeDetected!({
+      payload: {
+        volumeId: "vol-eos-123",
+        mountPath: "E:\\",
+        displayName: "EOS_DIGITAL",
+      },
+    });
+
+    expect(await screen.findByText(/EOS_DIGITAL/)).toBeInTheDocument();
+
+    const dismissButton = screen.getByRole("button", { name: "Dismiss" });
+    await fireEvent.click(dismissButton);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/EOS_DIGITAL/)).not.toBeInTheDocument();
+    });
+    expect(tauri.open).not.toHaveBeenCalled();
+  });
+});
+

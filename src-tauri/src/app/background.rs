@@ -32,7 +32,12 @@ fn spawn_removable_volume_consumer(
 ) {
     tauri::async_runtime::spawn(async move {
         let pool = handle.state::<sqlx::SqlitePool>().inner().clone();
-        let coordinator = crate::removable::RemovableVolumeCoordinator::new(pool, handle.clone());
+        let active_volumes = handle
+            .state::<crate::removable::ActiveRemovableVolumes>()
+            .inner()
+            .clone();
+        let coordinator = crate::removable::RemovableVolumeCoordinator::new(pool, handle.clone())
+            .with_active_volumes(active_volumes);
         while let Some(event) = volume_events.recv().await {
             if let Err(error) = coordinator.handle_event(event).await {
                 log_to_ui_error(
