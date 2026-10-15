@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Clock } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import type { LogEntry } from "./types";
 
@@ -11,18 +12,21 @@
   }
 </script>
 
-<div class="space-y-6 animate-in" style="animation-delay: 200ms">
-  <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-widest px-2">
-    {$t('activity_log')}
+<div class="space-y-4 animate-in">
+  <h4 class="text-xs font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-2 px-1">
+    <Clock class="w-3.5 h-3.5" />
+    <span>{$t('activity_log')}</span>
   </h4>
-  <div class="glass-pane !p-6 h-full max-h-[400px] overflow-y-auto space-y-4 selectable">
+  <div class="desktop-card !p-4 h-[320px] overflow-y-auto space-y-1.5 selectable">
     {#if logs.length === 0}
-      <p class="text-xs text-slate-400 dark:text-slate-400 italic">{$t('no_activity')}</p>
+      <div class="h-full flex items-center justify-center">
+        <p class="text-xs text-slate-400 dark:text-zinc-500 italic">{$t('no_activity')}</p>
+      </div>
     {:else}
       {#each logs as log (log.id)}
-        <div class="flex items-start gap-4 text-[11px] leading-relaxed group">
-          <span class="text-slate-400 dark:text-slate-400 font-mono w-14 shrink-0">{log.time}</span>
-          <span class="text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors">
+        <div class="flex items-start gap-3 text-xs leading-relaxed group py-1 border-b border-black/[0.03] dark:border-white/[0.03] last:border-0">
+          <span class="text-slate-400 dark:text-zinc-500 font-mono text-[10px] w-12 shrink-0 pt-0.5">{log.time}</span>
+          <span class="text-slate-700 dark:text-zinc-300 font-normal">
             {formatLogMessage(log)}
           </span>
         </div>

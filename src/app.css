@@ -25,9 +25,9 @@
   }
 
   html, body {
-    background: #F1F5F9;
+    background: #F3F4F6;
     color: rgb(var(--text-main));
-    font-family: 'Open Sans', system-ui, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI Variable Display", "Segoe UI", Cantarell, "Helvetica Neue", sans-serif;
     -webkit-font-smoothing: antialiased;
     margin: 0;
     overscroll-behavior: none;
@@ -39,7 +39,7 @@
 
   :root[data-theme="dark"],
   :root[data-theme="dark"] body {
-    background: #020617;
+    background: #18181B;
   }
 
   input, textarea, [contenteditable="true"], .selectable {
@@ -176,6 +176,140 @@
 
   :root[data-theme="dark"] .glass-input:focus {
     background: rgba(15, 23, 42, 0.95);
+  }
+
+  /* Unified Desktop & Settings Card */
+  .desktop-card,
+  .settings-card {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.07);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  :root[data-theme="dark"] .desktop-card,
+  :root[data-theme="dark"] .settings-card {
+    background: #242428;
+    border-color: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .desktop-card:hover,
+  .settings-card:hover {
+    border-color: rgba(0, 0, 0, 0.12);
+  }
+
+  :root[data-theme="dark"] .desktop-card:hover,
+  :root[data-theme="dark"] .settings-card:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .settings-card {
+    padding: 1rem 1.25rem;
+  }
+
+  /* Sidebar Navigation Item */
+  .nav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #475569;
+    transition: all 0.15s ease;
+    user-select: none;
+    width: 100%;
+    text-align: left;
+  }
+
+  :root[data-theme="dark"] .nav-item {
+    color: #94a3b8;
+  }
+
+  .nav-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+    color: #0f172a;
+  }
+
+  :root[data-theme="dark"] .nav-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #f1f5f9;
+  }
+
+  .nav-item.active {
+    background: rgba(0, 0, 0, 0.06);
+    color: #0f172a;
+    font-weight: 600;
+  }
+
+  :root[data-theme="dark"] .nav-item.active {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+  }
+
+  .nav-indicator {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    background: #2563eb;
+  }
+
+  :root[data-theme="dark"] .nav-indicator {
+    background: #38bdf8;
+  }
+
+  /* Desktop Capsule Toggle */
+  .desktop-toggle {
+    width: 2.75rem;
+    height: 1.5rem;
+    border-radius: 9999px;
+    position: relative;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: #e2e8f0;
+    flex-shrink: 0;
+  }
+
+  :root[data-theme="dark"] .desktop-toggle {
+    background: #3f3f46;
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .desktop-toggle.enabled {
+    background: #2563eb;
+    border-color: #2563eb;
+  }
+
+  :root[data-theme="dark"] .desktop-toggle.enabled {
+    background: #0284c7;
+    border-color: #0284c7;
+  }
+
+  .desktop-toggle-knob {
+    position: absolute;
+    top: 2px;
+    width: 1.125rem;
+    height: 1.125rem;
+    border-radius: 9999px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .desktop-toggle.enabled .desktop-toggle-knob {
+    transform: translateX(1.25rem);
+  }
+
+  .desktop-toggle:not(.enabled) .desktop-toggle-knob {
+    transform: translateX(2px);
   }
 }
 

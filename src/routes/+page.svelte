@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, AlertCircle, X } from "lucide-svelte";
+  import { Settings as SettingsIcon, AlertCircle, X, LayoutDashboard } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
-  import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
   import LoginView from "#lib/components/LoginView.svelte";
   import DashboardView from "#lib/components/DashboardView.svelte";
@@ -71,85 +70,18 @@
   });
 </script>
 
-<div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-[#F1F5F9] dark:bg-slate-950">
-  
-  <!-- Left Side: Hero Image (Permanent) -->
-  <aside class="w-[38%] h-full shrink-0 relative overflow-hidden">
-    <div class="hero-container">
-      <img src={hero} 
-           alt="Hero Landscape" 
-           class="hero-image" />
-      <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
-    </div>
-    
-    <div class="absolute top-12 left-12 flex items-center gap-3 text-white">
-      <img src={logo} alt="Lymic Logo" class="w-16 h-16 object-contain" />
-      <span class="font-bold tracking-tight text-3xl">Lymic</span>
-    </div>
-    <div class="absolute bottom-12 left-12 right-12 text-white">
-      <p class="text-xs font-semibold uppercase tracking-[0.3em] opacity-60 mb-2">{$t('hero_tagline')}</p>
-      <h1 class="text-4xl font-bold tracking-tight">
-        {$t('hero_title_line_1')}<br />
-        {$t('hero_title_line_2')}
-      </h1>
-    </div>
-  </aside>
-
-  <!-- Right Side: Modern Glass Content -->
-  <div class="flex-1 flex flex-col h-full relative overflow-hidden">
-    
-    <!-- Header (Simple & Glass) -->
-    <header class="h-20 px-10 flex items-center justify-between shrink-0 z-10">
-      {#if auth.isAuthenticated}
-        <div class="flex items-center gap-4">
-          <!-- h2 → h1 for correct heading hierarchy in the content column -->
-          <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100">
-            {currentView === "dashboard" ? $t('dashboard') : $t('settings')}
-          </h1>
+<div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60">
+  {#if !auth.isAuthenticated}
+    <!-- Centered Login Layout -->
+    <div class="flex-1 flex flex-col items-center justify-center p-8 overflow-y-auto">
+      <div class="flex items-center gap-3 mb-8">
+        <img src={logo} alt="Lymic Logo" class="w-12 h-12 object-contain" />
+        <div>
+          <span class="font-bold tracking-tight text-2xl text-slate-900 dark:text-slate-100">Lymic</span>
+          <p class="text-xs text-slate-400 dark:text-zinc-500 font-medium uppercase tracking-wider">Immich Desktop Client</p>
         </div>
-        <div class="flex items-center gap-2">
-          <button
-            class="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/60 transition-colors hover:bg-white dark:border-slate-700 dark:bg-slate-900/50 dark:hover:bg-slate-800"
-            aria-label={currentView === "settings" ? $t('dashboard') : $t('settings')}
-            onclick={() => currentView = currentView === "settings" ? "dashboard" : "settings"}
-          >
-            {#if currentView === "settings"}
-              <X class="w-5 h-5 text-slate-900 dark:text-slate-100" />
-            {:else}
-              <SettingsIcon class="w-5 h-5 text-slate-400 dark:text-slate-400" />
-            {/if}
-          </button>
-        </div>
-      {/if}
-    </header>
-
-    <main class="flex-1 overflow-y-auto p-10 flex flex-col {!auth.isAuthenticated ? 'justify-center' : 'space-y-10'}">
-      {#if auth.isAuthenticated && feedback.error}
-        <div class="p-4 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
-          <AlertCircle class="w-4 h-4 shrink-0" />
-          <span>{feedback.error}</span>
-          <button
-            type="button"
-            class="ml-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
-            aria-label={$t('dismiss_error')}
-            onclick={feedback.clear}
-          >
-            <X class="w-4 h-4" />
-          </button>
-        </div>
-      {/if}
-      {#if removable.currentPrompt}
-        <RemovableVolumePrompt
-          volume={removable.currentPrompt}
-          onAccept={async (vol) => {
-            currentView = "dashboard";
-            await sync.acceptRemovableFolder(vol);
-          }}
-          onDismiss={(volId) => removable.dismiss(volId)}
-        />
-      {/if}
-
-      {#if !auth.isAuthenticated}
+      </div>
+      <div class="w-full max-w-md">
         <LoginView
           bind:serverUrl={auth.serverUrl}
           bind:apiKey={auth.apiKey}
@@ -161,42 +93,140 @@
           loginErrorCode={auth.loginErrorCode}
           onLogin={auth.login}
         />
-      <!-- ===== DASHBOARD VIEW ===== -->
-      {:else if currentView === "dashboard"}
-        <DashboardView
-          dashboard={sync.dashboard}
-          serverUrl={auth.serverUrl}
-        />
-      <!-- ===== SETTINGS VIEW ===== -->
-      {:else if currentView === "settings"}
-        <SettingsView
-          currentUserName={auth.currentUserName}
-          serverUrl={auth.serverUrl}
-          isAutostartEnabled={preferences.isAutostartEnabled}
-          themePreference={preferences.themePreference}
-          uploadParallelism={preferences.uploadParallelism}
-          isSavingUploadParallelism={preferences.isSavingUploadParallelism}
-          updateStatus={updater.updateStatus}
-          isCheckingForUpdates={updater.isCheckingForUpdates}
-          locales={preferences.locales}
-          onToggleAutostart={preferences.toggleAutostart}
-          onLocaleChange={preferences.setLocale}
-          onThemeChange={preferences.setThemePreference}
-          onUploadParallelismChange={preferences.changeUploadParallelism}
-          onCheckForUpdates={updater.checkForUpdates}
-          onLogout={auth.logout}
-        />
-      {/if}
-    </main>
+      </div>
+      <footer class="mt-8 text-xs text-slate-400 dark:text-zinc-600 font-medium">
+        <span>Lymic - Unofficial Immich Desktop Client</span>
+        {#if updater.appVersion}
+          <span class="ml-2">v{updater.appVersion}</span>
+        {/if}
+      </footer>
+    </div>
+  {:else}
+    <!-- Authenticated Layout: Left Sidebar + Right Content Area -->
+    <aside class="w-60 shrink-0 h-full flex flex-col justify-between border-r border-black/5 dark:border-white/10 bg-slate-100/70 dark:bg-zinc-900/60 pt-6 pb-4 px-3 select-none">
+      <div class="space-y-6">
+        <!-- Brand / Header (padded for desktop window controls) -->
+        <div class="flex items-center gap-3 px-3 py-1">
+          <img src={logo} alt="Lymic Logo" class="w-8 h-8 object-contain shrink-0" />
+          <div class="leading-tight">
+            <span class="font-bold text-base text-slate-900 dark:text-slate-100">Lymic</span>
+            <p class="text-[10px] text-slate-400 dark:text-zinc-500 uppercase tracking-wider font-semibold">Desktop Client</p>
+          </div>
+        </div>
 
-    <!-- Global Footer -->
-    <footer class="h-16 px-10 border-t border-black/5 dark:border-white/10 flex items-center justify-end text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-widest shrink-0">
-      <span>Lymic - Unofficial Immich Desktop Client</span>
-      {#if updater.appVersion}
-        <span class="ml-2">v{updater.appVersion}</span>
-      {/if}
-    </footer>
-  </div>
+        <!-- Navigation items -->
+        <nav class="space-y-1" aria-label="Main Navigation">
+          <button
+            type="button"
+            class="nav-item {currentView === 'dashboard' ? 'active' : ''}"
+            onclick={() => currentView = "dashboard"}
+            aria-label={$t('dashboard')}
+          >
+            {#if currentView === 'dashboard'}
+              <span class="nav-indicator"></span>
+            {/if}
+            <LayoutDashboard class="w-4 h-4 shrink-0 {currentView === 'dashboard' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('dashboard')}</span>
+          </button>
+
+          <button
+            type="button"
+            class="nav-item {currentView === 'settings' ? 'active' : ''}"
+            onclick={() => currentView = "settings"}
+            aria-label={$t('settings')}
+          >
+            {#if currentView === 'settings'}
+              <span class="nav-indicator"></span>
+            {/if}
+            <SettingsIcon class="w-4 h-4 shrink-0 {currentView === 'settings' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('settings')}</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Bottom: User & Status info -->
+      <div class="pt-3 px-2">
+        <div class="flex items-center text-[11px] text-slate-400 dark:text-zinc-500">
+          <span class="truncate font-medium" title={auth.currentUserName || auth.serverUrl}>
+            {auth.currentUserName || "Connected"}
+          </span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right Side: Content Column -->
+    <div class="flex-1 flex flex-col h-full relative overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60">
+      <!-- Header -->
+      <header class="h-16 px-8 flex items-center justify-between shrink-0 z-10">
+        <div class="flex items-center gap-4">
+          <h1 class="text-lg font-bold text-slate-900 dark:text-slate-100">
+            {currentView === "dashboard" ? $t('dashboard') : $t('settings')}
+          </h1>
+        </div>
+      </header>
+
+      <main class="flex-1 overflow-y-auto p-8 flex flex-col space-y-6">
+        {#if feedback.error}
+          <div class="p-4 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
+            <AlertCircle class="w-4 h-4 shrink-0" />
+            <span>{feedback.error}</span>
+            <button
+              type="button"
+              class="ml-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+              aria-label={$t('dismiss_error')}
+              onclick={feedback.clear}
+            >
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+        {/if}
+        {#if removable.currentPrompt}
+          <RemovableVolumePrompt
+            volume={removable.currentPrompt}
+            onAccept={async (vol) => {
+              currentView = "dashboard";
+              await sync.acceptRemovableFolder(vol);
+            }}
+            onDismiss={(volId) => removable.dismiss(volId)}
+          />
+        {/if}
+
+        {#if currentView === "dashboard"}
+          <DashboardView
+            dashboard={sync.dashboard}
+            serverUrl={auth.serverUrl}
+          />
+        {:else if currentView === "settings"}
+          <SettingsView
+            currentUserName={auth.currentUserName}
+            serverUrl={auth.serverUrl}
+            isAutostartEnabled={preferences.isAutostartEnabled}
+            themePreference={preferences.themePreference}
+            uploadParallelism={preferences.uploadParallelism}
+            isSavingUploadParallelism={preferences.isSavingUploadParallelism}
+            updateStatus={updater.updateStatus}
+            isCheckingForUpdates={updater.isCheckingForUpdates}
+            locales={preferences.locales}
+            onToggleAutostart={preferences.toggleAutostart}
+            onLocaleChange={preferences.setLocale}
+            onThemeChange={preferences.setThemePreference}
+            onUploadParallelismChange={preferences.changeUploadParallelism}
+            onCheckForUpdates={updater.checkForUpdates}
+            onLogout={auth.logout}
+          />
+        {/if}
+      </main>
+
+      <!-- Global Footer -->
+      <footer class="h-10 px-8 flex items-center justify-end text-[10px] font-medium text-slate-400 dark:text-zinc-500 uppercase tracking-wider shrink-0">
+        <span>Lymic - Unofficial Immich Desktop Client</span>
+        {#if updater.appVersion}
+          <span class="ml-2">v{updater.appVersion}</span>
+        {/if}
+      </footer>
+    </div>
+  {/if}
+
   {#if updater.isUpdateDialogOpen && updater.availableUpdate}
     <UpdateDialog
       version={updater.availableUpdate.version}
@@ -218,4 +248,3 @@
     />
   {/if}
 </div>
-

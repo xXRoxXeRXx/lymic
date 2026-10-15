@@ -177,7 +177,7 @@ describe("application updates", () => {
   it("checks manually from settings and reports the current version", async () => {
     renderAuthenticatedPage();
     await screen.findByText("Dashboard", { selector: "h1" });
-    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
 
     expect(await screen.findByText("Lymic is up to date.")).toBeInTheDocument();
@@ -229,7 +229,7 @@ describe("application updates", () => {
     await fireEvent.click(await screen.findByRole("button", { name: "Install and restart" }));
     await screen.findByText("The update could not be installed. You can try again.");
     await fireEvent.click(screen.getByText("Later", { selector: "button" }));
-    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
 
     expect(await screen.findByRole("button", { name: "Install and restart" })).toBeEnabled();
@@ -688,7 +688,7 @@ describe("logout", () => {
     renderAuthenticatedPage();
     await screen.findByText("Dashboard", { selector: "h1" });
 
-    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const logoutButton = await screen.findByRole("button", { name: "Logout" });
     tauri.confirm.mockResolvedValue(false);
 
@@ -706,7 +706,7 @@ describe("logout", () => {
     renderAuthenticatedPage();
     await screen.findByText("Dashboard", { selector: "h1" });
 
-    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const logoutButton = await screen.findByRole("button", { name: "Logout" });
     tauri.invoke.mockImplementation((command: string) => {
       if (command === "logout") return Promise.reject(new Error("Keyring unavailable"));
@@ -730,7 +730,7 @@ describe("settings", () => {
     renderAuthenticatedPage();
     await screen.findByText("Dashboard", { selector: "h1" });
 
-    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
     expect(await screen.findByText("Logged in as Meyer")).toBeInTheDocument();
   });
@@ -739,7 +739,7 @@ describe("settings", () => {
     renderAuthenticatedPage();
     await screen.findByText("Dashboard", { selector: "h1" });
 
-    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
     expect(await screen.findByText("Language")).toBeInTheDocument();
     expect(screen.getByText("Choose your preferred language.")).toBeInTheDocument();
@@ -758,7 +758,7 @@ describe("settings", () => {
     renderAuthenticatedPage();
     await screen.findByText("Dashboard", { selector: "h1" });
 
-    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const darkButton = await screen.findByRole("button", { name: "Dark" });
     await fireEvent.click(darkButton);
 
@@ -772,7 +772,7 @@ describe("settings", () => {
     renderAuthenticatedPage();
     await screen.findByText("Dashboard", { selector: "h1" });
 
-    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
     const select = await screen.findByLabelText("Parallel uploads");
     await waitFor(() => expect(select).toHaveValue("6"));
@@ -819,7 +819,7 @@ describe("settings", () => {
       return Promise.resolve();
     });
 
-    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const select = await screen.findByLabelText("Parallel uploads");
     await waitFor(() => expect(select).toHaveValue("4"));
 
@@ -858,7 +858,7 @@ describe("theme preference", () => {
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
 
     await screen.findByText("Dashboard", { selector: "h1" });
-    await fireEvent.click(document.querySelector("header button")!);
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Dark" }));
     systemThemeIsDark = false;
     colorSchemeListeners.forEach((listener) => listener({ matches: false } as MediaQueryListEvent));
