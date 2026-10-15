@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "runId": "6a66adea-f002-47c7-8dff-56bd23b86f37",
+  "mode": "update",
+  "phase": "generating",
+  "startedAt": "2026-10-15T14:38:41.442Z",
+  "language": "en",
+  "languageChanged": false,
+  "requiredRewritePages": [],
+  "initialPages": [
+    "/openwiki/architecture/runtime.md",
+    "/openwiki/data/local-state.md",
+    "/openwiki/frontend/ui-and-ipc.md",
+    "/openwiki/integrations/immich-api.md",
+    "/openwiki/operations/development-and-testing.md",
+    "/openwiki/quickstart.md",
+    "/openwiki/security/authentication.md",
+    "/openwiki/workflows/synchronization.md",
+    "/openwiki/workflows/watched-folders.md"
+  ],
+  "sourceFingerprint": "sha256:5a329f545749ecbfba889e90459777efef9e97efc075221d8053b78347b554bc",
+  "targetGitHead": "d2cc65bf0c61b4728dd69267cd35a7f116a86788",
+  "actor": {
+    "producerActor": "openwiki/0.7.2",
+    "metadataModel": "gpt-5.6-terra"
+  },
+  "previousLastUpdate": {
+    "updatedAt": "2026-10-15T07:37:03.209Z",
+    "command": "init",
+    "gitHead": "75414a08f7d003866c274f1baa42f4a445e864aa",
+    "model": "host-agent/codex",
+    "status": "complete",
+    "language": "en"
+  },
+  "baseGitHead": "75414a08f7d003866c274f1baa42f4a445e864aa",
+  "wikiGoal": "A code wiki for this repository.",
+  "beforeContentSnapshot": "5e9f30c393f61c37ef6411bb271e906bd3d3342d27f4820ce3ea6521a28c6f3d",
+  "preparedWiki": {
+    "generatedProvenance": [
+      {
+        "page": "/openwiki/architecture/runtime.md",
+        "bodyHash": "75baf860d61a62aa4edecdf48f690ecc61526d4dd2b2d57f3d116362604c1707",
+        "generated": {
+          "by": "codex",
+          "at": "2026-10-15T07:26:54.164Z"
+        }
+      },
+      {
+        "page": "/openwiki/data/local-state.md",
+        "bodyHash": "24b8c178fbe6e054910ccbbe2cdf23586ab37457883f7b7580506b732d1a9868",
+        "generated": {
+          "by": "codex",
+          "at": "2026-10-15T07:26:54.164Z"
+        }
+      },
+      {
+        "page": "/openwiki/frontend/ui-and-ipc.md",
+        "bodyHash": "6b85dba6eeda6782ca0c8e70df8b170acb5dd4e9599c7c7bfbbe214c167e570e",
+        "generated": {
+          "by": "codex",
+          "at": "2026-10-15T07:26:54.164Z"
+        }
+      },
+      {
+        "page": "/openwiki/integrations/immich-api.md",
+        "bodyHash": "c6df8a065d4fb51cb99fd813ed8507eacaf9534bf0a318e5816ebaa576627545",
+        "generated": {
+          "by": "codex",
+          "at": "2026-10-15T07:26:54.164Z"
+        }
+      },
+      {
+        "page": "/openwiki/operations/development-and-testing.md",
+        "bodyHash": "6a2af3ee75569f12aa3a9cf59eaddf63383347558c72ac4d8207b40bdb1b2677",
+        "generated": {
+          "by": "codex",
+          "at": "2026-10-15T07:26:54.164Z"
+        }
+      },
+      {
+        "page": "/openwiki/quickstart.md",
+        "bodyHash": "726850dd1585532d5da3f2862d64b94f1443a8f6a398d03749dff5473e8cbabf",
+        "generated": {
+          "by": "codex",
+          "at": "2026-10-15T07:26:54.164Z"
+        }
+      },
+      {
+        "page": "/openwiki/security/authentication.md",
+        "bodyHash": "b622c726bb6cca5556a7e7f7baa1c29fd48a4ae65dea6abfc0b7d8e5e64c008b",
+        "generated": {
+          "by": "codex",
+          "at": "2026-10-15T07:26:54.164Z"
+        }
+      },
+      {
+        "page": "/openwiki/workflows/synchronization.md",
+        "bodyHash": "726f252fa85aef8a03e507a56963c84134a458d2dd9eefaa6300a153b368f49c",
+        "generated": {
+          "by": "codex",
+          "at": "2026-10-15T07:26:54.164Z"
+        }
+      },
+      {
+        "page": "/openwiki/workflows/watched-folders.md",
+        "bodyHash": "54adb3b8d0ecddbc1a7b32056354efd9b018529d58561d86d7718ccb03b1abba",
+        "generated": {
+          "by": "codex",
+          "at": "2026-10-15T07:26:54.164Z"
+        }
+      }
+    ]
+  },
+  "plan": {
+    "pages": [
+      {
+        "id": "b8c41942-2620-478f-8efc-81e045895062",
+        "path": "/openwiki/architecture/runtime.md",
+        "title": "Desktop Runtime and Lifecycle",
+        "purpose": "Explain the Tauri desktop composition, startup and background-service lifecycle, managed state, command/event boundary, tray behavior, and the safe handoff between frontend and Rust services.",
+        "seedPaths": [
+          "src-tauri/src/app/background.rs",
+          "src-tauri/src/app/events.rs",
+          "src-tauri/src/app/mod.rs",
+          "src-tauri/src/app/startup.rs",
+          "src-tauri/src/app/state.rs",
+          "src-tauri/src/lib.rs",
+          "src/lib/controllers",
+          "src/routes/+page.svelte"
+        ],
+        "relatedPages": [
+          "/openwiki/data/local-state.md",
+          "/openwiki/frontend/ui-and-ipc.md",
+          "/openwiki/operations/development-and-testing.md",
+          "/openwiki/workflows/synchronization.md",
+          "/openwiki/workflows/watched-folders.md"
+        ],
+        "instructions": [
+          "Refresh stale and unresolved claims against the current startup, route, and sync-service implementations. Preserve or update Mermaid lifecycle/control-flow diagrams when documenting non-trivial runtime flow."
+        ],
+        "status": "complete",
+        "completedBy": "openwiki/0.7.2"
+      },
+      {
+        "id": "4bb7228e-7107-4768-8e88-232fbb328231",
+        "path": "/openwiki/data/local-state.md",
+        "title": "Local Persistent State",
+        "purpose": "Document SQLite initialization, migrations, recovery/quarantine behavior, durable queue and folder state, and persistence invariants that make synchronization restart-safe.",
+        "seedPaths": [
+          "src-tauri/migrations",
+          "src-tauri/src/db/folders.rs",
+          "src-tauri/src/db/init.rs",
+          "src-tauri/src/db/mod.rs",
+          "src-tauri/src/db/queue.rs",
+          "src-tauri/src/db/sync_state.rs",
+          "src-tauri/src/db/tests.rs"
+        ],
+        "relatedPages": [
+          "/openwiki/architecture/runtime.md",
+          "/openwiki/security/authentication.md",
+          "/openwiki/workflows/synchronization.md",
+          "/openwiki/workflows/watched-folders.md"
+        ],
+        "instructions": [
+          "Refresh the stale database-initialization claim against the current implementation. Preserve or update Mermaid data-model/recovery-flow diagrams when they clarify state relationships."
+        ],
+        "status": "pending"
+      },
+      {
+        "id": "5bc6f4f9-bb60-4934-963a-dcf49d312c10",
+        "path": "/openwiki/integrations/immich-api.md",
+        "title": "Immich API Integration",
+        "purpose": "Describe the typed Immich client boundary, authentication and endpoint constraints, bulk existence checks, streamed upload protocol, album operations, and integration failure semantics.",
+        "seedPaths": [
+          "src-tauri/src/auth.rs",
+          "src-tauri/src/immich/album.rs",
+          "src-tauri/src/immich/bulk_check.rs",
+          "src-tauri/src/immich/client.rs",
+          "src-tauri/src/immich/response.rs",
+          "src-tauri/src/immich/upload.rs",
+          "src-tauri/src/sync/album_batch.rs",
+          "src-tauri/src/sync/processor.rs"
+        ],
+        "relatedPages": [
+          "/openwiki/data/local-state.md",
+          "/openwiki/security/authentication.md",
+          "/openwiki/workflows/synchronization.md",
+          "/openwiki/workflows/watched-folders.md"
+        ],
+        "instructions": [
+          "Refresh the stale album-batching claim and distinguish the external API contract from the local queue and sync orchestration. Preserve or update Mermaid request/control-flow diagrams when present."
+        ],
+        "status": "pending"
+      },
+      {
+        "id": "117a7533-bdf2-44ae-adf1-be368c63cb99",
+        "path": "/openwiki/workflows/watched-folders.md",
+        "title": "Watched Folders and Removable Volumes",
+        "purpose": "Trace folder registration, normalization and overlap guards, deferred availability, scanning, watcher reconciliation, removable-volume binding, removal/cancellation behavior, and UI-visible outcomes.",
+        "seedPaths": [
+          "src-tauri/src/commands/folders.rs",
+          "src-tauri/src/db/folders.rs",
+          "src-tauri/src/media/paths.rs",
+          "src-tauri/src/media/scanner.rs",
+          "src-tauri/src/removable",
+          "src-tauri/src/removable/tests.rs",
+          "src-tauri/src/watcher",
+          "src/lib/components/FolderList.svelte",
+          "src/lib/controllers/removable-volume-controller.svelte.ts"
+        ],
+        "relatedPages": [
+          "/openwiki/architecture/runtime.md",
+          "/openwiki/data/local-state.md",
+          "/openwiki/frontend/ui-and-ipc.md",
+          "/openwiki/integrations/immich-api.md",
+          "/openwiki/workflows/synchronization.md"
+        ],
+        "instructions": [
+          "Refresh the stale folder-command claim against the current registration and removal paths. Preserve or update Mermaid lifecycle/state diagrams when documenting watcher or removable-volume behavior."
+        ],
+        "status": "pending"
+      }
+    ],
+    "deletePages": []
+  }
+}

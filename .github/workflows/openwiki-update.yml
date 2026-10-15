@@ -35,17 +35,14 @@ jobs:
         continue-on-error: true
         run: openwiki code --update --print
         env:
-          OPENWIKI_PROVIDER: openai
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Uses the ChatGPT Plus/Pro/Team Codex allowance. OpenWiki requires
+          # the complete OAuth token set for a non-interactive CI run.
+          OPENWIKI_PROVIDER: openai-chatgpt
+          OPENAI_CHATGPT_ACCESS_TOKEN: ${{ secrets.OPENAI_CHATGPT_ACCESS_TOKEN }}
+          OPENAI_CHATGPT_REFRESH_TOKEN: ${{ secrets.OPENAI_CHATGPT_REFRESH_TOKEN }}
+          OPENAI_CHATGPT_EXPIRES_AT: ${{ secrets.OPENAI_CHATGPT_EXPIRES_AT }}
+          OPENAI_CHATGPT_ACCOUNT_ID: ${{ secrets.OPENAI_CHATGPT_ACCOUNT_ID }}
           OPENWIKI_MODEL_ID: "gpt-5.6-terra"
-          # Required for the LangSmith connector's code-mode pull to authenticate.
-          # For extra workspaces, add OPENWIKI_LANGSMITH_API_KEY_2, _3, ... as repo
-          # secrets and env entries here.
-          OPENWIKI_LANGSMITH_API_KEY: ${{ secrets.OPENWIKI_LANGSMITH_API_KEY }}
-          # Optional: also trace this workflow's own OpenWiki run to LangSmith.
-          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-          LANGCHAIN_PROJECT: openwiki
-          LANGCHAIN_TRACING_V2: "true"
 
       - name: Remove transient OpenWiki run state
         if: ${{ !cancelled() }}

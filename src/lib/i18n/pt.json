@@ -163,5 +163,9 @@
   "log_file_scan_failed": "Falha ao analisar o ficheiro '{file}': {error}",
   "log_file_hash_failed": "Falha ao calcular o hash de '{file}': {error}",
   "log_upload_persistence_reconcile_failed": "Envio remoto bem-sucedido, mas o estado local não pôde ser reconciliado: {error}",
-  "log_audit_failure": "Falha no registo de auditoria: {error}"
+  "log_audit_failure": "Falha no registo de auditoria: {error}",
+  "removable_card_detected_title": "Cartão SD detetado",
+  "removable_card_detected_body": "O cartão {name} ({path}) está pronto para sincronizar.",
+  "removable_prompt_sync": "Sincronizar cartão",
+  "removable_prompt_dismiss": "Ignorar"
 }

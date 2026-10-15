@@ -3,9 +3,6 @@ type: persistence
 title: Local Persistence and Recovery
 description: The SQLite and keyring state that lets Lymic retain folder configuration, synchronization progress, queue outcomes, and recovery context across launches.
 tags: [persistence, sqlite, recovery, sync]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-15T07:26:54.164Z
 sources:
   - id: openwiki-source-941c10286ffa11a6881678ef
     resource: repo://src-tauri/migrations/0004_sync_queue.sql

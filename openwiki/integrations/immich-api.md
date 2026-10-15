@@ -3,9 +3,6 @@ type: integration
 title: Immich Integration
 description: Lymic's authenticated boundary to Immich for identity checks, duplicate detection, streamed uploads, and target-album membership.
 tags: [immich, api, uploads, albums]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-15T07:26:54.164Z
 sources:
   - id: openwiki-source-27cf4cf217241afe3fc02fc8
     resource: repo://src-tauri/src/immich/bulk_check.rs

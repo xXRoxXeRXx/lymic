@@ -1,4 +1,4 @@
-﻿use crate::app::events::{
+use crate::app::events::{
     log_to_ui_error, log_to_ui_folder, log_to_ui_folder_error, log_to_ui_key,
 };
 use crate::app::startup::StartupContext;
@@ -18,11 +18,33 @@ pub(crate) fn spawn(handle: tauri::AppHandle, startup: StartupContext) {
     spawn_deferred_watches(handle.clone());
     spawn_startup_sync(handle.clone());
     spawn_watcher_consumer(
-        handle,
+        handle.clone(),
         startup.watch_events,
         startup.rescan_requested,
         startup.rescan_notify,
     );
+    spawn_removable_volume_consumer(handle, startup.volume_events);
+}
+
+fn spawn_removable_volume_consumer(
+    handle: tauri::AppHandle,
+    mut volume_events: tokio::sync::mpsc::Receiver<crate::removable::VolumeEvent>,
+) {
+    tauri::async_runtime::spawn(async move {
+        let pool = handle.state::<sqlx::SqlitePool>().inner().clone();
+        let coordinator = crate::removable::RemovableVolumeCoordinator::new(pool, handle.clone());
+        while let Some(event) = volume_events.recv().await {
+            if let Err(error) = coordinator.handle_event(event).await {
+                log_to_ui_error(
+                    &handle,
+                    "WARN",
+                    &format!("Error handling removable volume event: {error}"),
+                    "log_removable_volume_error",
+                    &error,
+                );
+            }
+        }
+    });
 }
 
 fn spawn_deferred_watches(handle: tauri::AppHandle) {

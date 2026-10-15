@@ -3,9 +3,6 @@ type: workflow
 title: Watched Folders and Media Discovery
 description: How Lymic configures local source folders, observes filesystem changes, and turns supported files into upload units.
 tags: [folders, watcher, media, discovery]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-15T07:26:54.164Z
 sources:
   - id: openwiki-source-df6e066f6f018afe47017686
     resource: repo://docs/adr/0002-removable-watched-folders.md

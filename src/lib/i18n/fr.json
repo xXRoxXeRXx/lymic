@@ -163,5 +163,9 @@
   "log_file_scan_failed": "Échec de l'analyse du fichier « {file} » : {error}",
   "log_file_hash_failed": "Échec du calcul de l'empreinte pour « {file} » : {error}",
   "log_upload_persistence_reconcile_failed": "Téléversement distant réussi, mais la persistance locale n'a pas pu être réconciliée : {error}",
-  "log_audit_failure": "Échec du journal d'audit : {error}"
+  "log_audit_failure": "Échec du journal d'audit : {error}",
+  "removable_card_detected_title": "Carte SD détectée",
+  "removable_card_detected_body": "La carte {name} ({path}) est prête à être synchronisée.",
+  "removable_prompt_sync": "Synchroniser la carte",
+  "removable_prompt_dismiss": "Ignorer"
 }

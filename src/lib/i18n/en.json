@@ -163,5 +163,9 @@
   "log_file_scan_failed": "File scan failed for ''{file}'': {error}",
   "log_file_hash_failed": "File hashing failed for ''{file}'': {error}",
   "log_upload_persistence_reconcile_failed": "Remote upload succeeded, but local state persistence could not be reconciled: {error}",
-  "log_audit_failure": "Audit log failure: {error}"
+  "log_audit_failure": "Audit log failure: {error}",
+  "removable_card_detected_title": "SD Card Detected",
+  "removable_card_detected_body": "Card {name} ({path}) is ready to synchronize.",
+  "removable_prompt_sync": "Sync Card",
+  "removable_prompt_dismiss": "Dismiss"
 }

@@ -163,5 +163,9 @@
   "log_file_scan_failed": "Error al analizar el archivo ''{file}'': {error}",
   "log_file_hash_failed": "Error al calcular el hash de ''{file}'': {error}",
   "log_upload_persistence_reconcile_failed": "La subida remota se completó, pero no se pudo sincronizar el estado local: {error}",
-  "log_audit_failure": "Error en el registro de auditoría: {error}"
+  "log_audit_failure": "Error en el registro de auditoría: {error}",
+  "removable_card_detected_title": "Tarjeta SD detectada",
+  "removable_card_detected_body": "La tarjeta {name} ({path}) está lista para sincronizar.",
+  "removable_prompt_sync": "Sincronizar tarjeta",
+  "removable_prompt_dismiss": "Descartar"
 }

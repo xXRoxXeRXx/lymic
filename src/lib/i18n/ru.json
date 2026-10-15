@@ -163,5 +163,9 @@
   "log_file_scan_failed": "Сбой проверки файла '{file}': {error}",
   "log_file_hash_failed": "Сбой вычисления хэша файла '{file}': {error}",
   "log_upload_persistence_reconcile_failed": "Удаленная выгрузка выполнена, но локальное состояние синхронизировать не удалось: {error}",
-  "log_audit_failure": "Сбой журнала аудита: {error}"
+  "log_audit_failure": "Сбой журнала аудита: {error}",
+  "removable_card_detected_title": "Обнаружена SD-карта",
+  "removable_card_detected_body": "Карта {name} ({path}) готова к синхронизации.",
+  "removable_prompt_sync": "Синхронизировать карту",
+  "removable_prompt_dismiss": "Отклонить"
 }

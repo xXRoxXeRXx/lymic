@@ -5,6 +5,7 @@ mod commands;
 mod db;
 mod immich;
 mod media;
+pub(crate) mod removable;
 mod sync;
 mod watcher;
 
