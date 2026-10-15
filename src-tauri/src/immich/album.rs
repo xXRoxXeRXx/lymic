@@ -1,5 +1,7 @@
 use super::client::ImmichClient;
-use super::response::{read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES};
+use super::response::{
+    read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -58,7 +60,8 @@ impl ImmichClient {
         }
 
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
-        serde_json::from_slice(&body).map_err(|error| format!("Invalid create album response: {}", error))
+        serde_json::from_slice(&body)
+            .map_err(|error| format!("Invalid create album response: {}", error))
     }
 
     pub async fn add_assets_to_album(
@@ -90,7 +93,10 @@ impl ImmichClient {
         Ok(())
     }
 
-    pub async fn search_asset_by_checksum(&self, checksum: &str) -> Result<Option<super::ids::RemoteAssetId>, String> {
+    pub async fn search_asset_by_checksum(
+        &self,
+        checksum: &str,
+    ) -> Result<Option<super::ids::RemoteAssetId>, String> {
         let response = self
             .client
             .post(self.endpoint_url("search/metadata"))
@@ -307,11 +313,11 @@ mod tests {
             api_key: "test-key".to_string(),
         };
 
-        let ids = vec![
-            RemoteAssetId::new("asset-1"),
-            RemoteAssetId::new("asset-2"),
-        ];
-        assert!(client.add_assets_to_album(&AlbumId::new("album-123"), &ids).await.is_ok());
+        let ids = vec![RemoteAssetId::new("asset-1"), RemoteAssetId::new("asset-2")];
+        assert!(client
+            .add_assets_to_album(&AlbumId::new("album-123"), &ids)
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
@@ -379,10 +385,7 @@ mod tests {
         };
 
         let resolved = client.search_asset_by_checksum("sha1-hash").await.unwrap();
-        assert_eq!(
-            resolved,
-            Some(RemoteAssetId::new("resolved-remote-id"))
-        );
+        assert_eq!(resolved, Some(RemoteAssetId::new("resolved-remote-id")));
     }
 
     #[tokio::test]
@@ -412,7 +415,10 @@ mod tests {
             api_key: "test-key".to_string(),
         };
 
-        let err = client.search_asset_by_checksum("sha1-hash").await.unwrap_err();
+        let err = client
+            .search_asset_by_checksum("sha1-hash")
+            .await
+            .unwrap_err();
         assert!(err.contains("cannot unambiguously resolve target album asset"));
     }
 }
