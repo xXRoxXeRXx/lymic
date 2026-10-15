@@ -1,5 +1,5 @@
 #[cfg(target_os = "windows")]
-use super::model::{VolumeEvent, VolumeInfo};
+use super::model::{VolumeEvent, VolumeInfo, VolumeRemoval};
 #[cfg(target_os = "windows")]
 use super::monitor::RemovableMediaMonitor;
 #[cfg(target_os = "windows")]
@@ -218,7 +218,7 @@ unsafe extern "system" fn window_proc(
                         if (unitmask & (1 << bit)) != 0 {
                             let drive_letter = (b'A' + bit as u8) as char;
                             let drive_str = format!("{}:\\", drive_letter);
-                            let _ = ctx.tx.blocking_send(VolumeEvent::Removal(drive_str));
+                            let _ = ctx.tx.blocking_send(VolumeEvent::Removal(VolumeRemoval::MountPath(drive_str)));
                         }
                     }
                 }

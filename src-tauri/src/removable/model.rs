@@ -7,9 +7,17 @@ pub struct VolumeInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum VolumeRemoval {
+    MountPath(String),
+    VolumeId(String),
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VolumeEvent {
     Arrival(VolumeInfo),
-    Removal(String),
+    Removal(VolumeRemoval),
 }
 
 #[derive(Clone, Default)]
@@ -30,9 +38,15 @@ impl ActiveRemovableVolumes {
         }
     }
 
-    pub fn remove(&self, id_or_path: &str) {
+    pub fn remove(&self, volume_id: &str) {
         if let Ok(mut lock) = self.0.lock() {
-            lock.retain(|k, v| k != id_or_path && v.mount_path != id_or_path);
+            lock.remove(volume_id);
+        }
+    }
+
+    pub fn remove_by_mount_path(&self, mount_path: &str) {
+        if let Ok(mut lock) = self.0.lock() {
+            lock.retain(|_, v| v.mount_path != mount_path);
         }
     }
 
@@ -40,10 +54,11 @@ impl ActiveRemovableVolumes {
         self.0.lock().ok()?.get(volume_id).cloned()
     }
 
-    pub fn find_by_id_or_path(&self, id_or_path: &str) -> Option<VolumeInfo> {
+    pub fn find_by_mount_path(&self, mount_path: &str) -> Option<VolumeInfo> {
         let lock = self.0.lock().ok()?;
         lock.values()
-            .find(|v| v.volume_id == id_or_path || v.mount_path == id_or_path)
+            .find(|v| v.mount_path == mount_path)
             .cloned()
     }
 }
+

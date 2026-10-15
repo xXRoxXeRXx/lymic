@@ -1,5 +1,8 @@
 use sqlx::SqlitePool;
 
+/// The singleton job ID used for Lymic's desktop sync queue, backed by database CHECK constraint `id = 1`.
+pub const SINGLETON_SYNC_JOB_ID: i64 = 1;
+
 #[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncSnapshot {
@@ -405,32 +408,37 @@ pub async fn reset_failed_queue_items_for_folder(
     let clean_path = folder_path.trim_end_matches(['/', '\\']);
     let mut tx = pool.begin().await?;
 
-    let queue_res = sqlx::query(
+    let path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
+
+    let queue_sql = format!(
         "UPDATE sync_queue \
          SET status = 'PENDING', failure_reason = NULL \
-         WHERE job_id = 1 AND status = 'FAILED' \
-           AND (local_path = ?1 \
-                OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' \
-                OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\')",
-    )
-    .bind(clean_path)
-    .execute(&mut *tx)
-    .await?;
+         WHERE job_id = {SINGLETON_SYNC_JOB_ID} AND status = 'FAILED' \
+           AND {path_cond}"
+    );
 
-    sqlx::query(
+    let queue_res = sqlx::query(&queue_sql)
+        .bind(clean_path)
+        .execute(&mut *tx)
+        .await?;
+
+    let state_sql = format!(
         "UPDATE sync_state \
          SET status = 'PENDING', failure_reason = NULL \
          WHERE status = 'FAILED' \
-           AND (local_path = ?1 \
-                OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' \
-                OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\')",
-    )
-    .bind(clean_path)
-    .execute(&mut *tx)
-    .await?;
+           AND {path_cond}"
+    );
+
+    sqlx::query(&state_sql)
+        .bind(clean_path)
+        .execute(&mut *tx)
+        .await?;
 
     if queue_res.rows_affected() > 0 {
-        sqlx::query("UPDATE sync_jobs SET status = 'RUNNING' WHERE id = 1 AND status = 'IDLE'")
+        let job_sql = format!(
+            "UPDATE sync_jobs SET status = 'RUNNING' WHERE id = {SINGLETON_SYNC_JOB_ID} AND status = 'IDLE'"
+        );
+        sqlx::query(&job_sql)
             .execute(&mut *tx)
             .await?;
     }
@@ -438,3 +446,4 @@ pub async fn reset_failed_queue_items_for_folder(
     tx.commit().await?;
     Ok(queue_res.rows_affected())
 }
+

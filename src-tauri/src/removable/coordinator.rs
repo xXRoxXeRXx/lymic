@@ -1,33 +1,25 @@
-use super::model::{ActiveRemovableVolumes, VolumeEvent, VolumeInfo};
+use super::model::{ActiveRemovableVolumes, VolumeEvent, VolumeInfo, VolumeRemoval};
 use sqlx::SqlitePool;
 
 pub trait VolumeEventEmitter: Send + Sync {
     fn emit_volume_detected(&self, volume: &VolumeInfo) -> Result<(), String>;
-    fn emit_volume_removed(&self, _id_or_path: &str) -> Result<(), String> {
-        Ok(())
-    }
+    fn emit_volume_removed(&self, volume_id: &str) -> Result<(), String>;
 
     fn reconcile_remount_watcher(
         &self,
-        _old_path: Option<&str>,
-        _new_path: &str,
-    ) -> impl std::future::Future<Output = Result<(), String>> + Send {
-        async { Ok(()) }
-    }
+        old_path: Option<&str>,
+        new_path: &str,
+    ) -> impl std::future::Future<Output = Result<(), String>> + Send;
 
     fn reconcile_folder_unavailable(
         &self,
-        _path: &str,
-    ) -> impl std::future::Future<Output = Result<(), String>> + Send {
-        async { Ok(()) }
-    }
+        path: &str,
+    ) -> impl std::future::Future<Output = Result<(), String>> + Send;
 
     fn trigger_remount_scan(
         &self,
-        _folder_path: &str,
-    ) -> impl std::future::Future<Output = Result<(), String>> + Send {
-        async { Ok(()) }
-    }
+        folder_path: &str,
+    ) -> impl std::future::Future<Output = Result<(), String>> + Send;
 }
 
 pub struct RemovableVolumeCoordinator<E: VolumeEventEmitter> {
@@ -122,18 +114,26 @@ impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
                 }
                 Ok(())
             }
-            VolumeEvent::Removal(id_or_path) => {
-                let volume_info = self
-                    .active_volumes
-                    .as_ref()
-                    .and_then(|a| a.find_by_id_or_path(&id_or_path));
-                let volume_id = volume_info
-                    .as_ref()
-                    .map(|v| v.volume_id.clone())
-                    .unwrap_or_else(|| id_or_path.clone());
+            VolumeEvent::Removal(removal) => {
+                let volume_info = match &removal {
+                    VolumeRemoval::VolumeId(id) => {
+                        self.active_volumes.as_ref().and_then(|a| a.get(id))
+                    }
+                    VolumeRemoval::MountPath(path) => {
+                        self.active_volumes.as_ref().and_then(|a| a.find_by_mount_path(path))
+                    }
+                };
+                let volume_id = match (&volume_info, &removal) {
+                    (Some(info), _) => info.volume_id.clone(),
+                    (None, VolumeRemoval::VolumeId(id)) => id.clone(),
+                    (None, VolumeRemoval::MountPath(path)) => path.clone(),
+                };
 
                 if let Some(ref active) = self.active_volumes {
-                    active.remove(&id_or_path);
+                    match &removal {
+                        VolumeRemoval::VolumeId(id) => active.remove(id),
+                        VolumeRemoval::MountPath(path) => active.remove_by_mount_path(path),
+                    }
                 }
 
                 self.emitter.emit_volume_removed(&volume_id)?;

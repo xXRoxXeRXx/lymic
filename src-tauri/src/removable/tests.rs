@@ -26,6 +26,7 @@ struct MockEmitter {
     reconciled: Arc<Mutex<Vec<(Option<String>, String)>>>,
     unwatched: Arc<Mutex<Vec<String>>>,
     scanned: Arc<Mutex<Vec<String>>>,
+    unwatch_error: Arc<Mutex<Option<String>>>,
 }
 
 impl VolumeEventEmitter for MockEmitter {
@@ -34,8 +35,8 @@ impl VolumeEventEmitter for MockEmitter {
         Ok(())
     }
 
-    fn emit_volume_removed(&self, id_or_path: &str) -> Result<(), String> {
-        self.removed.lock().unwrap().push(id_or_path.to_string());
+    fn emit_volume_removed(&self, volume_id: &str) -> Result<(), String> {
+        self.removed.lock().unwrap().push(volume_id.to_string());
         Ok(())
     }
 
@@ -52,6 +53,9 @@ impl VolumeEventEmitter for MockEmitter {
     }
 
     async fn reconcile_folder_unavailable(&self, path: &str) -> Result<(), String> {
+        if let Some(ref err) = *self.unwatch_error.lock().unwrap() {
+            return Err(err.clone());
+        }
         self.unwatched.lock().unwrap().push(path.to_string());
         Ok(())
     }
@@ -61,6 +65,7 @@ impl VolumeEventEmitter for MockEmitter {
         Ok(())
     }
 }
+
 
 #[tokio::test]
 async fn unknown_volume_arrival_emits_removable_volume_detected() {
@@ -145,7 +150,9 @@ async fn coordinator_arrival_and_removal_tracks_active_volumes() {
     assert_eq!(active_volumes.get(&volume.volume_id), Some(volume.clone()));
 
     coordinator
-        .handle_event(VolumeEvent::Removal(volume.mount_path.clone()))
+        .handle_event(VolumeEvent::Removal(VolumeRemoval::MountPath(
+            volume.mount_path.clone(),
+        )))
         .await
         .unwrap();
 
@@ -333,7 +340,9 @@ async fn volume_removal_clears_active_volumes_emits_removal_and_unwatches_bound_
 
     // When card removal event arrives (by drive path or volume id):
     coordinator
-        .handle_event(VolumeEvent::Removal(mount_path.to_string()))
+        .handle_event(VolumeEvent::Removal(VolumeRemoval::MountPath(
+            mount_path.to_string(),
+        )))
         .await
         .unwrap();
 
@@ -569,7 +578,9 @@ async fn volume_removal_during_active_sync_transitions_inflight_to_failed_and_re
 
     // 3. Platform volume removal event arrives
     coordinator
-        .handle_event(VolumeEvent::Removal(mount_path.to_string()))
+        .handle_event(VolumeEvent::Removal(VolumeRemoval::MountPath(
+            mount_path.to_string(),
+        )))
         .await
         .unwrap();
 
@@ -608,3 +619,91 @@ async fn volume_removal_during_active_sync_transitions_inflight_to_failed_and_re
     assert_eq!(scanned.len(), 1);
     assert_eq!(scanned[0], norm_folder);
 }
+
+#[tokio::test]
+async fn volume_removal_by_volume_id_clears_active_volumes_and_unwatches() {
+    let pool = test_pool().await;
+    let emitter = MockEmitter::default();
+    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone());
+
+    let volume_id = "vol-test-id-123";
+    let mount_path = "E:/";
+    let folder_path = "E:/DCIM";
+
+    let folder_id = crate::db::add_folder(&pool, folder_path, None)
+        .await
+        .unwrap();
+    crate::db::bind_removable_folder(&pool, folder_id, volume_id, "DCIM")
+        .await
+        .unwrap();
+
+    let active_volumes = ActiveRemovableVolumes::new();
+    let volume = VolumeInfo {
+        volume_id: volume_id.to_string(),
+        mount_path: mount_path.to_string(),
+        display_name: "EOS_DIGITAL".to_string(),
+    };
+    active_volumes.insert(volume.clone());
+
+    let coordinator = coordinator.with_active_volumes(active_volumes.clone());
+
+    // Send removal by VolumeId directly
+    coordinator
+        .handle_event(VolumeEvent::Removal(VolumeRemoval::VolumeId(
+            volume_id.to_string(),
+        )))
+        .await
+        .unwrap();
+
+    // 1. Clears active volume
+    assert!(active_volumes.get(volume_id).is_none());
+
+    // 2. Emits removal event with volume_id
+    let removed = emitter.removed.lock().unwrap().clone();
+    assert_eq!(removed.len(), 1);
+    assert_eq!(removed[0], volume_id);
+
+    // 3. Unwatches bound folder
+    let unwatched = emitter.unwatched.lock().unwrap().clone();
+    assert_eq!(unwatched.len(), 1);
+    assert_eq!(unwatched[0], folder_path);
+}
+
+#[tokio::test]
+async fn volume_removal_propagates_unwatch_error_when_reconcile_folder_unavailable_fails() {
+    let pool = test_pool().await;
+    let emitter = MockEmitter::default();
+    *emitter.unwatch_error.lock().unwrap() = Some("simulated unwatch failure".to_string());
+
+    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone());
+
+    let volume_id = "vol-error-test";
+    let folder_path = "E:/DCIM";
+
+    let folder_id = crate::db::add_folder(&pool, folder_path, None)
+        .await
+        .unwrap();
+    crate::db::bind_removable_folder(&pool, folder_id, volume_id, "DCIM")
+        .await
+        .unwrap();
+
+    let active_volumes = ActiveRemovableVolumes::new();
+    let volume = VolumeInfo {
+        volume_id: volume_id.to_string(),
+        mount_path: "E:/".to_string(),
+        display_name: "EOS_DIGITAL".to_string(),
+    };
+    active_volumes.insert(volume.clone());
+
+    let coordinator = coordinator.with_active_volumes(active_volumes);
+
+    let result = coordinator
+        .handle_event(VolumeEvent::Removal(VolumeRemoval::VolumeId(
+            volume_id.to_string(),
+        )))
+        .await;
+
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err(), "simulated unwatch failure");
+}
+

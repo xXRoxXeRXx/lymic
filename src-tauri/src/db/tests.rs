@@ -1485,4 +1485,112 @@ mod database_tests {
         assert_eq!(sibling_queued.0, "E:/DCIM_Backup/100EOS/IMG_0003.JPG");
         assert_eq!(sibling_queued.1, "PENDING");
     }
+
+    #[tokio::test]
+    async fn sql_path_is_or_descendant_of_predicate_format() {
+        let predicate = crate::db::sql_path_is_or_descendant_of("local_path", "?1");
+        assert_eq!(
+            predicate,
+            "(local_path = ?1 OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\\\')"
+        );
+    }
+
+    #[tokio::test]
+    async fn reset_failed_queue_items_for_folder_resets_descendants_and_preserves_sibling_folders() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        // 1. Populate sync_queue with failed items in target folder and a sibling folder
+        sqlx::query(
+            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, upload_unit_id, is_primary, failure_reason) \
+             VALUES \
+             (1, 1, 'E:/DCIM/sub/1.jpg', 100, 1, 'FAILED', 'E:/DCIM/sub/1.jpg', 1, 'timeout'), \
+             (1, 2, 'E:/DCIM/2.jpg', 200, 2, 'FAILED', 'E:/DCIM/2.jpg', 1, 'io error'), \
+             (1, 3, 'E:/DCIM_Backup/3.jpg', 300, 3, 'FAILED', 'E:/DCIM_Backup/3.jpg', 1, 'sibling failure')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // 2. Populate sync_state with matching failed items
+        update_sync_state(&pool, "E:/DCIM/sub/1.jpg", "h1", 100, 1, "FAILED", None)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE sync_state SET failure_reason = 'timeout' WHERE local_path = 'E:/DCIM/sub/1.jpg'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        update_sync_state(&pool, "E:/DCIM/2.jpg", "h2", 200, 2, "FAILED", None)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE sync_state SET failure_reason = 'io error' WHERE local_path = 'E:/DCIM/2.jpg'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        update_sync_state(&pool, "E:/DCIM_Backup/3.jpg", "h3", 300, 3, "FAILED", None)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE sync_state SET failure_reason = 'sibling failure' WHERE local_path = 'E:/DCIM_Backup/3.jpg'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Reset failed queue items for target folder 'E:/DCIM'
+        let affected = reset_failed_queue_items_for_folder(&pool, "E:/DCIM")
+            .await
+            .unwrap();
+        assert_eq!(affected, 2);
+
+        // Verify sync_jobs was transitioned to RUNNING
+        let job_status: String = sqlx::query_scalar("SELECT status FROM sync_jobs WHERE id = 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(job_status, "RUNNING");
+
+        // Verify E:/DCIM items in sync_queue were reset
+        let target_queue: Vec<(String, String, Option<String>)> = sqlx::query_as(
+            "SELECT local_path, status, failure_reason FROM sync_queue WHERE local_path LIKE 'E:/DCIM/%' ORDER BY sequence",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(target_queue.len(), 2);
+        assert_eq!(target_queue[0], ("E:/DCIM/sub/1.jpg".to_string(), "PENDING".to_string(), None));
+        assert_eq!(target_queue[1], ("E:/DCIM/2.jpg".to_string(), "PENDING".to_string(), None));
+
+        // Verify sibling E:/DCIM_Backup item in sync_queue was NOT reset
+        let sibling_queue: (String, String, Option<String>) = sqlx::query_as(
+            "SELECT local_path, status, failure_reason FROM sync_queue WHERE local_path = 'E:/DCIM_Backup/3.jpg'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(sibling_queue, ("E:/DCIM_Backup/3.jpg".to_string(), "FAILED".to_string(), Some("sibling failure".to_string())));
+
+        // Verify sync_state as well
+        let target_state: Vec<(String, String, Option<String>)> = sqlx::query_as(
+            "SELECT local_path, status, failure_reason FROM sync_state WHERE local_path LIKE 'E:/DCIM/%' ORDER BY local_path",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(target_state.len(), 2);
+        assert_eq!(target_state[0].1, "PENDING");
+        assert_eq!(target_state[0].2, None);
+        assert_eq!(target_state[1].1, "PENDING");
+        assert_eq!(target_state[1].2, None);
+
+        let sibling_state: (String, String, Option<String>) = sqlx::query_as(
+            "SELECT local_path, status, failure_reason FROM sync_state WHERE local_path = 'E:/DCIM_Backup/3.jpg'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(sibling_state.1, "FAILED");
+        assert_eq!(sibling_state.2, Some("sibling failure".to_string()));
+    }
 }
+
