@@ -6,14 +6,8 @@ use super::monitor::RemovableMediaMonitor;
 use tokio::sync::mpsc::Sender;
 
 #[cfg(target_os = "macos")]
+#[derive(Default)]
 pub struct MacOsRemovableMediaMonitor;
-
-#[cfg(target_os = "macos")]
-impl Default for MacOsRemovableMediaMonitor {
-    fn default() -> Self {
-        Self
-    }
-}
 
 #[cfg(target_os = "macos")]
 impl RemovableMediaMonitor for MacOsRemovableMediaMonitor {

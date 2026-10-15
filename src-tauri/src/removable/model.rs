@@ -14,6 +14,7 @@ pub enum VolumeRemoval {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum VolumeEvent {
     Arrival(VolumeInfo),
     Removal(VolumeRemoval),

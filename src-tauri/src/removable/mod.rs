@@ -98,11 +98,11 @@ pub fn create_platform_monitor() -> Box<dyn RemovableMediaMonitor> {
     }
     #[cfg(target_os = "macos")]
     {
-        Box::new(macos::MacOsRemovableMediaMonitor::default())
+        Box::new(macos::MacOsRemovableMediaMonitor)
     }
     #[cfg(target_os = "linux")]
     {
-        Box::new(linux::LinuxRemovableMediaMonitor::default())
+        Box::new(linux::LinuxRemovableMediaMonitor)
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
