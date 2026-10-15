@@ -72,6 +72,7 @@ async fn open_pool(db_path: &Path) -> Result<SqlitePool, sqlx::Error> {
     let options = SqliteConnectOptions::new()
         .filename(db_path)
         .create_if_missing(true)
+        .foreign_keys(true)
         .journal_mode(SqliteJournalMode::Wal)
         .busy_timeout(Duration::from_secs(5));
 
@@ -115,6 +116,7 @@ async fn try_salvage_folders(db_path: &Path) -> Vec<WatchedFolder> {
     let options = SqliteConnectOptions::new()
         .filename(db_path)
         .read_only(true)
+        .foreign_keys(true)
         .busy_timeout(Duration::from_secs(2));
 
     let pool = match SqlitePoolOptions::new()
