@@ -67,6 +67,7 @@
   "logout_confirmation": "¿Seguro que quieres cerrar sesión?",
   "select_folder": "Seleccionar carpeta",
   "target_album": "Álbum de destino",
+  "target_album_unavailable": "Álbum no disponible",
   "target_album_modal_title": "Seleccionar álbum de destino",
   "target_album_modal_subtitle": "Selecciona un álbum de Immich opcional para «{folder}»",
   "target_album_none": "Ningún álbum (Predeterminado)",

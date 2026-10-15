@@ -67,6 +67,7 @@
   "logout_confirmation": "क्या आप वाकई लॉग आउट करना चाहते हैं?",
   "select_folder": "फ़ोल्डर चुनें",
   "target_album": "लक्षित एल्बम",
+  "target_album_unavailable": "एल्बम उपलब्ध नहीं है",
   "target_album_modal_title": "लक्षित एल्बम चुनें",
   "target_album_modal_subtitle": "\"{folder}\" के लिए एक वैकल्पिक Immich एल्बम चुनें",
   "target_album_none": "कोई एल्बम नहीं (डिफ़ॉल्ट)",

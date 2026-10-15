@@ -67,6 +67,7 @@
   "logout_confirmation": "确定要退出登录吗？",
   "select_folder": "选择文件夹",
   "target_album": "目标相册",
+  "target_album_unavailable": "相册不可用",
   "target_album_modal_title": "选择目标相册",
   "target_album_modal_subtitle": "为“{folder}”选择一个可选的 Immich 相册",
   "target_album_none": "无相册（默认）",

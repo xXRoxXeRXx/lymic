@@ -1,31 +1,18 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { Folder, FolderPlus, Trash2 } from "lucide-svelte";
   import { t } from "svelte-i18n";
-  import type { Album, WatchedFolder } from "./types";
+  import { createTargetAlbumCatalogue, type TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
+  import type { WatchedFolder } from "./types";
 
   interface Props {
     watchedFolders: WatchedFolder[];
     onAddFolder: () => void;
     onRemoveFolder: (id: number) => void;
+    catalogue?: TargetAlbumCatalogue;
   }
 
-  let { watchedFolders, onAddFolder, onRemoveFolder }: Props = $props();
-  let albums = $state<Album[]>([]);
-  let latestAlbumRequest = 0;
+  let { watchedFolders, onAddFolder, onRemoveFolder, catalogue = createTargetAlbumCatalogue() }: Props = $props();
   let targetAlbumIds = new Set<string>();
-
-  const albumNamesById = $derived(new Map(albums.map((album) => [album.id, album.albumName])));
-
-  async function fetchAlbums() {
-    const request = ++latestAlbumRequest;
-    try {
-      const loadedAlbums = await invoke<Album[]>("get_albums");
-      if (request === latestAlbumRequest) albums = loadedAlbums;
-    } catch {
-      // Retain the persisted ID if the album list is temporarily unavailable.
-    }
-  }
 
   $effect(() => {
     const nextTargetAlbumIds = new Set(
@@ -34,8 +21,8 @@
     const hasNewTargetAlbum = [...nextTargetAlbumIds].some((id) => !targetAlbumIds.has(id));
     targetAlbumIds = nextTargetAlbumIds;
 
-    if (hasNewTargetAlbum || latestAlbumRequest === 0) {
-      void fetchAlbums();
+    if (hasNewTargetAlbum || !catalogue.hasRequested) {
+      void catalogue.refresh();
     }
   });
 </script>
@@ -65,7 +52,7 @@
             <p class="text-[10px] font-mono text-slate-400 dark:text-slate-400 truncate">{folder.path}</p>
             {#if folder.target_album_id}
               <p class="text-[10px] font-medium text-blue-600 dark:text-blue-400 truncate">
-                {$t('target_album')}: {albumNamesById.get(folder.target_album_id) ?? folder.target_album_id}
+                {$t('target_album')}: {catalogue.nameFor(folder.target_album_id) ?? $t('target_album_unavailable')}
               </p>
             {/if}
           </div>
