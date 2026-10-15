@@ -6,7 +6,7 @@ use crate::{
     db,
     immich::{ImmichClient, SidecarDirectoryCache},
     media::{
-        model::{upload_units_from_assets, HashedUploadUnit, ScanResult, UploadUnit},
+        model::{HashedUploadUnit, UploadUnit},
         scanner::{calculate_stable_checksums, reuse_cached_checksums},
     },
     sync::{
@@ -35,20 +35,43 @@ pub(crate) struct SyncSummary {
 pub(crate) const BULK_CHECK_CHUNK_SIZE: usize = 100;
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn process_sync_block(
+pub(crate) async fn process_recovered_upload_units(
     app: tauri::AppHandle,
     pool: sqlx::SqlitePool,
     client: Arc<ImmichClient>,
-    scan_result: ScanResult,
+    units: Vec<UploadUnit>,
+    audit_context: SyncAuditContext,
+    progress: JobByteProgress,
+    coordinator: Arc<SyncCoordinatorInner>,
+    sidecar_cache: SidecarDirectoryCache,
+) -> Result<SyncSummary, String> {
+    process_upload_units(
+        app,
+        pool,
+        client,
+        units,
+        Vec::new(),
+        audit_context,
+        progress,
+        coordinator,
+        sidecar_cache,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn process_upload_units(
+    app: tauri::AppHandle,
+    pool: sqlx::SqlitePool,
+    client: Arc<ImmichClient>,
+    units: Vec<UploadUnit>,
+    failures: Vec<crate::media::model::FileFailure>,
     audit_context: SyncAuditContext,
     progress: JobByteProgress,
     coordinator: Arc<SyncCoordinatorInner>,
     sidecar_cache: SidecarDirectoryCache,
 ) -> Result<SyncSummary, String> {
     let upload_parallelism = load_upload_parallelism(&pool).await?;
-    let ScanResult {
-        files, failures, ..
-    } = scan_result;
     let mut queue_results = Vec::new();
     for failure in failures {
         log_to_ui_file_error(
@@ -62,8 +85,6 @@ pub(crate) async fn process_sync_block(
         let _ = db::mark_sync_failed(&pool, &failure.path, 0, 0, &failure.error).await;
         queue_results.push((failure.path, "FAILED".to_string()));
     }
-    let units = upload_units_from_assets(files);
-
     let mut hashed_units = Vec::new();
     let mut hashing = FuturesUnordered::new();
     for unit in units {

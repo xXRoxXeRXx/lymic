@@ -7,9 +7,15 @@ mod sync_state;
 pub use folders::{add_folder, get_folders, remove_folder, WatchedFolder};
 pub use init::{init, DatabaseStatus};
 pub use queue::{
-    complete_sync_job_if_finished, enqueue_sync_assets, finalize_queued_block, get_sync_snapshot,
-    has_pending_sync_queue_items, next_sync_queue_block, recover_sync_job, set_sync_status,
-    update_sync_queue_failure, update_sync_queue_remote_id, QueueAsset, SyncSnapshot,
+    complete_sync_job_if_finished, enqueue_upload_units, finalize_queued_block, get_sync_snapshot,
+    has_pending_sync_queue_items, next_queued_upload_units, recover_sync_job, set_sync_status,
+    update_sync_queue_failure, update_sync_queue_remote_id, QueueUploadAsset, QueueUploadUnit,
+    QueuedUploadUnit, SyncSnapshot,
+};
+
+#[cfg(test)]
+pub use queue::{
+    enqueue_sync_assets, next_sync_queue_block, update_upload_unit_remote_id, QueueAsset,
 };
 pub use settings::{get_upload_parallelism, set_upload_parallelism};
 pub use sync_state::{
