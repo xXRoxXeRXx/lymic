@@ -163,5 +163,9 @@
   "log_file_scan_failed": "'{file}'-এর জন্য ফাইল স্ক্যান ব্যর্থ হয়েছে: {error}",
   "log_file_hash_failed": "'{file}'-এর জন্য ফাইল হ্যাশিং ব্যর্থ হয়েছে: {error}",
   "log_upload_persistence_reconcile_failed": "দূরবর্তী আপলোড সফল হয়েছে, কিন্তু স্থানীয় স্থিতি সমন্বয় করা যায়নি: {error}",
-  "log_audit_failure": "অডিট লগ ব্যর্থতা: {error}"
+  "log_audit_failure": "অডিট লগ ব্যর্থতা: {error}",
+  "removable_card_detected_title": "এসডি কার্ড সনাক্ত হয়েছে",
+  "removable_card_detected_body": "কার্ড {name} ({path}) সিঙ্ক করার জন্য প্রস্তুত।",
+  "removable_prompt_sync": "কার্ড সিঙ্ক করুন",
+  "removable_prompt_dismiss": "খারিজ করুন"
 }

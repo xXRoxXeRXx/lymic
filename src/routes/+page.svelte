@@ -8,11 +8,13 @@
   import DashboardView from "#lib/components/DashboardView.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
   import UpdateDialog from "#lib/components/UpdateDialog.svelte";
+  import RemovableVolumePrompt from "#lib/components/RemovableVolumePrompt.svelte";
   import { createFeedbackController } from "#lib/controllers/feedback-controller.svelte.ts";
   import { createAuthController } from "#lib/controllers/auth-controller.svelte.ts";
   import { createSyncController } from "#lib/controllers/sync-controller.svelte.ts";
   import { createPreferencesController } from "#lib/controllers/preferences-controller.svelte.ts";
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
+  import { createRemovableVolumeController } from "#lib/controllers/removable-volume-controller.svelte.ts";
 
   let currentView = $state("dashboard");
   const feedback = createFeedbackController(() => $t("unknown_error"));
@@ -20,6 +22,9 @@
     reportError: feedback.report,
     t: (key) => $t(key),
     locale: () => $locale ?? "en",
+  });
+  const removable = createRemovableVolumeController({
+    t: (key, params) => $t(key, params),
   });
   const auth = createAuthController({
     formatError: feedback.formatError,
@@ -43,6 +48,7 @@
     sync.startLifecycle();
     updater.startLifecycle();
     preferences.startLifecycle();
+    void removable.startSubscriptions();
 
     void auth.hydrate()
       .then(() => auth.isAuthenticated ? sync.refreshFailedSyncs() : undefined)
@@ -57,6 +63,7 @@
       sync.destroy();
       updater.destroy();
       preferences.stopLifecycle();
+      removable.destroy();
     };
   });
 </script>
@@ -127,6 +134,15 @@
             <X class="w-4 h-4" />
           </button>
         </div>
+      {/if}
+      {#if removable.currentPrompt}
+        <RemovableVolumePrompt
+          volume={removable.currentPrompt}
+          onAccept={(vol) => {
+            console.log("Removable volume accepted:", vol);
+          }}
+          onDismiss={(volId) => removable.dismiss(volId)}
+        />
       {/if}
       {#if !auth.isAuthenticated}
         <LoginView

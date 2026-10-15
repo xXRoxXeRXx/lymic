@@ -163,5 +163,9 @@
   "log_file_scan_failed": "Dateiüberprüfung für ''{file}'' fehlgeschlagen: {error}",
   "log_file_hash_failed": "Prüfsummenberechnung für ''{file}'' fehlgeschlagen: {error}",
   "log_upload_persistence_reconcile_failed": "Remote-Upload erfolgreich, aber lokaler Zustand konnte nicht abgeglichen werden: {error}",
-  "log_audit_failure": "Fehler im Überwachungsprotokoll: {error}"
+  "log_audit_failure": "Fehler im Überwachungsprotokoll: {error}",
+  "removable_card_detected_title": "SD-Karte erkannt",
+  "removable_card_detected_body": "Karte {name} ({path}) ist bereit zur Synchronisierung.",
+  "removable_prompt_sync": "Karte synchronisieren",
+  "removable_prompt_dismiss": "Verwerfen"
 }

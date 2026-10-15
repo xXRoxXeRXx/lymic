@@ -163,5 +163,9 @@
   "log_file_scan_failed": "فشل فحص الملف '{file}': {error}",
   "log_file_hash_failed": "فشل تجزئة الملف '{file}': {error}",
   "log_upload_persistence_reconcile_failed": "نجح الرفع البعيد، ولكن تعذرت مطابقة الحالة المحلية: {error}",
-  "log_audit_failure": "فشل سجل التدقيق: {error}"
+  "log_audit_failure": "فشل سجل التدقيق: {error}",
+  "removable_card_detected_title": "تم اكتشاف بطاقة SD",
+  "removable_card_detected_body": "البطاقة {name} ({path}) جاهزة للمزامنة.",
+  "removable_prompt_sync": "مزامنة البطاقة",
+  "removable_prompt_dismiss": "تجاهل"
 }

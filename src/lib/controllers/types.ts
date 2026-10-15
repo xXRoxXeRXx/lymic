@@ -1,4 +1,4 @@
-﻿export interface UiLogMessage {
+export interface UiLogMessage {
   level?: string;
   message?: string;
   timestamp?: number;
@@ -32,3 +32,10 @@ export interface TransferStatsEvent {
 export interface RemoveFolderResult {
   requiresSyncCancellation: boolean;
 }
+
+export interface DetectedVolume {
+  volumeId: string;
+  mountPath: string;
+  displayName: string;
+}
+

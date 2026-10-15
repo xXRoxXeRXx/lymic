@@ -16,6 +16,7 @@ pub(crate) struct StartupContext {
     pub(crate) watch_events: tokio::sync::mpsc::Receiver<notify::Event>,
     pub(crate) rescan_requested: std::sync::Arc<AtomicBool>,
     pub(crate) rescan_notify: std::sync::Arc<tokio::sync::Notify>,
+    pub(crate) volume_events: tokio::sync::mpsc::Receiver<crate::removable::VolumeEvent>,
 }
 
 pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std::error::Error>> {
@@ -251,12 +252,26 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
         ),
     );
 
+    let (volume_tx, volume_events) = tokio::sync::mpsc::channel(64);
+    let removable_monitor = crate::removable::create_platform_monitor();
+    if let Err(error) = removable_monitor.start(volume_tx) {
+        log_to_ui_folder_error(
+            &handle,
+            "WARN",
+            &format!("Failed to start removable volume monitor: {error}"),
+            "log_removable_monitor_failed",
+            "",
+            &error,
+        );
+    }
+
     Ok(StartupContext {
         has_folders,
         recovered_sync,
         watch_events,
         rescan_requested,
         rescan_notify,
+        volume_events,
     })
 }
 

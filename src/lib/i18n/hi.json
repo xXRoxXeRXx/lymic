@@ -163,5 +163,9 @@
   "log_file_scan_failed": "'{file}' के लिए फ़ाइल स्कैन विफल: {error}",
   "log_file_hash_failed": "'{file}' के लिए फ़ाइल हैशिंग विफल: {error}",
   "log_upload_persistence_reconcile_failed": "रिमोट अपलोड सफल रहा, लेकिन स्थानीय स्थिति का मिलान नहीं किया जा सका: {error}",
-  "log_audit_failure": "ऑडिट लॉग विफलता: {error}"
+  "log_audit_failure": "ऑडिट लॉग विफलता: {error}",
+  "removable_card_detected_title": "एसडी कार्ड का पता चला",
+  "removable_card_detected_body": "कार्ड {name} ({path}) सिंक्रनाइज़ करने के लिए तैयार है।",
+  "removable_prompt_sync": "कार्ड सिंक करें",
+  "removable_prompt_dismiss": "खारिज करें"
 }

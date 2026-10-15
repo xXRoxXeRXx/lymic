@@ -163,5 +163,9 @@
   "log_file_scan_failed": "检查文件“{file}”失败：{error}",
   "log_file_hash_failed": "计算文件“{file}”哈希失败：{error}",
   "log_upload_persistence_reconcile_failed": "远程上传成功，但无法同步本地持久化状态：{error}",
-  "log_audit_failure": "审计日志失败：{error}"
+  "log_audit_failure": "审计日志失败：{error}",
+  "removable_card_detected_title": "检测到 SD 卡",
+  "removable_card_detected_body": "卡 {name}（{path}）已准备好同步。",
+  "removable_prompt_sync": "同步此卡",
+  "removable_prompt_dismiss": "忽略"
 }
