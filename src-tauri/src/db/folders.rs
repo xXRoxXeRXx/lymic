@@ -137,53 +137,54 @@ pub async fn remap_watched_folder_path(
         .execute(&mut *tx)
         .await?;
 
-    sqlx::query(
+    let local_path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
+    let upload_unit_cond = super::sql_path_is_or_descendant_of("upload_unit_id", "?1");
+    let current_path_cond = super::sql_path_is_or_descendant_of("current_path", "?1");
+
+    let sync_state_sql = format!(
         "UPDATE sync_state \
          SET local_path = ?2 || substr(local_path, length(?1) + 1) \
-         WHERE local_path = ?1 \
-            OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' \
-            OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\'",
-    )
-    .bind(clean_old)
-    .bind(clean_new)
-    .execute(&mut *tx)
-    .await?;
+         WHERE {local_path_cond}"
+    );
+    sqlx::query(&sync_state_sql)
+        .bind(clean_old)
+        .bind(clean_new)
+        .execute(&mut *tx)
+        .await?;
 
-    sqlx::query(
+    let sync_queue_path_sql = format!(
         "UPDATE sync_queue \
          SET local_path = ?2 || substr(local_path, length(?1) + 1) \
-         WHERE local_path = ?1 \
-            OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' \
-            OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\'",
-    )
-    .bind(clean_old)
-    .bind(clean_new)
-    .execute(&mut *tx)
-    .await?;
+         WHERE {local_path_cond}"
+    );
+    sqlx::query(&sync_queue_path_sql)
+        .bind(clean_old)
+        .bind(clean_new)
+        .execute(&mut *tx)
+        .await?;
 
-    sqlx::query(
+    let sync_queue_unit_sql = format!(
         "UPDATE sync_queue \
          SET upload_unit_id = ?2 || substr(upload_unit_id, length(?1) + 1) \
-         WHERE upload_unit_id = ?1 \
-            OR substr(upload_unit_id, 1, length(?1) + 1) = ?1 || '/' \
-            OR substr(upload_unit_id, 1, length(?1) + 1) = ?1 || '\\'",
-    )
-    .bind(clean_old)
-    .bind(clean_new)
-    .execute(&mut *tx)
-    .await?;
+         WHERE {upload_unit_cond}"
+    );
+    sqlx::query(&sync_queue_unit_sql)
+        .bind(clean_old)
+        .bind(clean_new)
+        .execute(&mut *tx)
+        .await?;
 
-    sqlx::query(
+    let sync_jobs_sql = format!(
         "UPDATE sync_jobs \
          SET current_path = ?2 || substr(current_path, length(?1) + 1) \
-         WHERE current_path = ?1 \
-            OR substr(current_path, 1, length(?1) + 1) = ?1 || '/' \
-            OR substr(current_path, 1, length(?1) + 1) = ?1 || '\\'",
-    )
-    .bind(clean_old)
-    .bind(clean_new)
-    .execute(&mut *tx)
-    .await?;
+         WHERE {current_path_cond}"
+    );
+    sqlx::query(&sync_jobs_sql)
+        .bind(clean_old)
+        .bind(clean_new)
+        .execute(&mut *tx)
+        .await?;
+
 
     tx.commit().await?;
     Ok(())

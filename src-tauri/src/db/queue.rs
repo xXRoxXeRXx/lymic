@@ -1,5 +1,8 @@
 use sqlx::SqlitePool;
 
+/// The singleton job ID used for Lymic's desktop sync queue, backed by database CHECK constraint `id = 1`.
+pub const SINGLETON_SYNC_JOB_ID: i64 = 1;
+
 #[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncSnapshot {
@@ -397,3 +400,50 @@ pub async fn complete_sync_job_if_finished(
     }
     Some(set_sync_status(pool, "IDLE").await).transpose()
 }
+
+pub async fn reset_failed_queue_items_for_folder(
+    pool: &SqlitePool,
+    folder_path: &str,
+) -> Result<u64, sqlx::Error> {
+    let clean_path = folder_path.trim_end_matches(['/', '\\']);
+    let mut tx = pool.begin().await?;
+
+    let path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
+
+    let queue_sql = format!(
+        "UPDATE sync_queue \
+         SET status = 'PENDING', failure_reason = NULL \
+         WHERE job_id = {SINGLETON_SYNC_JOB_ID} AND status = 'FAILED' \
+           AND {path_cond}"
+    );
+
+    let queue_res = sqlx::query(&queue_sql)
+        .bind(clean_path)
+        .execute(&mut *tx)
+        .await?;
+
+    let state_sql = format!(
+        "UPDATE sync_state \
+         SET status = 'PENDING', failure_reason = NULL \
+         WHERE status = 'FAILED' \
+           AND {path_cond}"
+    );
+
+    sqlx::query(&state_sql)
+        .bind(clean_path)
+        .execute(&mut *tx)
+        .await?;
+
+    if queue_res.rows_affected() > 0 {
+        let job_sql = format!(
+            "UPDATE sync_jobs SET status = 'RUNNING' WHERE id = {SINGLETON_SYNC_JOB_ID} AND status = 'IDLE'"
+        );
+        sqlx::query(&job_sql)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(queue_res.rows_affected())
+}
+

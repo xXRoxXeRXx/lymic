@@ -26,6 +26,11 @@ impl VolumeEventEmitter for tauri::AppHandle {
             .map_err(|e| e.to_string())
     }
 
+    fn emit_volume_removed(&self, volume_id: &str) -> Result<(), String> {
+        self.emit("removable-volume-removed", volume_id)
+            .map_err(|e| e.to_string())
+    }
+
     async fn reconcile_remount_watcher(
         &self,
         old_path: Option<&str>,
@@ -43,6 +48,15 @@ impl VolumeEventEmitter for tauri::AppHandle {
 
         Ok(())
     }
+
+    async fn reconcile_folder_unavailable(&self, path: &str) -> Result<(), String> {
+        let watcher_state = self.state::<tokio::sync::Mutex<crate::watcher::WatcherState>>();
+        let mut w = watcher_state.lock().await;
+        w.reconcile_path(path, false)
+            .map_err(|e| format!("Could not unwatch unavailable path '{path}': {e}"))?;
+        Ok(())
+    }
+
 
     async fn trigger_remount_scan(&self, folder_path: &str) -> Result<(), String> {
         let path = std::path::PathBuf::from(folder_path);
