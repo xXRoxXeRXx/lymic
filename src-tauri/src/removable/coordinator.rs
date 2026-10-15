@@ -119,9 +119,10 @@ impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
                     VolumeRemoval::VolumeId(id) => {
                         self.active_volumes.as_ref().and_then(|a| a.get(id))
                     }
-                    VolumeRemoval::MountPath(path) => {
-                        self.active_volumes.as_ref().and_then(|a| a.find_by_mount_path(path))
-                    }
+                    VolumeRemoval::MountPath(path) => self
+                        .active_volumes
+                        .as_ref()
+                        .and_then(|a| a.find_by_mount_path(path)),
                 };
                 let volume_id = match (&volume_info, &removal) {
                     (Some(info), _) => info.volume_id.clone(),

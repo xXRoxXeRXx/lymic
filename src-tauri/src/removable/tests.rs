@@ -66,7 +66,6 @@ impl VolumeEventEmitter for MockEmitter {
     }
 }
 
-
 #[tokio::test]
 async fn unknown_volume_arrival_emits_removable_volume_detected() {
     let pool = test_pool().await;
@@ -706,4 +705,3 @@ async fn volume_removal_propagates_unwatch_error_when_reconcile_folder_unavailab
     assert!(result.is_err());
     assert_eq!(result.unwrap_err(), "simulated unwatch failure");
 }
-

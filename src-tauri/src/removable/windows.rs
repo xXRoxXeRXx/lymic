@@ -218,7 +218,9 @@ unsafe extern "system" fn window_proc(
                         if (unitmask & (1 << bit)) != 0 {
                             let drive_letter = (b'A' + bit as u8) as char;
                             let drive_str = format!("{}:\\", drive_letter);
-                            let _ = ctx.tx.blocking_send(VolumeEvent::Removal(VolumeRemoval::MountPath(drive_str)));
+                            let _ = ctx.tx.blocking_send(VolumeEvent::Removal(
+                                VolumeRemoval::MountPath(drive_str),
+                            ));
                         }
                     }
                 }

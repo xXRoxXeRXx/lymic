@@ -185,7 +185,6 @@ pub async fn remap_watched_folder_path(
         .execute(&mut *tx)
         .await?;
 
-
     tx.commit().await?;
     Ok(())
 }

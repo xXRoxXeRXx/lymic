@@ -1496,7 +1496,8 @@ mod database_tests {
     }
 
     #[tokio::test]
-    async fn reset_failed_queue_items_for_folder_resets_descendants_and_preserves_sibling_folders() {
+    async fn reset_failed_queue_items_for_folder_resets_descendants_and_preserves_sibling_folders()
+    {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
@@ -1524,10 +1525,12 @@ mod database_tests {
         update_sync_state(&pool, "E:/DCIM/2.jpg", "h2", 200, 2, "FAILED", None)
             .await
             .unwrap();
-        sqlx::query("UPDATE sync_state SET failure_reason = 'io error' WHERE local_path = 'E:/DCIM/2.jpg'")
-            .execute(&pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "UPDATE sync_state SET failure_reason = 'io error' WHERE local_path = 'E:/DCIM/2.jpg'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         update_sync_state(&pool, "E:/DCIM_Backup/3.jpg", "h3", 300, 3, "FAILED", None)
             .await
@@ -1558,8 +1561,14 @@ mod database_tests {
         .await
         .unwrap();
         assert_eq!(target_queue.len(), 2);
-        assert_eq!(target_queue[0], ("E:/DCIM/sub/1.jpg".to_string(), "PENDING".to_string(), None));
-        assert_eq!(target_queue[1], ("E:/DCIM/2.jpg".to_string(), "PENDING".to_string(), None));
+        assert_eq!(
+            target_queue[0],
+            ("E:/DCIM/sub/1.jpg".to_string(), "PENDING".to_string(), None)
+        );
+        assert_eq!(
+            target_queue[1],
+            ("E:/DCIM/2.jpg".to_string(), "PENDING".to_string(), None)
+        );
 
         // Verify sibling E:/DCIM_Backup item in sync_queue was NOT reset
         let sibling_queue: (String, String, Option<String>) = sqlx::query_as(
@@ -1568,7 +1577,14 @@ mod database_tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(sibling_queue, ("E:/DCIM_Backup/3.jpg".to_string(), "FAILED".to_string(), Some("sibling failure".to_string())));
+        assert_eq!(
+            sibling_queue,
+            (
+                "E:/DCIM_Backup/3.jpg".to_string(),
+                "FAILED".to_string(),
+                Some("sibling failure".to_string())
+            )
+        );
 
         // Verify sync_state as well
         let target_state: Vec<(String, String, Option<String>)> = sqlx::query_as(
@@ -1593,4 +1609,3 @@ mod database_tests {
         assert_eq!(sibling_state.2, Some("sibling failure".to_string()));
     }
 }
-

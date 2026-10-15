@@ -57,7 +57,6 @@ impl VolumeEventEmitter for tauri::AppHandle {
         Ok(())
     }
 
-
     async fn trigger_remount_scan(&self, folder_path: &str) -> Result<(), String> {
         let path = std::path::PathBuf::from(folder_path);
         let app = self.clone();

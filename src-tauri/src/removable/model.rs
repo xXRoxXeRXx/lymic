@@ -13,7 +13,6 @@ pub enum VolumeRemoval {
     VolumeId(String),
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VolumeEvent {
     Arrival(VolumeInfo),
@@ -56,9 +55,6 @@ impl ActiveRemovableVolumes {
 
     pub fn find_by_mount_path(&self, mount_path: &str) -> Option<VolumeInfo> {
         let lock = self.0.lock().ok()?;
-        lock.values()
-            .find(|v| v.mount_path == mount_path)
-            .cloned()
+        lock.values().find(|v| v.mount_path == mount_path).cloned()
     }
 }
-
