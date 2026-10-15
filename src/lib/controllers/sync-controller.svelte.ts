@@ -150,6 +150,8 @@ export function createSyncController(options: SyncControllerOptions) {
     if (!mounted) return;
     await refreshFailedSyncs();
     if (!mounted) return;
+    await refreshFolders();
+    if (!mounted) return;
 
     if (syncStatus === "error" || !!summary?.failed || failedSyncs.length > 0) {
       syncStatus = "error";

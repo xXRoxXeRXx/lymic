@@ -119,3 +119,72 @@ pub async fn unbind_removable_folder(
         .await?;
     Ok(())
 }
+
+pub async fn remap_watched_folder_path(
+    pool: &SqlitePool,
+    folder_id: i64,
+    old_path: &str,
+    new_path: &str,
+) -> Result<(), sqlx::Error> {
+    let clean_old = old_path.trim_end_matches(['/', '\\']);
+    let clean_new = new_path.trim_end_matches(['/', '\\']);
+
+    let mut tx = pool.begin().await?;
+
+    sqlx::query("UPDATE watched_folders SET path = ? WHERE id = ?")
+        .bind(new_path)
+        .bind(folder_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query(
+        "UPDATE sync_state \
+         SET local_path = ?2 || substr(local_path, length(?1) + 1) \
+         WHERE local_path = ?1 \
+            OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' \
+            OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\'",
+    )
+    .bind(clean_old)
+    .bind(clean_new)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE sync_queue \
+         SET local_path = ?2 || substr(local_path, length(?1) + 1) \
+         WHERE local_path = ?1 \
+            OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' \
+            OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\'",
+    )
+    .bind(clean_old)
+    .bind(clean_new)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE sync_queue \
+         SET upload_unit_id = ?2 || substr(upload_unit_id, length(?1) + 1) \
+         WHERE upload_unit_id = ?1 \
+            OR substr(upload_unit_id, 1, length(?1) + 1) = ?1 || '/' \
+            OR substr(upload_unit_id, 1, length(?1) + 1) = ?1 || '\\'",
+    )
+    .bind(clean_old)
+    .bind(clean_new)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE sync_jobs \
+         SET current_path = ?2 || substr(current_path, length(?1) + 1) \
+         WHERE current_path = ?1 \
+            OR substr(current_path, 1, length(?1) + 1) = ?1 || '/' \
+            OR substr(current_path, 1, length(?1) + 1) = ?1 || '\\'",
+    )
+    .bind(clean_old)
+    .bind(clean_new)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
