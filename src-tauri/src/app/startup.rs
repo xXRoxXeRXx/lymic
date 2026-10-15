@@ -238,6 +238,8 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
     handle.manage(DatabaseRecoveryNotice(std::sync::Mutex::new(
         recovery_notice,
     )));
+    handle.manage(crate::removable::ActiveRemovableVolumes::new());
+
     audit_event(
         &handle,
         audit::AuditEvent::new(

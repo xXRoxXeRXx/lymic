@@ -9,6 +9,7 @@
   import SettingsView from "#lib/components/SettingsView.svelte";
   import UpdateDialog from "#lib/components/UpdateDialog.svelte";
   import RemovableVolumePrompt from "#lib/components/RemovableVolumePrompt.svelte";
+  import TargetAlbumModal from "#lib/components/TargetAlbumModal.svelte";
   import { createFeedbackController } from "#lib/controllers/feedback-controller.svelte.ts";
   import { createAuthController } from "#lib/controllers/auth-controller.svelte.ts";
   import { createSyncController } from "#lib/controllers/sync-controller.svelte.ts";
@@ -18,14 +19,16 @@
 
   let currentView = $state("dashboard");
   const feedback = createFeedbackController(() => $t("unknown_error"));
+  const removable = createRemovableVolumeController({
+    t: (key, params) => $t(key, params),
+  });
   const sync = createSyncController({
     reportError: feedback.report,
     t: (key) => $t(key),
     locale: () => $locale ?? "en",
+    onRemovableVolumeAccepted: (volumeId) => removable.dismiss(volumeId),
   });
-  const removable = createRemovableVolumeController({
-    t: (key, params) => $t(key, params),
-  });
+
   const auth = createAuthController({
     formatError: feedback.formatError,
     reportError: feedback.report,
@@ -138,12 +141,14 @@
       {#if removable.currentPrompt}
         <RemovableVolumePrompt
           volume={removable.currentPrompt}
-          onAccept={(vol) => {
-            console.log("Removable volume accepted:", vol);
+          onAccept={async (vol) => {
+            currentView = "dashboard";
+            await sync.acceptRemovableFolder(vol);
           }}
           onDismiss={(volId) => removable.dismiss(volId)}
         />
       {/if}
+
       {#if !auth.isAuthenticated}
         <LoginView
           bind:serverUrl={auth.serverUrl}
@@ -204,4 +209,13 @@
       onInstall={updater.installUpdate}
     />
   {/if}
+  {#if !auth.isAuthenticated && sync.isTargetAlbumModalOpen}
+    <TargetAlbumModal
+      isOpen={sync.isTargetAlbumModalOpen}
+      folderPath={sync.pendingFolderPath ?? ""}
+      onConfirm={sync.confirmAddFolder}
+      onCancel={sync.cancelAddFolder}
+    />
+  {/if}
 </div>
+

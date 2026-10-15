@@ -97,6 +97,7 @@ pub(crate) fn run() {
             crate::commands::albums::get_albums,
             crate::commands::albums::create_album,
             crate::commands::folders::add_folder,
+            crate::commands::folders::accept_removable_media_folder,
             crate::commands::folders::get_folders,
             crate::commands::folders::remove_folder,
             crate::commands::sync::start_sync,

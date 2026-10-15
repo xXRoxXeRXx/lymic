@@ -144,4 +144,85 @@ describe("sync controller", () => {
     expect(controller.pendingFolderPath).toBe(null);
     expect(controller.watchedFolders).toEqual([{ id: 1, path: "C:/media/photos", target_album_id: "alb-99" }]);
   });
+
+  it("opens the target album modal with defaultPath for removable volume", async () => {
+    tauri.open.mockResolvedValue("E:/DCIM");
+    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+
+    await controller.acceptRemovableFolder({
+      volumeId: "vol-sd-1",
+      mountPath: "E:\\",
+      displayName: "EOS_DIGITAL",
+    });
+
+    expect(tauri.open).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      defaultPath: "E:\\",
+      title: "select_folder",
+    });
+    expect(controller.isTargetAlbumModalOpen).toBe(true);
+    expect(controller.pendingFolderPath).toBe("E:/DCIM");
+  });
+
+  it("invokes accept_removable_media_folder when confirming a removable folder", async () => {
+    tauri.open.mockResolvedValue("E:/DCIM");
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "accept_removable_media_folder") return Promise.resolve(1);
+      if (command === "get_folders") return Promise.resolve([{ id: 1, path: "E:/DCIM", target_album_id: "alb-vacation" }]);
+      return Promise.resolve();
+    });
+
+    const onRemovableVolumeAccepted = vi.fn();
+    const controller = createSyncController({
+      reportError: vi.fn(),
+      t: (key) => key,
+      locale: () => "en",
+      onRemovableVolumeAccepted,
+    });
+
+    await controller.acceptRemovableFolder({
+      volumeId: "vol-sd-1",
+      mountPath: "E:\\",
+      displayName: "EOS_DIGITAL",
+    });
+    await controller.dashboard.onConfirmAddFolder("alb-vacation");
+
+    expect(tauri.invoke).toHaveBeenCalledWith("accept_removable_media_folder", {
+      volumeId: "vol-sd-1",
+      path: "E:/DCIM",
+      targetAlbumId: "alb-vacation",
+    });
+    expect(onRemovableVolumeAccepted).toHaveBeenCalledWith("vol-sd-1");
+    expect(controller.isTargetAlbumModalOpen).toBe(false);
+    expect(controller.pendingFolderPath).toBe(null);
+    expect(controller.watchedFolders).toEqual([{ id: 1, path: "E:/DCIM", target_album_id: "alb-vacation" }]);
+  });
+
+  it("reports error when accept_removable_media_folder fails", async () => {
+    tauri.open.mockResolvedValue("C:/Photos");
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "accept_removable_media_folder") {
+        return Promise.reject(new Error("Path 'C:/Photos' does not reside within removable volume"));
+      }
+      return Promise.resolve();
+    });
+
+    const reportError = vi.fn();
+    const controller = createSyncController({
+      reportError,
+      t: (key) => key,
+      locale: () => "en",
+    });
+
+    await controller.acceptRemovableFolder({
+      volumeId: "vol-sd-1",
+      mountPath: "E:\\",
+      displayName: "EOS_DIGITAL",
+    });
+    await controller.dashboard.onConfirmAddFolder(null);
+
+    expect(reportError).toHaveBeenCalledWith(expect.any(Error));
+  });
 });
+

@@ -3,7 +3,14 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 import type { FailedSyncEntry, LogEntry, SyncStatus, WatchedFolder } from "../components/types";
 import { subscribeToSyncEvents } from "../tauri/sync-event-subscription";
 import { toBcp47Locale } from "../i18n";
-import type { RemoveFolderResult, SyncSnapshot, SyncSummary, TransferStatsEvent, UiLogMessage } from "./types";
+import type {
+  DetectedVolume,
+  RemoveFolderResult,
+  SyncSnapshot,
+  SyncSummary,
+  TransferStatsEvent,
+  UiLogMessage,
+} from "./types";
 
 export interface DashboardViewState {
   syncStatus: SyncStatus;
@@ -29,11 +36,15 @@ export interface DashboardViewState {
   onCancelAddFolder(): void;
 }
 
-export function createSyncController(options: {
+export interface SyncControllerOptions {
   reportError(error: unknown): void;
   t(key: string): string;
   locale(): string;
-}) {
+  onRemovableVolumeAccepted?(volumeId: string): void;
+}
+
+export function createSyncController(options: SyncControllerOptions) {
+
   let syncStatus = $state<SyncStatus>("idle");
   let lastSync = $state<string | null>(null);
   let progress = $state(0);
@@ -49,6 +60,7 @@ export function createSyncController(options: {
   let isSyncActionPending = $state(false);
   let isTargetAlbumModalOpen = $state(false);
   let pendingFolderPath = $state<string | null>(null);
+  let pendingVolume = $state<DetectedVolume | null>(null);
   let mounted = false;
   let logCounter = 0;
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -212,6 +224,7 @@ export function createSyncController(options: {
     try {
       const selected = await open({ directory: true, multiple: false, title: options.t("select_folder") });
       if (typeof selected === "string") {
+        pendingVolume = null;
         pendingFolderPath = selected;
         isTargetAlbumModalOpen = true;
       }
@@ -221,13 +234,45 @@ export function createSyncController(options: {
     }
   }
 
+  async function acceptRemovableFolder(volume: DetectedVolume) {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath: volume.mountPath,
+        title: options.t("select_folder"),
+      });
+      if (typeof selected === "string") {
+        pendingVolume = volume;
+        pendingFolderPath = selected;
+        isTargetAlbumModalOpen = true;
+      }
+    } catch (error) {
+      console.error("Failed to select folder for removable volume", error);
+      options.reportError(error);
+    }
+  }
+
   async function confirmAddFolder(targetAlbumId: string | null) {
     if (!pendingFolderPath) return;
     const path = pendingFolderPath;
+    const volume = pendingVolume;
     isTargetAlbumModalOpen = false;
     pendingFolderPath = null;
+    pendingVolume = null;
     try {
-      await invoke<number>("add_folder", { path, targetAlbumId });
+      if (volume) {
+        await invoke<number>("accept_removable_media_folder", {
+          volumeId: volume.volumeId,
+          path,
+          targetAlbumId,
+        });
+        if (options.onRemovableVolumeAccepted) {
+          options.onRemovableVolumeAccepted(volume.volumeId);
+        }
+      } else {
+        await invoke<number>("add_folder", { path, targetAlbumId });
+      }
       await refreshFolders();
     } catch (error) {
       console.error("Failed to add folder", error);
@@ -238,7 +283,9 @@ export function createSyncController(options: {
   function cancelAddFolder() {
     isTargetAlbumModalOpen = false;
     pendingFolderPath = null;
+    pendingVolume = null;
   }
+
 
   async function removeFolder(id: number) {
     try {
@@ -353,6 +400,7 @@ export function createSyncController(options: {
     get isSyncActionPending() { return isSyncActionPending; },
     get isTargetAlbumModalOpen() { return isTargetAlbumModalOpen; },
     get pendingFolderPath() { return pendingFolderPath; },
+    get pendingVolume() { return pendingVolume; },
     startLifecycle,
     addLog,
     refreshFailedSyncs,
@@ -363,8 +411,10 @@ export function createSyncController(options: {
     syncAction,
     retryFailedSyncs,
     addFolder,
+    acceptRemovableFolder,
     confirmAddFolder,
     cancelAddFolder,
     removeFolder,
   };
 }
+

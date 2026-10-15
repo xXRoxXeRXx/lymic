@@ -89,3 +89,34 @@ fn windows_fixed_drive_is_not_treated_as_removable() {
     let result = windows::get_volume_info_for_drive('C');
     assert!(result.is_none());
 }
+
+#[tokio::test]
+async fn coordinator_arrival_and_removal_tracks_active_volumes() {
+    let pool = test_pool().await;
+    let emitter = MockEmitter::default();
+    let active_volumes = ActiveRemovableVolumes::new();
+    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone())
+        .with_active_volumes(active_volumes.clone());
+
+    let volume = VolumeInfo {
+        volume_id: "{vol-test-active}".to_string(),
+        mount_path: "E:\\".to_string(),
+        display_name: "ACTIVE_SD".to_string(),
+    };
+
+    assert!(active_volumes.get(&volume.volume_id).is_none());
+
+    coordinator
+        .handle_event(VolumeEvent::Arrival(volume.clone()))
+        .await
+        .unwrap();
+
+    assert_eq!(active_volumes.get(&volume.volume_id), Some(volume.clone()));
+
+    coordinator
+        .handle_event(VolumeEvent::Removal(volume.mount_path.clone()))
+        .await
+        .unwrap();
+
+    assert!(active_volumes.get(&volume.volume_id).is_none());
+}

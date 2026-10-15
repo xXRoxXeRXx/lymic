@@ -279,6 +279,96 @@ pub(crate) async fn add_folder(
     .await
 }
 
+pub(crate) fn compute_volume_relative_path(
+    mount_path: &Path,
+    folder_path: &Path,
+) -> Result<String, String> {
+    let normalized_mount = normalize_folder_path(mount_path);
+    let normalized_folder = normalize_folder_path(folder_path);
+
+    if !path_is_within(&normalized_folder, &normalized_mount) {
+        return Err(format!(
+            "Path '{}' is not within mount path '{}'",
+            folder_path.display(),
+            mount_path.display()
+        ));
+    }
+
+    let mount_count = normalized_mount.components().count();
+    let folder_components: Vec<_> = normalized_folder.components().collect();
+
+    if folder_components.len() <= mount_count {
+        return Ok(String::new());
+    }
+
+    let remaining = &folder_components[mount_count..];
+    let mut parts = Vec::new();
+    for component in remaining {
+        parts.push(component.as_os_str().to_string_lossy().to_string());
+    }
+    Ok(parts.join("/"))
+}
+
+pub(crate) fn validate_removable_folder_acceptance(
+    volume: Option<&crate::removable::VolumeInfo>,
+    volume_id: &str,
+    path: &Path,
+    existing_bindings: &[crate::db::RemovableFolderBinding],
+) -> Result<String, String> {
+    let volume =
+        volume.ok_or_else(|| format!("Removable volume '{}' is not connected.", volume_id))?;
+
+    if !existing_bindings.is_empty() {
+        return Err(format!(
+            "Removable volume '{}' is already bound to a watched folder.",
+            volume_id
+        ));
+    }
+
+    let mount_path = Path::new(&volume.mount_path);
+    let normalized_mount = normalize_folder_path(mount_path);
+    let normalized_path = normalize_folder_path(path);
+
+    if !path_is_within(&normalized_path, &normalized_mount) {
+        return Err(format!(
+            "Path '{}' does not reside within removable volume '{}' (mounted at '{}').",
+            path.display(),
+            volume_id,
+            volume.mount_path
+        ));
+    }
+
+    compute_volume_relative_path(&normalized_mount, &normalized_path)
+}
+
+#[tauri::command]
+pub(crate) async fn accept_removable_media_folder(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    watcher: tauri::State<'_, tokio::sync::Mutex<watcher::WatcherState>>,
+    active_volumes: tauri::State<'_, crate::removable::ActiveRemovableVolumes>,
+    volume_id: String,
+    path: String,
+    target_album_id: Option<String>,
+) -> Result<i64, String> {
+    let volume = active_volumes.get(&volume_id);
+    let existing_bindings = db::get_removable_folders_by_volume(pool.inner(), &volume_id)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let relative_path = validate_removable_folder_acceptance(
+        volume.as_ref(),
+        &volume_id,
+        Path::new(&path),
+        &existing_bindings,
+    )?;
+
+    let params = RegisterFolderParams::new(&path, target_album_id)
+        .with_removable_binding(volume_id, relative_path);
+
+    register_watched_folder(&app, pool.inner(), watcher.inner(), params).await
+}
+
 #[tauri::command]
 pub(crate) async fn get_folders(
     pool: tauri::State<'_, sqlx::SqlitePool>,
@@ -472,5 +562,95 @@ mod tests {
                 relative_path: "DCIM".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn validate_removable_acceptance_checks_presence_bounds_and_containment() {
+        use crate::removable::VolumeInfo;
+        use std::path::Path;
+
+        let volume = VolumeInfo {
+            volume_id: "vol-sd-123".to_string(),
+            mount_path: if cfg!(windows) {
+                "E:\\".to_string()
+            } else {
+                "/media/sdcard".to_string()
+            },
+            display_name: "SD_CARD".to_string(),
+        };
+
+        // 1. Disconnected volume
+        let err = super::validate_removable_folder_acceptance(
+            None,
+            "vol-missing",
+            Path::new(if cfg!(windows) {
+                "E:\\DCIM"
+            } else {
+                "/media/sdcard/DCIM"
+            }),
+            &[],
+        )
+        .unwrap_err();
+        assert!(err.contains("not connected") || err.contains("not found"));
+
+        // 2. Already bound volume
+        let existing_binding = crate::db::RemovableFolderBinding {
+            watched_folder_id: 1,
+            volume_id: "vol-sd-123".to_string(),
+            relative_path: "DCIM".to_string(),
+        };
+        let err = super::validate_removable_folder_acceptance(
+            Some(&volume),
+            "vol-sd-123",
+            Path::new(if cfg!(windows) {
+                "E:\\DCIM"
+            } else {
+                "/media/sdcard/DCIM"
+            }),
+            &[existing_binding],
+        )
+        .unwrap_err();
+        assert!(err.contains("already bound"));
+
+        // 3. Path outside volume mount
+        let outside_path = Path::new(if cfg!(windows) {
+            "C:\\Photos"
+        } else {
+            "/home/user/Photos"
+        });
+        let err = super::validate_removable_folder_acceptance(
+            Some(&volume),
+            "vol-sd-123",
+            outside_path,
+            &[],
+        )
+        .unwrap_err();
+        assert!(err.contains("does not reside within") || err.contains("outside"));
+
+        // 4. Valid path inside volume
+        let valid_path = Path::new(if cfg!(windows) {
+            "E:\\DCIM\\100EOS"
+        } else {
+            "/media/sdcard/DCIM/100EOS"
+        });
+        let relative = super::validate_removable_folder_acceptance(
+            Some(&volume),
+            "vol-sd-123",
+            valid_path,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(relative.replace('\\', "/"), "DCIM/100EOS");
+
+        // 5. Valid path at mount root
+        let root_path = Path::new(&volume.mount_path);
+        let relative_root = super::validate_removable_folder_acceptance(
+            Some(&volume),
+            "vol-sd-123",
+            root_path,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(relative_root, "");
     }
 }
