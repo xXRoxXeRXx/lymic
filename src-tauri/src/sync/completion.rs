@@ -234,6 +234,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn completes_a_live_photo_upload_unit_coherently_for_both_assets() {
+        let pool = test_pool().await;
+        db::enqueue_upload_units(
+            &pool,
+            &[db::QueueUploadUnit {
+                image: db::QueueUploadAsset {
+                    path: "photo.jpg".to_string(),
+                    size: 123,
+                    mtime: 42,
+                    target_album_id: None,
+                },
+                live_photo_video: Some(db::QueueUploadAsset {
+                    path: "photo.mov".to_string(),
+                    size: 456,
+                    mtime: 42,
+                    target_album_id: None,
+                }),
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        let mut unit = upload_unit(None);
+        unit.live_photo_video = Some(SyncAsset {
+            path: "photo.mov".to_string(),
+            size: 456,
+            checksums: Some(Checksums {
+                sha1_base64: "video-hash".to_string(),
+            }),
+            mtime: 42,
+            target_album_id: None,
+            remote_id: None,
+        });
+
+        let completion =
+            begin_upload_unit_completion(&pool, unit, RemoteAssetId::new("remote-photo"), 2)
+                .await
+                .unwrap()
+                .into_complete()
+                .unwrap();
+
+        assert_eq!(completion.uploaded_count(), 2);
+        assert_eq!(completion.queue_results().len(), 2);
+        let states: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sync_state WHERE status = 'SYNCED' AND local_path IN ('photo.jpg', 'photo.mov')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(states, 2);
+    }
+
+    #[tokio::test]
     async fn completes_a_target_album_upload_unit_only_after_album_assignment() {
         let pool = test_pool().await;
         let album_id = AlbumId::new("album-1");

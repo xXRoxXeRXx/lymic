@@ -21,12 +21,51 @@ pub struct QueuedAsset {
     pub remote_id: Option<crate::immich::RemoteAssetId>,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct QueueAsset<'a> {
     pub path: &'a str,
     pub size: i64,
     pub mtime: i64,
     pub target_album_id: Option<&'a crate::immich::AlbumId>,
+}
+
+/// The complete synchronization outcome which must survive queue recovery.
+#[derive(Debug, Clone)]
+pub struct QueueUploadAsset {
+    pub path: String,
+    pub size: i64,
+    pub mtime: i64,
+    pub target_album_id: Option<crate::immich::AlbumId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueueUploadUnit {
+    pub image: QueueUploadAsset,
+    pub live_photo_video: Option<QueueUploadAsset>,
+}
+
+/// A recovered Upload Unit. Its primary asset owns the Target Album and Remote Asset ID.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueuedUploadUnit {
+    pub image: QueuedAsset,
+    pub live_photo_video: Option<QueuedAsset>,
+}
+
+impl QueuedUploadUnit {
+    pub(crate) fn into_upload_unit(self) -> crate::media::model::UploadUnit {
+        let asset = |queued: QueuedAsset| crate::media::model::Asset {
+            path: queued.local_path,
+            size: queued.size as u64,
+            mtime: queued.last_modified,
+            target_album_id: queued.target_album_id,
+            remote_id: queued.remote_id,
+        };
+        crate::media::model::UploadUnit {
+            image: asset(self.image),
+            live_photo_video: self.live_photo_video.map(asset),
+        }
+    }
 }
 
 const SNAPSHOT_SELECT: &str = "SELECT status, total_count AS total, success_count AS succeeded, failure_count AS failed, current_path, \
@@ -49,9 +88,31 @@ pub async fn get_sync_snapshot(pool: &SqlitePool) -> Result<SyncSnapshot, sqlx::
         .await
 }
 
+#[cfg(test)]
 pub async fn enqueue_sync_assets(
     pool: &SqlitePool,
     assets: &[QueueAsset<'_>],
+    failures: &[(String, String)],
+) -> Result<SyncSnapshot, sqlx::Error> {
+    let units = assets
+        .iter()
+        .cloned()
+        .map(|image| QueueUploadUnit {
+            image: QueueUploadAsset {
+                path: image.path.to_owned(),
+                size: image.size,
+                mtime: image.mtime,
+                target_album_id: image.target_album_id.cloned(),
+            },
+            live_photo_video: None,
+        })
+        .collect::<Vec<_>>();
+    enqueue_upload_units(pool, &units, failures).await
+}
+
+pub async fn enqueue_upload_units(
+    pool: &SqlitePool,
+    units: &[QueueUploadUnit],
     failures: &[(String, String)],
 ) -> Result<SyncSnapshot, sqlx::Error> {
     let mut tx = pool.begin().await?;
@@ -64,7 +125,7 @@ pub async fn enqueue_sync_assets(
     .fetch_one(&mut *tx)
     .await?;
     let should_reset = (status == "IDLE" || (status == "RUNNING" && !has_pending))
-        && (!assets.is_empty() || !failures.is_empty());
+        && (!units.is_empty() || !failures.is_empty());
     if should_reset {
         sqlx::query("UPDATE sync_jobs SET status = 'RUNNING', next_sequence = 1, total_count = 0, success_count = 0, failure_count = 0, current_path = NULL WHERE id = 1")
             .execute(&mut *tx).await?;
@@ -72,35 +133,52 @@ pub async fn enqueue_sync_assets(
             .execute(&mut *tx)
             .await?;
     }
-    for asset in assets {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND local_path = ?)",
+    for unit in units {
+        let existing_unit_id: Option<String> = sqlx::query_scalar(
+            "SELECT upload_unit_id FROM sync_queue \
+             WHERE job_id = 1 AND local_path IN (?, ?) ORDER BY sequence LIMIT 1",
         )
-        .bind(asset.path)
-        .fetch_one(&mut *tx)
-        .await?;
-        let next: i64 = sqlx::query_scalar("SELECT next_sequence FROM sync_jobs WHERE id = 1")
+        .bind(&unit.image.path)
+        .bind(unit.live_photo_video.as_ref().map(|asset| &asset.path))
+        .fetch_optional(&mut *tx)
+        .await?
+        .flatten();
+        let unit_id = existing_unit_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        for (asset, is_primary) in std::iter::once((&unit.image, true))
+            .chain(unit.live_photo_video.as_ref().map(|asset| (asset, false)))
+        {
+            let exists: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND local_path = ?)",
+            )
+            .bind(&asset.path)
             .fetch_one(&mut *tx)
             .await?;
-        sqlx::query(
-            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, target_album_id)
-             VALUES (1, ?, ?, ?, ?, 'PENDING', ?)
+            let next: i64 = sqlx::query_scalar("SELECT next_sequence FROM sync_jobs WHERE id = 1")
+                .fetch_one(&mut *tx)
+                .await?;
+            sqlx::query(
+            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, target_album_id, upload_unit_id, is_primary)
+             VALUES (1, ?, ?, ?, ?, 'PENDING', ?, ?, ?)
              ON CONFLICT(job_id, local_path) DO UPDATE SET
                size = excluded.size, last_modified = excluded.last_modified,
+               upload_unit_id = excluded.upload_unit_id, is_primary = excluded.is_primary,
                status = CASE WHEN sync_queue.status = 'SYNCED' THEN 'SYNCED' ELSE 'PENDING' END,
                failure_reason = NULL",
         )
         .bind(next)
-        .bind(asset.path)
+        .bind(&asset.path)
         .bind(asset.size)
         .bind(asset.mtime)
-        .bind(asset.target_album_id.map(|id| id.as_str()))
+        .bind(asset.target_album_id.as_ref().map(|id| id.as_str()))
+        .bind(&unit_id)
+        .bind(is_primary)
         .execute(&mut *tx)
         .await?;
-        if !exists {
-            sqlx::query("UPDATE sync_jobs SET next_sequence = next_sequence + 1 WHERE id = 1")
-                .execute(&mut *tx)
-                .await?;
+            if !exists {
+                sqlx::query("UPDATE sync_jobs SET next_sequence = next_sequence + 1 WHERE id = 1")
+                    .execute(&mut *tx)
+                    .await?;
+            }
         }
     }
     for (path, reason) in failures {
@@ -127,6 +205,7 @@ pub async fn enqueue_sync_assets(
     update_counts_and_snapshot(tx, true, None).await
 }
 
+#[cfg(test)]
 pub async fn next_sync_queue_block(
     pool: &SqlitePool,
     limit: i64,
@@ -138,6 +217,59 @@ pub async fn next_sync_queue_block(
     .bind(limit)
     .fetch_all(pool)
     .await
+}
+
+pub async fn next_queued_upload_units(
+    pool: &SqlitePool,
+    limit: i64,
+) -> Result<Vec<QueuedUploadUnit>, sqlx::Error> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        upload_unit_id: String,
+        is_primary: bool,
+        #[sqlx(flatten)]
+        asset: QueuedAsset,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT COALESCE(upload_unit_id, local_path) AS upload_unit_id, is_primary, \
+                local_path, size, last_modified, target_album_id, remote_id FROM sync_queue \
+         WHERE job_id = 1 AND status = 'PENDING' ORDER BY sequence",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut units = Vec::new();
+    let mut current_id = None;
+    let mut current: Option<QueuedUploadUnit> = None;
+    for row in rows {
+        if current_id.as_deref() != Some(row.upload_unit_id.as_str()) {
+            if let Some(unit) = current.take() {
+                units.push(unit);
+                if units.len() as i64 == limit {
+                    break;
+                }
+            }
+            current_id = Some(row.upload_unit_id);
+            current = Some(QueuedUploadUnit {
+                image: row.asset,
+                live_photo_video: None,
+            });
+        } else if let Some(unit) = &mut current {
+            if row.is_primary {
+                let previous_image = std::mem::replace(&mut unit.image, row.asset);
+                unit.live_photo_video = Some(previous_image);
+            } else {
+                unit.live_photo_video = Some(row.asset);
+            }
+        }
+    }
+    if units.len() as i64 != limit {
+        if let Some(unit) = current {
+            units.push(unit);
+        }
+    }
+    Ok(units)
 }
 
 pub async fn update_sync_queue_remote_id(
@@ -155,6 +287,15 @@ pub async fn update_sync_queue_remote_id(
         return Err(sqlx::Error::RowNotFound);
     }
     Ok(())
+}
+
+#[cfg(test)]
+pub async fn update_upload_unit_remote_id(
+    pool: &SqlitePool,
+    primary_path: &str,
+    remote_id: &crate::immich::RemoteAssetId,
+) -> Result<(), sqlx::Error> {
+    update_sync_queue_remote_id(pool, primary_path, remote_id).await
 }
 
 pub async fn update_sync_queue_failure(

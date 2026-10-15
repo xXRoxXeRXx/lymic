@@ -8,11 +8,8 @@ use crate::{
     audit::{self, audit_event, SyncAuditContext},
     db,
     immich::{ImmichClient, SidecarDirectoryCache},
-    media::model::{Asset, ScanResult},
-    sync::{
-        processor::{process_sync_block, SyncSummary},
-        JobByteProgress, SyncCoordinatorInner,
-    },
+    media::model::ScanResult,
+    sync::{processor::SyncSummary, JobByteProgress, SyncCoordinatorInner},
 };
 use serde_json::json;
 use std::sync::{atomic::Ordering, Arc};
@@ -32,8 +29,9 @@ pub(crate) async fn run_sync_pipeline(
     // Scans are merely producers. The durable queue is the sole source used by the
     // runner, including after recovery, so no completed item is re-scanned to resume.
     let folders = db::get_folders(&pool).await.unwrap_or_default();
-    let (queue_assets, queue_failures) = crate::sync::service::prepare_scan_for_queue(&scan_result, &folders);
-    let snapshot = db::enqueue_sync_assets(&pool, &queue_assets, &queue_failures)
+    let (queue_units, queue_failures) =
+        crate::sync::service::prepare_scan_for_queue(&scan_result, &folders);
+    let snapshot = db::enqueue_upload_units(&pool, &queue_units, &queue_failures)
         .await
         .map_err(|error| format!("Could not persist sync queue: {}", error))?;
     crate::app::tray::update_sync_action(&app, &snapshot);
@@ -130,7 +128,7 @@ pub(crate) async fn run_sync_pipeline(
                 );
             }
         }
-        let queued = db::next_sync_queue_block(&pool, SYNC_QUEUE_BLOCK_SIZE)
+        let queued = db::next_queued_upload_units(&pool, SYNC_QUEUE_BLOCK_SIZE)
             .await
             .map_err(|error| format!("Could not load sync queue: {}", error))?;
         if queued.is_empty() {
@@ -187,23 +185,19 @@ pub(crate) async fn run_sync_pipeline(
             audit_event(&app, audit_context.event("sync.completed", if totals.failed == 0 { audit::Outcome::Success } else { audit::Outcome::Failure }, if totals.failed == 0 { audit::Severity::Info } else { audit::Severity::Warn }, "Synchronization completed", json!({ "processed": totals.processed, "uploaded": totals.uploaded, "failed": totals.failed })));
             return Ok(totals);
         }
-        let block = ScanResult {
-            files: queued
-                .into_iter()
-                .map(|asset| Asset {
-                    path: asset.local_path,
-                    size: asset.size as u64,
-                    mtime: asset.last_modified,
-                    target_album_id: asset.target_album_id,
-                    remote_id: asset.remote_id,
-                })
-                .collect(),
-            ..Default::default()
-        };
+        let block = queued
+            .into_iter()
+            .map(db::QueuedUploadUnit::into_upload_unit)
+            .collect::<Vec<_>>();
         let active_work = coordinator
-            .register_active_work(block.files.iter().map(|asset| asset.path.clone()))
+            .register_active_work(
+                block
+                    .iter()
+                    .flat_map(|unit| unit.assets())
+                    .map(|asset| asset.path.clone()),
+            )
             .await;
-        let result = process_sync_block(
+        let result = crate::sync::processor::process_recovered_upload_units(
             app.clone(),
             pool.clone(),
             client.clone(),

@@ -759,7 +759,9 @@ mod database_tests {
         }
 
         // New database should be fully functional
-        add_folder(&result.pool, "C:/test_photos", None).await.unwrap();
+        add_folder(&result.pool, "C:/test_photos", None)
+            .await
+            .unwrap();
         let folders = get_folders(&result.pool).await.unwrap();
         assert_eq!(folders.len(), 1);
         assert_eq!(folders[0].path, "C:/test_photos");
@@ -1070,7 +1072,9 @@ mod database_tests {
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
         let album_id = crate::immich::AlbumId::new("album-123");
-        let id = add_folder(&pool, "C:/vacation", Some(&album_id)).await.unwrap();
+        let id = add_folder(&pool, "C:/vacation", Some(&album_id))
+            .await
+            .unwrap();
         let folders = get_folders(&pool).await.unwrap();
         assert_eq!(folders.len(), 1);
         assert_eq!(folders[0].id, id);
@@ -1104,7 +1108,110 @@ mod database_tests {
             .unwrap();
 
         let queued = next_sync_queue_block(&pool, 10).await.unwrap();
-        assert_eq!(queued[0].remote_id.as_deref(), Some("remote-asset-uuid-789"));
+        assert_eq!(
+            queued[0].remote_id.as_deref(),
+            Some("remote-asset-uuid-789")
+        );
+    }
+
+    #[tokio::test]
+    async fn recovery_reconstructs_a_live_photo_upload_unit_with_its_fixed_album_and_primary_remote_id(
+    ) {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let album_id = crate::immich::AlbumId::new("album-original");
+        let image = QueueUploadAsset {
+            path: "live.jpg".to_string(),
+            size: 100,
+            mtime: 10,
+            target_album_id: Some(album_id.clone()),
+        };
+        let video = QueueUploadAsset {
+            path: "live.mov".to_string(),
+            size: 200,
+            mtime: 10,
+            target_album_id: Some(album_id.clone()),
+        };
+        let unit = QueueUploadUnit {
+            image,
+            live_photo_video: Some(video),
+        };
+        enqueue_upload_units(&pool, &[unit], &[]).await.unwrap();
+
+        let primary_remote_id = crate::immich::RemoteAssetId::new("remote-live");
+        update_upload_unit_remote_id(&pool, "live.jpg", &primary_remote_id)
+            .await
+            .unwrap();
+
+        let recovered = next_queued_upload_units(&pool, 10).await.unwrap();
+        assert_eq!(recovered.len(), 1);
+        assert_eq!(recovered[0].image.local_path, "live.jpg");
+        assert_eq!(
+            recovered[0].image.target_album_id.as_deref(),
+            Some("album-original")
+        );
+        assert_eq!(recovered[0].image.remote_id.as_deref(), Some("remote-live"));
+        assert_eq!(
+            recovered[0]
+                .live_photo_video
+                .as_ref()
+                .map(|asset| asset.local_path.as_str()),
+            Some("live.mov")
+        );
+    }
+
+    #[tokio::test]
+    async fn reenqueueing_a_single_image_with_its_live_photo_preserves_one_upload_unit() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        enqueue_upload_units(
+            &pool,
+            &[QueueUploadUnit {
+                image: QueueUploadAsset {
+                    path: "live.jpg".to_string(),
+                    size: 100,
+                    mtime: 10,
+                    target_album_id: None,
+                },
+                live_photo_video: None,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        enqueue_upload_units(
+            &pool,
+            &[QueueUploadUnit {
+                image: QueueUploadAsset {
+                    path: "live.jpg".to_string(),
+                    size: 100,
+                    mtime: 10,
+                    target_album_id: None,
+                },
+                live_photo_video: Some(QueueUploadAsset {
+                    path: "live.mov".to_string(),
+                    size: 200,
+                    mtime: 10,
+                    target_album_id: None,
+                }),
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+
+        let recovered = next_queued_upload_units(&pool, 10).await.unwrap();
+        assert_eq!(recovered.len(), 1);
+        assert_eq!(recovered[0].image.local_path, "live.jpg");
+        assert_eq!(
+            recovered[0]
+                .live_photo_video
+                .as_ref()
+                .map(|asset| asset.local_path.as_str()),
+            Some("live.mov")
+        );
     }
 
     #[tokio::test]
@@ -1119,7 +1226,9 @@ mod database_tests {
             mtime: 10,
             target_album_id: Some(&original_album),
         }];
-        enqueue_sync_assets(&pool, &initial_asset, &[]).await.unwrap();
+        enqueue_sync_assets(&pool, &initial_asset, &[])
+            .await
+            .unwrap();
 
         let queued = next_sync_queue_block(&pool, 10).await.unwrap();
         assert_eq!(queued[0].target_album_id.as_deref(), Some("album-original"));
@@ -1132,7 +1241,9 @@ mod database_tests {
             mtime: 20,
             target_album_id: Some(&different_album),
         }];
-        enqueue_sync_assets(&pool, &updated_asset, &[]).await.unwrap();
+        enqueue_sync_assets(&pool, &updated_asset, &[])
+            .await
+            .unwrap();
 
         let queued = next_sync_queue_block(&pool, 10).await.unwrap();
         assert_eq!(queued.len(), 1);

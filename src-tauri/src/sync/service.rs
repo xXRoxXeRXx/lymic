@@ -50,31 +50,34 @@ fn authenticated_client(credentials: auth::AuthConfig) -> Result<ImmichClient, S
     )
 }
 
-pub(crate) fn prepare_scan_for_queue<'a>(
-    scan_result: &'a ScanResult,
-    folders: &'a [db::WatchedFolder],
-) -> (Vec<db::QueueAsset<'a>>, Vec<(String, String)>) {
+pub(crate) fn prepare_scan_for_queue(
+    scan_result: &ScanResult,
+    folders: &[db::WatchedFolder],
+) -> (Vec<db::QueueUploadUnit>, Vec<(String, String)>) {
     let assets = scan_result
         .files
         .iter()
         .map(|asset| {
+            let mut asset = asset.clone();
             let asset_path = std::path::PathBuf::from(&asset.path);
-            let target_album_id = asset.target_album_id.as_ref().or_else(|| {
+            asset.target_album_id = asset.target_album_id.or_else(|| {
                 folders.iter().find_map(|f| {
                     let folder_path = std::path::PathBuf::from(&f.path);
                     if crate::media::paths::path_is_within(&asset_path, &folder_path) {
-                        f.target_album_id.as_ref()
+                        f.target_album_id.clone()
                     } else {
                         None
                     }
                 })
             });
-            db::QueueAsset {
-                path: &asset.path,
-                size: asset.size as i64,
-                mtime: asset.mtime,
-                target_album_id,
-            }
+            asset
+        })
+        .collect::<Vec<_>>();
+    let units = crate::media::model::upload_units_from_assets(assets)
+        .into_iter()
+        .map(|unit| db::QueueUploadUnit {
+            image: queue_upload_asset(unit.image),
+            live_photo_video: unit.live_photo_video.map(queue_upload_asset),
         })
         .collect();
 
@@ -84,7 +87,16 @@ pub(crate) fn prepare_scan_for_queue<'a>(
         .map(|failure| (failure.path.clone(), failure.error.clone()))
         .collect();
 
-    (assets, failures)
+    (units, failures)
+}
+
+fn queue_upload_asset(asset: crate::media::model::Asset) -> db::QueueUploadAsset {
+    db::QueueUploadAsset {
+        path: asset.path,
+        size: asset.size as i64,
+        mtime: asset.mtime,
+        target_album_id: asset.target_album_id,
+    }
 }
 
 pub(crate) async fn sync_scan_result_if_authenticated(
@@ -101,8 +113,8 @@ pub(crate) async fn sync_scan_result_if_authenticated(
     // Persist before scheduling the runner. This keeps the watcher receiver free to
     // keep draining events while another run is active or the queue is paused.
     let folders = db::get_folders(&pool).await.unwrap_or_default();
-    let (assets, failures) = prepare_scan_for_queue(&scan_result, &folders);
-    match db::enqueue_sync_assets(&pool, &assets, &failures).await {
+    let (units, failures) = prepare_scan_for_queue(&scan_result, &folders);
+    match db::enqueue_upload_units(&pool, &units, &failures).await {
         Ok(snapshot) => {
             crate::app::tray::update_sync_action(&app, &snapshot);
             let _ = app.emit("sync-progress-snapshot", &snapshot);
@@ -189,5 +201,56 @@ mod tests {
             ..credentials
         };
         assert!(authenticated_client(denied_credentials).is_err());
+    }
+
+    #[tokio::test]
+    async fn changing_a_watched_folders_target_album_after_enqueue_does_not_change_queued_work() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let scan = ScanResult {
+            files: vec![Asset {
+                path: "C:/photos/photo.jpg".to_string(),
+                size: 100,
+                mtime: 10,
+                target_album_id: None,
+                remote_id: None,
+            }],
+            ..Default::default()
+        };
+        let original_album = crate::immich::AlbumId::new("album-original");
+        let changed_album = crate::immich::AlbumId::new("album-changed");
+        let folders = [db::WatchedFolder {
+            id: 1,
+            path: "C:/photos".to_string(),
+            recursive: true,
+            target_album_id: Some(original_album),
+        }];
+        let (units, failures) = prepare_scan_for_queue(&scan, &folders);
+        db::enqueue_upload_units(&pool, &units, &failures)
+            .await
+            .unwrap();
+
+        let changed_folders = [db::WatchedFolder {
+            target_album_id: Some(changed_album),
+            ..folders.into_iter().next().unwrap()
+        }];
+        let (units, failures) = prepare_scan_for_queue(&scan, &changed_folders);
+        db::enqueue_upload_units(&pool, &units, &failures)
+            .await
+            .unwrap();
+
+        let recovered = db::next_queued_upload_units(&pool, 10).await.unwrap();
+        assert_eq!(
+            recovered[0].image.target_album_id.as_deref(),
+            Some("album-original")
+        );
     }
 }
