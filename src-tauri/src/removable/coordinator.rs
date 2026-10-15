@@ -3,11 +3,21 @@ use sqlx::SqlitePool;
 
 pub trait VolumeEventEmitter: Send + Sync {
     fn emit_volume_detected(&self, volume: &VolumeInfo) -> Result<(), String>;
+    fn emit_volume_removed(&self, _id_or_path: &str) -> Result<(), String> {
+        Ok(())
+    }
 
     fn reconcile_remount_watcher(
         &self,
         _old_path: Option<&str>,
         _new_path: &str,
+    ) -> impl std::future::Future<Output = Result<(), String>> + Send {
+        async { Ok(()) }
+    }
+
+    fn reconcile_folder_unavailable(
+        &self,
+        _path: &str,
     ) -> impl std::future::Future<Output = Result<(), String>> + Send {
         async { Ok(()) }
     }
@@ -99,6 +109,13 @@ impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
                                     .await?;
                             }
 
+                            crate::db::reset_failed_queue_items_for_folder(
+                                &self.pool,
+                                &norm_new_str,
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
+
                             self.emitter.trigger_remount_scan(&norm_new_str).await?;
                         }
                     }
@@ -106,10 +123,38 @@ impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
                 Ok(())
             }
             VolumeEvent::Removal(id_or_path) => {
+                let volume_info = self
+                    .active_volumes
+                    .as_ref()
+                    .and_then(|a| a.find_by_id_or_path(&id_or_path));
+                let volume_id = volume_info
+                    .as_ref()
+                    .map(|v| v.volume_id.clone())
+                    .unwrap_or_else(|| id_or_path.clone());
+
                 if let Some(ref active) = self.active_volumes {
                     active.remove(&id_or_path);
                 }
-                // In Issue #26, volume removal unregisters watchers and transitions queue items
+
+                self.emitter.emit_volume_removed(&volume_id)?;
+
+                let bindings = crate::db::get_removable_folders_by_volume(&self.pool, &volume_id)
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                let folders = crate::db::get_folders(&self.pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                for binding in bindings {
+                    if let Some(folder) = folders.iter().find(|f| f.id == binding.watched_folder_id)
+                    {
+                        self.emitter
+                            .reconcile_folder_unavailable(&folder.path)
+                            .await?;
+                    }
+                }
+
                 Ok(())
             }
         }

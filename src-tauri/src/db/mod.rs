@@ -16,9 +16,9 @@ pub use folders::{
 pub use init::{init, DatabaseStatus};
 pub use queue::{
     complete_sync_job_if_finished, enqueue_upload_units, finalize_queued_block, get_sync_snapshot,
-    has_pending_sync_queue_items, next_queued_upload_units, recover_sync_job, set_sync_status,
-    update_sync_queue_failure, update_sync_queue_remote_id, QueueUploadAsset, QueueUploadUnit,
-    QueuedUploadUnit, SyncSnapshot,
+    has_pending_sync_queue_items, next_queued_upload_units, recover_sync_job,
+    reset_failed_queue_items_for_folder, set_sync_status, update_sync_queue_failure,
+    update_sync_queue_remote_id, QueueUploadAsset, QueueUploadUnit, QueuedUploadUnit, SyncSnapshot,
 };
 
 #[cfg(test)]

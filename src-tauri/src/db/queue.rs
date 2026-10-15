@@ -397,3 +397,44 @@ pub async fn complete_sync_job_if_finished(
     }
     Some(set_sync_status(pool, "IDLE").await).transpose()
 }
+
+pub async fn reset_failed_queue_items_for_folder(
+    pool: &SqlitePool,
+    folder_path: &str,
+) -> Result<u64, sqlx::Error> {
+    let clean_path = folder_path.trim_end_matches(['/', '\\']);
+    let mut tx = pool.begin().await?;
+
+    let queue_res = sqlx::query(
+        "UPDATE sync_queue \
+         SET status = 'PENDING', failure_reason = NULL \
+         WHERE job_id = 1 AND status = 'FAILED' \
+           AND (local_path = ?1 \
+                OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' \
+                OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\')",
+    )
+    .bind(clean_path)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE sync_state \
+         SET status = 'PENDING', failure_reason = NULL \
+         WHERE status = 'FAILED' \
+           AND (local_path = ?1 \
+                OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' \
+                OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\')",
+    )
+    .bind(clean_path)
+    .execute(&mut *tx)
+    .await?;
+
+    if queue_res.rows_affected() > 0 {
+        sqlx::query("UPDATE sync_jobs SET status = 'RUNNING' WHERE id = 1 AND status = 'IDLE'")
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(queue_res.rows_affected())
+}

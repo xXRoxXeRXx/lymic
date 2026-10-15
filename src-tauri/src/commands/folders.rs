@@ -270,13 +270,45 @@ pub(crate) async fn add_folder(
     path: String,
     target_album_id: Option<String>,
 ) -> Result<i64, String> {
-    register_watched_folder(
-        &app,
-        pool.inner(),
-        watcher.inner(),
-        RegisterFolderParams::new(path, target_album_id),
-    )
-    .await
+    use tauri::Manager;
+    let mut params = RegisterFolderParams::new(&path, target_album_id);
+    if let Some(active_volumes) = app.try_state::<crate::removable::ActiveRemovableVolumes>() {
+        if let Some(binding) = detect_removable_binding_for_path(&active_volumes, Path::new(&path))
+        {
+            params.removable_binding = Some(binding);
+        }
+    }
+
+    register_watched_folder(&app, pool.inner(), watcher.inner(), params).await
+}
+
+pub(crate) fn detect_removable_binding_for_path(
+    active_volumes: &crate::removable::ActiveRemovableVolumes,
+    path: &Path,
+) -> Option<RemovableBindingInput> {
+    let normalized_path = normalize_folder_path(path);
+    let volumes = active_volumes.0.lock().ok()?;
+    let mut matching_volumes: Vec<&crate::removable::VolumeInfo> = volumes
+        .values()
+        .filter(|vol| {
+            let normalized_mount = normalize_folder_path(Path::new(&vol.mount_path));
+            path_is_within(&normalized_path, &normalized_mount)
+        })
+        .collect();
+
+    matching_volumes.sort_by_key(|vol| std::cmp::Reverse(vol.mount_path.len()));
+
+    if let Some(best_volume) = matching_volumes.first() {
+        let normalized_mount = normalize_folder_path(Path::new(&best_volume.mount_path));
+        let relative_path =
+            compute_volume_relative_path(&normalized_mount, &normalized_path).ok()?;
+        Some(RemovableBindingInput {
+            volume_id: best_volume.volume_id.clone(),
+            relative_path,
+        })
+    } else {
+        None
+    }
 }
 
 pub(crate) fn compute_volume_relative_path(
@@ -652,5 +684,44 @@ mod tests {
         )
         .unwrap();
         assert_eq!(relative_root, "");
+    }
+
+    #[test]
+    fn detect_removable_binding_for_path_resolves_mounted_volumes() {
+        use crate::removable::{ActiveRemovableVolumes, VolumeInfo};
+        use std::path::Path;
+
+        let active_volumes = ActiveRemovableVolumes::new();
+        let volume = VolumeInfo {
+            volume_id: "vol-card-456".to_string(),
+            mount_path: if cfg!(windows) {
+                "E:\\".to_string()
+            } else {
+                "/media/sdcard".to_string()
+            },
+            display_name: "SD_CARD".to_string(),
+        };
+        active_volumes.insert(volume);
+
+        // Path on removable card
+        let card_path = Path::new(if cfg!(windows) {
+            "E:\\DCIM\\100CANON"
+        } else {
+            "/media/sdcard/DCIM/100CANON"
+        });
+        let binding = super::detect_removable_binding_for_path(&active_volumes, card_path);
+        assert!(binding.is_some());
+        let binding = binding.unwrap();
+        assert_eq!(binding.volume_id, "vol-card-456");
+        assert_eq!(binding.relative_path.replace('\\', "/"), "DCIM/100CANON");
+
+        // Path on fixed local drive
+        let fixed_path = Path::new(if cfg!(windows) {
+            "C:\\Users\\Photos"
+        } else {
+            "/home/user/Photos"
+        });
+        let no_binding = super::detect_removable_binding_for_path(&active_volumes, fixed_path);
+        assert!(no_binding.is_none());
     }
 }

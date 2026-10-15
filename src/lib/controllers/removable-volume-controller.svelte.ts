@@ -51,11 +51,24 @@ export function createRemovableVolumeController(options: RemovableVolumeControll
     void notifyArrival(volume);
   }
 
+  function handleVolumeRemoved(idOrPath: string) {
+    detectedVolumes = detectedVolumes.filter(
+      (v) => v.volumeId !== idOrPath && v.mountPath !== idOrPath
+    );
+  }
+
   async function startSubscriptions() {
     if (unlisten) return;
-    unlisten = await listen<DetectedVolume>("removable-volume-detected", (event) => {
+    const unlistenDetected = await listen<DetectedVolume>("removable-volume-detected", (event) => {
       handleVolumeDetected(event.payload);
     });
+    const unlistenRemoved = await listen<string>("removable-volume-removed", (event) => {
+      handleVolumeRemoved(event.payload);
+    });
+    unlisten = () => {
+      unlistenDetected();
+      unlistenRemoved();
+    };
   }
 
   function dismiss(volumeId: string) {

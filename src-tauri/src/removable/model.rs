@@ -39,4 +39,11 @@ impl ActiveRemovableVolumes {
     pub fn get(&self, volume_id: &str) -> Option<VolumeInfo> {
         self.0.lock().ok()?.get(volume_id).cloned()
     }
+
+    pub fn find_by_id_or_path(&self, id_or_path: &str) -> Option<VolumeInfo> {
+        let lock = self.0.lock().ok()?;
+        lock.values()
+            .find(|v| v.volume_id == id_or_path || v.mount_path == id_or_path)
+            .cloned()
+    }
 }

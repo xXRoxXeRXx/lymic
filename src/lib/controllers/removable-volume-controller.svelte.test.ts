@@ -99,6 +99,32 @@ describe("removable volume controller", () => {
     });
   });
 
+  it("clears pending detection prompt when a volume is removed", async () => {
+    const controller = createRemovableVolumeController({
+      isAppInBackground: () => false,
+      t: (key) => key,
+    });
+    await controller.startSubscriptions();
+
+    const card1 = { volumeId: "vol-1", mountPath: "E:\\", displayName: "EOS_DIGITAL" };
+    const card2 = { volumeId: "vol-2", mountPath: "F:\\", displayName: "NIKON_D850" };
+
+    const detectedHandler = eventListeners.get("removable-volume-detected")!;
+    detectedHandler({ payload: card1 });
+    detectedHandler({ payload: card2 });
+
+    expect(controller.detectedVolumes).toHaveLength(2);
+    expect(controller.currentPrompt).toEqual(card1);
+
+    const removedHandler = eventListeners.get("removable-volume-removed");
+    expect(removedHandler).toBeDefined();
+
+    removedHandler!({ payload: "vol-1" });
+
+    expect(controller.detectedVolumes).toHaveLength(1);
+    expect(controller.currentPrompt).toEqual(card2);
+  });
+
   it("cleans up event subscription on destroy", async () => {
     const controller = createRemovableVolumeController({
       isAppInBackground: () => false,
