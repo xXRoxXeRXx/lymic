@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.19.0] - 2026-10-15
+
+### Added
+- **Removable media support for watched folders**:
+  - Discovers removable volumes such as SD cards and USB drives across Windows, macOS, and Linux, and notifies users when new media is inserted.
+  - Adds a first-time setup prompt to configure removable storage as a watched folder with optional target album selection.
+  - Recognizes remounted media by volume UUID/label and automatically remaps watched folder paths when drive letters or mount points change.
+  - Adds resilient disconnection handling: pauses active uploads without corrupting sync state or marking missing files as deleted, and resumes pending items when the volume reconnects.
+  - Automatically identifies and binds removable volumes when adding folders manually.
+- **Target album assignment for watched folders**:
+  - Allows watched folders to be mapped to an Immich target album so newly uploaded assets and server duplicates are automatically added to the selected album.
+  - Enables creating new Immich albums directly within the folder setup dialog.
+  - Displays assigned target album names in the watched folders list.
+- **Shared locale catalog**:
+  - Centralizes supported locale definitions and metadata into a shared catalog used across the frontend.
+
+### Fixed
+- **Update dialog positioning**:
+  - Centers the update notification dialog on screen.
+- **Album assignment error handling**:
+  - Finalizes album assignment failures cleanly without silent fallbacks or orphaned queue records.
+- **SQL path prefix matching**:
+  - Hardens path prefix queries against substring collisions between sibling directory names.
+
 ## [0.18.0] - 2026-10-13
 
 ### Added
