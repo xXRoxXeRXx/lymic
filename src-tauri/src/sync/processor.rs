@@ -131,8 +131,10 @@ async fn process_upload_units(
             }
 
             if let Some(remote_id) = &unit.image.remote_id {
-                match completion::begin_upload_unit_completion(
+                match begin_upload_unit_completion_or_fail(
                     &pool,
+                    &app,
+                    &audit_context,
                     unit.clone(),
                     remote_id.clone(),
                     0,
@@ -145,6 +147,9 @@ async fn process_upload_units(
                     UploadUnitCompletion::Complete(completion) => {
                         queue_results.extend_from_slice(completion.queue_results());
                         uploaded += completion.uploaded_count();
+                    }
+                    UploadUnitCompletion::Failed { completion, .. } => {
+                        queue_results.extend_from_slice(completion.queue_results());
                     }
                 }
                 progress.advance(&app, unit.byte_size());
@@ -204,8 +209,10 @@ async fn process_upload_units(
             if is_duplicate {
                 match album_batch::resolve_duplicate_remote_id(&client, &unit, &existing).await {
                     Ok(remote_id) => {
-                        match completion::begin_upload_unit_completion(
+                        match begin_upload_unit_completion_or_fail(
                             &pool,
+                            &app,
+                            &audit_context,
                             unit.clone(),
                             remote_id,
                             0,
@@ -218,6 +225,9 @@ async fn process_upload_units(
                             UploadUnitCompletion::Complete(completion) => {
                                 queue_results.extend_from_slice(completion.queue_results());
                                 uploaded += completion.uploaded_count();
+                            }
+                            UploadUnitCompletion::Failed { completion, .. } => {
+                                queue_results.extend_from_slice(completion.queue_results());
                             }
                         }
                         progress.advance(&app, unit.byte_size());
@@ -244,19 +254,9 @@ async fn process_upload_units(
                                 }),
                             ),
                         );
-                        for asset in unit.assets() {
-                            let _ = db::mark_sync_failed(
-                                &pool,
-                                &asset.path,
-                                asset.mtime,
-                                asset.size as i64,
-                                &error_msg,
-                            )
-                            .await;
-                            let _ =
-                                db::update_sync_queue_failure(&pool, &asset.path, &error_msg).await;
-                            queue_results.push((asset.path.clone(), "FAILED".to_string()));
-                        }
+                        let failure =
+                            completion::fail_upload_unit(&pool, &unit, &error_msg).await?;
+                        queue_results.extend_from_slice(failure.queue_results());
                         progress.advance(&app, unit.byte_size());
                     }
                 }
@@ -331,7 +331,7 @@ async fn process_upload_units(
                 &mut queue_results,
                 &mut uploaded,
             )
-            .await;
+            .await?;
         }
 
         if !can_start_work(&coordinator) {
@@ -601,51 +601,63 @@ async fn upload_unit(
             pending_album_unit: None,
         });
     };
-    let (uploaded, status, failure_reason, remote_id, pending_album_unit) = match upload_result {
-        Ok(remote_id_str) => {
-            let remote_id = crate::immich::RemoteAssetId::new(remote_id_str);
-            match completion::begin_upload_unit_completion(
-                &pool,
-                unit.clone(),
-                remote_id.clone(),
-                unit.assets().count(),
-            )
-            .await?
-            {
-                UploadUnitCompletion::PendingAlbum(pending) => {
-                    (0, "PENDING", None, Some(remote_id), Some(*pending))
-                }
-                UploadUnitCompletion::Complete(completion) => (
-                    completion.uploaded_count(),
-                    "SYNCED",
-                    None,
-                    Some(remote_id),
-                    None,
-                ),
-            }
-        }
-        Err(error) => {
-            log_to_ui_file_error(
-                &app,
-                "ERROR",
-                &format!("Upload failed for {}: {}", unit.image.path, error),
-                "log_upload_failed",
-                &unit.image.path,
-                &error,
-            );
-            for asset in unit.assets() {
-                let _ = db::mark_sync_failed(
+    let (uploaded, status, failure_reason, remote_id, pending_album_unit, durable_queue_results) =
+        match upload_result {
+            Ok(remote_id_str) => {
+                let remote_id = crate::immich::RemoteAssetId::new(remote_id_str);
+                match begin_upload_unit_completion_or_fail(
                     &pool,
-                    &asset.path,
-                    asset.mtime,
-                    asset.size as i64,
-                    &error,
+                    &app,
+                    &audit_context,
+                    unit.clone(),
+                    remote_id.clone(),
+                    unit.assets().count(),
                 )
-                .await;
+                .await?
+                {
+                    UploadUnitCompletion::PendingAlbum(pending) => {
+                        (0, "PENDING", None, Some(remote_id), Some(*pending), None)
+                    }
+                    UploadUnitCompletion::Complete(completion) => (
+                        completion.uploaded_count(),
+                        "SYNCED",
+                        None,
+                        Some(remote_id),
+                        None,
+                        Some(completion.queue_results().to_vec()),
+                    ),
+                    UploadUnitCompletion::Failed { completion, reason } => (
+                        0,
+                        "FAILED",
+                        Some(reason),
+                        Some(remote_id),
+                        None,
+                        Some(completion.queue_results().to_vec()),
+                    ),
+                }
             }
-            (0, "FAILED", Some(error), None, None)
-        }
-    };
+            Err(error) => {
+                log_to_ui_file_error(
+                    &app,
+                    "ERROR",
+                    &format!("Upload failed for {}: {}", unit.image.path, error),
+                    "log_upload_failed",
+                    &unit.image.path,
+                    &error,
+                );
+                for asset in unit.assets() {
+                    let _ = db::mark_sync_failed(
+                        &pool,
+                        &asset.path,
+                        asset.mtime,
+                        asset.size as i64,
+                        &error,
+                    )
+                    .await;
+                }
+                (0, "FAILED", Some(error), None, None, None)
+            }
+        };
     let mut details = upload_details(
         &unit.image,
         unit.image.checksums.as_ref().unwrap(),
@@ -679,18 +691,72 @@ async fn upload_unit(
         ),
     );
     progress.advance(&app, unit.byte_size());
-    let queue_results = if pending_album_unit.is_some() {
-        Vec::new()
-    } else {
+    let queue_results = durable_queue_results.unwrap_or_else(|| {
+        if pending_album_unit.is_some() {
+            return Vec::new();
+        }
         unit.assets()
             .map(|asset| (asset.path.clone(), status.to_string()))
             .collect()
-    };
+    });
     Ok(UploadOutcome {
         uploaded,
         queue_results,
         pending_album_unit,
     })
+}
+
+async fn begin_upload_unit_completion_or_fail(
+    pool: &sqlx::SqlitePool,
+    app: &tauri::AppHandle,
+    audit_context: &SyncAuditContext,
+    unit: HashedUploadUnit,
+    remote_id: crate::immich::RemoteAssetId,
+    uploaded_count: usize,
+) -> Result<UploadUnitCompletion, String> {
+    match completion::begin_upload_unit_completion(
+        pool,
+        unit.clone(),
+        remote_id.clone(),
+        uploaded_count,
+    )
+    .await
+    {
+        Ok(completion) => Ok(completion),
+        Err(error) => {
+            log_to_ui_file_error(
+                app,
+                "ERROR",
+                &format!(
+                    "Could not complete synchronization for '{}': {error}",
+                    unit.image.path
+                ),
+                "log_upload_completion_persist_failed",
+                &unit.image.path,
+                &error,
+            );
+            audit_event(
+                app,
+                audit_context.event(
+                    "upload.unit.completion.failed",
+                    audit::Outcome::Failure,
+                    audit::Severity::Error,
+                    "Could not durably complete Upload Unit",
+                    json!({
+                        "local_path": unit.image.path,
+                        "remote_asset_id": remote_id.to_string(),
+                        "failure_reason": audit_context.safe_error(&error),
+                    }),
+                ),
+            );
+            completion::fail_upload_unit(pool, &unit, &error)
+                .await
+                .map(|completion| UploadUnitCompletion::Failed {
+                    completion,
+                    reason: error,
+                })
+        }
+    }
 }
 
 async fn await_or_cancellation<T>(

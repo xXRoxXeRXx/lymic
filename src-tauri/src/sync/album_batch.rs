@@ -8,7 +8,6 @@ use std::sync::Arc;
 use crate::{
     app::events::log_to_ui_file_error,
     audit::{self, audit_event, SyncAuditContext},
-    db,
     immich::{AlbumId, BulkCheckDuplicate, ImmichClient, RemoteAssetId},
     media::model::HashedUploadUnit,
     sync::completion::{complete_album_assignment, PendingAlbumUnit},
@@ -61,9 +60,9 @@ pub(crate) async fn assign_pending_album_units(
     pending_units: Vec<PendingAlbumUnit>,
     queue_results: &mut Vec<(String, String)>,
     uploaded: &mut usize,
-) {
+) -> Result<(), String> {
     if pending_units.is_empty() {
-        return;
+        return Ok(());
     }
 
     let mut by_album: BTreeMap<AlbumId, Vec<PendingAlbumUnit>> = BTreeMap::new();
@@ -88,7 +87,33 @@ pub(crate) async fn assign_pending_album_units(
                             *uploaded += completion.uploaded_count();
                         }
                         Err(error) => {
-                            mark_pending_unit_failed(pool, &item, &error, queue_results).await;
+                            log_to_ui_file_error(
+                                app,
+                                "ERROR",
+                                &format!(
+                                    "Could not durably complete album assignment for '{}': {error}",
+                                    item.unit.image.path
+                                ),
+                                "log_album_assignment_persist_failed",
+                                &item.unit.image.path,
+                                &error,
+                            );
+                            audit_event(
+                                app,
+                                audit_context.event(
+                                    "album.assets.assignment.persistence.failed",
+                                    audit::Outcome::Failure,
+                                    audit::Severity::Error,
+                                    "Album Assignment succeeded but durable completion failed",
+                                    json!({
+                                        "album_id": album_id.to_string(),
+                                        "remote_asset_id": item.remote_id.to_string(),
+                                        "local_path": item.unit.image.path,
+                                        "failure_reason": audit_context.safe_error(&error),
+                                    }),
+                                ),
+                            );
+                            mark_pending_unit_failed(pool, &item, &error, queue_results).await?;
                             continue;
                         }
                     }
@@ -140,11 +165,12 @@ pub(crate) async fn assign_pending_album_units(
                             }),
                         ),
                     );
-                    mark_pending_unit_failed(pool, &item, &failure_reason, queue_results).await;
+                    mark_pending_unit_failed(pool, &item, &failure_reason, queue_results).await?;
                 }
             }
         }
     }
+    Ok(())
 }
 
 async fn mark_pending_unit_failed(
@@ -152,11 +178,8 @@ async fn mark_pending_unit_failed(
     item: &PendingAlbumUnit,
     reason: &str,
     queue_results: &mut Vec<(String, String)>,
-) {
-    for asset in item.unit.assets() {
-        let _ =
-            db::mark_sync_failed(pool, &asset.path, asset.mtime, asset.size as i64, reason).await;
-        let _ = db::update_sync_queue_failure(pool, &asset.path, reason).await;
-        queue_results.push((asset.path.clone(), "FAILED".to_string()));
-    }
+) -> Result<(), String> {
+    let failure = crate::sync::completion::fail_upload_unit(pool, &item.unit, reason).await?;
+    queue_results.extend_from_slice(failure.queue_results());
+    Ok(())
 }
