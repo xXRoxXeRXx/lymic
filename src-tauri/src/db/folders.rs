@@ -54,3 +54,68 @@ pub async fn remove_folder(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error
         .await?;
     Ok(())
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[allow(dead_code)]
+pub struct RemovableFolderBinding {
+    pub watched_folder_id: i64,
+    pub volume_id: String,
+    pub relative_path: String,
+}
+
+pub async fn bind_removable_folder(
+    pool: &SqlitePool,
+    watched_folder_id: i64,
+    volume_id: &str,
+    relative_path: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO removable_watched_folders (watched_folder_id, volume_id, relative_path) \
+         VALUES (?, ?, ?) \
+         ON CONFLICT(watched_folder_id) DO UPDATE SET volume_id = excluded.volume_id, relative_path = excluded.relative_path",
+    )
+    .bind(watched_folder_id)
+    .bind(volume_id)
+    .bind(relative_path)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub async fn get_removable_folder_binding(
+    pool: &SqlitePool,
+    watched_folder_id: i64,
+) -> Result<Option<RemovableFolderBinding>, sqlx::Error> {
+    sqlx::query_as::<_, RemovableFolderBinding>(
+        "SELECT watched_folder_id, volume_id, relative_path FROM removable_watched_folders WHERE watched_folder_id = ?",
+    )
+    .bind(watched_folder_id)
+    .fetch_optional(pool)
+    .await
+}
+
+#[allow(dead_code)]
+pub async fn get_removable_folders_by_volume(
+    pool: &SqlitePool,
+    volume_id: &str,
+) -> Result<Vec<RemovableFolderBinding>, sqlx::Error> {
+    sqlx::query_as::<_, RemovableFolderBinding>(
+        "SELECT watched_folder_id, volume_id, relative_path FROM removable_watched_folders WHERE volume_id = ?",
+    )
+    .bind(volume_id)
+    .fetch_all(pool)
+    .await
+}
+
+#[allow(dead_code)]
+pub async fn unbind_removable_folder(
+    pool: &SqlitePool,
+    watched_folder_id: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM removable_watched_folders WHERE watched_folder_id = ?")
+        .bind(watched_folder_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}

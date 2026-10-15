@@ -10,12 +10,12 @@ mod database_tests {
 
     async fn test_pool() -> SqlitePool {
         let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let uri = format!("sqlite:file:{}?mode=memory&cache=private", database_name);
+        let options: SqliteConnectOptions = uri.parse().unwrap();
+        let options = options.foreign_keys(true);
         SqlitePoolOptions::new()
             .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{}?mode=memory&cache=private",
-                database_name
-            ))
+            .connect_with(options)
             .await
             .unwrap()
     }
@@ -1262,5 +1262,71 @@ mod database_tests {
         let queued = next_sync_queue_block(&pool, 10).await.unwrap();
         assert_eq!(queued[0].target_album_id.as_deref(), Some("album-original"));
         assert_eq!(queued[0].size, 300);
+    }
+
+    #[tokio::test]
+    async fn removable_watched_folder_binding_persists_queries_and_cascades_on_folder_deletion() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let folder_id = add_folder(&pool, "E:/DCIM", None).await.unwrap();
+
+        // Initially no binding
+        assert_eq!(
+            get_removable_folder_binding(&pool, folder_id)
+                .await
+                .unwrap(),
+            None
+        );
+
+        // Bind folder to removable volume
+        bind_removable_folder(&pool, folder_id, "vol-uuid-1234", "DCIM")
+            .await
+            .unwrap();
+
+        let binding = get_removable_folder_binding(&pool, folder_id)
+            .await
+            .unwrap()
+            .expect("binding should exist");
+        assert_eq!(binding.watched_folder_id, folder_id);
+        assert_eq!(binding.volume_id, "vol-uuid-1234");
+        assert_eq!(binding.relative_path, "DCIM");
+
+        // Query by volume
+        let volume_folders = get_removable_folders_by_volume(&pool, "vol-uuid-1234")
+            .await
+            .unwrap();
+        assert_eq!(volume_folders.len(), 1);
+        assert_eq!(volume_folders[0].watched_folder_id, folder_id);
+        assert_eq!(volume_folders[0].relative_path, "DCIM");
+
+        // Unbind manually
+        unbind_removable_folder(&pool, folder_id).await.unwrap();
+        assert_eq!(
+            get_removable_folder_binding(&pool, folder_id)
+                .await
+                .unwrap(),
+            None
+        );
+        // Folder itself is still intact
+        let folders = get_folders(&pool).await.unwrap();
+        assert_eq!(folders.len(), 1);
+
+        // Re-bind and delete folder -> cascade must delete the binding
+        bind_removable_folder(&pool, folder_id, "vol-uuid-1234", "DCIM")
+            .await
+            .unwrap();
+        assert!(get_removable_folder_binding(&pool, folder_id)
+            .await
+            .unwrap()
+            .is_some());
+
+        remove_folder(&pool, folder_id).await.unwrap();
+        assert_eq!(
+            get_removable_folder_binding(&pool, folder_id)
+                .await
+                .unwrap(),
+            None
+        );
     }
 }

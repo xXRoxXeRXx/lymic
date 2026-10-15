@@ -4,7 +4,12 @@ mod queue;
 mod settings;
 mod sync_state;
 
-pub use folders::{add_folder, get_folders, remove_folder, WatchedFolder};
+pub use folders::{add_folder, bind_removable_folder, get_folders, remove_folder, WatchedFolder};
+#[allow(unused_imports)]
+pub use folders::{
+    get_removable_folder_binding, get_removable_folders_by_volume, unbind_removable_folder,
+    RemovableFolderBinding,
+};
 pub use init::{init, DatabaseStatus};
 pub use queue::{
     complete_sync_job_if_finished, enqueue_upload_units, finalize_queued_block, get_sync_snapshot,

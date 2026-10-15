@@ -8,7 +8,7 @@ use crate::{
     watcher,
 };
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,46 +23,71 @@ fn removal_requires_confirmation(
     has_active_work && !confirm_cancellation.unwrap_or(false)
 }
 
-// tokio::sync::Mutex avoids blocking the async executor while waiting
-//         for the lock (std::sync::Mutex::lock blocks the current thread).
-#[tauri::command]
-pub(crate) async fn add_folder(
-    app: tauri::AppHandle,
-    pool: tauri::State<'_, sqlx::SqlitePool>,
-    watcher: tauri::State<'_, tokio::sync::Mutex<watcher::WatcherState>>,
-    path: String,
-    target_album_id: Option<String>,
-) -> Result<i64, String> {
-    let folders = db::get_folders(pool.inner())
-        .await
-        .map_err(|error| error.to_string())?;
-    let path_for_normalization = PathBuf::from(&path);
-    let existing_paths = folders
-        .into_iter()
-        .map(|folder| PathBuf::from(folder.path))
-        .collect::<Vec<_>>();
-    let (normalized_path, conflict) = tokio::task::spawn_blocking(move || {
-        let normalized_path = normalize_folder_path(&path_for_normalization);
-        let conflict = existing_paths
-            .into_iter()
-            .map(|path| normalize_folder_path(&path))
-            .find_map(|existing_path| {
-                let is_duplicate = path_is_within(&normalized_path, &existing_path)
-                    && path_is_within(&existing_path, &normalized_path);
-                if is_duplicate
-                    || path_is_within(&normalized_path, &existing_path)
-                    || path_is_within(&existing_path, &normalized_path)
-                {
-                    Some((existing_path, is_duplicate))
-                } else {
-                    None
-                }
-            });
-        (normalized_path, conflict)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RemovableBindingInput {
+    pub volume_id: String,
+    pub relative_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RegisterFolderParams {
+    pub path: String,
+    pub target_album_id: Option<String>,
+    pub removable_binding: Option<RemovableBindingInput>,
+}
+
+impl RegisterFolderParams {
+    pub fn new(path: impl Into<String>, target_album_id: Option<String>) -> Self {
+        Self {
+            path: path.into(),
+            target_album_id,
+            removable_binding: None,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn with_removable_binding(
+        mut self,
+        volume_id: impl Into<String>,
+        relative_path: impl Into<String>,
+    ) -> Self {
+        self.removable_binding = Some(RemovableBindingInput {
+            volume_id: volume_id.into(),
+            relative_path: relative_path.into(),
+        });
+        self
+    }
+}
+
+pub(crate) fn sanitize_target_album_id(target_album_id: Option<String>) -> Option<String> {
+    target_album_id.and_then(|id| {
+        let trimmed = id.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
     })
-    .await
-    .map_err(|error| format!("Could not normalize folder '{}': {}", path, error))?;
-    let normalized_path_string = normalized_path.to_string_lossy().to_string();
+}
+
+pub(crate) fn check_folder_conflict(
+    candidate_path: &Path,
+    existing_paths: &[PathBuf],
+) -> Result<PathBuf, String> {
+    let normalized_path = normalize_folder_path(candidate_path);
+    let conflict = existing_paths.iter().find_map(|existing_path| {
+        let normalized_existing = normalize_folder_path(existing_path);
+        let is_duplicate = path_is_within(&normalized_path, &normalized_existing)
+            && path_is_within(&normalized_existing, &normalized_path);
+        if is_duplicate
+            || path_is_within(&normalized_path, &normalized_existing)
+            || path_is_within(&normalized_existing, &normalized_path)
+        {
+            Some((normalized_existing, is_duplicate))
+        } else {
+            None
+        }
+    });
 
     if let Some((existing_path, is_duplicate)) = conflict {
         let message = if is_duplicate {
@@ -80,53 +105,81 @@ pub(crate) async fn add_folder(
         return Err(message);
     }
 
-    let path = normalized_path_string;
-    let path_for_check = PathBuf::from(&path);
+    Ok(normalized_path)
+}
+
+pub(crate) async fn register_watched_folder(
+    app: &tauri::AppHandle,
+    pool: &sqlx::SqlitePool,
+    watcher: &tokio::sync::Mutex<watcher::WatcherState>,
+    params: RegisterFolderParams,
+) -> Result<i64, String> {
+    let folders = db::get_folders(pool)
+        .await
+        .map_err(|error| error.to_string())?;
+    let path_for_normalization = PathBuf::from(&params.path);
+    let existing_paths = folders
+        .into_iter()
+        .map(|folder| PathBuf::from(folder.path))
+        .collect::<Vec<_>>();
+
+    let normalized_path = tokio::task::spawn_blocking(move || {
+        check_folder_conflict(&path_for_normalization, &existing_paths)
+    })
+    .await
+    .map_err(|error| format!("Could not normalize folder '{}': {}", params.path, error))??;
+
+    let path_string = normalized_path.to_string_lossy().to_string();
+    let path_for_check = normalized_path.clone();
+
     let is_available = match tokio::task::spawn_blocking(move || {
         std::fs::metadata(path_for_check).map(|metadata| metadata.is_dir())
     })
     .await
     {
         Ok(Ok(true)) => true,
-        Ok(Ok(false)) => return Err(format!("Path '{}' is not a directory.", path)),
+        Ok(Ok(false)) => return Err(format!("Path '{}' is not a directory.", path_string)),
         Ok(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => false,
-        Ok(Err(error)) => return Err(format!("Could not access folder '{}': {}", path, error)),
-        Err(error) => return Err(format!("Could not check folder '{}': {}", path, error)),
+        Ok(Err(error)) => {
+            return Err(format!(
+                "Could not access folder '{}': {}",
+                path_string, error
+            ))
+        }
+        Err(error) => {
+            return Err(format!(
+                "Could not check folder '{}': {}",
+                path_string, error
+            ))
+        }
     };
 
     let registration = if is_available {
         let mut w = watcher.lock().await;
-        w.reconcile_path(&path, true)
-            .map_err(|error| format!("Could not watch '{}': {}", path, error))?
+        w.reconcile_path(&path_string, true)
+            .map_err(|error| format!("Could not watch '{}': {}", path_string, error))?
     } else {
         watcher::WatchRegistration::PathUnavailable
     };
 
-    let target_album_id = target_album_id.and_then(|id| {
-        let trimmed = id.trim().to_string();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed)
-        }
-    });
-
+    let target_album_id = sanitize_target_album_id(params.target_album_id);
     let album_id = target_album_id.as_deref().map(crate::immich::AlbumId::new);
-    let id = match db::add_folder(pool.inner(), &path, album_id.as_ref()).await {
+
+    let id = match db::add_folder(pool, &path_string, album_id.as_ref()).await {
         Ok(id) => id,
         Err(error) => {
             if registration == watcher::WatchRegistration::Registered {
                 let mut w = watcher.lock().await;
-                if let Err(unwatch_error) = watcher::unwatch_path(&mut w, &path) {
+                if let Err(unwatch_error) = watcher::unwatch_path(&mut w, &path_string) {
                     log_to_ui_folder_error(
-                        &app,
+                        app,
                         "ERROR",
                         &format!(
                             "Could not undo watcher registration for '{}': {}",
-                            path, unwatch_error
+                            path_string, unwatch_error
                         ),
                         "log_watcher_undo_failed",
-                        &path,
+                        &path_string,
                         &unwatch_error.to_string(),
                     );
                 }
@@ -135,26 +188,40 @@ pub(crate) async fn add_folder(
         }
     };
 
+    if let Some(removable) = params.removable_binding {
+        if let Err(error) =
+            db::bind_removable_folder(pool, id, &removable.volume_id, &removable.relative_path)
+                .await
+        {
+            let _ = db::remove_folder(pool, id).await;
+            if registration == watcher::WatchRegistration::Registered {
+                let mut w = watcher.lock().await;
+                let _ = watcher::unwatch_path(&mut w, &path_string);
+            }
+            return Err(error.to_string());
+        }
+    }
+
     // The persisted folder is the source of truth, even when its watcher is deferred.
-    set_sync_enabled(&app, true);
+    set_sync_enabled(app, true);
 
     if registration == watcher::WatchRegistration::PathUnavailable {
         log_to_ui_folder(
-            &app,
+            app,
             "WARN",
             &format!(
                 "Folder '{}' does not exist; watching deferred until it appears.",
-                path
+                path_string
             ),
             "log_folder_deferred",
-            &path,
+            &path_string,
         );
     }
 
     // An offline folder will be scanned when the deferred-watch task registers it.
     if is_available {
-        let pool_inner = pool.inner().clone();
-        let path_clone = path.clone();
+        let pool_inner = pool.clone();
+        let path_clone = path_string.clone();
         let app_for_scan = app.clone();
         tauri::async_runtime::spawn(async move {
             let scan_result =
@@ -178,7 +245,7 @@ pub(crate) async fn add_folder(
     }
 
     audit_event(
-        &app,
+        app,
         crate::audit::AuditEvent::new(
             crate::audit::AuditEvent::operation_id(),
             "folder.added",
@@ -187,10 +254,29 @@ pub(crate) async fn add_folder(
             None,
             "command",
             "Watched folder added",
-            json!({ "folder_id": id, "local_path": path, "target_album_id": target_album_id }),
+            json!({ "folder_id": id, "local_path": path_string, "target_album_id": target_album_id }),
         ),
     );
     Ok(id)
+}
+
+// tokio::sync::Mutex avoids blocking the async executor while waiting
+//         for the lock (std::sync::Mutex::lock blocks the current thread).
+#[tauri::command]
+pub(crate) async fn add_folder(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    watcher: tauri::State<'_, tokio::sync::Mutex<watcher::WatcherState>>,
+    path: String,
+    target_album_id: Option<String>,
+) -> Result<i64, String> {
+    register_watched_folder(
+        &app,
+        pool.inner(),
+        watcher.inner(),
+        RegisterFolderParams::new(path, target_album_id),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -326,5 +412,65 @@ mod tests {
             requires_sync_cancellation: true,
         };
         assert!(result.requires_sync_cancellation);
+    }
+
+    #[test]
+    fn folder_conflict_check_detects_duplicates_and_overlaps() {
+        use std::path::{Path, PathBuf};
+        let existing = vec![PathBuf::from("C:/Media/Photos")];
+
+        // Exact duplicate
+        let err =
+            super::check_folder_conflict(Path::new("C:/Media/Photos"), &existing).unwrap_err();
+        assert!(err.contains("already being watched"));
+
+        // Child subfolder
+        let err =
+            super::check_folder_conflict(Path::new("C:/Media/Photos/2024"), &existing).unwrap_err();
+        assert!(err.contains("overlaps with already watched folder"));
+
+        // Parent folder
+        let err = super::check_folder_conflict(Path::new("C:/Media"), &existing).unwrap_err();
+        assert!(err.contains("overlaps with already watched folder"));
+
+        // Sibling folder with common prefix
+        let ok =
+            super::check_folder_conflict(Path::new("C:/Media/Photos-Vacation"), &existing).unwrap();
+        assert_eq!(
+            ok,
+            crate::media::paths::normalize_folder_path(Path::new("C:/Media/Photos-Vacation"))
+        );
+    }
+
+    #[test]
+    fn target_album_sanitization_trims_and_discards_empty_strings() {
+        assert_eq!(super::sanitize_target_album_id(None), None);
+        assert_eq!(
+            super::sanitize_target_album_id(Some("   ".to_string())),
+            None
+        );
+        assert_eq!(
+            super::sanitize_target_album_id(Some("  album-uuid  ".to_string())),
+            Some("album-uuid".to_string())
+        );
+    }
+
+    #[test]
+    fn register_folder_params_constructs_manual_and_removable_bindings() {
+        let manual = super::RegisterFolderParams::new("C:/Photos", Some("album-1".to_string()));
+        assert_eq!(manual.path, "C:/Photos");
+        assert_eq!(manual.target_album_id.as_deref(), Some("album-1"));
+        assert!(manual.removable_binding.is_none());
+
+        let removable = super::RegisterFolderParams::new("E:/DCIM", None)
+            .with_removable_binding("vol-uuid-456", "DCIM");
+        assert_eq!(removable.path, "E:/DCIM");
+        assert_eq!(
+            removable.removable_binding,
+            Some(super::RemovableBindingInput {
+                volume_id: "vol-uuid-456".to_string(),
+                relative_path: "DCIM".to_string(),
+            })
+        );
     }
 }
