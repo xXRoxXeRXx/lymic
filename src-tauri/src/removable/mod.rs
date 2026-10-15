@@ -18,12 +18,63 @@ pub(crate) use coordinator::*;
 pub(crate) use model::*;
 pub(crate) use monitor::*;
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 impl VolumeEventEmitter for tauri::AppHandle {
     fn emit_volume_detected(&self, volume: &VolumeInfo) -> Result<(), String> {
         self.emit("removable-volume-detected", volume)
             .map_err(|e| e.to_string())
+    }
+
+    async fn reconcile_remount_watcher(
+        &self,
+        old_path: Option<&str>,
+        new_path: &str,
+    ) -> Result<(), String> {
+        let watcher_state = self.state::<tokio::sync::Mutex<crate::watcher::WatcherState>>();
+        let mut w = watcher_state.lock().await;
+
+        if let Some(old) = old_path {
+            let _ = crate::watcher::unwatch_path(&mut w, old);
+        }
+
+        w.reconcile_path(new_path, true)
+            .map_err(|e| format!("Could not watch '{new_path}': {e}"))?;
+
+        Ok(())
+    }
+
+    async fn trigger_remount_scan(&self, folder_path: &str) -> Result<(), String> {
+        let path = std::path::PathBuf::from(folder_path);
+        let app = self.clone();
+        let pool = self.state::<sqlx::SqlitePool>().inner().clone();
+        let path_str = folder_path.to_string();
+
+        tauri::async_runtime::spawn(async move {
+            let scan_result = match crate::sync::scan_folders_for_media(vec![path]).await {
+                Ok(result) => result,
+                Err(error) => {
+                    crate::app::events::log_to_ui_folder_error(
+                        &app,
+                        "ERROR",
+                        &format!("Folder scanning failed for '{path_str}': {error}"),
+                        "log_folder_scan_failed",
+                        &path_str,
+                        &error,
+                    );
+                    return;
+                }
+            };
+            crate::sync::sync_scan_result_if_authenticated(
+                app,
+                pool,
+                scan_result,
+                "removable_media_reconnect",
+            )
+            .await;
+        });
+
+        Ok(())
     }
 }
 

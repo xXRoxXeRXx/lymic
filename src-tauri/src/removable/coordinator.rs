@@ -3,6 +3,21 @@ use sqlx::SqlitePool;
 
 pub trait VolumeEventEmitter: Send + Sync {
     fn emit_volume_detected(&self, volume: &VolumeInfo) -> Result<(), String>;
+
+    fn reconcile_remount_watcher(
+        &self,
+        _old_path: Option<&str>,
+        _new_path: &str,
+    ) -> impl std::future::Future<Output = Result<(), String>> + Send {
+        async { Ok(()) }
+    }
+
+    fn trigger_remount_scan(
+        &self,
+        _folder_path: &str,
+    ) -> impl std::future::Future<Output = Result<(), String>> + Send {
+        async { Ok(()) }
+    }
 }
 
 pub struct RemovableVolumeCoordinator<E: VolumeEventEmitter> {
@@ -39,6 +54,54 @@ impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
 
                 if bindings.is_empty() {
                     self.emitter.emit_volume_detected(&volume)?;
+                } else {
+                    let folders = crate::db::get_folders(&self.pool)
+                        .await
+                        .map_err(|e| e.to_string())?;
+
+                    for binding in bindings {
+                        if let Some(folder) =
+                            folders.iter().find(|f| f.id == binding.watched_folder_id)
+                        {
+                            let candidate_path = if binding.relative_path.is_empty() {
+                                std::path::PathBuf::from(&volume.mount_path)
+                            } else {
+                                std::path::Path::new(&volume.mount_path)
+                                    .join(&binding.relative_path)
+                            };
+                            let norm_new =
+                                crate::media::paths::normalize_folder_path(&candidate_path);
+                            let norm_new_str = norm_new.to_string_lossy().to_string();
+
+                            let norm_current = crate::media::paths::normalize_folder_path(
+                                std::path::Path::new(&folder.path),
+                            );
+                            let norm_current_str = norm_current.to_string_lossy().to_string();
+
+                            let path_changed = norm_current_str != norm_new_str;
+
+                            if path_changed {
+                                crate::db::remap_watched_folder_path(
+                                    &self.pool,
+                                    folder.id,
+                                    &folder.path,
+                                    &norm_new_str,
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
+
+                                self.emitter
+                                    .reconcile_remount_watcher(Some(&folder.path), &norm_new_str)
+                                    .await?;
+                            } else {
+                                self.emitter
+                                    .reconcile_remount_watcher(None, &norm_new_str)
+                                    .await?;
+                            }
+
+                            self.emitter.trigger_remount_scan(&norm_new_str).await?;
+                        }
+                    }
                 }
                 Ok(())
             }

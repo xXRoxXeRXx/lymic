@@ -1329,4 +1329,160 @@ mod database_tests {
             None
         );
     }
+
+    #[tokio::test]
+    async fn remap_watched_folder_path_atomically_updates_descendants_and_preserves_siblings() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        // Setup watched folder and sibling folder
+        let folder_id = add_folder(&pool, "E:/DCIM", None).await.unwrap();
+        let sibling_id = add_folder(&pool, "E:/DCIM_Backup", None).await.unwrap();
+
+        // Populate sync_state
+        update_sync_state(
+            &pool,
+            "E:/DCIM/100EOS/IMG_0001.JPG",
+            "hash1",
+            100,
+            1000,
+            "SYNCED",
+            Some("rem1"),
+        )
+        .await
+        .unwrap();
+        update_sync_state(
+            &pool,
+            "E:/DCIM/100EOS/IMG_0002.JPG",
+            "hash2",
+            200,
+            2000,
+            "FAILED",
+            None,
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE sync_state SET failure_reason = 'network timeout' WHERE local_path = 'E:/DCIM/100EOS/IMG_0002.JPG'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        update_sync_state(
+            &pool,
+            "E:/DCIM_Backup/100EOS/IMG_0003.JPG",
+            "hash3",
+            300,
+            3000,
+            "SYNCED",
+            Some("rem3"),
+        )
+        .await
+        .unwrap();
+
+        // Populate sync_queue
+        let queue_units = vec![
+            QueueUploadUnit {
+                image: QueueUploadAsset {
+                    path: "E:/DCIM/100EOS/IMG_0002.JPG".to_string(),
+                    size: 2000,
+                    mtime: 200,
+                    target_album_id: None,
+                },
+                live_photo_video: None,
+            },
+            QueueUploadUnit {
+                image: QueueUploadAsset {
+                    path: "E:/DCIM_Backup/100EOS/IMG_0003.JPG".to_string(),
+                    size: 3000,
+                    mtime: 300,
+                    target_album_id: None,
+                },
+                live_photo_video: None,
+            },
+        ];
+        enqueue_upload_units(&pool, &queue_units, &[])
+            .await
+            .unwrap();
+
+        // Perform remap
+        remap_watched_folder_path(&pool, folder_id, "E:/DCIM", "F:/DCIM")
+            .await
+            .unwrap();
+
+        // 1. Verify watched_folders
+        let folders = get_folders(&pool).await.unwrap();
+        let remapped_folder = folders.iter().find(|f| f.id == folder_id).unwrap();
+        assert_eq!(remapped_folder.path, "F:/DCIM");
+
+        let sibling_folder = folders.iter().find(|f| f.id == sibling_id).unwrap();
+        assert_eq!(sibling_folder.path, "E:/DCIM_Backup");
+
+        // 2. Verify sync_state
+        let old_item = sqlx::query(
+            "SELECT local_path FROM sync_state WHERE local_path = 'E:/DCIM/100EOS/IMG_0001.JPG'",
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+        assert!(old_item.is_none());
+
+        let new_item_1: (String, String, Option<String>, String) = sqlx::query_as(
+            "SELECT local_path, file_hash, remote_id, status FROM sync_state WHERE local_path = 'F:/DCIM/100EOS/IMG_0001.JPG'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(new_item_1.0, "F:/DCIM/100EOS/IMG_0001.JPG");
+        assert_eq!(new_item_1.1, "hash1");
+        assert_eq!(new_item_1.2, Some("rem1".to_string()));
+        assert_eq!(new_item_1.3, "SYNCED");
+
+        let new_item_2: (String, String, Option<String>, String, Option<String>) = sqlx::query_as(
+            "SELECT local_path, file_hash, remote_id, status, failure_reason FROM sync_state WHERE local_path = 'F:/DCIM/100EOS/IMG_0002.JPG'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(new_item_2.0, "F:/DCIM/100EOS/IMG_0002.JPG");
+        assert_eq!(new_item_2.1, "hash2");
+        assert_eq!(new_item_2.3, "FAILED");
+        assert_eq!(new_item_2.4, Some("network timeout".to_string()));
+
+        // Sibling sync_state MUST be unchanged
+        let sibling_state: (String, String) = sqlx::query_as(
+            "SELECT local_path, file_hash FROM sync_state WHERE local_path = 'E:/DCIM_Backup/100EOS/IMG_0003.JPG'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(sibling_state.0, "E:/DCIM_Backup/100EOS/IMG_0003.JPG");
+        assert_eq!(sibling_state.1, "hash3");
+
+        // 3. Verify sync_queue
+        let old_queued = sqlx::query(
+            "SELECT local_path FROM sync_queue WHERE local_path = 'E:/DCIM/100EOS/IMG_0002.JPG'",
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+        assert!(old_queued.is_none());
+
+        let new_queued: (String, String) = sqlx::query_as(
+            "SELECT local_path, status FROM sync_queue WHERE local_path = 'F:/DCIM/100EOS/IMG_0002.JPG'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(new_queued.0, "F:/DCIM/100EOS/IMG_0002.JPG");
+        assert_eq!(new_queued.1, "PENDING");
+
+        // Sibling queue entry MUST be unchanged
+        let sibling_queued: (String, String) = sqlx::query_as(
+            "SELECT local_path, status FROM sync_queue WHERE local_path = 'E:/DCIM_Backup/100EOS/IMG_0003.JPG'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(sibling_queued.0, "E:/DCIM_Backup/100EOS/IMG_0003.JPG");
+        assert_eq!(sibling_queued.1, "PENDING");
+    }
 }
