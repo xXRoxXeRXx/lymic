@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.1] - 2026-10-15
+
+### Fixed
+- **Linux and macOS build compilation**:
+  - Allow dead code on `VolumeEvent` variants on platforms where removable media monitors are currently stubbed.
+  - Fix Clippy unit struct instantiation for macOS and Linux removable media monitors.
+
 ## [0.19.0] - 2026-10-15
 
 ### Added
