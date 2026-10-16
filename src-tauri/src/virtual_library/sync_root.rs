@@ -18,6 +18,15 @@ pub(crate) enum ConnectionStatus {
     Error,
 }
 
+/// Observable outcome of returning hydrated placeholders to online-only state.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CacheClearResult {
+    pub(crate) bytes_freed: u64,
+    pub(crate) files_dehydrated: u64,
+    pub(crate) pinned_files_preserved: u64,
+}
+
 #[allow(dead_code)] // Placeholder operations are consumed by timeline reconciliation.
 pub(crate) trait CloudFilter: Send + Sync {
     fn register(&self, path: &str) -> Result<(), String>;
@@ -36,6 +45,9 @@ pub(crate) trait CloudFilter: Send + Sync {
         ))
     }
     fn create_placeholder(&self, path: &str, metadata: PlaceholderMetadata) -> Result<(), String>;
+    fn clear_local_cache(&self, _: &str) -> Result<CacheClearResult, String> {
+        Err("Virtual Library cache clearing is unavailable.".to_string())
+    }
     fn acknowledge_change(
         &self,
         notification: ChangeNotification,
@@ -124,6 +136,14 @@ impl SyncRootLifecycle {
         state.1 = ConnectionStatus::Disconnected;
         Ok(())
     }
+    pub(crate) fn clear_local_cache(&self) -> Result<CacheClearResult, String> {
+        let state = self.state.lock().map_err(|e| e.to_string())?;
+        let (path, _) = state
+            .0
+            .as_ref()
+            .ok_or_else(|| "Virtual Library is not enabled.".to_string())?;
+        self.api.clear_local_cache(path)
+    }
 }
 
 #[cfg(not(windows))]
@@ -152,6 +172,9 @@ impl CloudFilter for PlatformCloudFilter {
         Err("Virtual Library is only available on Windows".into())
     }
     fn create_placeholder(&self, _: &str, _: PlaceholderMetadata) -> Result<(), String> {
+        Err("Virtual Library is only available on Windows".into())
+    }
+    fn clear_local_cache(&self, _: &str) -> Result<CacheClearResult, String> {
         Err("Virtual Library is only available on Windows".into())
     }
     fn acknowledge_change(
@@ -214,6 +237,9 @@ impl CloudFilter for PlatformCloudFilter {
     }
     fn create_placeholder(&self, path: &str, metadata: PlaceholderMetadata) -> Result<(), String> {
         native::create_placeholder(path, metadata)
+    }
+    fn clear_local_cache(&self, path: &str) -> Result<CacheClearResult, String> {
+        native::clear_local_cache(path)
     }
     fn acknowledge_change(
         &self,
@@ -574,6 +600,79 @@ mod native {
                 )
             })
     }
+    pub(super) fn clear_local_cache(path: &str) -> Result<CacheClearResult, String> {
+        let mut summary = CacheClearResult::default();
+        for entry in walkdir::WalkDir::new(path) {
+            let entry = entry.map_err(|error| error.to_string())?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let path = entry.path();
+            let handle = open_placeholder(path)?;
+            let operation = (|| -> Result<(), String> {
+                let standard_info = placeholder_standard_info(handle)?;
+                if standard_info.PinState == CF_PIN_STATE_PINNED {
+                    summary.pinned_files_preserved += 1;
+                } else if standard_info.OnDiskDataSize > 0 {
+                    summary.bytes_freed = summary
+                        .bytes_freed
+                        .saturating_add(standard_info.OnDiskDataSize as u64);
+                    summary.files_dehydrated += 1;
+                    result("CfDehydratePlaceholder", unsafe {
+                        CfDehydratePlaceholder(
+                            handle,
+                            0,
+                            0,
+                            CF_DEHYDRATE_FLAG_NONE,
+                            std::ptr::null_mut(),
+                        )
+                    })?;
+                }
+                Ok(())
+            })();
+            unsafe { windows_sys::Win32::Foundation::CloseHandle(handle) };
+            operation?;
+        }
+        Ok(summary)
+    }
+    fn open_placeholder(path: &Path) -> Result<windows_sys::Win32::Foundation::HANDLE, String> {
+        use windows_sys::Win32::Storage::FileSystem::{
+            CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_DELETE, FILE_SHARE_READ,
+            FILE_SHARE_WRITE, OPEN_EXISTING,
+        };
+        let display_path = path.to_string_lossy();
+        let path = wide(&display_path);
+        let handle = unsafe {
+            CreateFileW(
+                path.as_ptr(),
+                FILE_GENERIC_READ | FILE_GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                std::ptr::null(),
+                OPEN_EXISTING,
+                0,
+                0,
+            )
+        };
+        (handle != windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE)
+            .then_some(handle)
+            .ok_or_else(|| format!("Could not open '{display_path}' for cache clearing"))
+    }
+    fn placeholder_standard_info(
+        handle: windows_sys::Win32::Foundation::HANDLE,
+    ) -> Result<CF_PLACEHOLDER_STANDARD_INFO, String> {
+        let mut info = std::mem::MaybeUninit::<CF_PLACEHOLDER_STANDARD_INFO>::zeroed();
+        let mut returned = 0;
+        result("CfGetPlaceholderInfo", unsafe {
+            CfGetPlaceholderInfo(
+                handle,
+                CF_PLACEHOLDER_INFO_STANDARD,
+                info.as_mut_ptr().cast(),
+                std::mem::size_of::<CF_PLACEHOLDER_STANDARD_INFO>() as u32,
+                &mut returned,
+            )
+        })?;
+        Ok(unsafe { info.assume_init() })
+    }
     fn windows_file_time(timestamp: chrono::DateTime<chrono::Utc>) -> i64 {
         const WINDOWS_EPOCH_OFFSET_SECONDS: i64 = 11_644_473_600;
         timestamp
@@ -611,6 +710,14 @@ mod tests {
         fn create_placeholder(&self, _: &str, _: PlaceholderMetadata) -> Result<(), String> {
             Ok(())
         }
+        fn clear_local_cache(&self, _: &str) -> Result<CacheClearResult, String> {
+            self.0.lock().unwrap().push("clear_local_cache");
+            Ok(CacheClearResult {
+                bytes_freed: 1024,
+                files_dehydrated: 1,
+                pinned_files_preserved: 1,
+            })
+        }
         fn acknowledge_change(
             &self,
             _: ChangeNotification,
@@ -630,6 +737,36 @@ mod tests {
         assert_eq!(
             *calls.lock().unwrap(),
             ["register", "connect", "disconnect", "unregister"]
+        );
+    }
+
+    #[test]
+    fn clearing_the_local_cache_dehydrates_unpinned_files_and_reports_reclaimed_space() {
+        let calls = Arc::new(Mutex::new(vec![]));
+        let root = SyncRootLifecycle::new(Box::new(Fake(calls.clone())));
+        root.enable("C:\\Library").unwrap();
+
+        assert_eq!(
+            root.clear_local_cache().unwrap(),
+            CacheClearResult {
+                bytes_freed: 1024,
+                files_dehydrated: 1,
+                pinned_files_preserved: 1,
+            }
+        );
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["register", "connect", "clear_local_cache"]
+        );
+    }
+
+    #[test]
+    fn clearing_the_local_cache_requires_an_enabled_sync_root() {
+        let root = SyncRootLifecycle::new(Box::new(Fake(Arc::new(Mutex::new(vec![])))));
+
+        assert_eq!(
+            root.clear_local_cache().unwrap_err(),
+            "Virtual Library is not enabled."
         );
     }
 

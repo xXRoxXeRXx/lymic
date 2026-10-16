@@ -320,15 +320,17 @@ describe("SettingsView", () => {
     const onThemeChange = vi.fn();
     const onToggleAutostart = vi.fn();
     const onToggleVirtualLibrary = vi.fn();
+    const onClearVirtualLibraryCache = vi.fn();
     const onUploadParallelismChange = vi.fn();
     const onCheckForUpdates = vi.fn();
     const onLogout = vi.fn();
-    const { rerender } = render(SettingsView, { currentUserName: "Meyer", serverUrl: "https://immich.example", isAutostartEnabled: false, virtualLibraryEnabled: false, virtualLibraryPath: "%USERPROFILE%\\Pictures\\Lymic", themePreference: "system", uploadParallelism: 3, isSavingUploadParallelism: true, updateStatus: "unknown", isCheckingForUpdates: false, locales: localeCatalog, onToggleAutostart, onToggleVirtualLibrary, onLocaleChange, onThemeChange, onUploadParallelismChange, onCheckForUpdates, onLogout });
+    const { rerender } = render(SettingsView, { currentUserName: "Meyer", serverUrl: "https://immich.example", isAutostartEnabled: false, virtualLibraryEnabled: false, virtualLibraryPath: "%USERPROFILE%\\Pictures\\Lymic", virtualLibraryConnectionStatus: "disconnected", themePreference: "system", uploadParallelism: 3, isSavingUploadParallelism: true, updateStatus: "unknown", isCheckingForUpdates: false, locales: localeCatalog, onToggleAutostart, onToggleVirtualLibrary, onLocaleChange, onThemeChange, onUploadParallelismChange, onCheckForUpdates, onLogout });
     expect(screen.getByLabelText("Parallel uploads")).toBeDisabled();
-    rerender({ currentUserName: "Meyer", serverUrl: "https://immich.example", isAutostartEnabled: false, virtualLibraryEnabled: false, virtualLibraryPath: "%USERPROFILE%\\Pictures\\Lymic", themePreference: "system", uploadParallelism: 3, isSavingUploadParallelism: false, updateStatus: "current", isCheckingForUpdates: false, onToggleAutostart, onToggleVirtualLibrary, onLocaleChange, onThemeChange, onUploadParallelismChange, onCheckForUpdates, onLogout });
+    rerender({ currentUserName: "Meyer", serverUrl: "https://immich.example", isAutostartEnabled: false, virtualLibraryEnabled: true, virtualLibraryPath: "%USERPROFILE%\\Pictures\\Lymic", virtualLibraryConnectionStatus: "connected", themePreference: "system", uploadParallelism: 3, isSavingUploadParallelism: false, updateStatus: "current", isCheckingForUpdates: false, onToggleAutostart, onToggleVirtualLibrary, onClearVirtualLibraryCache, onLocaleChange, onThemeChange, onUploadParallelismChange, onCheckForUpdates, onLogout });
     await fireEvent.click(screen.getByRole("button", { name: "Enable autostart" }));
     expect(screen.getByText("%USERPROFILE%\\Pictures\\Lymic")).toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "Enable Virtual Library" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Disable Virtual Library" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Clear Local Cache" }));
     await fireEvent.change(screen.getByLabelText("Language"), { target: { value: "de" } });
     await fireEvent.click(screen.getByRole("button", { name: "Dark" }));
     await fireEvent.change(screen.getByLabelText("Parallel uploads"), { target: { value: "5" } });
@@ -336,6 +338,7 @@ describe("SettingsView", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Logout" }));
     expect(onToggleAutostart).toHaveBeenCalledOnce();
     expect(onToggleVirtualLibrary).toHaveBeenCalledOnce();
+    expect(onClearVirtualLibraryCache).toHaveBeenCalledOnce();
     expect(onLocaleChange).toHaveBeenCalledWith("de");
     expect(onThemeChange).toHaveBeenCalledWith("dark");
     expect(onUploadParallelismChange).toHaveBeenCalledOnce();

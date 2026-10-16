@@ -128,6 +128,13 @@ pub(crate) fn clear_thumbnail_cache(app: tauri::AppHandle) -> Result<(), String>
 }
 
 #[tauri::command]
+pub(crate) fn clear_virtual_library_cache(
+    root: tauri::State<'_, crate::virtual_library::sync_root::SyncRootLifecycle>,
+) -> Result<crate::virtual_library::sync_root::CacheClearResult, String> {
+    root.clear_local_cache()
+}
+
+#[tauri::command]
 pub(crate) fn update_locale(
     app: tauri::AppHandle,
     state: tauri::State<'_, LocaleState>,

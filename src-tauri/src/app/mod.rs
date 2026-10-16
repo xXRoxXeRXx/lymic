@@ -126,6 +126,7 @@ pub(crate) fn run() {
             crate::commands::settings::get_thumbnail_cache_cap_bytes,
             crate::commands::settings::set_thumbnail_cache_cap_bytes,
             crate::commands::settings::clear_thumbnail_cache,
+            crate::commands::settings::clear_virtual_library_cache,
             crate::commands::settings::record_webview_startup_phase_probe,
             crate::commands::settings::get_database_recovery_notice
         ])

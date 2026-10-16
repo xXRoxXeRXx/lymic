@@ -23,6 +23,8 @@ export function createPreferencesController(options: {
   let isSavingUploadParallelism = $state(false);
   let thumbnailCacheCapBytes = $state(250 * 1024 * 1024);
   let isClearingThumbnailCache = $state(false);
+  let isClearingVirtualLibraryCache = $state(false);
+  let virtualLibraryCacheClearResult = $state<{ bytesFreed: number; filesDehydrated: number; pinnedFilesPreserved: number } | null>(null);
   let virtualLibraryEnabled = $state(false);
   let virtualLibraryPath = $state("%USERPROFILE%\\Pictures\\Lymic");
   let virtualLibraryConnectionStatus = $state("disconnected");
@@ -187,6 +189,18 @@ export function createPreferencesController(options: {
     }
   }
 
+  async function clearVirtualLibraryCache() {
+    isClearingVirtualLibraryCache = true;
+    try {
+      virtualLibraryCacheClearResult = await invoke("clear_virtual_library_cache");
+    } catch (error) {
+      console.error("Failed to clear Virtual Library cache", error);
+      options.reportError(error);
+    } finally {
+      isClearingVirtualLibraryCache = false;
+    }
+  }
+
   function startLifecycle() {
     if (typeof window === "undefined") return;
     applyTheme();
@@ -221,6 +235,8 @@ export function createPreferencesController(options: {
     get isSavingUploadParallelism() { return isSavingUploadParallelism; },
     get thumbnailCacheCapBytes() { return thumbnailCacheCapBytes; },
     get isClearingThumbnailCache() { return isClearingThumbnailCache; },
+    get isClearingVirtualLibraryCache() { return isClearingVirtualLibraryCache; },
+    get virtualLibraryCacheClearResult() { return virtualLibraryCacheClearResult; },
     get virtualLibraryEnabled() { return virtualLibraryEnabled; },
     get virtualLibraryPath() { return virtualLibraryPath; },
     get virtualLibraryConnectionStatus() { return virtualLibraryConnectionStatus; },
@@ -235,5 +251,6 @@ export function createPreferencesController(options: {
     changeUploadParallelism,
     changeThumbnailCacheCap,
     clearThumbnailCache,
+    clearVirtualLibraryCache,
   };
 }

@@ -241,6 +241,8 @@
             isSavingUploadParallelism={preferences.isSavingUploadParallelism}
             thumbnailCacheCapBytes={preferences.thumbnailCacheCapBytes}
             isClearingThumbnailCache={preferences.isClearingThumbnailCache}
+            isClearingVirtualLibraryCache={preferences.isClearingVirtualLibraryCache}
+            virtualLibraryCacheClearResult={preferences.virtualLibraryCacheClearResult}
             updateStatus={updater.updateStatus}
             isCheckingForUpdates={updater.isCheckingForUpdates}
             locales={preferences.locales}
@@ -251,6 +253,7 @@
             onUploadParallelismChange={preferences.changeUploadParallelism}
             onThumbnailCacheCapChange={preferences.changeThumbnailCacheCap}
             onClearThumbnailCache={preferences.clearThumbnailCache}
+            onClearVirtualLibraryCache={preferences.clearVirtualLibraryCache}
             onCheckForUpdates={updater.checkForUpdates}
             onLogout={auth.logout}
           />

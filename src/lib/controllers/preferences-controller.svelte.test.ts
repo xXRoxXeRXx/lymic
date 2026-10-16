@@ -36,6 +36,17 @@ describe("preferences controller", () => {
     expect(controller.isClearingThumbnailCache).toBe(false);
   });
 
+  it("clears the local Virtual Library cache and retains the reported reclaimed space", async () => {
+    tauri.invoke.mockResolvedValue({ bytesFreed: 4096, filesDehydrated: 2, pinnedFilesPreserved: 1 });
+    const controller = createPreferencesController({ reportError: vi.fn(), addLog: vi.fn(), locale: () => "en", setLocale: vi.fn() });
+
+    await controller.clearVirtualLibraryCache();
+
+    expect(tauri.invoke).toHaveBeenCalledWith("clear_virtual_library_cache");
+    expect(controller.virtualLibraryCacheClearResult).toEqual({ bytesFreed: 4096, filesDehydrated: 2, pinnedFilesPreserved: 1 });
+    expect(controller.isClearingVirtualLibraryCache).toBe(false);
+  });
+
   it("restores the select value when upload parallelism persistence fails", async () => {
     tauri.invoke.mockRejectedValue(new Error("Database unavailable"));
     const reportError = vi.fn();
