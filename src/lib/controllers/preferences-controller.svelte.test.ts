@@ -7,6 +7,25 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
 vi.mock("@tauri-apps/plugin-autostart", () => tauri);
 
 describe("preferences controller", () => {
+  it("loads and persists the virtual library setting", async () => {
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_locale_catalog") return localeCatalog;
+      if (command === "get_upload_parallelism") return 3;
+      if (command === "get_virtual_library_status") {
+        return { enabled: false, path: "%USERPROFILE%\\Pictures\\Lymic" };
+      }
+      return null;
+    });
+    const controller = createPreferencesController({ reportError: vi.fn(), addLog: vi.fn(), locale: () => "en", setLocale: vi.fn() });
+
+    await controller.hydrate();
+    await controller.toggleVirtualLibrary();
+
+    expect(controller.virtualLibraryEnabled).toBe(true);
+    expect(controller.virtualLibraryPath).toBe("%USERPROFILE%\\Pictures\\Lymic");
+    expect(tauri.invoke).toHaveBeenCalledWith("set_virtual_library_enabled", { enabled: true });
+  });
+
   it("restores the select value when upload parallelism persistence fails", async () => {
     tauri.invoke.mockRejectedValue(new Error("Database unavailable"));
     const reportError = vi.fn();

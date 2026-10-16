@@ -20,6 +20,8 @@ export function createPreferencesController(options: {
   let isAutostartEnabled = $state(false);
   let uploadParallelism = $state(3);
   let isSavingUploadParallelism = $state(false);
+  let virtualLibraryEnabled = $state(false);
+  let virtualLibraryPath = $state("%USERPROFILE%\\Pictures\\Lymic");
   let colorSchemeQuery: MediaQueryList | undefined;
   let listener: (() => void) | undefined;
   let locales = $state<readonly LocaleCatalogEntry[]>(localeCatalog);
@@ -59,6 +61,15 @@ export function createPreferencesController(options: {
       uploadParallelism = await invoke<number>("get_upload_parallelism");
     } catch (error) {
       console.error("Failed to load upload parallelism", error);
+      options.reportError(error);
+    }
+
+    try {
+      const status = await invoke<{ enabled: boolean; path: string }>("get_virtual_library_status");
+      virtualLibraryEnabled = status.enabled;
+      virtualLibraryPath = status.path;
+    } catch (error) {
+      console.error("Failed to load virtual library status", error);
       options.reportError(error);
     }
 
@@ -109,6 +120,17 @@ export function createPreferencesController(options: {
     }
   }
 
+  async function toggleVirtualLibrary() {
+    const nextEnabled = !virtualLibraryEnabled;
+    try {
+      await invoke<void>("set_virtual_library_enabled", { enabled: nextEnabled });
+      virtualLibraryEnabled = nextEnabled;
+    } catch (error) {
+      console.error("Failed to update virtual library status", error);
+      options.reportError(error);
+    }
+  }
+
   async function changeUploadParallelism(event: Event) {
     const select = event.currentTarget as HTMLSelectElement;
     const nextValue = Number(select.value);
@@ -152,6 +174,8 @@ export function createPreferencesController(options: {
     get isAutostartEnabled() { return isAutostartEnabled; },
     get uploadParallelism() { return uploadParallelism; },
     get isSavingUploadParallelism() { return isSavingUploadParallelism; },
+    get virtualLibraryEnabled() { return virtualLibraryEnabled; },
+    get virtualLibraryPath() { return virtualLibraryPath; },
     get locales() { return locales; },
     hydrate,
     startLifecycle,
@@ -159,6 +183,7 @@ export function createPreferencesController(options: {
     setThemePreference,
     setLocale,
     toggleAutostart,
+    toggleVirtualLibrary,
     changeUploadParallelism,
   };
 }
