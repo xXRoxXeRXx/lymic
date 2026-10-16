@@ -56,6 +56,9 @@ windows-sys = { version = "0.59", features = [
     "Win32_Storage_FileSystem",
     "Win32_Storage_CloudFilters",
     "Win32_System_CorrelationVector",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_Security",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_LibraryLoader",
 ] }

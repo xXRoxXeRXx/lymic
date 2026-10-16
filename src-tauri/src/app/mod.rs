@@ -37,6 +37,16 @@ pub(crate) fn run() {
             let start_in_background = should_start_in_background(&args, has_credentials);
 
             let startup = startup::initialize(app)?;
+            #[cfg(windows)]
+            {
+                if let Ok(cache_dir) =
+                    crate::thumbnail_cache::local_thumbnail_cache_dir(app.handle())
+                {
+                    crate::thumbnail_pipe::start_server(std::sync::Arc::new(
+                        crate::thumbnail_cache::ThumbnailCache::new(cache_dir, 0),
+                    ));
+                }
+            }
             let has_folders = startup.has_folders;
             let recovered_sync = startup.recovered_sync.clone();
             background::spawn(app.handle().clone(), startup);
