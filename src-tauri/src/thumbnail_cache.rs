@@ -148,7 +148,9 @@ impl ThumbnailCache {
             .flatten()
         {
             let path = entry.path();
-            if path.file_name().is_some_and(|name| name.to_string_lossy().starts_with(&prefix))
+            if path
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with(&prefix))
                 && is_thumbnail_file(&path)
             {
                 fs::remove_file(&path).map_err(|error| error.to_string())?;

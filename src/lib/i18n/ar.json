@@ -177,4 +177,5 @@
   "removable_card_detected_body": "البطاقة {name} ({path}) جاهزة للمزامنة.",
   "removable_prompt_sync": "مزامنة البطاقة",
   "removable_prompt_dismiss": "تجاهل"
+  ,"virtual_library_title": "Virtual Library (Windows Explorer)"
 }

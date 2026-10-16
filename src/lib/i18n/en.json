@@ -177,4 +177,5 @@
   "removable_card_detected_body": "Card {name} ({path}) is ready to synchronize.",
   "removable_prompt_sync": "Sync Card",
   "removable_prompt_dismiss": "Dismiss"
+  ,"virtual_library_title": "Virtual Library (Windows Explorer)"
 }

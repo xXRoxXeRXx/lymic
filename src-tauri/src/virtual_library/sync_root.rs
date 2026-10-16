@@ -48,10 +48,18 @@ pub(crate) trait CloudFilter: Send + Sync {
     /// Removes a placeholder that no longer has a remote counterpart. Implementations
     /// must return an error for a locked file so reconciliation can retry it later.
     fn remove_placeholder(&self, path: &str) -> Result<(), String> {
-        Err(format!("removing virtual placeholders is not supported: {path}"))
+        Err(format!(
+            "removing virtual placeholders is not supported: {path}"
+        ))
     }
     fn clear_local_cache(&self, _: &str) -> Result<CacheClearResult, String> {
         Err("Virtual Library cache clearing is unavailable.".to_string())
+    }
+    /// Removes the projection after it has been disconnected and deregistered.
+    /// This is intentionally separate from cache clearing: disabling the
+    /// feature must not leave stale Explorer-visible placeholders behind.
+    fn remove_root(&self, _: &str) -> Result<(), String> {
+        Ok(())
     }
     fn acknowledge_change(
         &self,
@@ -140,6 +148,7 @@ impl SyncRootLifecycle {
         if let Some((path, key)) = state.0.take() {
             self.api.disconnect(key)?;
             self.api.unregister(&path)?;
+            self.api.remove_root(&path)?;
         }
         state.1 = ConnectionStatus::Disconnected;
         Ok(())
@@ -259,6 +268,13 @@ impl CloudFilter for PlatformCloudFilter {
     fn clear_local_cache(&self, path: &str) -> Result<CacheClearResult, String> {
         native::clear_local_cache(path)
     }
+    fn remove_root(&self, path: &str) -> Result<(), String> {
+        match std::fs::remove_dir_all(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.to_string()),
+        }
+    }
     fn acknowledge_change(
         &self,
         notification: ChangeNotification,
@@ -271,7 +287,8 @@ impl CloudFilter for PlatformCloudFilter {
 #[cfg(windows)]
 mod native {
     use super::CacheClearResult;
-    #[allow(dead_code)] // Some Cloud Filter calls are consumed by follow-up reconciliation work.
+    #[allow(dead_code)]
+    // Some Cloud Filter calls are consumed by follow-up reconciliation work.
     use super::{ChangeNotification, ChangeRequest, PlaceholderMetadata, PlatformCloudFilter};
     use crate::virtual_library::hydration::{DataTransfer, FetchDataRequest};
     use bytes::Bytes;
@@ -723,6 +740,10 @@ mod tests {
             self.0.lock().unwrap().push("unregister");
             Ok(())
         }
+        fn remove_root(&self, _: &str) -> Result<(), String> {
+            self.0.lock().unwrap().push("remove_root");
+            Ok(())
+        }
         fn create_directory(&self, _: &str) -> Result<(), String> {
             Ok(())
         }
@@ -755,7 +776,13 @@ mod tests {
         root.disable().unwrap();
         assert_eq!(
             *calls.lock().unwrap(),
-            ["register", "connect", "disconnect", "unregister"]
+            [
+                "register",
+                "connect",
+                "disconnect",
+                "unregister",
+                "remove_root"
+            ]
         );
     }
 

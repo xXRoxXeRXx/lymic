@@ -62,30 +62,102 @@ impl ImmichClient {
         if let Some(updated_after) = updated_after {
             query["updatedAfter"] = json!(updated_after);
         }
-        let response = self.client.post(self.endpoint_url("search/metadata"))
-            .header("x-api-key", &self.api_key).json(&query).send().await
+        let response = self
+            .client
+            .post(self.endpoint_url("search/metadata"))
+            .header("x-api-key", &self.api_key)
+            .json(&query)
+            .send()
+            .await
             .map_err(|error| format!("Virtual Library delta request failed: {error}"))?;
         if !response.status().is_success() {
-            return Err(format!("Virtual Library delta request failed: {}", response_status_error(response).await?));
+            return Err(format!(
+                "Virtual Library delta request failed: {}",
+                response_status_error(response).await?
+            ));
         }
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         let response: serde_json::Value = serde_json::from_slice(&body)
             .map_err(|error| format!("Invalid Virtual Library delta response: {error}"))?;
-        let items = response.pointer("/assets/items").and_then(serde_json::Value::as_array)
+        let items = response
+            .pointer("/assets/items")
+            .and_then(serde_json::Value::as_array)
             .or_else(|| response.get("items").and_then(serde_json::Value::as_array))
             .ok_or_else(|| "Virtual Library delta response did not include assets".to_string())?;
-        items.iter().map(|asset| {
-            let text = |key: &str| asset.get(key).and_then(serde_json::Value::as_str).map(str::to_owned);
-            let id = text("id").ok_or_else(|| "Virtual Library asset did not include id".to_string())?;
-            let file_name = text("originalFileName").or_else(|| text("fileName")).ok_or_else(|| "Virtual Library asset did not include originalFileName".to_string())?;
-            let version = text("updatedAt").or_else(|| text("version")).unwrap_or_default();
-            let file_size = asset.get("originalFileSize").and_then(serde_json::Value::as_u64).or_else(|| asset.get("fileSize").and_then(serde_json::Value::as_u64)).unwrap_or(0);
-            let captured_at = text("fileCreatedAt").or_else(|| text("localDateTime"))
-                .and_then(|date| chrono::DateTime::parse_from_rfc3339(&date).ok())
-                .map(|date| date.with_timezone(&chrono::Utc));
-            Ok(crate::virtual_library::timeline::RemoteVisualAsset { id, version, file_name, file_size, captured_at, live_photo_video: None })
-        }).collect()
+        items.iter().map(parse_visual_asset).collect()
     }
+}
+
+pub(crate) fn parse_visual_asset(
+    asset: &serde_json::Value,
+) -> Result<crate::virtual_library::timeline::RemoteVisualAsset, String> {
+    let text = |key: &str| {
+        asset
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+    let id = text("id").ok_or_else(|| "Virtual Library asset did not include id".to_string())?;
+    let file_name = text("originalFileName")
+        .or_else(|| text("fileName"))
+        .ok_or_else(|| "Virtual Library asset did not include originalFileName".to_string())?;
+    let version = text("updatedAt")
+        .or_else(|| text("version"))
+        .unwrap_or_default();
+    let file_size = asset
+        .get("originalFileSize")
+        .and_then(serde_json::Value::as_u64)
+        .or_else(|| asset.get("fileSize").and_then(serde_json::Value::as_u64))
+        .unwrap_or(0);
+    let captured_at = text("fileCreatedAt")
+        .or_else(|| text("localDateTime"))
+        .and_then(|date| chrono::DateTime::parse_from_rfc3339(&date).ok())
+        .map(|date| date.with_timezone(&chrono::Utc));
+    let live_photo_video = asset
+        .get("livePhotoVideo")
+        .or_else(|| asset.get("livePhotoVideoAsset"))
+        .and_then(serde_json::Value::as_object)
+        .map(|video| {
+            let text = |key: &str| {
+                video
+                    .get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            };
+            let id = text("id")
+                .ok_or_else(|| "Virtual Library live photo video did not include id".to_string())?;
+            let file_name = text("originalFileName")
+                .or_else(|| text("fileName"))
+                .ok_or_else(|| {
+                    "Virtual Library live photo video did not include originalFileName".to_string()
+                })?;
+            Ok::<crate::virtual_library::timeline::RemoteLivePhotoVideo, String>(
+                crate::virtual_library::timeline::RemoteLivePhotoVideo {
+                    id,
+                    version: text("updatedAt")
+                        .or_else(|| text("version"))
+                        .unwrap_or_default(),
+                    file_name,
+                    file_size: video
+                        .get("originalFileSize")
+                        .and_then(serde_json::Value::as_u64)
+                        .or_else(|| video.get("fileSize").and_then(serde_json::Value::as_u64))
+                        .unwrap_or(0),
+                },
+            )
+        })
+        .transpose()?;
+    Ok(crate::virtual_library::timeline::RemoteVisualAsset {
+        id,
+        version,
+        file_name,
+        file_size,
+        captured_at,
+        live_photo_video,
+    })
+}
+
+impl ImmichClient {
     pub(crate) fn new(
         server_url: String,
         api_key: String,
@@ -439,6 +511,16 @@ mod tests {
         headers.insert("cf-access-client-id", "client-id".parse().unwrap());
         headers.insert("cf-access-client-secret", "client-secret".parse().unwrap());
         Client::builder().default_headers(headers).build().unwrap()
+    }
+
+    #[test]
+    fn parses_live_photo_linkage_from_the_visual_catalog() {
+        let asset = serde_json::json!({
+            "id": "image", "originalFileName": "IMG.HEIC", "originalFileSize": 1,
+            "livePhotoVideo": { "id": "video", "originalFileName": "IMG.MOV", "originalFileSize": 2, "updatedAt": "v2" }
+        });
+        let parsed = super::parse_visual_asset(&asset).unwrap();
+        assert_eq!(parsed.live_photo_video.unwrap().id, "video");
     }
 
     #[test]

@@ -13,6 +13,60 @@ pub struct Album {
 }
 
 impl ImmichClient {
+    pub(crate) async fn virtual_library_albums_page(
+        &self,
+        page: u32,
+        page_size: usize,
+    ) -> Result<Vec<crate::virtual_library::albums::RemoteAlbum>, String> {
+        let response = self
+            .client
+            .get(self.endpoint_url("albums"))
+            .query(&[("page", page), ("size", page_size as u32)])
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Virtual Library albums request failed: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Virtual Library albums request failed: {}",
+                response_status_error(response).await?
+            ));
+        }
+        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
+        let value: serde_json::Value = serde_json::from_slice(&body)
+            .map_err(|error| format!("Invalid Virtual Library albums response: {error}"))?;
+        let items = value
+            .as_array()
+            .or_else(|| value.get("items").and_then(serde_json::Value::as_array))
+            .ok_or_else(|| "Virtual Library albums response did not include albums".to_string())?;
+        items
+            .iter()
+            .map(|album| {
+                let id = album
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or("Virtual Library album did not include id")?;
+                let name = album
+                    .get("albumName")
+                    .or_else(|| album.get("name"))
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or("Virtual Library album did not include albumName")?;
+                let assets = match album.get("assets").and_then(serde_json::Value::as_array) {
+                    Some(assets) => assets
+                        .iter()
+                        .map(super::client::parse_visual_asset)
+                        .collect::<Result<Vec<_>, _>>()?,
+                    None => Vec::new(),
+                };
+                Ok(crate::virtual_library::albums::RemoteAlbum {
+                    id: id.to_owned(),
+                    name: name.to_owned(),
+                    assets,
+                })
+            })
+            .collect()
+    }
+
     pub async fn get_albums(&self) -> Result<Vec<Album>, String> {
         let response = self
             .client

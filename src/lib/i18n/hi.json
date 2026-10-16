@@ -177,4 +177,5 @@
   "removable_card_detected_body": "कार्ड {name} ({path}) सिंक्रनाइज़ करने के लिए तैयार है।",
   "removable_prompt_sync": "कार्ड सिंक करें",
   "removable_prompt_dismiss": "खारिज करें"
+  ,"virtual_library_title": "Virtual Library (Windows Explorer)"
 }

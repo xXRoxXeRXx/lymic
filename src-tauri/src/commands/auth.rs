@@ -2,6 +2,7 @@ use crate::app::events::log_to_ui_key;
 use crate::audit::{audit_event, audit_safe_error};
 use crate::{auth, immich};
 use serde_json::json;
+use tauri::Manager;
 
 fn normalize_cloudflare_access_credentials(
     client_id: Option<String>,
@@ -103,6 +104,11 @@ pub(crate) async fn logout(app: tauri::AppHandle) -> Result<(), String> {
         .ok()
         .flatten()
         .map(|credentials| crate::audit::actor_id(&credentials.server_url, &credentials.api_key));
+    // A logged-out projection cannot hydrate and must not remain visible as a
+    // stale copy of the previous user's library.
+    if let Some(root) = app.try_state::<crate::virtual_library::sync_root::SyncRootLifecycle>() {
+        root.disable()?;
+    }
     let result = auth::delete_credentials();
     audit_event(
         &app,

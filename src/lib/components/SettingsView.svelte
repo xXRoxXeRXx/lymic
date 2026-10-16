@@ -117,7 +117,7 @@
           <Monitor class="w-4 h-4" />
         </div>
         <div class="space-y-0.5">
-          <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm">Virtual Library (Windows Explorer)</p>
+          <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm">{$t('virtual_library_title')}</p>
           <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-lg">Read-only library at <span class="font-mono">{virtualLibraryPath}</span> · {virtualLibraryConnectionStatus === 'connected' ? 'Connected' : virtualLibraryConnectionStatus === 'error' ? 'Error' : 'Disconnected'}</p>
         </div>
       </div>

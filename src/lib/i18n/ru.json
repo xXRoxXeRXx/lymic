@@ -177,4 +177,5 @@
   "removable_card_detected_body": "Карта {name} ({path}) готова к синхронизации.",
   "removable_prompt_sync": "Синхронизировать карту",
   "removable_prompt_dismiss": "Отклонить"
+  ,"virtual_library_title": "Virtual Library (Windows Explorer)"
 }

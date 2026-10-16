@@ -74,7 +74,10 @@ impl From<FetchDataRequest> for FetchRequestKey {
     }
 }
 
-const PROGRESS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+/// Cloud Files treats a quiet provider as unresponsive.  Keep the callback
+/// alive at least twice a second while the server is slow.
+const PROGRESS_HEARTBEAT_INTERVAL: Duration = Duration::from_millis(500);
+const PROGRESS_BYTES_INTERVAL: usize = 1024 * 1024;
 
 impl HydrationDispatcher {
     pub(crate) fn new(
@@ -158,16 +161,24 @@ impl HydrationDispatcher {
             if bytes.is_empty() {
                 continue;
             }
-            self.transfer
-                .transfer_data(request, offset, bytes.clone(), false)?;
-            offset = offset
-                .checked_add(i64::try_from(bytes.len()).map_err(|_| "original chunk is too large")?)
-                .ok_or_else(|| "original asset offset overflow".to_string())?;
-            self.transfer.report_progress(
-                request,
-                request.required_length,
-                offset - request.required_offset,
-            )?;
+            // CfReportProviderProgress2 must be observed both frequently in
+            // time and as a transfer grows.  A response chunk can be much
+            // larger than 1 MiB, so split it at the provider-progress seam.
+            for part in bytes.chunks(PROGRESS_BYTES_INTERVAL) {
+                let part = Bytes::copy_from_slice(part);
+                self.transfer
+                    .transfer_data(request, offset, part.clone(), false)?;
+                offset = offset
+                    .checked_add(
+                        i64::try_from(part.len()).map_err(|_| "original chunk is too large")?,
+                    )
+                    .ok_or_else(|| "original asset offset overflow".to_string())?;
+                self.transfer.report_progress(
+                    request,
+                    request.required_length,
+                    offset - request.required_offset,
+                )?;
+            }
         }
         if cancellation.is_cancelled() {
             return Ok(());
@@ -282,6 +293,34 @@ mod tests {
             *transfer.progress.lock().unwrap(),
             [(14, 0), (14, 9), (14, 14)]
         );
+    }
+
+    #[test]
+    fn reports_progress_for_every_mebibyte_of_a_large_network_chunk() {
+        struct LargeChunkClient;
+        impl OriginalAssetClient for LargeChunkClient {
+            fn stream_original(&self, _: RemoteAssetId) -> OriginalAssetFuture {
+                Box::pin(async {
+                    Ok(Box::pin(futures::stream::iter(vec![Ok(Bytes::from(vec![
+                        7;
+                        PROGRESS_BYTES_INTERVAL
+                            * 2
+                            + 1
+                    ]))])) as OriginalAssetStream)
+                })
+            }
+        }
+        let transfer = Arc::new(FakeTransfer::default());
+        let dispatcher = HydrationDispatcher::new(Arc::new(LargeChunkClient), transfer.clone());
+        let mut large_request = request();
+        large_request.required_length = (PROGRESS_BYTES_INTERVAL * 2 + 1) as i64;
+        tauri::async_runtime::block_on(
+            dispatcher.hydrate(RemoteAssetId::new("asset-id"), large_request),
+        )
+        .unwrap();
+
+        assert_eq!(transfer.transfers.lock().unwrap().len(), 4); // 3 data parts plus completion
+        assert_eq!(transfer.progress.lock().unwrap().len(), 4); // initial plus one report per part
     }
 
     struct PendingClient(mpsc::Sender<()>);

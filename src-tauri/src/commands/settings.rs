@@ -145,8 +145,12 @@ pub(crate) async fn refresh_virtual_library(
     pool: tauri::State<'_, sqlx::SqlitePool>,
     root: tauri::State<'_, crate::virtual_library::sync_root::SyncRootLifecycle>,
 ) -> Result<usize, String> {
-    crate::virtual_library::reconciliation::refresh_configured_library(pool.inner(), root.inner(), &app)
-        .await
+    crate::virtual_library::reconciliation::refresh_configured_library(
+        pool.inner(),
+        root.inner(),
+        &app,
+    )
+    .await
 }
 
 #[tauri::command]

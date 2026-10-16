@@ -4,9 +4,8 @@ use super::{
     timeline::{RemoteVisualAsset, TimelineProjection},
 };
 use crate::db::{
-    apply_virtual_library_delta, replace_virtual_library_snapshot,
-    remove_virtual_library_bindings, virtual_library_bindings,
-    virtual_library_reconciliation_cursor, VirtualLibraryBinding,
+    apply_virtual_library_delta, remove_virtual_library_bindings, replace_virtual_library_snapshot,
+    virtual_library_bindings, virtual_library_reconciliation_cursor, VirtualLibraryBinding,
 };
 use futures::future::BoxFuture;
 use sqlx::SqlitePool;
@@ -41,12 +40,37 @@ pub(crate) trait UpdatedVisualLibraryCatalog: Send + Sync {
 }
 
 impl UpdatedVisualLibraryCatalog for crate::immich::ImmichClient {
-    fn updated_visual_assets_page(&self, updated_after: Option<&str>, page: u32, page_size: usize) -> BoxFuture<'_, Result<Vec<RemoteVisualAsset>, String>> {
+    fn updated_visual_assets_page(
+        &self,
+        updated_after: Option<&str>,
+        page: u32,
+        page_size: usize,
+    ) -> BoxFuture<'_, Result<Vec<RemoteVisualAsset>, String>> {
         let updated_after = updated_after.map(str::to_owned);
         Box::pin(async move {
             self.visual_assets_updated_after(updated_after.as_deref(), page, page_size)
                 .await
         })
+    }
+}
+
+impl VisualLibraryCatalog for crate::immich::ImmichClient {
+    fn visual_assets_page(
+        &self,
+        page: u32,
+        page_size: usize,
+    ) -> BoxFuture<'_, Result<Vec<RemoteVisualAsset>, String>> {
+        Box::pin(async move {
+            self.visual_assets_updated_after(None, page, page_size)
+                .await
+        })
+    }
+    fn albums_page(
+        &self,
+        page: u32,
+        page_size: usize,
+    ) -> BoxFuture<'_, Result<Vec<RemoteAlbum>, String>> {
+        Box::pin(async move { self.virtual_library_albums_page(page, page_size).await })
     }
 }
 
@@ -146,10 +170,9 @@ async fn reconcile_authoritative_assets(
     cursor: &str,
     thumbnails: &crate::thumbnail_cache::ThumbnailCache,
 ) -> Result<usize, String> {
-    let assets = all_pages(|page| {
-        catalog.updated_visual_assets_page(None, page, RECONCILIATION_PAGE_SIZE)
-    })
-    .await?;
+    let assets =
+        all_pages(|page| catalog.updated_visual_assets_page(None, page, RECONCILIATION_PAGE_SIZE))
+            .await?;
     let timeline = TimelineProjection::new(filter.clone());
     let mut bindings = Vec::new();
     for asset in &assets {
@@ -170,10 +193,12 @@ async fn reconcile_authoritative_assets(
 
 /// Runs one configured-library delta using the current credentials. This is
 /// shared by startup, the ten-minute timer, and the user-initiated refresh.
+/// Full enumeration remains available only for explicit deletion detection;
+/// normal refreshes must keep using Immich's cursor.
 pub(crate) async fn refresh_configured_library(
     pool: &SqlitePool,
     root: &crate::virtual_library::sync_root::SyncRootLifecycle,
-    app: &tauri::AppHandle,
+    _app: &tauri::AppHandle,
 ) -> Result<usize, String> {
     let status = crate::db::get_virtual_library_status(pool)
         .await
@@ -189,17 +214,27 @@ pub(crate) async fn refresh_configured_library(
         credentials.cloudflare_client_id,
         credentials.cloudflare_client_secret,
     )?;
-    let thumbnail_root = crate::thumbnail_cache::local_thumbnail_cache_dir(app)?;
-    let thumbnail_cap = crate::db::get_thumbnail_cache_cap_bytes(pool)
+    if virtual_library_reconciliation_cursor(pool)
         .await
-        .map_err(|error| error.to_string())?;
-    reconcile_authoritative_assets(
+        .map_err(|error| error.to_string())?
+        .is_none()
+    {
+        reconcile_initial_library(
+            pool,
+            &status.path,
+            &client,
+            root.projection_filter(),
+            |_| {},
+        )
+        .await?;
+        return Ok(0);
+    }
+    reconcile_library_delta(
         pool,
         &status.path,
         &client,
         root.projection_filter(),
         &chrono::Utc::now().to_rfc3339(),
-        &crate::thumbnail_cache::ThumbnailCache::new(thumbnail_root, thumbnail_cap),
     )
     .await
 }
@@ -440,25 +475,71 @@ mod tests {
 
     #[tokio::test]
     async fn delta_queries_from_the_stored_cursor_and_advances_it_after_projecting_new_assets() {
-        struct DeltaCatalog { seen: Mutex<Vec<Option<String>>>, assets: Vec<RemoteVisualAsset> }
+        struct DeltaCatalog {
+            seen: Mutex<Vec<Option<String>>>,
+            assets: Vec<RemoteVisualAsset>,
+        }
         impl UpdatedVisualLibraryCatalog for DeltaCatalog {
-            fn updated_visual_assets_page(&self, cursor: Option<&str>, page: u32, size: usize) -> BoxFuture<'_, Result<Vec<RemoteVisualAsset>, String>> {
+            fn updated_visual_assets_page(
+                &self,
+                cursor: Option<&str>,
+                page: u32,
+                size: usize,
+            ) -> BoxFuture<'_, Result<Vec<RemoteVisualAsset>, String>> {
                 self.seen.lock().unwrap().push(cursor.map(str::to_owned));
-                Box::pin(async move { Ok(self.assets.iter().skip((page as usize - 1) * size).take(size).cloned().collect()) })
+                Box::pin(async move {
+                    Ok(self
+                        .assets
+                        .iter()
+                        .skip((page as usize - 1) * size)
+                        .take(size)
+                        .cloned()
+                        .collect())
+                })
             }
         }
-        let db = crate::db::init_at_path(&std::env::temp_dir().join(format!("delta-{}.db", uuid::Uuid::new_v4()))).await.unwrap().pool;
-        crate::db::replace_virtual_library_snapshot(&db, &[], "2026-01-01T00:00:00Z").await.unwrap();
-        let catalog = DeltaCatalog { seen: Mutex::new(Vec::new()), assets: vec![asset(9)] };
+        let db = crate::db::init_at_path(
+            &std::env::temp_dir().join(format!("delta-{}.db", uuid::Uuid::new_v4())),
+        )
+        .await
+        .unwrap()
+        .pool;
+        crate::db::replace_virtual_library_snapshot(&db, &[], "2026-01-01T00:00:00Z")
+            .await
+            .unwrap();
+        let catalog = DeltaCatalog {
+            seen: Mutex::new(Vec::new()),
+            assets: vec![asset(9)],
+        };
         let filter = Arc::new(Filter::default());
-        assert_eq!(reconcile_library_delta(&db, "C:\\Library", &catalog, filter.clone(), "2026-01-02T00:00:00Z").await.unwrap(), 1);
-        assert_eq!(*catalog.seen.lock().unwrap(), vec![Some("2026-01-01T00:00:00Z".into())]);
-        assert_eq!(crate::db::virtual_library_reconciliation_cursor(&db).await.unwrap(), Some("2026-01-02T00:00:00Z".into()));
+        assert_eq!(
+            reconcile_library_delta(
+                &db,
+                "C:\\Library",
+                &catalog,
+                filter.clone(),
+                "2026-01-02T00:00:00Z"
+            )
+            .await
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            *catalog.seen.lock().unwrap(),
+            vec![Some("2026-01-01T00:00:00Z".into())]
+        );
+        assert_eq!(
+            crate::db::virtual_library_reconciliation_cursor(&db)
+                .await
+                .unwrap(),
+            Some("2026-01-02T00:00:00Z".into())
+        );
         assert_eq!(filter.paths.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]
-    async fn prunes_every_projection_and_thumbnail_for_a_deleted_remote_asset_but_retries_locked_files() {
+    async fn prunes_every_projection_and_thumbnail_for_a_deleted_remote_asset_but_retries_locked_files(
+    ) {
         let db = crate::db::init_at_path(
             &std::env::temp_dir().join(format!("prune-{}.db", uuid::Uuid::new_v4())),
         )
@@ -471,10 +552,26 @@ mod tests {
         crate::db::replace_virtual_library_snapshot(
             &db,
             &[
-                VirtualLibraryBinding { asset_id: "deleted".into(), projection_path: deleted_timeline.into(), version: "v1".into() },
-                VirtualLibraryBinding { asset_id: "deleted".into(), projection_path: deleted_album.into(), version: "v1".into() },
-                VirtualLibraryBinding { asset_id: "locked".into(), projection_path: locked.into(), version: "v1".into() },
-                VirtualLibraryBinding { asset_id: "retained".into(), projection_path: "C:\\Library\\All Photos\\Unknown\\retained.jpg".into(), version: "v1".into() },
+                VirtualLibraryBinding {
+                    asset_id: "deleted".into(),
+                    projection_path: deleted_timeline.into(),
+                    version: "v1".into(),
+                },
+                VirtualLibraryBinding {
+                    asset_id: "deleted".into(),
+                    projection_path: deleted_album.into(),
+                    version: "v1".into(),
+                },
+                VirtualLibraryBinding {
+                    asset_id: "locked".into(),
+                    projection_path: locked.into(),
+                    version: "v1".into(),
+                },
+                VirtualLibraryBinding {
+                    asset_id: "retained".into(),
+                    projection_path: "C:\\Library\\All Photos\\Unknown\\retained.jpg".into(),
+                    version: "v1".into(),
+                },
             ],
             "2026-01-01T00:00:00Z",
         )
@@ -482,12 +579,20 @@ mod tests {
         .unwrap();
         let filter = Arc::new(Filter::default());
         filter.locked.lock().unwrap().insert(locked.into());
-        let cache_root = std::env::temp_dir().join(format!("prune-thumbnails-{}", uuid::Uuid::new_v4()));
+        let cache_root =
+            std::env::temp_dir().join(format!("prune-thumbnails-{}", uuid::Uuid::new_v4()));
         let cache = crate::thumbnail_cache::ThumbnailCache::new(cache_root.clone(), 1_000_000);
-        let thumbnail = cache.store("deleted", "v1", "image/jpeg", b"thumbnail").unwrap();
+        let thumbnail = cache
+            .store("deleted", "v1", "image/jpeg", b"thumbnail")
+            .unwrap();
 
         let current = HashSet::from(["retained".to_string()]);
-        assert_eq!(prune_remote_deleted_assets(&db, &current, filter.clone(), &cache).await.unwrap(), 2);
+        assert_eq!(
+            prune_remote_deleted_assets(&db, &current, filter.clone(), &cache)
+                .await
+                .unwrap(),
+            2
+        );
         assert_eq!(
             *filter.removed.lock().unwrap(),
             [deleted_album.to_string(), deleted_timeline.to_string()]
@@ -496,8 +601,16 @@ mod tests {
         assert_eq!(
             crate::db::virtual_library_bindings(&db).await.unwrap(),
             vec![
-                VirtualLibraryBinding { asset_id: "locked".into(), projection_path: locked.into(), version: "v1".into() },
-                VirtualLibraryBinding { asset_id: "retained".into(), projection_path: "C:\\Library\\All Photos\\Unknown\\retained.jpg".into(), version: "v1".into() },
+                VirtualLibraryBinding {
+                    asset_id: "locked".into(),
+                    projection_path: locked.into(),
+                    version: "v1".into()
+                },
+                VirtualLibraryBinding {
+                    asset_id: "retained".into(),
+                    projection_path: "C:\\Library\\All Photos\\Unknown\\retained.jpg".into(),
+                    version: "v1".into()
+                },
             ]
         );
         std::fs::remove_dir_all(cache_root).unwrap();

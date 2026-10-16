@@ -177,4 +177,5 @@
   "removable_card_detected_body": "কার্ড {name} ({path}) সিঙ্ক করার জন্য প্রস্তুত।",
   "removable_prompt_sync": "কার্ড সিঙ্ক করুন",
   "removable_prompt_dismiss": "খারিজ করুন"
+  ,"virtual_library_title": "Virtual Library (Windows Explorer)"
 }

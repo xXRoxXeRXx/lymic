@@ -35,8 +35,14 @@ fn spawn_virtual_library_reconciliation(handle: tauri::AppHandle) {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10 * 60));
         loop {
             interval.tick().await;
-            let Some(pool) = handle.try_state::<sqlx::SqlitePool>() else { return; };
-            let Some(root) = handle.try_state::<crate::virtual_library::sync_root::SyncRootLifecycle>() else { return; };
+            let Some(pool) = handle.try_state::<sqlx::SqlitePool>() else {
+                return;
+            };
+            let Some(root) =
+                handle.try_state::<crate::virtual_library::sync_root::SyncRootLifecycle>()
+            else {
+                return;
+            };
             let _ = crate::virtual_library::reconciliation::refresh_configured_library(
                 pool.inner(),
                 root.inner(),

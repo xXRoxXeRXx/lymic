@@ -177,4 +177,5 @@
   "removable_card_detected_body": "La carte {name} ({path}) est prête à être synchronisée.",
   "removable_prompt_sync": "Synchroniser la carte",
   "removable_prompt_dismiss": "Ignorer"
+  ,"virtual_library_title": "Bibliothèque virtuelle (Explorateur Windows)"
 }
