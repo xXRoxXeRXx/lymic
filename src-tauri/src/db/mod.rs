@@ -53,7 +53,10 @@ pub use sync_state::{
 };
 #[cfg(test)]
 pub(crate) use virtual_library::virtual_library_bindings;
-pub(crate) use virtual_library::{replace_virtual_library_snapshot, VirtualLibraryBinding};
+pub(crate) use virtual_library::{
+    apply_virtual_library_delta, replace_virtual_library_snapshot,
+    virtual_library_reconciliation_cursor, VirtualLibraryBinding,
+};
 
 #[cfg(test)]
 pub use init::init_at_path;

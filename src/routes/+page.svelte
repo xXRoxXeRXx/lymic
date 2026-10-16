@@ -243,6 +243,7 @@
             isClearingThumbnailCache={preferences.isClearingThumbnailCache}
             isClearingVirtualLibraryCache={preferences.isClearingVirtualLibraryCache}
             virtualLibraryCacheClearResult={preferences.virtualLibraryCacheClearResult}
+            isRefreshingVirtualLibrary={preferences.isRefreshingVirtualLibrary}
             updateStatus={updater.updateStatus}
             isCheckingForUpdates={updater.isCheckingForUpdates}
             locales={preferences.locales}
@@ -254,6 +255,7 @@
             onThumbnailCacheCapChange={preferences.changeThumbnailCacheCap}
             onClearThumbnailCache={preferences.clearThumbnailCache}
             onClearVirtualLibraryCache={preferences.clearVirtualLibraryCache}
+            onRefreshVirtualLibrary={preferences.refreshVirtualLibrary}
             onCheckForUpdates={updater.checkForUpdates}
             onLogout={auth.logout}
           />

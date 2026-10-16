@@ -24,6 +24,7 @@ export function createPreferencesController(options: {
   let thumbnailCacheCapBytes = $state(250 * 1024 * 1024);
   let isClearingThumbnailCache = $state(false);
   let isClearingVirtualLibraryCache = $state(false);
+  let isRefreshingVirtualLibrary = $state(false);
   let virtualLibraryCacheClearResult = $state<{ bytesFreed: number; filesDehydrated: number; pinnedFilesPreserved: number } | null>(null);
   let virtualLibraryEnabled = $state(false);
   let virtualLibraryPath = $state("%USERPROFILE%\\Pictures\\Lymic");
@@ -201,6 +202,17 @@ export function createPreferencesController(options: {
     }
   }
 
+  async function refreshVirtualLibrary() {
+    isRefreshingVirtualLibrary = true;
+    try {
+      await invoke("refresh_virtual_library");
+    } catch (error) {
+      options.reportError(error);
+    } finally {
+      isRefreshingVirtualLibrary = false;
+    }
+  }
+
   function startLifecycle() {
     if (typeof window === "undefined") return;
     applyTheme();
@@ -236,6 +248,7 @@ export function createPreferencesController(options: {
     get thumbnailCacheCapBytes() { return thumbnailCacheCapBytes; },
     get isClearingThumbnailCache() { return isClearingThumbnailCache; },
     get isClearingVirtualLibraryCache() { return isClearingVirtualLibraryCache; },
+    get isRefreshingVirtualLibrary() { return isRefreshingVirtualLibrary; },
     get virtualLibraryCacheClearResult() { return virtualLibraryCacheClearResult; },
     get virtualLibraryEnabled() { return virtualLibraryEnabled; },
     get virtualLibraryPath() { return virtualLibraryPath; },
@@ -252,5 +265,6 @@ export function createPreferencesController(options: {
     changeThumbnailCacheCap,
     clearThumbnailCache,
     clearVirtualLibraryCache,
+    refreshVirtualLibrary,
   };
 }

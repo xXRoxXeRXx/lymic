@@ -140,6 +140,15 @@ pub(crate) fn clear_virtual_library_cache(
 }
 
 #[tauri::command]
+pub(crate) async fn refresh_virtual_library(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    root: tauri::State<'_, crate::virtual_library::sync_root::SyncRootLifecycle>,
+) -> Result<usize, String> {
+    crate::virtual_library::reconciliation::refresh_configured_library(pool.inner(), root.inner())
+        .await
+}
+
+#[tauri::command]
 pub(crate) fn update_locale(
     app: tauri::AppHandle,
     state: tauri::State<'_, LocaleState>,

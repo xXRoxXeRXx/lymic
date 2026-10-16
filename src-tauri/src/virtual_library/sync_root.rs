@@ -85,7 +85,7 @@ fn deny_change(
 }
 
 pub(crate) struct SyncRootLifecycle {
-    api: Box<dyn CloudFilter>,
+    api: std::sync::Arc<dyn CloudFilter>,
     state: Mutex<(Option<(String, i64)>, ConnectionStatus)>,
 }
 impl SyncRootLifecycle {
@@ -94,9 +94,12 @@ impl SyncRootLifecycle {
     }
     pub(crate) fn new(api: Box<dyn CloudFilter>) -> Self {
         Self {
-            api,
+            api: api.into(),
             state: Mutex::new((None, ConnectionStatus::Disconnected)),
         }
+    }
+    pub(crate) fn projection_filter(&self) -> std::sync::Arc<dyn CloudFilter> {
+        self.api.clone()
     }
     pub(crate) fn status(&self) -> ConnectionStatus {
         self.state.lock().expect("sync root mutex poisoned").1
@@ -253,7 +256,7 @@ impl CloudFilter for PlatformCloudFilter {
 #[cfg(windows)]
 mod native {
     use super::CacheClearResult;
-    #![allow(dead_code)] // Some Cloud Filter calls are consumed by follow-up reconciliation work.
+    #[allow(dead_code)] // Some Cloud Filter calls are consumed by follow-up reconciliation work.
     use super::{ChangeNotification, ChangeRequest, PlaceholderMetadata, PlatformCloudFilter};
     use crate::virtual_library::hydration::{DataTransfer, FetchDataRequest};
     use bytes::Bytes;
@@ -650,8 +653,8 @@ mod native {
                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                 std::ptr::null(),
                 OPEN_EXISTING,
-                std::ptr::null_mut(),
                 0,
+                std::ptr::null_mut(),
             )
         };
         (handle != windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE)

@@ -29,6 +29,44 @@ pub(crate) async fn replace_virtual_library_snapshot(
     transaction.commit().await
 }
 
+pub(crate) async fn virtual_library_reconciliation_cursor(
+    pool: &SqlitePool,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar("SELECT watermark FROM virtual_library_reconciliation WHERE id = 1")
+        .fetch_optional(pool)
+        .await
+}
+
+/// Publishes an incremental projection only after every fetched page has been
+/// projected successfully. The cursor is the commit point: a failed run will
+/// be replayed from the previous value.
+pub(crate) async fn apply_virtual_library_delta(
+    pool: &SqlitePool,
+    bindings: &[VirtualLibraryBinding],
+    cursor: &str,
+) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
+    for binding in bindings {
+        sqlx::query(
+            "INSERT INTO virtual_library_bindings (asset_id, projection_path, version) VALUES (?, ?, ?) \
+             ON CONFLICT(asset_id, projection_path) DO UPDATE SET version = excluded.version",
+        )
+        .bind(&binding.asset_id)
+        .bind(&binding.projection_path)
+        .bind(&binding.version)
+        .execute(&mut *transaction)
+        .await?;
+    }
+    sqlx::query(
+        "INSERT INTO virtual_library_reconciliation (id, watermark) VALUES (1, ?) \
+         ON CONFLICT(id) DO UPDATE SET watermark = excluded.watermark",
+    )
+    .bind(cursor)
+    .execute(&mut *transaction)
+    .await?;
+    transaction.commit().await
+}
+
 async fn insert_bindings(
     transaction: &mut Transaction<'_, Sqlite>,
     bindings: &[VirtualLibraryBinding],
