@@ -7,6 +7,7 @@ use super::response::{
 use super::upload::{parse_upload_response, upload_form, SidecarDirectoryCache};
 use crate::sync::progress::TransferStatsTracker;
 use crate::thumbnail_cache::extension_for_mime_type;
+use futures::StreamExt;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     Client, Response,
@@ -30,6 +31,7 @@ fn upload_timeout(total_file_bytes: u64) -> std::time::Duration {
     std::time::Duration::from_secs(u64::try_from(total_seconds).unwrap_or(u64::MAX))
 }
 
+#[derive(Clone)]
 pub(crate) struct ImmichClient {
     pub(super) client: Client,
     pub(super) server_url: Url,
@@ -242,6 +244,28 @@ impl ImmichClient {
         })
     }
 
+    pub(crate) async fn stream_original(
+        &self,
+        asset_id: &super::ids::RemoteAssetId,
+    ) -> Result<crate::virtual_library::hydration::OriginalAssetStream, String> {
+        let response = self
+            .client
+            .get(self.endpoint_url(&format!("assets/{}/original", asset_id.as_str())))
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Original asset request failed: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Original asset request failed: {}",
+                response_status_error(response).await?
+            ));
+        }
+        Ok(Box::pin(response.bytes_stream().map(|chunk| {
+            chunk.map_err(|error| format!("Could not read original asset: {error}"))
+        })))
+    }
+
     pub(crate) async fn upload_asset_with_live_photo(
         &self,
         path: &str,
@@ -288,6 +312,16 @@ impl ImmichClient {
     }
 }
 
+impl crate::virtual_library::hydration::OriginalAssetClient for ImmichClient {
+    fn stream_original(
+        &self,
+        asset_id: super::ids::RemoteAssetId,
+    ) -> crate::virtual_library::hydration::OriginalAssetFuture {
+        let client = self.clone();
+        Box::pin(async move { client.stream_original(&asset_id).await })
+    }
+}
+
 fn is_loopback_host(host: Option<Host<&str>>) -> bool {
     match host {
         Some(Host::Domain("localhost")) => true,
@@ -304,6 +338,7 @@ mod tests {
         LOCAL_HTTP_NOT_ALLOWED_ERROR, UPLOAD_TIMEOUT_BASE_SECONDS,
     };
     use crate::immich::RemoteAssetId;
+    use futures::TryStreamExt;
     use reqwest::Client;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -787,6 +822,45 @@ mod tests {
         assert_eq!(thumbnail.bytes, b"img");
         let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
         assert!(request.starts_with("GET /api/assets/asset-uuid/thumbnail HTTP/1.1"));
+        assert!(request.contains("x-api-key: test-key"));
+    }
+
+    #[tokio::test]
+    async fn original_asset_request_streams_the_authenticated_original_endpoint() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            requests_tx
+                .send(read_http_request(&mut stream).await)
+                .await
+                .unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n4\r\norig\r\n5\r\ninal!\r\n0\r\n\r\n")
+                .await
+                .unwrap();
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+
+        let bytes = client
+            .stream_original(&RemoteAssetId::new("asset-uuid"))
+            .await
+            .unwrap()
+            .try_fold(Vec::new(), |mut received, chunk| async move {
+                received.extend_from_slice(&chunk?);
+                Ok::<_, String>(received)
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(bytes, b"original!");
+        let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(request.starts_with("GET /api/assets/asset-uuid/original HTTP/1.1"));
         assert!(request.contains("x-api-key: test-key"));
     }
 
