@@ -7,6 +7,7 @@
   "version_label": "Version",
   "license_label": "Lizenz",
   "source_code_label": "Quellcode",
+  "report_issue_label": "Fehler melden",
   "login": "Anmelden",
   "login_subtitle": "Verbinde Lymic mit deinem Immich-Server, damit deine Fotos und Erinnerungen immer sicher aufgehoben sind.",
   "server_url": "Server-URL",

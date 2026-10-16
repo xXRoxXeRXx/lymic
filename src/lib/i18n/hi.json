@@ -7,6 +7,7 @@
   "version_label": "संस्करण",
   "license_label": "लाइसेंस",
   "source_code_label": "स्रोत कोड",
+  "report_issue_label": "समस्या रिपोर्ट करें",
   "login": "लॉग इन",
   "login_subtitle": "Lymic को अपने Immich सर्वर से कनेक्ट करें, ताकि आपकी तस्वीरें और यादें हमेशा सुरक्षित रहें।",
   "server_url": "सर्वर URL",

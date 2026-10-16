@@ -7,6 +7,7 @@
   "version_label": "Версия",
   "license_label": "Лицензия",
   "source_code_label": "Исходный код",
+  "report_issue_label": "Сообщить об ошибке",
   "login": "Вход",
   "login_subtitle": "Подключите Lymic к вашему серверу Immich, чтобы ваши фотографии и воспоминания всегда были в безопасности.",
   "server_url": "URL сервера",

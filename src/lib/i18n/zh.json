@@ -7,6 +7,7 @@
   "version_label": "版本",
   "license_label": "许可证",
   "source_code_label": "源代码",
+  "report_issue_label": "报告问题",
   "login": "登录",
   "login_subtitle": "将 Lymic 连接到你的 Immich 服务器，妥善保存你的照片与美好回忆。",
   "server_url": "服务器地址",

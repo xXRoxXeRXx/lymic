@@ -7,6 +7,7 @@
   "version_label": "সংস্করণ",
   "license_label": "লাইসেন্স",
   "source_code_label": "সোর্স কোড",
+  "report_issue_label": "সমস্যা জানান",
   "login": "লগইন",
   "login_subtitle": "আপনার Immich সার্ভারের সাথে Lymic সংযুক্ত করুন, যাতে আপনার ছবি ও স্মৃতিগুলো সর্বদা সুরক্ষিত থাকে।",
   "server_url": "সার্ভার URL",

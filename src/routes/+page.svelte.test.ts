@@ -142,6 +142,7 @@ describe("app version", () => {
     expect(screen.getByText("Lymic (Unofficial Immich Desktop Client)")).toBeInTheDocument();
     expect(screen.getByText("MIT")).toBeInTheDocument();
     expect(screen.getByText("https://github.com/xXRoxXeRXx/lymic/")).toBeInTheDocument();
+    expect(screen.getByText("https://github.com/xXRoxXeRXx/lymic/issues")).toBeInTheDocument();
   });
 
   it("omits the version without interrupting initialization when loading fails", async () => {

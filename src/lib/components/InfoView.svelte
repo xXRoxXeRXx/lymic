@@ -65,6 +65,20 @@
           <ExternalLink class="w-3 h-3 shrink-0" />
         </a>
       </div>
+
+      <!-- Report Issue -->
+      <div class="flex items-center justify-between p-4 gap-4">
+        <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">{$t('report_issue_label')}</span>
+        <a
+          href="https://github.com/xXRoxXeRXx/lymic/issues"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-xs font-medium text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1.5 truncate"
+        >
+          <span class="truncate">https://github.com/xXRoxXeRXx/lymic/issues</span>
+          <ExternalLink class="w-3 h-3 shrink-0" />
+        </a>
+      </div>
     </div>
   </section>
 </div>

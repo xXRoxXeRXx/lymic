@@ -7,6 +7,7 @@
   "version_label": "الإصدار",
   "license_label": "الترخيص",
   "source_code_label": "الرمز المصدري",
+  "report_issue_label": "الإبلاغ عن مشكلة",
   "login": "تسجيل الدخول",
   "login_subtitle": "قم بربط Lymic بخادم Immich الخاص بك لتبقى صورك وذكرياتك محفوظة بأمان دائمًا.",
   "server_url": "عنوان الخادم (URL)",

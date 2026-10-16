@@ -455,6 +455,8 @@ describe("InfoView", () => {
     expect(screen.getByText("MIT")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "https://github.com/xXRoxXeRXx/lymic/" });
     expect(link).toHaveAttribute("href", "https://github.com/xXRoxXeRXx/lymic/");
+    const issueLink = screen.getByRole("link", { name: "https://github.com/xXRoxXeRXx/lymic/issues" });
+    expect(issueLink).toHaveAttribute("href", "https://github.com/xXRoxXeRXx/lymic/issues");
   });
 
   it("handles missing version gracefully", () => {
