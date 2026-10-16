@@ -4,6 +4,7 @@ pub(crate) mod albums;
 pub(crate) mod filenames;
 pub(crate) mod hydration;
 pub(crate) mod reconciliation;
+pub(crate) mod shell_extension;
 pub(crate) mod sync_root;
 #[allow(dead_code)] // Wired to reconciliation in a follow-up ticket.
 pub(crate) mod timeline;

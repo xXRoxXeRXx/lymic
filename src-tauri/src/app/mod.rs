@@ -148,6 +148,7 @@ pub(crate) fn run() {
                 {
                     let _ = root.disable();
                 }
+                let _ = crate::virtual_library::shell_extension::unregister_for_current_user();
                 if let Some(logger) = app
                     .try_state::<std::sync::Arc<crate::audit::AuditLogger>>()
                     .map(|state| state.inner().clone())
