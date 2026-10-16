@@ -3,6 +3,7 @@ mod init;
 mod queue;
 mod settings;
 mod sync_state;
+mod virtual_library;
 
 pub use folders::{
     add_folder, bind_removable_folder, get_folders, remap_watched_folder_path, remove_folder,
@@ -50,6 +51,9 @@ pub use sync_state::{
     has_sync_work_in_folder, mark_sync_failed, persist_uploaded_unit, update_sync_state,
     FailedSyncEntry, UploadedAssetState,
 };
+#[cfg(test)]
+pub(crate) use virtual_library::virtual_library_bindings;
+pub(crate) use virtual_library::{replace_virtual_library_snapshot, VirtualLibraryBinding};
 
 #[cfg(test)]
 pub use init::init_at_path;

@@ -34,7 +34,7 @@ impl AlbumProjection {
         }
     }
 
-    pub(crate) fn project(&self, root: &str, album: &RemoteAlbum) -> Result<(), String> {
+    pub(crate) fn project(&self, root: &str, album: &RemoteAlbum) -> Result<Vec<String>, String> {
         let albums = format!("{root}\\Albums");
         self.adapter.create_directory(&albums)?;
         let album_directory = self
@@ -59,7 +59,11 @@ impl AlbumProjection {
 
     /// Makes the album projection match the currently returned remote albums.
     /// This deliberately manages only paths below `Albums`; `All Photos` is canonical.
-    pub(crate) fn reconcile(&self, root: &str, albums: &[RemoteAlbum]) -> Result<(), String> {
+    pub(crate) fn reconcile(
+        &self,
+        root: &str,
+        albums: &[RemoteAlbum],
+    ) -> Result<Vec<String>, String> {
         let albums_root = format!("{root}\\Albums");
         self.adapter.create_directory(&albums_root)?;
         let mut resolver = self
@@ -104,17 +108,22 @@ impl AlbumProjection {
         *current = desired.clone();
         drop(current);
 
+        let mut paths = Vec::new();
         for album in albums {
             let directory = desired
                 .get(&album.id)
                 .expect("every reconciled album has a directory");
             self.adapter.create_directory(directory)?;
-            self.project_into_directory(directory, album)?;
+            paths.extend(self.project_into_directory(directory, album)?);
         }
-        Ok(())
+        Ok(paths)
     }
 
-    fn project_into_directory(&self, directory: &str, album: &RemoteAlbum) -> Result<(), String> {
+    fn project_into_directory(
+        &self,
+        directory: &str,
+        album: &RemoteAlbum,
+    ) -> Result<Vec<String>, String> {
         let mut resolvers = self
             .filenames_by_directory
             .lock()
@@ -122,10 +131,12 @@ impl AlbumProjection {
         let resolver = resolvers
             .entry(directory.to_owned())
             .or_insert_with(FilenameResolver::new);
+        let mut paths = Vec::new();
         for asset in &album.assets {
             let file_name = resolver.resolve(&asset.file_name, &asset.id);
+            let path = format!("{directory}\\{file_name}");
             self.adapter.create_placeholder(
-                &format!("{directory}\\{file_name}"),
+                &path,
                 PlaceholderMetadata {
                     file_size: asset.file_size,
                     captured_at: asset.captured_at,
@@ -133,8 +144,9 @@ impl AlbumProjection {
                     version: asset.version.clone(),
                 },
             )?;
+            paths.push(path);
         }
-        Ok(())
+        Ok(paths)
     }
 }
 

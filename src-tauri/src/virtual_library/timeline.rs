@@ -38,7 +38,11 @@ impl TimelineProjection {
         }
     }
 
-    pub(crate) fn project(&self, root: &str, asset: &RemoteVisualAsset) -> Result<(), String> {
+    pub(crate) fn project(
+        &self,
+        root: &str,
+        asset: &RemoteVisualAsset,
+    ) -> Result<Vec<String>, String> {
         let all_photos = format!("{root}\\All Photos");
         let directories = match asset.captured_at {
             Some(captured_at) => {
@@ -70,8 +74,9 @@ impl TimelineProjection {
             .entry(directory.clone())
             .or_insert_with(FilenameResolver::new)
             .resolve(&asset.file_name, &asset.id);
+        let mut paths = vec![format!("{directory}\\{file_name}")];
         self.adapter.create_placeholder(
-            &format!("{directory}\\{file_name}"),
+            &paths[0],
             PlaceholderMetadata {
                 file_size: asset.file_size,
                 captured_at: asset.captured_at,
@@ -83,8 +88,9 @@ impl TimelineProjection {
         if let Some(video) = &asset.live_photo_video {
             let stem = file_stem(&file_name);
             let file_name = format!("{stem}{}", file_extension(&video.file_name));
+            paths.push(format!("{directory}\\{file_name}"));
             self.adapter.create_placeholder(
-                &format!("{directory}\\{file_name}"),
+                paths.last().expect("just pushed a placeholder path"),
                 PlaceholderMetadata {
                     file_size: video.file_size,
                     captured_at: asset.captured_at,
@@ -94,7 +100,7 @@ impl TimelineProjection {
             )?;
         }
 
-        Ok(())
+        Ok(paths)
     }
 }
 
