@@ -37,6 +37,26 @@ pub(crate) async fn virtual_library_reconciliation_cursor(
         .await
 }
 
+/// Removes durable bindings only after their corresponding placeholder was
+/// removed locally. Callers retain bindings that could not be removed (for
+/// example, because Explorer still has the file open) so the next run retries.
+pub(crate) async fn remove_virtual_library_bindings(
+    pool: &SqlitePool,
+    bindings: &[VirtualLibraryBinding],
+) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
+    for binding in bindings {
+        sqlx::query(
+            "DELETE FROM virtual_library_bindings WHERE asset_id = ? AND projection_path = ?",
+        )
+        .bind(&binding.asset_id)
+        .bind(&binding.projection_path)
+        .execute(&mut *transaction)
+        .await?;
+    }
+    transaction.commit().await
+}
+
 /// Publishes an incremental projection only after every fetched page has been
 /// projected successfully. The cursor is the commit point: a failed run will
 /// be replayed from the previous value.
@@ -84,7 +104,6 @@ async fn insert_bindings(
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) async fn virtual_library_bindings(
     pool: &SqlitePool,
 ) -> Result<Vec<VirtualLibraryBinding>, sqlx::Error> {

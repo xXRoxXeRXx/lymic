@@ -137,6 +137,29 @@ impl ThumbnailCache {
         Ok(())
     }
 
+    /// Removes every cached revision for one Remote Asset.
+    pub(crate) fn remove_asset(&self, asset_id: &str) -> Result<(), String> {
+        if !self.root.exists() {
+            return Ok(());
+        }
+        let prefix = asset_key(asset_id);
+        for entry in fs::read_dir(&self.root)
+            .map_err(|error| error.to_string())?
+            .flatten()
+        {
+            let path = entry.path();
+            if path.file_name().is_some_and(|name| name.to_string_lossy().starts_with(&prefix))
+                && is_thumbnail_file(&path)
+            {
+                fs::remove_file(&path).map_err(|error| error.to_string())?;
+                if let Ok(mut access) = self.access.lock() {
+                    access.timestamps.remove(&path);
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn cache_key(&self, asset_id: &str, revision: &str) -> String {
         format!("{}-{}", asset_key(asset_id), digest(revision))
     }
@@ -279,6 +302,19 @@ mod tests {
         assert!(oldest.exists());
         assert!(!retained.exists());
         assert!(newest.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn removes_every_cached_revision_for_a_deleted_remote_asset() {
+        let (cache, root) = cache();
+        let first = cache.store("deleted", "v1", "image/jpeg", b"one").unwrap();
+        let other = cache.store("retained", "v1", "image/jpeg", b"two").unwrap();
+
+        cache.remove_asset("deleted").unwrap();
+
+        assert!(!first.exists());
+        assert!(other.exists());
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -51,10 +51,9 @@ pub use sync_state::{
     has_sync_work_in_folder, mark_sync_failed, persist_uploaded_unit, update_sync_state,
     FailedSyncEntry, UploadedAssetState,
 };
-#[cfg(test)]
-pub(crate) use virtual_library::virtual_library_bindings;
 pub(crate) use virtual_library::{
     apply_virtual_library_delta, replace_virtual_library_snapshot,
+    remove_virtual_library_bindings, virtual_library_bindings,
     virtual_library_reconciliation_cursor, VirtualLibraryBinding,
 };
 

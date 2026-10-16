@@ -45,6 +45,11 @@ pub(crate) trait CloudFilter: Send + Sync {
         ))
     }
     fn create_placeholder(&self, path: &str, metadata: PlaceholderMetadata) -> Result<(), String>;
+    /// Removes a placeholder that no longer has a remote counterpart. Implementations
+    /// must return an error for a locked file so reconciliation can retry it later.
+    fn remove_placeholder(&self, path: &str) -> Result<(), String> {
+        Err(format!("removing virtual placeholders is not supported: {path}"))
+    }
     fn clear_local_cache(&self, _: &str) -> Result<CacheClearResult, String> {
         Err("Virtual Library cache clearing is unavailable.".to_string())
     }
@@ -177,6 +182,9 @@ impl CloudFilter for PlatformCloudFilter {
     fn create_placeholder(&self, _: &str, _: PlaceholderMetadata) -> Result<(), String> {
         Err("Virtual Library is only available on Windows".into())
     }
+    fn remove_placeholder(&self, _: &str) -> Result<(), String> {
+        Err("Virtual Library is only available on Windows".into())
+    }
     fn clear_local_cache(&self, _: &str) -> Result<CacheClearResult, String> {
         Err("Virtual Library is only available on Windows".into())
     }
@@ -240,6 +248,13 @@ impl CloudFilter for PlatformCloudFilter {
     }
     fn create_placeholder(&self, path: &str, metadata: PlaceholderMetadata) -> Result<(), String> {
         native::create_placeholder(path, metadata)
+    }
+    fn remove_placeholder(&self, path: &str) -> Result<(), String> {
+        match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.to_string()),
+        }
     }
     fn clear_local_cache(&self, path: &str) -> Result<CacheClearResult, String> {
         native::clear_local_cache(path)
