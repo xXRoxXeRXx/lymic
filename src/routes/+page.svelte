@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, AlertCircle, X, LayoutDashboard } from "lucide-svelte";
+  import { Settings as SettingsIcon, AlertCircle, X, LayoutDashboard, User } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
+  import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
   import LoginView from "#lib/components/LoginView.svelte";
   import DashboardView from "#lib/components/DashboardView.svelte";
@@ -72,16 +73,33 @@
 
 <div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60">
   {#if !auth.isAuthenticated}
-    <!-- Centered Login Layout -->
-    <div class="flex-1 flex flex-col items-center justify-center p-8 overflow-y-auto">
-      <div class="flex items-center gap-3 mb-8">
-        <img src={logo} alt="Lymic Logo" class="w-12 h-12 object-contain" />
-        <div>
-          <span class="font-bold tracking-tight text-2xl text-slate-900 dark:text-slate-100">Lymic</span>
-          <p class="text-xs text-slate-400 dark:text-zinc-500 font-medium uppercase tracking-wider">Immich Desktop Client</p>
-        </div>
+    <!-- Left Side: Hero Image (Login Screen) -->
+    <aside class="w-[38%] h-full shrink-0 relative overflow-hidden select-none">
+      <div class="hero-container">
+        <img
+          src={hero}
+          alt="Hero Landscape"
+          class="hero-image"
+        />
+        <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
       </div>
-      <div class="w-full max-w-md">
+
+      <div class="absolute top-12 left-12 flex items-center gap-3 text-white">
+        <img src={logo} alt="Lymic Logo" class="w-16 h-16 object-contain" />
+        <span class="font-bold tracking-tight text-3xl">Lymic</span>
+      </div>
+      <div class="absolute bottom-12 left-12 right-12 text-white">
+        <p class="text-xs font-semibold uppercase tracking-[0.3em] opacity-60 mb-2">{$t('hero_tagline')}</p>
+        <h1 class="text-4xl font-bold tracking-tight">
+          {$t('hero_title_line_1')}<br />
+          {$t('hero_title_line_2')}
+        </h1>
+      </div>
+    </aside>
+
+    <!-- Right Side: Login Content Column -->
+    <div class="flex-1 flex flex-col h-full relative overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60">
+      <div class="flex-1 overflow-y-auto p-10 flex flex-col justify-center">
         <LoginView
           bind:serverUrl={auth.serverUrl}
           bind:apiKey={auth.apiKey}
@@ -94,7 +112,9 @@
           onLogin={auth.login}
         />
       </div>
-      <footer class="mt-8 text-xs text-slate-400 dark:text-zinc-600 font-medium">
+
+      <!-- Footer -->
+      <footer class="h-10 px-8 flex items-center justify-end text-[10px] font-medium text-slate-400 dark:text-zinc-500 uppercase tracking-wider shrink-0">
         <span>Lymic - Unofficial Immich Desktop Client</span>
         {#if updater.appVersion}
           <span class="ml-2">v{updater.appVersion}</span>
@@ -122,9 +142,6 @@
             onclick={() => currentView = "dashboard"}
             aria-label={$t('dashboard')}
           >
-            {#if currentView === 'dashboard'}
-              <span class="nav-indicator"></span>
-            {/if}
             <LayoutDashboard class="w-4 h-4 shrink-0 {currentView === 'dashboard' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('dashboard')}</span>
           </button>
@@ -135,9 +152,6 @@
             onclick={() => currentView = "settings"}
             aria-label={$t('settings')}
           >
-            {#if currentView === 'settings'}
-              <span class="nav-indicator"></span>
-            {/if}
             <SettingsIcon class="w-4 h-4 shrink-0 {currentView === 'settings' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('settings')}</span>
           </button>
@@ -146,7 +160,8 @@
 
       <!-- Bottom: User & Status info -->
       <div class="pt-3 px-2">
-        <div class="flex items-center text-[11px] text-slate-400 dark:text-zinc-500">
+        <div class="flex items-center gap-2 text-[11px] text-slate-400 dark:text-zinc-500">
+          <User class="w-3.5 h-3.5 shrink-0" />
           <span class="truncate font-medium" title={auth.currentUserName || auth.serverUrl}>
             {auth.currentUserName || "Connected"}
           </span>

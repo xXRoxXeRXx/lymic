@@ -251,20 +251,6 @@
     color: #ffffff;
   }
 
-  .nav-indicator {
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 16px;
-    border-radius: 2px;
-    background: #2563eb;
-  }
-
-  :root[data-theme="dark"] .nav-indicator {
-    background: #38bdf8;
-  }
 
   /* Desktop Capsule Toggle */
   .desktop-toggle {
