@@ -252,6 +252,7 @@ impl CloudFilter for PlatformCloudFilter {
 }
 #[cfg(windows)]
 mod native {
+    use super::CacheClearResult;
     #![allow(dead_code)] // Some Cloud Filter calls are consumed by follow-up reconciliation work.
     use super::{ChangeNotification, ChangeRequest, PlaceholderMetadata, PlatformCloudFilter};
     use crate::virtual_library::hydration::{DataTransfer, FetchDataRequest};
@@ -649,7 +650,7 @@ mod native {
                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                 std::ptr::null(),
                 OPEN_EXISTING,
-                0,
+                std::ptr::null_mut(),
                 0,
             )
         };

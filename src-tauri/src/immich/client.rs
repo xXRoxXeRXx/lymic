@@ -852,7 +852,7 @@ mod tests {
             .await
             .unwrap()
             .try_fold(Vec::new(), |mut received, chunk| async move {
-                received.extend_from_slice(&chunk?);
+                received.extend_from_slice(&chunk);
                 Ok::<_, String>(received)
             })
             .await
