@@ -299,7 +299,7 @@ mod native {
         request: ChangeRequest,
         completion_status: i32,
     ) -> Result<(), String> {
-        let (operation_type, parameters) = match notification {
+        let (operation_type, mut parameters) = match notification {
             ChangeNotification::Delete => (
                 CF_OPERATION_TYPE_ACK_DELETE,
                 CF_OPERATION_PARAMETERS {
@@ -334,7 +334,9 @@ mod native {
             SyncStatus: std::ptr::null(),
             RequestKey: request.request_key,
         };
-        result("CfExecute", unsafe { CfExecute(&operation, &parameters) })
+        result("CfExecute", unsafe {
+            CfExecute(&operation, &mut parameters)
+        })
     }
     pub(super) fn unregister(path: &str) -> Result<(), String> {
         let path = wide(path);
