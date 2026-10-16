@@ -47,6 +47,15 @@ impl FilenameResolver {
         name
     }
 
+    /// Reallocates a name after its remote source name changed.
+    pub(crate) fn rename(&mut self, source_name: &str, asset_id: &str) -> String {
+        if let Some(previous_name) = self.names_by_asset_id.remove(asset_id) {
+            self.asset_ids_by_name
+                .remove(&windows_name_key(&previous_name));
+        }
+        self.resolve(source_name, asset_id)
+    }
+
     fn is_available(&self, name: &str, asset_id: &str) -> bool {
         self.asset_ids_by_name
             .get(&windows_name_key(name))

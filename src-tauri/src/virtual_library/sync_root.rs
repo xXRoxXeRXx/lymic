@@ -25,6 +25,16 @@ pub(crate) trait CloudFilter: Send + Sync {
     fn disconnect(&self, key: i64) -> Result<(), String>;
     fn unregister(&self, path: &str) -> Result<(), String>;
     fn create_directory(&self, path: &str) -> Result<(), String>;
+    fn rename_directory(&self, from: &str, to: &str) -> Result<(), String> {
+        Err(format!(
+            "renaming virtual directories is not supported: {from} -> {to}"
+        ))
+    }
+    fn remove_directory(&self, path: &str) -> Result<(), String> {
+        Err(format!(
+            "removing virtual directories is not supported: {path}"
+        ))
+    }
     fn create_placeholder(&self, path: &str, metadata: PlaceholderMetadata) -> Result<(), String>;
     fn acknowledge_change(
         &self,
@@ -170,6 +180,12 @@ impl PlatformCloudFilter {
             }),
         }
     }
+
+    fn cancel_hydration(&self, request: crate::virtual_library::hydration::FetchDataRequest) {
+        if let Some(hydration) = &self.hydration {
+            hydration.cancel(request);
+        }
+    }
 }
 #[cfg(windows)]
 impl CloudFilter for PlatformCloudFilter {
@@ -189,6 +205,12 @@ impl CloudFilter for PlatformCloudFilter {
     }
     fn create_directory(&self, path: &str) -> Result<(), String> {
         std::fs::create_dir_all(path).map_err(|error| error.to_string())
+    }
+    fn rename_directory(&self, from: &str, to: &str) -> Result<(), String> {
+        std::fs::rename(from, to).map_err(|error| error.to_string())
+    }
+    fn remove_directory(&self, path: &str) -> Result<(), String> {
+        std::fs::remove_dir_all(path).map_err(|error| error.to_string())
     }
     fn create_placeholder(&self, path: &str, metadata: PlaceholderMetadata) -> Result<(), String> {
         native::create_placeholder(path, metadata)
@@ -265,6 +287,10 @@ mod native {
                 Callback: Some(fetch_data),
             },
             CF_CALLBACK_REGISTRATION {
+                Type: CF_CALLBACK_TYPE_CANCEL_FETCH_DATA,
+                Callback: Some(cancel_fetch_data),
+            },
+            CF_CALLBACK_REGISTRATION {
                 Type: CF_CALLBACK_TYPE_NOTIFY_DELETE,
                 Callback: Some(deny_delete),
             },
@@ -326,8 +352,45 @@ mod native {
         );
     }
 
+    unsafe extern "system" fn cancel_fetch_data(
+        callback_info: *const CF_CALLBACK_INFO,
+        _: *const CF_CALLBACK_PARAMETERS,
+    ) {
+        let Some(info) = callback_info.as_ref() else {
+            return;
+        };
+        let Some(filter) = (info.CallbackContext as *const PlatformCloudFilter).as_ref() else {
+            return;
+        };
+        filter.cancel_hydration(FetchDataRequest {
+            connection_key: info.ConnectionKey,
+            transfer_key: info.TransferKey,
+            request_key: info.RequestKey,
+            required_offset: 0,
+            required_length: 0,
+        });
+    }
+
     pub(super) struct WindowsDataTransfer;
     impl DataTransfer for WindowsDataTransfer {
+        fn report_progress(
+            &self,
+            request: FetchDataRequest,
+            total: i64,
+            completed: i64,
+        ) -> Result<(), String> {
+            result("CfReportProviderProgress2", unsafe {
+                CfReportProviderProgress2(
+                    request.connection_key,
+                    request.transfer_key,
+                    request.request_key,
+                    total,
+                    completed,
+                    0,
+                )
+            })
+        }
+
         fn transfer_data(
             &self,
             request: FetchDataRequest,
@@ -335,7 +398,7 @@ mod native {
             bytes: Bytes,
             completed: bool,
         ) -> Result<(), String> {
-            let parameters = CF_OPERATION_PARAMETERS {
+            let mut parameters = CF_OPERATION_PARAMETERS {
                 ParamSize: std::mem::size_of::<CF_OPERATION_PARAMETERS_0_6>() as u32,
                 Anonymous: CF_OPERATION_PARAMETERS_0 {
                     TransferData: CF_OPERATION_PARAMETERS_0_6 {
@@ -359,7 +422,9 @@ mod native {
                 SyncStatus: std::ptr::null(),
                 RequestKey: request.request_key,
             };
-            result("CfExecute", unsafe { CfExecute(&operation, &parameters) })
+            result("CfExecute", unsafe {
+                CfExecute(&operation, &mut parameters)
+            })
         }
     }
     unsafe extern "system" fn deny_delete(
@@ -368,7 +433,7 @@ mod native {
     ) {
         if let Some(callback_info) = callback_info.as_ref() {
             let _ = super::deny_change(
-                &super::PlatformCloudFilter,
+                &super::PlatformCloudFilter { hydration: None },
                 ChangeNotification::Delete,
                 ChangeRequest {
                     connection_key: callback_info.ConnectionKey,
@@ -384,7 +449,7 @@ mod native {
     ) {
         if let Some(callback_info) = callback_info.as_ref() {
             let _ = super::deny_change(
-                &super::PlatformCloudFilter,
+                &super::PlatformCloudFilter { hydration: None },
                 ChangeNotification::Rename,
                 ChangeRequest {
                     connection_key: callback_info.ConnectionKey,
