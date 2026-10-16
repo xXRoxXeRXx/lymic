@@ -235,6 +235,7 @@
             isAutostartEnabled={preferences.isAutostartEnabled}
             virtualLibraryEnabled={preferences.virtualLibraryEnabled}
             virtualLibraryPath={preferences.virtualLibraryPath}
+            virtualLibraryConnectionStatus={preferences.virtualLibraryConnectionStatus}
             themePreference={preferences.themePreference}
             uploadParallelism={preferences.uploadParallelism}
             isSavingUploadParallelism={preferences.isSavingUploadParallelism}

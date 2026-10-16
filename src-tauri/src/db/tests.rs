@@ -360,6 +360,8 @@ mod database_tests {
             VirtualLibraryStatus {
                 enabled: false,
                 path: DEFAULT_VIRTUAL_LIBRARY_PATH.to_string(),
+                connection_status:
+                    crate::virtual_library::sync_root::ConnectionStatus::Disconnected,
             }
         );
 
@@ -369,6 +371,8 @@ mod database_tests {
             VirtualLibraryStatus {
                 enabled: true,
                 path: DEFAULT_VIRTUAL_LIBRARY_PATH.to_string(),
+                connection_status:
+                    crate::virtual_library::sync_root::ConnectionStatus::Disconnected,
             }
         );
     }

@@ -14,6 +14,7 @@ const MAX_UPLOAD_PARALLELISM: usize = 8;
 pub struct VirtualLibraryStatus {
     pub enabled: bool,
     pub path: String,
+    pub connection_status: crate::virtual_library::sync_root::ConnectionStatus,
 }
 
 pub async fn get_virtual_library_status(
@@ -33,7 +34,11 @@ pub async fn get_virtual_library_status(
     .filter(|value| !value.is_empty())
     .unwrap_or_else(|| DEFAULT_VIRTUAL_LIBRARY_PATH.to_string());
 
-    Ok(VirtualLibraryStatus { enabled, path })
+    Ok(VirtualLibraryStatus {
+        enabled,
+        path,
+        connection_status: crate::virtual_library::sync_root::ConnectionStatus::Disconnected,
+    })
 }
 
 pub async fn set_virtual_library_enabled(pool: &SqlitePool, enabled: bool) -> Result<(), String> {
