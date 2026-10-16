@@ -197,12 +197,12 @@
 
       <main class="flex-1 overflow-y-auto p-8 flex flex-col space-y-6">
         {#if feedback.error}
-          <div class="p-4 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
+          <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
-            <span>{feedback.error}</span>
+            <span class="flex-1">{feedback.error}</span>
             <button
               type="button"
-              class="ml-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+              class="ml-auto p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:text-red-200 dark:hover:bg-red-900/50 transition-colors cursor-pointer shrink-0"
               aria-label={$t('dismiss_error')}
               onclick={feedback.clear}
             >

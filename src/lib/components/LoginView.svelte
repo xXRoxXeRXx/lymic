@@ -125,16 +125,21 @@
 </div>
 
 {#if isApiKeyHelpOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" onclick={handleApiKeyHelpBackdropClick}>
-    <dialog open class="static m-0 w-full max-w-lg rounded-xl border border-slate-200 dark:border-zinc-800 bg-white p-6 shadow-xl dark:bg-zinc-900" aria-labelledby="api-key-help-title" aria-modal="true">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in" role="presentation" onclick={handleApiKeyHelpBackdropClick}>
+    <dialog open class="static m-0 w-full max-w-lg rounded-xl border border-slate-200 dark:border-zinc-800 bg-white p-6 shadow-xl dark:bg-zinc-900 text-slate-900 dark:text-slate-100 space-y-4" aria-labelledby="api-key-help-title" aria-modal="true">
       <div class="flex items-start justify-between gap-4">
-        <h2 id="api-key-help-title" class="text-base font-bold text-slate-900 dark:text-slate-100">{$t('api_key_help_title')}</h2>
-        <button type="button" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer" aria-label={$t('api_key_help_close')} onclick={closeApiKeyHelp}>
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-sky-400 shrink-0">
+            <CircleHelp class="w-5 h-5" />
+          </div>
+          <h2 id="api-key-help-title" class="text-base font-bold text-slate-900 dark:text-slate-100 truncate">{$t('api_key_help_title')}</h2>
+        </div>
+        <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer shrink-0" aria-label={$t('api_key_help_close')} onclick={closeApiKeyHelp}>
           <X class="h-4 w-4" />
         </button>
       </div>
-      <p class="mt-3 text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">{$t('api_key_help_creation')}</p>
-      <h3 class="mt-4 text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">{$t('api_key_help_permissions_title')}</h3>
+      <p class="mt-1 text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">{$t('api_key_help_creation')}</p>
+      <h3 class="mt-3 text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">{$t('api_key_help_permissions_title')}</h3>
       <ul class="mt-2 space-y-1.5 text-xs text-slate-600 dark:text-zinc-400">
         <li><code class="font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-[11px]">asset.upload</code>: {$t('api_key_help_permission_upload')}</li>
         <li><code class="font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-[11px]">asset.read</code>: {$t('api_key_help_permission_read')}</li>

@@ -26,7 +26,7 @@
 </script>
 
 {#await waitLocale()}
-  <div class="h-screen w-screen flex items-center justify-center bg-[#F1F5F9] dark:bg-slate-950">
+  <div class="h-screen w-screen flex items-center justify-center bg-[#F3F4F6] dark:bg-[#18181B]">
     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
   </div>
 {:then}
