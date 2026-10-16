@@ -23,6 +23,7 @@
     isAutostartEnabled: boolean;
     virtualLibraryEnabled: boolean;
     virtualLibraryPath: string;
+    virtualLibraryConnectionStatus: string;
     themePreference: ThemePreference;
     uploadParallelism: number;
     isSavingUploadParallelism: boolean;
@@ -44,6 +45,7 @@
     isAutostartEnabled,
     virtualLibraryEnabled,
     virtualLibraryPath,
+    virtualLibraryConnectionStatus,
     themePreference,
     uploadParallelism,
     isSavingUploadParallelism,
@@ -98,7 +100,7 @@
         </div>
         <div class="space-y-0.5">
           <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm">Virtual Library (Windows Explorer)</p>
-          <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-lg">Read-only library at <span class="font-mono">{virtualLibraryPath}</span></p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-lg">Read-only library at <span class="font-mono">{virtualLibraryPath}</span> · {virtualLibraryConnectionStatus === 'connected' ? 'Connected' : virtualLibraryConnectionStatus === 'error' ? 'Error' : 'Disconnected'}</p>
         </div>
       </div>
 

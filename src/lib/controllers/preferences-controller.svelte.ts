@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { ThemePreference } from "../components/types";
 import { isSupportedLocale } from "../i18n";
@@ -22,8 +23,10 @@ export function createPreferencesController(options: {
   let isSavingUploadParallelism = $state(false);
   let virtualLibraryEnabled = $state(false);
   let virtualLibraryPath = $state("%USERPROFILE%\\Pictures\\Lymic");
+  let virtualLibraryConnectionStatus = $state("disconnected");
   let colorSchemeQuery: MediaQueryList | undefined;
   let listener: (() => void) | undefined;
+  let unlistenVirtualLibrary: (() => void) | undefined;
   let locales = $state<readonly LocaleCatalogEntry[]>(localeCatalog);
 
   if (savedTheme && savedTheme !== initialTheme && typeof localStorage !== "undefined") {
@@ -65,9 +68,10 @@ export function createPreferencesController(options: {
     }
 
     try {
-      const status = await invoke<{ enabled: boolean; path: string }>("get_virtual_library_status");
+      const status = await invoke<{ enabled: boolean; path: string; connectionStatus: string }>("get_virtual_library_status");
       virtualLibraryEnabled = status.enabled;
       virtualLibraryPath = status.path;
+      virtualLibraryConnectionStatus = status.connectionStatus;
     } catch (error) {
       console.error("Failed to load virtual library status", error);
       options.reportError(error);
@@ -156,6 +160,11 @@ export function createPreferencesController(options: {
       if (themePreference === "system") applyTheme();
     };
     colorSchemeQuery.addEventListener("change", listener);
+    void listen<{ enabled: boolean; path: string; connectionStatus: string }>("virtual-library-status", ({ payload }) => {
+      virtualLibraryEnabled = payload.enabled;
+      virtualLibraryPath = payload.path;
+      virtualLibraryConnectionStatus = payload.connectionStatus;
+    }).then((unlisten) => { unlistenVirtualLibrary = unlisten; });
 
     const stored = typeof localStorage === "undefined" ? null : localStorage.getItem("lymic-locale");
     if (isSupportedLocale(stored)) void setLocale(stored);
@@ -167,6 +176,7 @@ export function createPreferencesController(options: {
 
   function stopLifecycle() {
     if (colorSchemeQuery && listener) colorSchemeQuery.removeEventListener("change", listener);
+    unlistenVirtualLibrary?.();
   }
 
   return {
@@ -176,6 +186,7 @@ export function createPreferencesController(options: {
     get isSavingUploadParallelism() { return isSavingUploadParallelism; },
     get virtualLibraryEnabled() { return virtualLibraryEnabled; },
     get virtualLibraryPath() { return virtualLibraryPath; },
+    get virtualLibraryConnectionStatus() { return virtualLibraryConnectionStatus; },
     get locales() { return locales; },
     hydrate,
     startLifecycle,

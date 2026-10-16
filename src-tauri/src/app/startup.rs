@@ -226,6 +226,7 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
         }
     }
 
+    let virtual_library = tauri::async_runtime::block_on(db::get_virtual_library_status(&pool))?;
     handle.manage(pool);
     handle.manage(tokio::sync::Mutex::new(watcher));
     handle.manage(sync::SyncState(AtomicBool::new(false)));
@@ -239,6 +240,11 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
         recovery_notice,
     )));
     handle.manage(crate::removable::ActiveRemovableVolumes::new());
+    let root = crate::virtual_library::sync_root::SyncRootLifecycle::platform();
+    if virtual_library.enabled {
+        let _ = root.enable(&virtual_library.path);
+    }
+    handle.manage(root);
 
     audit_event(
         &handle,
