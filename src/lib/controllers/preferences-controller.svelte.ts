@@ -20,6 +20,8 @@ export function createPreferencesController(options: {
   let isAutostartEnabled = $state(false);
   let uploadParallelism = $state(3);
   let isSavingUploadParallelism = $state(false);
+  let thumbnailCacheCapBytes = $state(250 * 1024 * 1024);
+  let isClearingThumbnailCache = $state(false);
   let virtualLibraryEnabled = $state(false);
   let virtualLibraryPath = $state("%USERPROFILE%\\Pictures\\Lymic");
   let colorSchemeQuery: MediaQueryList | undefined;
@@ -61,6 +63,13 @@ export function createPreferencesController(options: {
       uploadParallelism = await invoke<number>("get_upload_parallelism");
     } catch (error) {
       console.error("Failed to load upload parallelism", error);
+      options.reportError(error);
+    }
+
+    try {
+      thumbnailCacheCapBytes = await invoke<number>("get_thumbnail_cache_cap_bytes");
+    } catch (error) {
+      console.error("Failed to load thumbnail cache cap", error);
       options.reportError(error);
     }
 
@@ -148,6 +157,32 @@ export function createPreferencesController(options: {
     }
   }
 
+  async function changeThumbnailCacheCap(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    const nextValue = Number(select.value);
+    const previousValue = thumbnailCacheCapBytes;
+    try {
+      await invoke<void>("set_thumbnail_cache_cap_bytes", { thumbnailCacheCapBytes: nextValue });
+      thumbnailCacheCapBytes = nextValue;
+    } catch (error) {
+      console.error("Failed to update thumbnail cache cap", error);
+      options.reportError(error);
+      select.value = String(previousValue);
+    }
+  }
+
+  async function clearThumbnailCache() {
+    isClearingThumbnailCache = true;
+    try {
+      await invoke<void>("clear_thumbnail_cache");
+    } catch (error) {
+      console.error("Failed to clear thumbnail cache", error);
+      options.reportError(error);
+    } finally {
+      isClearingThumbnailCache = false;
+    }
+  }
+
   function startLifecycle() {
     if (typeof window === "undefined") return;
     applyTheme();
@@ -174,6 +209,8 @@ export function createPreferencesController(options: {
     get isAutostartEnabled() { return isAutostartEnabled; },
     get uploadParallelism() { return uploadParallelism; },
     get isSavingUploadParallelism() { return isSavingUploadParallelism; },
+    get thumbnailCacheCapBytes() { return thumbnailCacheCapBytes; },
+    get isClearingThumbnailCache() { return isClearingThumbnailCache; },
     get virtualLibraryEnabled() { return virtualLibraryEnabled; },
     get virtualLibraryPath() { return virtualLibraryPath; },
     get locales() { return locales; },
@@ -185,5 +222,7 @@ export function createPreferencesController(options: {
     toggleAutostart,
     toggleVirtualLibrary,
     changeUploadParallelism,
+    changeThumbnailCacheCap,
+    clearThumbnailCache,
   };
 }
