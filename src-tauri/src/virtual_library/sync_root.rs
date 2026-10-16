@@ -1,6 +1,15 @@
 use serde::Serialize;
 use std::sync::Mutex;
 
+#[allow(dead_code)] // Used by timeline reconciliation in a follow-up ticket.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PlaceholderMetadata {
+    pub(crate) file_size: u64,
+    pub(crate) captured_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) asset_id: String,
+    pub(crate) version: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum ConnectionStatus {
@@ -9,11 +18,14 @@ pub(crate) enum ConnectionStatus {
     Error,
 }
 
+#[allow(dead_code)] // Placeholder operations are consumed by timeline reconciliation.
 pub(crate) trait CloudFilter: Send + Sync {
     fn register(&self, path: &str) -> Result<(), String>;
     fn connect(&self, path: &str) -> Result<i64, String>;
     fn disconnect(&self, key: i64) -> Result<(), String>;
     fn unregister(&self, path: &str) -> Result<(), String>;
+    fn create_directory(&self, path: &str) -> Result<(), String>;
+    fn create_placeholder(&self, path: &str, metadata: PlaceholderMetadata) -> Result<(), String>;
 }
 
 pub(crate) struct SyncRootLifecycle {
@@ -86,6 +98,12 @@ impl CloudFilter for PlatformCloudFilter {
     fn unregister(&self, _: &str) -> Result<(), String> {
         Ok(())
     }
+    fn create_directory(&self, _: &str) -> Result<(), String> {
+        Err("Virtual Library is only available on Windows".into())
+    }
+    fn create_placeholder(&self, _: &str, _: PlaceholderMetadata) -> Result<(), String> {
+        Err("Virtual Library is only available on Windows".into())
+    }
 }
 
 #[cfg(windows)]
@@ -106,9 +124,18 @@ impl CloudFilter for PlatformCloudFilter {
     fn unregister(&self, path: &str) -> Result<(), String> {
         native::unregister(path)
     }
+    fn create_directory(&self, path: &str) -> Result<(), String> {
+        std::fs::create_dir_all(path).map_err(|error| error.to_string())
+    }
+    fn create_placeholder(&self, path: &str, metadata: PlaceholderMetadata) -> Result<(), String> {
+        native::create_placeholder(path, metadata)
+    }
 }
 #[cfg(windows)]
 mod native {
+    #![allow(dead_code)] // Some Cloud Filter calls are consumed by follow-up reconciliation work.
+    use super::PlaceholderMetadata;
+    use std::path::Path;
     use windows_sys::core::GUID;
     use windows_sys::Win32::Storage::CloudFilters::*;
     pub(super) fn wide(v: &str) -> Vec<u16> {
@@ -181,6 +208,76 @@ mod native {
             CfUnregisterSyncRoot(path.as_ptr())
         })
     }
+    pub(super) fn create_placeholder(
+        path: &str,
+        metadata: PlaceholderMetadata,
+    ) -> Result<(), String> {
+        let path = Path::new(path);
+        let directory = path
+            .parent()
+            .ok_or_else(|| "placeholder path has no parent directory".to_string())?;
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| "placeholder path has no Unicode file name".to_string())?;
+        let directory = wide(&directory.to_string_lossy());
+        let name = wide(name);
+        let identity = serde_json::to_vec(&serde_json::json!({
+            "assetId": metadata.asset_id,
+            "version": metadata.version,
+        }))
+        .map_err(|error| error.to_string())?;
+        let timestamp = windows_file_time(metadata.captured_at);
+        let size = i64::try_from(metadata.file_size)
+            .map_err(|_| "remote file size exceeds Windows maximum".to_string())?;
+        let mut placeholder = CF_PLACEHOLDER_CREATE_INFO {
+            RelativeFileName: name.as_ptr(),
+            FsMetadata: CF_FS_METADATA {
+                BasicInfo: windows_sys::Win32::Storage::FileSystem::FILE_BASIC_INFO {
+                    CreationTime: timestamp,
+                    LastAccessTime: timestamp,
+                    LastWriteTime: timestamp,
+                    ChangeTime: timestamp,
+                    FileAttributes: windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_NORMAL,
+                },
+                FileSize: size,
+            },
+            FileIdentity: identity.as_ptr().cast(),
+            FileIdentityLength: identity
+                .len()
+                .try_into()
+                .map_err(|_| "file identity is too long".to_string())?,
+            Flags: CF_PLACEHOLDER_CREATE_FLAG_MARK_IN_SYNC,
+            Result: 0,
+            CreateUsn: 0,
+        };
+        let mut processed = 0;
+        result("CfCreatePlaceholders", unsafe {
+            CfCreatePlaceholders(
+                directory.as_ptr(),
+                &mut placeholder,
+                1,
+                CF_CREATE_FLAG_NONE,
+                &mut processed,
+            )
+        })?;
+        (processed == 1 && placeholder.Result >= 0)
+            .then_some(())
+            .ok_or_else(|| {
+                format!(
+                    "CfCreatePlaceholders failed (HRESULT 0x{:08X})",
+                    placeholder.Result
+                )
+            })
+    }
+    fn windows_file_time(timestamp: chrono::DateTime<chrono::Utc>) -> i64 {
+        const WINDOWS_EPOCH_OFFSET_SECONDS: i64 = 11_644_473_600;
+        timestamp
+            .timestamp()
+            .saturating_add(WINDOWS_EPOCH_OFFSET_SECONDS)
+            .saturating_mul(10_000_000)
+            .saturating_add(i64::from(timestamp.timestamp_subsec_nanos() / 100))
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -202,6 +299,12 @@ mod tests {
         }
         fn unregister(&self, _: &str) -> Result<(), String> {
             self.0.lock().unwrap().push("unregister");
+            Ok(())
+        }
+        fn create_directory(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn create_placeholder(&self, _: &str, _: PlaceholderMetadata) -> Result<(), String> {
             Ok(())
         }
     }
