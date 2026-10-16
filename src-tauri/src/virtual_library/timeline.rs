@@ -12,7 +12,8 @@ pub(crate) struct RemoteVisualAsset {
     pub(crate) version: String,
     pub(crate) file_name: String,
     pub(crate) file_size: u64,
-    pub(crate) captured_at: DateTime<Utc>,
+    /// `None` represents missing or malformed remote capture-date metadata.
+    pub(crate) captured_at: Option<DateTime<Utc>>,
 }
 
 pub(crate) struct TimelineProjection {
@@ -30,25 +31,38 @@ impl TimelineProjection {
 
     pub(crate) fn project(&self, root: &str, asset: &RemoteVisualAsset) -> Result<(), String> {
         let all_photos = format!("{root}\\All Photos");
-        let year = format!("{}\\{}", all_photos, asset.captured_at.year());
-        let month = format!(
-            "{}\\{:02} {}",
-            year,
-            asset.captured_at.month(),
-            month_name(asset.captured_at.month())
-        );
-        for directory in [&all_photos, &year, &month] {
+        let directories = match asset.captured_at {
+            Some(captured_at) => {
+                let year = format!("{}\\{}", all_photos, captured_at.year());
+                vec![
+                    all_photos.clone(),
+                    year.clone(),
+                    format!(
+                        "{}\\{:02} {}",
+                        year,
+                        captured_at.month(),
+                        month_name(captured_at.month())
+                    ),
+                ]
+            }
+            None => vec![all_photos.clone(), format!("{all_photos}\\Unknown")],
+        };
+        let directory = directories
+            .last()
+            .expect("timeline projection always has a target directory")
+            .clone();
+        for directory in &directories {
             self.adapter.create_directory(directory)?;
         }
         let file_name = self
             .filenames_by_directory
             .lock()
             .map_err(|error| error.to_string())?
-            .entry(month.clone())
+            .entry(directory.clone())
             .or_insert_with(FilenameResolver::new)
             .resolve(&asset.file_name, &asset.id);
         self.adapter.create_placeholder(
-            &format!("{month}\\{file_name}"),
+            &format!("{directory}\\{file_name}"),
             PlaceholderMetadata {
                 file_size: asset.file_size,
                 captured_at: asset.captured_at,
@@ -131,7 +145,7 @@ mod tests {
             version: "2026-03-04T10:11:12.000Z".into(),
             file_name: "summer:trip?.jpg".into(),
             file_size: 4_294_967_296,
-            captured_at: Utc.with_ymd_and_hms(2024, 7, 3, 14, 15, 16).unwrap(),
+            captured_at: Some(Utc.with_ymd_and_hms(2024, 7, 3, 14, 15, 16).unwrap()),
         };
 
         timeline.project("C:\\Library", &asset).unwrap();
@@ -150,7 +164,7 @@ mod tests {
                 "C:\\Library\\All Photos\\2024\\07 July\\summer_trip_.jpg".into(),
                 PlaceholderMetadata {
                     file_size: 4_294_967_296,
-                    captured_at: Utc.with_ymd_and_hms(2024, 7, 3, 14, 15, 16).unwrap(),
+                    captured_at: Some(Utc.with_ymd_and_hms(2024, 7, 3, 14, 15, 16).unwrap()),
                     asset_id: "2f9c0a3d-1234-4567-9876-123456789abc".into(),
                     version: "2026-03-04T10:11:12.000Z".into(),
                 },
@@ -167,14 +181,14 @@ mod tests {
             version: "v1".into(),
             file_name: "same.jpg".into(),
             file_size: 1,
-            captured_at: Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            captured_at: Some(Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()),
         };
         let february = RemoteVisualAsset {
             id: "february-id".into(),
             version: "v1".into(),
             file_name: "same.jpg".into(),
             file_size: 1,
-            captured_at: Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
+            captured_at: Some(Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap()),
         };
 
         timeline.project("C:\\Library", &january).unwrap();
@@ -192,6 +206,53 @@ mod tests {
             [
                 "C:\\Library\\All Photos\\2024\\01 January\\same.jpg",
                 "C:\\Library\\All Photos\\2024\\02 February\\same.jpg",
+            ]
+        );
+    }
+
+    #[test]
+    fn projects_assets_without_capture_dates_into_unknown_with_stable_names() {
+        let adapter = Arc::new(FakeCloudFilter::default());
+        let timeline = TimelineProjection::new(adapter.clone());
+        let first = RemoteVisualAsset {
+            id: "first-id".into(),
+            version: "v1".into(),
+            file_name: "same:name.jpg".into(),
+            file_size: 1,
+            captured_at: None,
+        };
+        let second = RemoteVisualAsset {
+            id: "second-id".into(),
+            version: "v1".into(),
+            file_name: "same?name.jpg".into(),
+            file_size: 1,
+            captured_at: None,
+        };
+
+        timeline.project("C:\\Library", &first).unwrap();
+        timeline.project("C:\\Library", &second).unwrap();
+
+        assert_eq!(
+            *adapter.directories.lock().unwrap(),
+            [
+                "C:\\Library\\All Photos",
+                "C:\\Library\\All Photos\\Unknown",
+                "C:\\Library\\All Photos",
+                "C:\\Library\\All Photos\\Unknown",
+            ]
+        );
+        let paths: Vec<String> = adapter
+            .placeholders
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(path, _)| path.clone())
+            .collect();
+        assert_eq!(
+            paths,
+            [
+                "C:\\Library\\All Photos\\Unknown\\same_name.jpg",
+                "C:\\Library\\All Photos\\Unknown\\same_name~second-i.jpg",
             ]
         );
     }
