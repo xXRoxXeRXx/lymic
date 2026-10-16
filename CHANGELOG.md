@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-10-16
+
+### Added
+- **Modernized sidebar navigation**:
+  - Replaces top tabs with a persistent desktop sidebar providing seamless switching between Synchronization, Settings, Logs, and Info views.
+  - Dedicated full-page view for activity logs with filtering and clearing controls.
+  - Dedicated Info view displaying application version, repository links, and issue tracker shortcuts.
+- **External link browser opening**:
+  - Integrates `tauri-plugin-opener` to open documentation, repository, and issue tracker links directly in the system's default browser.
+
+### Changed
+- **Unified desktop styling and design overhaul**:
+  - Restyled login screen with clear input borders, field icons, and toggleable password/token visibility.
+  - Redesigned target album selection modal, update notification dialog, removable volume setup prompt, and failed syncs modal with cohesive rounded containers, backdrop blur, and modern typography.
+  - Renamed Dashboard view to Synchronization view and simplified the active synchronization status card layout.
+  - Reorganized Settings view with account and logout controls positioned at the bottom, and widened the parallel upload selector to prevent chevron overlap.
+  - Added localized text labels to folder action buttons.
+
+### Fixed
+- **Watched folder removal confirmation**:
+  - Requires explicit user confirmation before removing watched folders to prevent accidental unwatching or transfer cancellations.
+
 ## [0.19.1] - 2026-10-15
 
 ### Fixed
