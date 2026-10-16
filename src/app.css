@@ -141,12 +141,17 @@
   /* Input */
   .glass-input {
     width: 100%;
-    background: rgba(255, 255, 255, 0.5);
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    border-radius: 12px;
-    padding: 0.75rem 1rem;
+    background: #f8fafc;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 8px;
+    padding: 0.625rem 0.875rem;
+    color: #0f172a;
     outline: none;
-    transition: all 0.2s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .glass-input::placeholder {
+    color: #94a3b8;
   }
 
   select.glass-input {
@@ -159,23 +164,25 @@
   }
 
   :root[data-theme="dark"] .glass-input {
-    color: #e2e8f0;
-    background: rgba(15, 23, 42, 0.7);
-    border-color: rgba(148, 163, 184, 0.25);
+    color: #f1f5f9;
+    background: #1b1b1f;
+    border-color: rgba(255, 255, 255, 0.12);
   }
 
   :root[data-theme="dark"] .glass-input::placeholder {
-    color: #64748b;
+    color: #71717a;
   }
 
   .glass-input:focus {
-    background: white;
+    background: #ffffff;
     border-color: #2563eb;
-    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
   }
 
   :root[data-theme="dark"] .glass-input:focus {
-    background: rgba(15, 23, 42, 0.95);
+    background: #202024;
+    border-color: #0284c7;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2);
   }
 
   /* Unified Desktop & Settings Card */

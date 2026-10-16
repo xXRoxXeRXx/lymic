@@ -37,6 +37,34 @@ describe("LoginView", () => {
     expect(onLogin).toHaveBeenCalledOnce();
   });
 
+  it("toggles API key and Cloudflare secret visibility", async () => {
+    render(LoginView, {
+      serverUrl: "https://immich.example",
+      apiKey: "secret-key",
+      allowLocalHttp: false,
+      cloudflareClientId: "cf-id",
+      cloudflareClientSecret: "cf-secret",
+      isLoggingIn: false,
+      loginError: "",
+      onLogin: vi.fn(),
+    });
+
+    const apiKeyInput = screen.getByLabelText("API Key");
+    expect(apiKeyInput).toHaveAttribute("type", "password");
+    await fireEvent.click(screen.getByRole("button", { name: "Show API key" }));
+    expect(apiKeyInput).toHaveAttribute("type", "text");
+    await fireEvent.click(screen.getByRole("button", { name: "Hide API key" }));
+    expect(apiKeyInput).toHaveAttribute("type", "password");
+
+    await fireEvent.click(screen.getByText("Advanced login options"));
+    const secretInput = screen.getByLabelText("Cloudflare Access client secret");
+    expect(secretInput).toHaveAttribute("type", "password");
+    await fireEvent.click(screen.getByRole("button", { name: "Show secret" }));
+    expect(secretInput).toHaveAttribute("type", "text");
+    await fireEvent.click(screen.getByRole("button", { name: "Hide secret" }));
+    expect(secretInput).toHaveAttribute("type", "password");
+  });
+
   it("opens API key help and closes it with the close button", async () => {
     render(LoginView, { serverUrl: "https://immich.example", apiKey: "key", allowLocalHttp: false, cloudflareClientId: "", cloudflareClientSecret: "", isLoggingIn: false, loginError: "", onLogin: vi.fn() });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
