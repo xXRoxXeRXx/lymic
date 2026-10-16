@@ -13,6 +13,15 @@ pub(crate) struct RemoteVisualAsset {
     pub(crate) file_name: String,
     pub(crate) file_size: u64,
     pub(crate) captured_at: DateTime<Utc>,
+    pub(crate) live_photo_video: Option<RemoteLivePhotoVideo>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RemoteLivePhotoVideo {
+    pub(crate) id: String,
+    pub(crate) version: String,
+    pub(crate) file_name: String,
+    pub(crate) file_size: u64,
 }
 
 pub(crate) struct TimelineProjection {
@@ -55,8 +64,38 @@ impl TimelineProjection {
                 asset_id: asset.id.clone(),
                 version: asset.version.clone(),
             },
-        )
+        )?;
+
+        if let Some(video) = &asset.live_photo_video {
+            let stem = file_stem(&file_name);
+            let file_name = format!("{stem}{}", file_extension(&video.file_name));
+            self.adapter.create_placeholder(
+                &format!("{month}\\{file_name}"),
+                PlaceholderMetadata {
+                    file_size: video.file_size,
+                    captured_at: asset.captured_at,
+                    asset_id: video.id.clone(),
+                    version: video.version.clone(),
+                },
+            )?;
+        }
+
+        Ok(())
     }
+}
+
+fn file_stem(file_name: &str) -> &str {
+    file_name
+        .rfind('.')
+        .filter(|index| *index > 0)
+        .map_or(file_name, |index| &file_name[..index])
+}
+
+fn file_extension(file_name: &str) -> &str {
+    file_name
+        .rfind('.')
+        .filter(|index| *index > 0)
+        .map_or("", |index| &file_name[index..])
 }
 
 fn month_name(month: u32) -> &'static str {
@@ -132,6 +171,7 @@ mod tests {
             file_name: "summer:trip?.jpg".into(),
             file_size: 4_294_967_296,
             captured_at: Utc.with_ymd_and_hms(2024, 7, 3, 14, 15, 16).unwrap(),
+            live_photo_video: None,
         };
 
         timeline.project("C:\\Library", &asset).unwrap();
@@ -168,6 +208,7 @@ mod tests {
             file_name: "same.jpg".into(),
             file_size: 1,
             captured_at: Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            live_photo_video: None,
         };
         let february = RemoteVisualAsset {
             id: "february-id".into(),
@@ -175,6 +216,7 @@ mod tests {
             file_name: "same.jpg".into(),
             file_size: 1,
             captured_at: Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
+            live_photo_video: None,
         };
 
         timeline.project("C:\\Library", &january).unwrap();
@@ -192,6 +234,52 @@ mod tests {
             [
                 "C:\\Library\\All Photos\\2024\\01 January\\same.jpg",
                 "C:\\Library\\All Photos\\2024\\02 February\\same.jpg",
+            ]
+        );
+    }
+
+    #[test]
+    fn projects_live_photo_components_as_independent_siblings_with_a_shared_sanitized_stem() {
+        let adapter = Arc::new(FakeCloudFilter::default());
+        let timeline = TimelineProjection::new(adapter.clone());
+        let captured_at = Utc.with_ymd_and_hms(2024, 7, 3, 14, 15, 16).unwrap();
+        let asset = RemoteVisualAsset {
+            id: "image-id".into(),
+            version: "image-version".into(),
+            file_name: "summer:trip?.HEIC".into(),
+            file_size: 1_024,
+            captured_at,
+            live_photo_video: Some(RemoteLivePhotoVideo {
+                id: "video-id".into(),
+                version: "video-version".into(),
+                file_name: "summer trip.MOV".into(),
+                file_size: 2_048,
+            }),
+        };
+
+        timeline.project("C:\\Library", &asset).unwrap();
+
+        assert_eq!(
+            *adapter.placeholders.lock().unwrap(),
+            [
+                (
+                    "C:\\Library\\All Photos\\2024\\07 July\\summer_trip_.HEIC".into(),
+                    PlaceholderMetadata {
+                        file_size: 1_024,
+                        captured_at,
+                        asset_id: "image-id".into(),
+                        version: "image-version".into(),
+                    },
+                ),
+                (
+                    "C:\\Library\\All Photos\\2024\\07 July\\summer_trip_.MOV".into(),
+                    PlaceholderMetadata {
+                        file_size: 2_048,
+                        captured_at,
+                        asset_id: "video-id".into(),
+                        version: "video-version".into(),
+                    },
+                ),
             ]
         );
     }
