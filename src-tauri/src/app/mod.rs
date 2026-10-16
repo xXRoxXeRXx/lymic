@@ -129,6 +129,11 @@ pub(crate) fn run() {
                 );
             }
             if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(root) =
+                    app.try_state::<crate::virtual_library::sync_root::SyncRootLifecycle>()
+                {
+                    let _ = root.disable();
+                }
                 if let Some(logger) = app
                     .try_state::<std::sync::Arc<crate::audit::AuditLogger>>()
                     .map(|state| state.inner().clone())

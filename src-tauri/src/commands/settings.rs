@@ -5,7 +5,7 @@ use crate::app::locale::{
 use crate::app::state::{DatabaseRecoveryNotice, DatabaseRecoveryNoticeData, TrayMenuState};
 use crate::audit::{audit_event, AuditEvent, Outcome, Severity};
 use serde_json::json;
-use tauri::{menu::MenuItemKind, Manager};
+use tauri::{menu::MenuItemKind, Emitter, Manager};
 
 const WEBVIEW_STARTUP_PHASES: &[&str] = &[
     "locale_update_started",
@@ -67,18 +67,41 @@ pub(crate) fn get_database_recovery_notice(
 #[tauri::command]
 pub(crate) async fn get_virtual_library_status(
     pool: tauri::State<'_, sqlx::SqlitePool>,
+    root: tauri::State<'_, crate::virtual_library::sync_root::SyncRootLifecycle>,
 ) -> Result<crate::db::VirtualLibraryStatus, String> {
-    crate::db::get_virtual_library_status(pool.inner())
+    let mut status = crate::db::get_virtual_library_status(pool.inner())
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    status.connection_status = root.status();
+    Ok(status)
 }
 
 #[tauri::command]
 pub(crate) async fn set_virtual_library_enabled(
     enabled: bool,
+    app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
+    root: tauri::State<'_, crate::virtual_library::sync_root::SyncRootLifecycle>,
 ) -> Result<(), String> {
-    crate::db::set_virtual_library_enabled(pool.inner(), enabled).await
+    let current = crate::db::get_virtual_library_status(pool.inner())
+        .await
+        .map_err(|e| e.to_string())?;
+    if enabled {
+        crate::db::set_virtual_library_enabled(pool.inner(), true).await?;
+        let _ = root.enable(&current.path);
+    } else {
+        root.disable()?;
+        crate::db::set_virtual_library_enabled(pool.inner(), false).await?;
+    }
+    app.emit(
+        "virtual-library-status",
+        crate::db::VirtualLibraryStatus {
+            enabled,
+            path: current.path,
+            connection_status: root.status(),
+        },
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
