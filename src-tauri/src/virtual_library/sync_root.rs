@@ -67,8 +67,8 @@ pub(crate) struct SyncRootLifecycle {
     state: Mutex<(Option<(String, i64)>, ConnectionStatus)>,
 }
 impl SyncRootLifecycle {
-    pub(crate) fn platform() -> Self {
-        Self::new(Box::new(PlatformCloudFilter))
+    pub(crate) fn platform(client: Option<std::sync::Arc<crate::immich::ImmichClient>>) -> Self {
+        Self::new(Box::new(PlatformCloudFilter::new(client)))
     }
     pub(crate) fn new(api: Box<dyn CloudFilter>) -> Self {
         Self {
@@ -119,6 +119,12 @@ impl SyncRootLifecycle {
 #[cfg(not(windows))]
 struct PlatformCloudFilter;
 #[cfg(not(windows))]
+impl PlatformCloudFilter {
+    fn new(_: Option<std::sync::Arc<crate::immich::ImmichClient>>) -> Self {
+        Self
+    }
+}
+#[cfg(not(windows))]
 impl CloudFilter for PlatformCloudFilter {
     fn register(&self, _: &str) -> Result<(), String> {
         Err("Virtual Library is only available on Windows".into())
@@ -149,14 +155,29 @@ impl CloudFilter for PlatformCloudFilter {
 }
 
 #[cfg(windows)]
-struct PlatformCloudFilter;
+struct PlatformCloudFilter {
+    hydration: Option<std::sync::Arc<crate::virtual_library::hydration::HydrationDispatcher>>,
+}
+#[cfg(windows)]
+impl PlatformCloudFilter {
+    fn new(client: Option<std::sync::Arc<crate::immich::ImmichClient>>) -> Self {
+        Self {
+            hydration: client.map(|client| {
+                std::sync::Arc::new(crate::virtual_library::hydration::HydrationDispatcher::new(
+                    client,
+                    std::sync::Arc::new(native::WindowsDataTransfer),
+                ))
+            }),
+        }
+    }
+}
 #[cfg(windows)]
 impl CloudFilter for PlatformCloudFilter {
     fn register(&self, path: &str) -> Result<(), String> {
         native::register(path)
     }
     fn connect(&self, path: &str) -> Result<i64, String> {
-        native::connect(path)
+        native::connect(path, self)
     }
     fn disconnect(&self, key: i64) -> Result<(), String> {
         native::result("CfDisconnectSyncRoot", unsafe {
@@ -184,7 +205,9 @@ impl CloudFilter for PlatformCloudFilter {
 #[cfg(windows)]
 mod native {
     #![allow(dead_code)] // Some Cloud Filter calls are consumed by follow-up reconciliation work.
-    use super::{ChangeNotification, ChangeRequest, PlaceholderMetadata};
+    use super::{ChangeNotification, ChangeRequest, PlaceholderMetadata, PlatformCloudFilter};
+    use crate::virtual_library::hydration::{DataTransfer, FetchDataRequest};
+    use bytes::Bytes;
     use std::path::Path;
     use windows_sys::core::GUID;
     use windows_sys::Win32::Storage::CloudFilters::*;
@@ -234,9 +257,13 @@ mod native {
             )
         })
     }
-    pub(super) fn connect(path: &str) -> Result<i64, String> {
+    pub(super) fn connect(path: &str, filter: &PlatformCloudFilter) -> Result<i64, String> {
         let path = wide(path);
         let table = [
+            CF_CALLBACK_REGISTRATION {
+                Type: CF_CALLBACK_TYPE_FETCH_DATA,
+                Callback: Some(fetch_data),
+            },
             CF_CALLBACK_REGISTRATION {
                 Type: CF_CALLBACK_TYPE_NOTIFY_DELETE,
                 Callback: Some(deny_delete),
@@ -255,12 +282,85 @@ mod native {
             CfConnectSyncRoot(
                 path.as_ptr(),
                 table.as_ptr(),
-                std::ptr::null(),
+                (filter as *const PlatformCloudFilter).cast_mut().cast(),
                 CF_CONNECT_FLAG_NONE,
                 &mut key,
             )
         })?;
         Ok(key)
+    }
+    unsafe extern "system" fn fetch_data(
+        callback_info: *const CF_CALLBACK_INFO,
+        callback_parameters: *const CF_CALLBACK_PARAMETERS,
+    ) {
+        let (Some(info), Some(parameters)) = (callback_info.as_ref(), callback_parameters.as_ref())
+        else {
+            return;
+        };
+        let filter = (info.CallbackContext as *const PlatformCloudFilter).as_ref();
+        let Some(dispatcher) = filter.and_then(|filter| filter.hydration.as_ref()) else {
+            return;
+        };
+        let identity = std::slice::from_raw_parts(
+            info.FileIdentity.cast::<u8>(),
+            info.FileIdentityLength as usize,
+        );
+        let asset_id = serde_json::from_slice::<serde_json::Value>(identity)
+            .ok()
+            .and_then(|identity| identity.get("assetId")?.as_str().map(str::to_owned));
+        let fetch = parameters.Anonymous.FetchData;
+        let Some(asset_id) =
+            asset_id.filter(|_| fetch.RequiredFileOffset >= 0 && fetch.RequiredLength >= 0)
+        else {
+            return;
+        };
+        dispatcher.dispatch(
+            crate::immich::RemoteAssetId::new(asset_id),
+            FetchDataRequest {
+                connection_key: info.ConnectionKey,
+                transfer_key: info.TransferKey,
+                request_key: info.RequestKey,
+                required_offset: fetch.RequiredFileOffset,
+                required_length: fetch.RequiredLength,
+            },
+        );
+    }
+
+    pub(super) struct WindowsDataTransfer;
+    impl DataTransfer for WindowsDataTransfer {
+        fn transfer_data(
+            &self,
+            request: FetchDataRequest,
+            offset: i64,
+            bytes: Bytes,
+            completed: bool,
+        ) -> Result<(), String> {
+            let parameters = CF_OPERATION_PARAMETERS {
+                ParamSize: std::mem::size_of::<CF_OPERATION_PARAMETERS_0_6>() as u32,
+                Anonymous: CF_OPERATION_PARAMETERS_0 {
+                    TransferData: CF_OPERATION_PARAMETERS_0_6 {
+                        Flags: CF_OPERATION_TRANSFER_DATA_FLAG_NONE,
+                        CompletionStatus: if completed { 0 } else { 0 },
+                        Buffer: bytes.as_ptr().cast(),
+                        Offset: offset,
+                        Length: bytes
+                            .len()
+                            .try_into()
+                            .map_err(|_| "original chunk is too large")?,
+                    },
+                },
+            };
+            let operation = CF_OPERATION_INFO {
+                StructSize: std::mem::size_of::<CF_OPERATION_INFO>() as u32,
+                Type: CF_OPERATION_TYPE_TRANSFER_DATA,
+                ConnectionKey: request.connection_key,
+                TransferKey: request.transfer_key,
+                CorrelationVector: std::ptr::null(),
+                SyncStatus: std::ptr::null(),
+                RequestKey: request.request_key,
+            };
+            result("CfExecute", unsafe { CfExecute(&operation, &parameters) })
+        }
     }
     unsafe extern "system" fn deny_delete(
         callback_info: *const CF_CALLBACK_INFO,

@@ -240,7 +240,21 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
         recovery_notice,
     )));
     handle.manage(crate::removable::ActiveRemovableVolumes::new());
-    let root = crate::virtual_library::sync_root::SyncRootLifecycle::platform();
+    let hydration_client = crate::auth::get_credentials()
+        .ok()
+        .flatten()
+        .and_then(|credentials| {
+            crate::immich::ImmichClient::new(
+                credentials.server_url,
+                credentials.api_key,
+                credentials.allow_local_http,
+                credentials.cloudflare_client_id,
+                credentials.cloudflare_client_secret,
+            )
+            .ok()
+        })
+        .map(std::sync::Arc::new);
+    let root = crate::virtual_library::sync_root::SyncRootLifecycle::platform(hydration_client);
     if virtual_library.enabled {
         let _ = root.enable(&virtual_library.path);
     }
