@@ -9,10 +9,10 @@
 
   interface Props {
     dashboard: DashboardViewState;
-    serverUrl: string;
+    serverUrl?: string;
   }
 
-  let { dashboard, serverUrl }: Props = $props();
+  let { dashboard }: Props = $props();
   const targetAlbumCatalogue = createTargetAlbumCatalogue();
 
   const transferredBytes = $derived(dashboard.transferredBytes);
@@ -37,11 +37,7 @@
   <!-- Top Status Card -->
   <section class="desktop-card p-6 space-y-6">
     <div class="flex items-center justify-between gap-4">
-      <div class="space-y-1">
-        <div class="flex items-center gap-2">
-          <div class="w-2.5 h-2.5 rounded-full {dashboard.syncStatus === 'syncing' ? 'bg-blue-600 animate-pulse' : dashboard.syncStatus === 'paused' ? 'bg-amber-500' : dashboard.syncStatus === 'error' ? 'bg-red-500' : 'bg-emerald-500'}"></div>
-          <span class="text-xs font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">{$t('status')}</span>
-        </div>
+      <div>
         <h3 class="text-2xl font-bold text-slate-900 dark:text-slate-100">
           {dashboard.syncStatus === 'syncing' ? $t('sync_running') : dashboard.syncStatus === 'paused' ? $t('sync_paused') : dashboard.syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
         </h3>
@@ -84,15 +80,10 @@
         {/if}
       </div>
     {:else}
-      <div class="flex gap-10 pt-4 border-t border-slate-100 dark:border-zinc-800">
-        <div class="space-y-1">
-          <p class="text-[11px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">{$t('last_sync')}</p>
-          <p class="text-sm font-semibold text-slate-700 dark:text-zinc-300">{dashboard.lastSync ?? $t('never')}</p>
-        </div>
-        <div class="space-y-1">
-          <p class="text-[11px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">{$t('server')}</p>
-          <p class="text-sm font-semibold text-slate-700 dark:text-zinc-300 font-mono text-xs">{serverUrl.replace(/https?:\/\//, '')}</p>
-        </div>
+      <div class="pt-4 border-t border-slate-100 dark:border-zinc-800">
+        <p class="text-xs text-slate-500 dark:text-zinc-400">
+          {$t('last_sync')}: {dashboard.lastSync ? `${dashboard.lastSync} Uhr` : $t('never')}
+        </p>
       </div>
     {/if}
 
