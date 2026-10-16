@@ -5,7 +5,7 @@ use std::sync::Mutex;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PlaceholderMetadata {
     pub(crate) file_size: u64,
-    pub(crate) captured_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) captured_at: Option<chrono::DateTime<chrono::Utc>>,
     pub(crate) asset_id: String,
     pub(crate) version: String,
 }
@@ -227,7 +227,10 @@ mod native {
             "version": metadata.version,
         }))
         .map_err(|error| error.to_string())?;
-        let timestamp = windows_file_time(metadata.captured_at);
+        let timestamp = metadata
+            .captured_at
+            .map(windows_file_time)
+            .unwrap_or_default();
         let size = i64::try_from(metadata.file_size)
             .map_err(|_| "remote file size exceeds Windows maximum".to_string())?;
         let mut placeholder = CF_PLACEHOLDER_CREATE_INFO {
