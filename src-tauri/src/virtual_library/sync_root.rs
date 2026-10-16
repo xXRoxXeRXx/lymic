@@ -332,14 +332,22 @@ mod native {
             HardLink: CF_HARDLINK_POLICY_NONE,
             PlaceholderManagement: CF_PLACEHOLDER_MANAGEMENT_POLICY_DEFAULT,
         };
-        result("CfRegisterSyncRoot", unsafe {
+        let registration_result = unsafe {
             CfRegisterSyncRoot(
                 path.as_ptr(),
                 &registration,
                 &policies,
                 CF_REGISTER_FLAG_NONE,
             )
-        })
+        };
+        // Development restarts (and normal application restarts) reconnect to
+        // an existing registration. Cloud Files reports this as already
+        // connected instead of requiring the sync root to be registered again.
+        if registration_result >= 0 || registration_result == 0x8007_017Ai32 {
+            Ok(())
+        } else {
+            result("CfRegisterSyncRoot", registration_result)
+        }
     }
     pub(super) fn connect(path: &str, filter: &PlatformCloudFilter) -> Result<i64, String> {
         let path = wide(path);

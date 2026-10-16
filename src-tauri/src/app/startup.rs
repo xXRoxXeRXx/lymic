@@ -257,7 +257,9 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
     let root = crate::virtual_library::sync_root::SyncRootLifecycle::platform(hydration_client);
     if virtual_library.enabled {
         let _ = crate::virtual_library::shell_extension::register_for_app(&handle);
-        let _ = root.enable(&virtual_library.path);
+        if let Err(error) = root.enable(&virtual_library.path) {
+            eprintln!("Virtual Library sync-root connection failed: {error}");
+        }
     }
     handle.manage(root);
 
