@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && npm run build:shell-extension",
     "frontendDist": "../build"
   },
   "app": {
@@ -38,7 +38,9 @@
     ],
     "windows": {
       "nsis": {
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "installMode": "both",
+        "installerHooks": "./windows/shell-extension-hooks.nsh"
       }
     },
     "publisher": "xXRoxXeRXx",

@@ -23,6 +23,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:shell-extension": "node scripts/build-shell-extension.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

@@ -87,10 +87,15 @@ pub(crate) async fn set_virtual_library_enabled(
         .await
         .map_err(|e| e.to_string())?;
     if enabled {
+        crate::virtual_library::shell_extension::register_for_app(&app)?;
+        if let Err(error) = root.enable(&current.path) {
+            let _ = crate::virtual_library::shell_extension::unregister_for_current_user();
+            return Err(error);
+        }
         crate::db::set_virtual_library_enabled(pool.inner(), true).await?;
-        let _ = root.enable(&current.path);
     } else {
         root.disable()?;
+        crate::virtual_library::shell_extension::unregister_for_current_user()?;
         crate::db::set_virtual_library_enabled(pool.inner(), false).await?;
     }
     app.emit(
