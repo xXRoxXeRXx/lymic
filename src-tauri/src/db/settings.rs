@@ -1,8 +1,49 @@
+use serde::Serialize;
 use sqlx::SqlitePool;
 
 pub const DEFAULT_UPLOAD_PARALLELISM: usize = 3;
+pub const DEFAULT_VIRTUAL_LIBRARY_PATH: &str = "%USERPROFILE%\\Pictures\\Lymic";
 const MIN_UPLOAD_PARALLELISM: usize = 1;
 const MAX_UPLOAD_PARALLELISM: usize = 8;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VirtualLibraryStatus {
+    pub enabled: bool,
+    pub path: String,
+}
+
+pub async fn get_virtual_library_status(
+    pool: &SqlitePool,
+) -> Result<VirtualLibraryStatus, sqlx::Error> {
+    let enabled = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM app_settings WHERE key = 'virtual_library_enabled'",
+    )
+    .fetch_optional(pool)
+    .await?
+    .is_some_and(|value| value == "true");
+    let path = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM app_settings WHERE key = 'virtual_library_path'",
+    )
+    .fetch_optional(pool)
+    .await?
+    .filter(|value| !value.is_empty())
+    .unwrap_or_else(|| DEFAULT_VIRTUAL_LIBRARY_PATH.to_string());
+
+    Ok(VirtualLibraryStatus { enabled, path })
+}
+
+pub async fn set_virtual_library_enabled(pool: &SqlitePool, enabled: bool) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO app_settings (key, value) VALUES ('virtual_library_enabled', ?) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(enabled.to_string())
+    .execute(pool)
+    .await
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
 
 pub fn validate_upload_parallelism(value: i64) -> Option<usize> {
     let value = usize::try_from(value).ok()?;

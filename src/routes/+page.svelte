@@ -233,6 +233,8 @@
             currentUserName={auth.currentUserName}
             serverUrl={auth.serverUrl}
             isAutostartEnabled={preferences.isAutostartEnabled}
+            virtualLibraryEnabled={preferences.virtualLibraryEnabled}
+            virtualLibraryPath={preferences.virtualLibraryPath}
             themePreference={preferences.themePreference}
             uploadParallelism={preferences.uploadParallelism}
             isSavingUploadParallelism={preferences.isSavingUploadParallelism}
@@ -240,6 +242,7 @@
             isCheckingForUpdates={updater.isCheckingForUpdates}
             locales={preferences.locales}
             onToggleAutostart={preferences.toggleAutostart}
+            onToggleVirtualLibrary={preferences.toggleVirtualLibrary}
             onLocaleChange={preferences.setLocale}
             onThemeChange={preferences.setThemePreference}
             onUploadParallelismChange={preferences.changeUploadParallelism}

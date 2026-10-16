@@ -21,6 +21,8 @@
     currentUserName: string;
     serverUrl: string;
     isAutostartEnabled: boolean;
+    virtualLibraryEnabled: boolean;
+    virtualLibraryPath: string;
     themePreference: ThemePreference;
     uploadParallelism: number;
     isSavingUploadParallelism: boolean;
@@ -28,6 +30,7 @@
     isCheckingForUpdates: boolean;
     locales: readonly LocaleCatalogEntry[];
     onToggleAutostart: () => void;
+    onToggleVirtualLibrary: () => void;
     onLocaleChange: (locale: string) => void;
     onThemeChange: (preference: ThemePreference) => void;
     onUploadParallelismChange: (event: Event) => void;
@@ -39,6 +42,8 @@
     currentUserName,
     serverUrl,
     isAutostartEnabled,
+    virtualLibraryEnabled,
+    virtualLibraryPath,
     themePreference,
     uploadParallelism,
     isSavingUploadParallelism,
@@ -46,6 +51,7 @@
     isCheckingForUpdates,
     locales,
     onToggleAutostart,
+    onToggleVirtualLibrary,
     onLocaleChange,
     onThemeChange,
     onUploadParallelismChange,
@@ -80,6 +86,28 @@
         onclick={onToggleAutostart}
         aria-label={isAutostartEnabled ? $t('autostart_disable') : $t('autostart_enable')}
         aria-pressed={isAutostartEnabled}
+      >
+        <div class="desktop-toggle-knob"></div>
+      </button>
+    </div>
+
+    <div class="settings-card flex items-center justify-between gap-4">
+      <div class="flex items-start gap-3">
+        <div class="p-2 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5">
+          <Monitor class="w-4 h-4" />
+        </div>
+        <div class="space-y-0.5">
+          <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm">Virtual Library (Windows Explorer)</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-lg">Read-only library at <span class="font-mono">{virtualLibraryPath}</span></p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="desktop-toggle {virtualLibraryEnabled ? 'enabled' : ''}"
+        onclick={onToggleVirtualLibrary}
+        aria-label={virtualLibraryEnabled ? 'Disable Virtual Library' : 'Enable Virtual Library'}
+        aria-pressed={virtualLibraryEnabled}
       >
         <div class="desktop-toggle-knob"></div>
       </button>

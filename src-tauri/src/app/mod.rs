@@ -111,6 +111,8 @@ pub(crate) fn run() {
             crate::commands::sync::set_upload_parallelism,
             crate::commands::settings::get_locale_catalog,
             crate::commands::settings::update_locale,
+            crate::commands::settings::get_virtual_library_status,
+            crate::commands::settings::set_virtual_library_enabled,
             crate::commands::settings::record_webview_startup_phase_probe,
             crate::commands::settings::get_database_recovery_notice
         ])

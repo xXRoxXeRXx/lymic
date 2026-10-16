@@ -351,6 +351,29 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn virtual_library_status_defaults_and_persists() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        assert_eq!(
+            get_virtual_library_status(&pool).await.unwrap(),
+            VirtualLibraryStatus {
+                enabled: false,
+                path: DEFAULT_VIRTUAL_LIBRARY_PATH.to_string(),
+            }
+        );
+
+        set_virtual_library_enabled(&pool, true).await.unwrap();
+        assert_eq!(
+            get_virtual_library_status(&pool).await.unwrap(),
+            VirtualLibraryStatus {
+                enabled: true,
+                path: DEFAULT_VIRTUAL_LIBRARY_PATH.to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
     async fn cached_hash_misses_when_mtime_differs_within_a_second() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();

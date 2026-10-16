@@ -65,6 +65,23 @@ pub(crate) fn get_database_recovery_notice(
 }
 
 #[tauri::command]
+pub(crate) async fn get_virtual_library_status(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<crate::db::VirtualLibraryStatus, String> {
+    crate::db::get_virtual_library_status(pool.inner())
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn set_virtual_library_enabled(
+    enabled: bool,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<(), String> {
+    crate::db::set_virtual_library_enabled(pool.inner(), enabled).await
+}
+
+#[tauri::command]
 pub(crate) fn update_locale(
     app: tauri::AppHandle,
     state: tauri::State<'_, LocaleState>,

@@ -40,7 +40,10 @@ pub(crate) fn sql_path_is_or_descendant_of(column: &str, param_placeholder: &str
 pub use queue::{
     enqueue_sync_assets, next_sync_queue_block, update_upload_unit_remote_id, QueueAsset,
 };
-pub use settings::{get_upload_parallelism, set_upload_parallelism};
+pub use settings::{
+    get_upload_parallelism, get_virtual_library_status, set_upload_parallelism,
+    set_virtual_library_enabled, VirtualLibraryStatus,
+};
 pub use sync_state::{
     discard_failed_sync_paths, discard_sync_data_in_folder, get_cached_hash, get_failed_syncs,
     has_sync_work_in_folder, mark_sync_failed, persist_uploaded_unit, update_sync_state,
@@ -50,7 +53,9 @@ pub use sync_state::{
 #[cfg(test)]
 pub use init::init_at_path;
 #[cfg(test)]
-pub use settings::{validate_upload_parallelism, DEFAULT_UPLOAD_PARALLELISM};
+pub use settings::{
+    validate_upload_parallelism, DEFAULT_UPLOAD_PARALLELISM, DEFAULT_VIRTUAL_LIBRARY_PATH,
+};
 
 #[cfg(test)]
 mod tests;
