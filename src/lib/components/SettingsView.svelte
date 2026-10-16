@@ -27,6 +27,8 @@
     themePreference: ThemePreference;
     uploadParallelism: number;
     isSavingUploadParallelism: boolean;
+    thumbnailCacheCapBytes?: number;
+    isClearingThumbnailCache?: boolean;
     updateStatus: "unknown" | "current" | "available";
     isCheckingForUpdates: boolean;
     locales: readonly LocaleCatalogEntry[];
@@ -35,6 +37,8 @@
     onLocaleChange: (locale: string) => void;
     onThemeChange: (preference: ThemePreference) => void;
     onUploadParallelismChange: (event: Event) => void;
+    onThumbnailCacheCapChange?: (event: Event) => void;
+    onClearThumbnailCache?: () => void;
     onCheckForUpdates: () => void;
     onLogout: () => void;
   }
@@ -49,6 +53,8 @@
     themePreference,
     uploadParallelism,
     isSavingUploadParallelism,
+    thumbnailCacheCapBytes = 268435456,
+    isClearingThumbnailCache = false,
     updateStatus,
     isCheckingForUpdates,
     locales,
@@ -57,6 +63,8 @@
     onLocaleChange,
     onThemeChange,
     onUploadParallelismChange,
+    onThumbnailCacheCapChange = () => {},
+    onClearThumbnailCache = () => {},
     onCheckForUpdates,
     onLogout
   }: Props = $props();
@@ -137,6 +145,29 @@
           <option value={code}>{name}</option>
         {/each}
       </select>
+    </div>
+
+    <div class="settings-card flex items-center justify-between gap-4">
+      <div class="flex items-start gap-3">
+        <div class="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+          <Cpu class="w-4 h-4" />
+        </div>
+        <div class="space-y-0.5">
+          <label for="thumbnail-cache-cap" class="font-semibold text-slate-900 dark:text-slate-100 text-sm cursor-pointer">Thumbnail cache</label>
+          <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-lg">Keeps Virtual Library previews in local app data.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="thumbnail-cache-cap" class="glass-input !w-24 !py-1.5 !pl-3 !pr-8 text-sm font-medium rounded-lg cursor-pointer" value={thumbnailCacheCapBytes} onchange={onThumbnailCacheCapChange}>
+          <option value={67108864}>64 MB</option>
+          <option value={268435456}>256 MB</option>
+          <option value={536870912}>512 MB</option>
+          <option value={1073741824}>1 GB</option>
+        </select>
+        <button type="button" class="rounded-lg border border-slate-200 bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-slate-200 dark:hover:bg-zinc-700 cursor-pointer" onclick={onClearThumbnailCache} disabled={isClearingThumbnailCache}>
+          {isClearingThumbnailCache ? "Clearing…" : "Clear Thumbnail Cache"}
+        </button>
+      </div>
     </div>
   </section>
 

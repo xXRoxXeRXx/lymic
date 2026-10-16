@@ -239,6 +239,8 @@
             themePreference={preferences.themePreference}
             uploadParallelism={preferences.uploadParallelism}
             isSavingUploadParallelism={preferences.isSavingUploadParallelism}
+            thumbnailCacheCapBytes={preferences.thumbnailCacheCapBytes}
+            isClearingThumbnailCache={preferences.isClearingThumbnailCache}
             updateStatus={updater.updateStatus}
             isCheckingForUpdates={updater.isCheckingForUpdates}
             locales={preferences.locales}
@@ -247,6 +249,8 @@
             onLocaleChange={preferences.setLocale}
             onThemeChange={preferences.setThemePreference}
             onUploadParallelismChange={preferences.changeUploadParallelism}
+            onThumbnailCacheCapChange={preferences.changeThumbnailCacheCap}
+            onClearThumbnailCache={preferences.clearThumbnailCache}
             onCheckForUpdates={updater.checkForUpdates}
             onLogout={auth.logout}
           />

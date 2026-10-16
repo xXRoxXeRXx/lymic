@@ -41,8 +41,9 @@ pub use queue::{
     enqueue_sync_assets, next_sync_queue_block, update_upload_unit_remote_id, QueueAsset,
 };
 pub use settings::{
-    get_upload_parallelism, get_virtual_library_status, set_upload_parallelism,
-    set_virtual_library_enabled, VirtualLibraryStatus,
+    get_thumbnail_cache_cap_bytes, get_upload_parallelism, get_virtual_library_status,
+    set_thumbnail_cache_cap_bytes, set_upload_parallelism, set_virtual_library_enabled,
+    VirtualLibraryStatus,
 };
 pub use sync_state::{
     discard_failed_sync_paths, discard_sync_data_in_folder, get_cached_hash, get_failed_syncs,
@@ -54,7 +55,8 @@ pub use sync_state::{
 pub use init::init_at_path;
 #[cfg(test)]
 pub use settings::{
-    validate_upload_parallelism, DEFAULT_UPLOAD_PARALLELISM, DEFAULT_VIRTUAL_LIBRARY_PATH,
+    validate_thumbnail_cache_cap_bytes, validate_upload_parallelism,
+    DEFAULT_THUMBNAIL_CACHE_CAP_BYTES, DEFAULT_UPLOAD_PARALLELISM, DEFAULT_VIRTUAL_LIBRARY_PATH,
 };
 
 #[cfg(test)]

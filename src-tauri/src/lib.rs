@@ -7,6 +7,7 @@ mod immich;
 mod media;
 pub(crate) mod removable;
 mod sync;
+mod thumbnail_cache;
 pub(crate) mod virtual_library;
 mod watcher;
 

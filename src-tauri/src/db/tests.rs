@@ -378,6 +378,24 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn thumbnail_cache_cap_defaults_and_persists_a_valid_value() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        assert_eq!(
+            get_thumbnail_cache_cap_bytes(&pool).await.unwrap(),
+            DEFAULT_THUMBNAIL_CACHE_CAP_BYTES
+        );
+        set_thumbnail_cache_cap_bytes(&pool, 512 * 1024 * 1024)
+            .await
+            .unwrap();
+        assert_eq!(
+            get_thumbnail_cache_cap_bytes(&pool).await.unwrap(),
+            512 * 1024 * 1024
+        );
+    }
+
+    #[tokio::test]
     async fn cached_hash_misses_when_mtime_differs_within_a_second() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();

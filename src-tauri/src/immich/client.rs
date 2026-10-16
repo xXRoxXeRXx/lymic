@@ -6,6 +6,7 @@ use super::response::{
 };
 use super::upload::{parse_upload_response, upload_form, SidecarDirectoryCache};
 use crate::sync::progress::TransferStatsTracker;
+use crate::thumbnail_cache::extension_for_mime_type;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     Client, Response,
@@ -33,6 +34,11 @@ pub(crate) struct ImmichClient {
     pub(super) client: Client,
     pub(super) server_url: Url,
     pub(super) api_key: String,
+}
+
+pub(crate) struct ThumbnailResponse {
+    pub(crate) mime_type: String,
+    pub(crate) bytes: Vec<u8>,
 }
 
 #[derive(Deserialize)]
@@ -198,6 +204,44 @@ impl ImmichClient {
         parse_bulk_check_response(&data, &hashes).map_err(BulkCheckError::Retryable)
     }
 
+    pub(crate) async fn fetch_thumbnail(
+        &self,
+        asset_id: &super::ids::RemoteAssetId,
+    ) -> Result<ThumbnailResponse, String> {
+        let response = self
+            .client
+            .get(self.endpoint_url(&format!("assets/{}/thumbnail", asset_id.as_str())))
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Thumbnail request failed: {}", error))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Thumbnail request failed: {}",
+                response_status_error(response).await?
+            ));
+        }
+        let mime_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                "Immich thumbnail response did not include an image MIME type".to_string()
+            })?;
+        if extension_for_mime_type(&mime_type).is_none() {
+            return Err("Immich thumbnail response was not an image".to_string());
+        }
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|error| format!("Could not read thumbnail response: {}", error))?;
+        Ok(ThumbnailResponse {
+            mime_type,
+            bytes: bytes.to_vec(),
+        })
+    }
+
     pub(crate) async fn upload_asset_with_live_photo(
         &self,
         path: &str,
@@ -259,6 +303,7 @@ mod tests {
         upload_timeout, BulkCheckDuplicate, ImmichClient, SidecarDirectoryCache, GIB_BYTES,
         LOCAL_HTTP_NOT_ALLOWED_ERROR, UPLOAD_TIMEOUT_BASE_SECONDS,
     };
+    use crate::immich::RemoteAssetId;
     use reqwest::Client;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -712,6 +757,37 @@ mod tests {
         assert!(!request.contains("cf-access-client-id"));
         assert!(!request.contains("cf-access-client-secret"));
         assert!(!request.contains("bulk-upload-check"));
+    }
+
+    #[tokio::test]
+    async fn thumbnail_request_uses_the_asset_thumbnail_endpoint_and_requires_an_image() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            requests_tx
+                .send(read_http_request(&mut stream).await)
+                .await
+                .unwrap();
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: 3\r\nConnection: close\r\n\r\nimg").await.unwrap();
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+
+        let thumbnail = client
+            .fetch_thumbnail(&RemoteAssetId::new("asset-uuid"))
+            .await
+            .unwrap();
+
+        assert_eq!(thumbnail.mime_type, "image/jpeg");
+        assert_eq!(thumbnail.bytes, b"img");
+        let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(request.starts_with("GET /api/assets/asset-uuid/thumbnail HTTP/1.1"));
+        assert!(request.contains("x-api-key: test-key"));
     }
 
     #[tokio::test]

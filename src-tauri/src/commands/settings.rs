@@ -105,6 +105,29 @@ pub(crate) async fn set_virtual_library_enabled(
 }
 
 #[tauri::command]
+pub(crate) async fn get_thumbnail_cache_cap_bytes(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<u64, String> {
+    crate::db::get_thumbnail_cache_cap_bytes(pool.inner())
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn set_thumbnail_cache_cap_bytes(
+    thumbnail_cache_cap_bytes: u64,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<(), String> {
+    crate::db::set_thumbnail_cache_cap_bytes(pool.inner(), thumbnail_cache_cap_bytes).await
+}
+
+#[tauri::command]
+pub(crate) fn clear_thumbnail_cache(app: tauri::AppHandle) -> Result<(), String> {
+    let path = crate::thumbnail_cache::local_thumbnail_cache_dir(&app)?;
+    crate::thumbnail_cache::ThumbnailCache::new(path, 0).clear()
+}
+
+#[tauri::command]
 pub(crate) fn update_locale(
     app: tauri::AppHandle,
     state: tauri::State<'_, LocaleState>,

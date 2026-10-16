@@ -26,6 +26,16 @@ describe("preferences controller", () => {
     expect(tauri.invoke).toHaveBeenCalledWith("set_virtual_library_enabled", { enabled: true });
   });
 
+  it("clears the thumbnail cache through its settings action", async () => {
+    tauri.invoke.mockResolvedValue(null);
+    const controller = createPreferencesController({ reportError: vi.fn(), addLog: vi.fn(), locale: () => "en", setLocale: vi.fn() });
+
+    await controller.clearThumbnailCache();
+
+    expect(tauri.invoke).toHaveBeenCalledWith("clear_thumbnail_cache");
+    expect(controller.isClearingThumbnailCache).toBe(false);
+  });
+
   it("restores the select value when upload parallelism persistence fails", async () => {
     tauri.invoke.mockRejectedValue(new Error("Database unavailable"));
     const reportError = vi.fn();

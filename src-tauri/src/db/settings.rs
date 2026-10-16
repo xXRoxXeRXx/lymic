@@ -3,6 +3,9 @@ use sqlx::SqlitePool;
 
 pub const DEFAULT_UPLOAD_PARALLELISM: usize = 3;
 pub const DEFAULT_VIRTUAL_LIBRARY_PATH: &str = "%USERPROFILE%\\Pictures\\Lymic";
+pub const DEFAULT_THUMBNAIL_CACHE_CAP_BYTES: u64 = 250 * 1024 * 1024;
+const MIN_THUMBNAIL_CACHE_CAP_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_THUMBNAIL_CACHE_CAP_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MIN_UPLOAD_PARALLELISM: usize = 1;
 const MAX_UPLOAD_PARALLELISM: usize = 8;
 
@@ -80,6 +83,40 @@ pub async fn set_upload_parallelism(pool: &SqlitePool, value: usize) -> Result<(
 
     sqlx::query(
         "INSERT INTO app_settings (key, value) VALUES ('upload_parallelism', ?) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(value.to_string())
+    .execute(pool)
+    .await
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+pub fn validate_thumbnail_cache_cap_bytes(value: i64) -> Option<u64> {
+    let value = u64::try_from(value).ok()?;
+    (MIN_THUMBNAIL_CACHE_CAP_BYTES..=MAX_THUMBNAIL_CACHE_CAP_BYTES)
+        .contains(&value)
+        .then_some(value)
+}
+
+pub async fn get_thumbnail_cache_cap_bytes(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let value = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM app_settings WHERE key = 'thumbnail_cache_cap_bytes'",
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(value
+        .and_then(|value| value.parse::<i64>().ok())
+        .and_then(validate_thumbnail_cache_cap_bytes)
+        .unwrap_or(DEFAULT_THUMBNAIL_CACHE_CAP_BYTES))
+}
+
+pub async fn set_thumbnail_cache_cap_bytes(pool: &SqlitePool, value: u64) -> Result<(), String> {
+    if !(MIN_THUMBNAIL_CACHE_CAP_BYTES..=MAX_THUMBNAIL_CACHE_CAP_BYTES).contains(&value) {
+        return Err("Thumbnail cache cap must be between 16 MB and 2 GB.".to_string());
+    }
+    sqlx::query(
+        "INSERT INTO app_settings (key, value) VALUES ('thumbnail_cache_cap_bytes', ?) \
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     )
     .bind(value.to_string())

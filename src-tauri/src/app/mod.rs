@@ -113,6 +113,9 @@ pub(crate) fn run() {
             crate::commands::settings::update_locale,
             crate::commands::settings::get_virtual_library_status,
             crate::commands::settings::set_virtual_library_enabled,
+            crate::commands::settings::get_thumbnail_cache_cap_bytes,
+            crate::commands::settings::set_thumbnail_cache_cap_bytes,
+            crate::commands::settings::clear_thumbnail_cache,
             crate::commands::settings::record_webview_startup_phase_probe,
             crate::commands::settings::get_database_recovery_notice
         ])
