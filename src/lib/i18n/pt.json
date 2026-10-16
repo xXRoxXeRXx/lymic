@@ -1,6 +1,12 @@
 {
-  "dashboard": "Painel",
+  "dashboard": "Sincronização",
+  "logs": "Registos",
   "settings": "Configurações",
+  "info": "Info",
+  "app_name_label": "Nome",
+  "version_label": "Versão",
+  "license_label": "Licença",
+  "source_code_label": "Código-fonte",
   "login": "Entrar",
   "login_subtitle": "Conecte o Lymic ao seu servidor Immich para que suas fotos e memórias fiquem sempre seguras.",
   "server_url": "URL do servidor",

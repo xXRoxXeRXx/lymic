@@ -1,6 +1,12 @@
 {
-  "dashboard": "Панель",
+  "dashboard": "Синхронизация",
+  "logs": "Журналы",
   "settings": "Настройки",
+  "info": "Инфо",
+  "app_name_label": "Название",
+  "version_label": "Версия",
+  "license_label": "Лицензия",
+  "source_code_label": "Исходный код",
   "login": "Вход",
   "login_subtitle": "Подключите Lymic к вашему серверу Immich, чтобы ваши фотографии и воспоминания всегда были в безопасности.",
   "server_url": "URL сервера",

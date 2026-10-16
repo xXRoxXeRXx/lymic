@@ -1,6 +1,12 @@
 {
-  "dashboard": "ড্যাশবোর্ড",
+  "dashboard": "সিঙ্ক",
+  "logs": "লগ",
   "settings": "সেটিংস",
+  "info": "তথ্য",
+  "app_name_label": "নাম",
+  "version_label": "সংস্করণ",
+  "license_label": "লাইসেন্স",
+  "source_code_label": "সোর্স কোড",
   "login": "লগইন",
   "login_subtitle": "আপনার Immich সার্ভারের সাথে Lymic সংযুক্ত করুন, যাতে আপনার ছবি ও স্মৃতিগুলো সর্বদা সুরক্ষিত থাকে।",
   "server_url": "সার্ভার URL",

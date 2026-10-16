@@ -3,7 +3,6 @@
   import { toBcp47Locale } from "../i18n";
   import FailedSyncsModal from "./FailedSyncsModal.svelte";
   import FolderList from "./FolderList.svelte";
-  import ActivityLog from "./ActivityLog.svelte";
   import TargetAlbumModal from "./TargetAlbumModal.svelte";
   import { createTargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { DashboardViewState } from "../controllers/sync-controller.svelte";
@@ -100,11 +99,8 @@
     <FailedSyncsModal failedSyncs={dashboard.failedSyncs} syncStatus={dashboard.syncStatus} onRetry={dashboard.onRetryFailedSyncs} />
   </section>
 
-  <!-- Bottom Grid: Folder List & Activity Log -->
-  <div class="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
-    <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} catalogue={targetAlbumCatalogue} />
-    <ActivityLog logs={dashboard.logs} />
-  </div>
+  <!-- Bottom: Folder List -->
+  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} catalogue={targetAlbumCatalogue} />
 </div>
 
 <TargetAlbumModal

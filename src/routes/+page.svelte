@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, AlertCircle, X, LayoutDashboard, User } from "lucide-svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
   import LoginView from "#lib/components/LoginView.svelte";
   import DashboardView from "#lib/components/DashboardView.svelte";
+  import ActivityLog from "#lib/components/ActivityLog.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
+  import InfoView from "#lib/components/InfoView.svelte";
   import UpdateDialog from "#lib/components/UpdateDialog.svelte";
   import RemovableVolumePrompt from "#lib/components/RemovableVolumePrompt.svelte";
   import TargetAlbumModal from "#lib/components/TargetAlbumModal.svelte";
@@ -113,13 +115,6 @@
         />
       </div>
 
-      <!-- Footer -->
-      <footer class="h-10 px-8 flex items-center justify-end text-[10px] font-medium text-slate-400 dark:text-zinc-500 uppercase tracking-wider shrink-0">
-        <span>Lymic - Unofficial Immich Desktop Client</span>
-        {#if updater.appVersion}
-          <span class="ml-2">v{updater.appVersion}</span>
-        {/if}
-      </footer>
     </div>
   {:else}
     <!-- Authenticated Layout: Left Sidebar + Right Content Area -->
@@ -142,8 +137,18 @@
             onclick={() => currentView = "dashboard"}
             aria-label={$t('dashboard')}
           >
-            <LayoutDashboard class="w-4 h-4 shrink-0 {currentView === 'dashboard' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <FolderSync class="w-4 h-4 shrink-0 {currentView === 'dashboard' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('dashboard')}</span>
+          </button>
+
+          <button
+            type="button"
+            class="nav-item {currentView === 'logs' ? 'active' : ''}"
+            onclick={() => currentView = "logs"}
+            aria-label={$t('logs')}
+          >
+            <ScrollText class="w-4 h-4 shrink-0 {currentView === 'logs' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('logs')}</span>
           </button>
 
           <button
@@ -154,6 +159,16 @@
           >
             <SettingsIcon class="w-4 h-4 shrink-0 {currentView === 'settings' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('settings')}</span>
+          </button>
+
+          <button
+            type="button"
+            class="nav-item {currentView === 'info' ? 'active' : ''}"
+            onclick={() => currentView = "info"}
+            aria-label={$t('info')}
+          >
+            <InfoIcon class="w-4 h-4 shrink-0 {currentView === 'info' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('info')}</span>
           </button>
         </nav>
       </div>
@@ -175,7 +190,7 @@
       <header class="h-16 px-8 flex items-center justify-between shrink-0 z-10">
         <div class="flex items-center gap-4">
           <h1 class="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {currentView === "dashboard" ? $t('dashboard') : $t('settings')}
+            {currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
           </h1>
         </div>
       </header>
@@ -211,6 +226,8 @@
             dashboard={sync.dashboard}
             serverUrl={auth.serverUrl}
           />
+        {:else if currentView === "logs"}
+          <ActivityLog logs={sync.dashboard.logs} />
         {:else if currentView === "settings"}
           <SettingsView
             currentUserName={auth.currentUserName}
@@ -229,16 +246,12 @@
             onCheckForUpdates={updater.checkForUpdates}
             onLogout={auth.logout}
           />
+        {:else if currentView === "info"}
+          <InfoView
+            appVersion={updater.appVersion}
+          />
         {/if}
       </main>
-
-      <!-- Global Footer -->
-      <footer class="h-10 px-8 flex items-center justify-end text-[10px] font-medium text-slate-400 dark:text-zinc-500 uppercase tracking-wider shrink-0">
-        <span>Lymic - Unofficial Immich Desktop Client</span>
-        {#if updater.appVersion}
-          <span class="ml-2">v{updater.appVersion}</span>
-        {/if}
-      </footer>
     </div>
   {/if}
 

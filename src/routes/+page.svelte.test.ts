@@ -132,12 +132,16 @@ afterEach(() => {
 });
 
 describe("app version", () => {
-  it("displays the version provided by the Tauri runtime", async () => {
+  it("displays the version provided by the Tauri runtime in the info view", async () => {
     tauri.getVersion.mockResolvedValue("1.2.3");
 
     renderAuthenticatedPage();
+    await fireEvent.click(await screen.findByRole("button", { name: "Info" }));
 
     expect(await screen.findByText("v1.2.3")).toBeInTheDocument();
+    expect(screen.getByText("Lymic (Unofficial Immich Desktop Client)")).toBeInTheDocument();
+    expect(screen.getByText("MIT")).toBeInTheDocument();
+    expect(screen.getByText("https://github.com/xXRoxXeRXx/lymic/")).toBeInTheDocument();
   });
 
   it("omits the version without interrupting initialization when loading fails", async () => {
@@ -147,7 +151,8 @@ describe("app version", () => {
 
     renderAuthenticatedPage();
 
-    expect(await screen.findByText("Dashboard", { selector: "h1" })).toBeInTheDocument();
+    expect(await screen.findByText("Synchronization", { selector: "h1" })).toBeInTheDocument();
+    await fireEvent.click(await screen.findByRole("button", { name: "Info" }));
     expect(screen.queryByText(/v\d+/)).not.toBeInTheDocument();
     expect(warn).toHaveBeenCalledWith("Failed to load app version", error);
   });
@@ -169,14 +174,14 @@ describe("application updates", () => {
     tauri.check.mockRejectedValue(error);
     renderAuthenticatedPage();
 
-    expect(await screen.findByText("Dashboard", { selector: "h1" })).toBeInTheDocument();
+    expect(await screen.findByText("Synchronization", { selector: "h1" })).toBeInTheDocument();
     await waitFor(() => expect(warn).toHaveBeenCalledWith("Failed to check for updates", error));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("checks manually from settings and reports the current version", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
 
@@ -627,6 +632,7 @@ describe("sync dashboard", () => {
 describe("activity log", () => {
   it("renders an ERROR payload with its formatted event timestamp", async () => {
     renderAuthenticatedPage();
+    await fireEvent.click(await screen.findByRole("button", { name: "Logs" }));
     await waitFor(() => expect(logMessage).toBeTypeOf("function"));
     const timestamp = 1_700_000_000_123;
 
@@ -640,6 +646,7 @@ describe("activity log", () => {
 
   it("accepts SUCCESS and WARN structured payloads", async () => {
     renderAuthenticatedPage();
+    await fireEvent.click(await screen.findByRole("button", { name: "Logs" }));
     await waitFor(() => expect(logMessage).toBeTypeOf("function"));
 
     logMessage?.({ payload: { level: "SUCCESS", message: "Sync completed", timestamp: 1_700_000_000_000 } });
@@ -651,6 +658,7 @@ describe("activity log", () => {
 
   it("defaults unknown levels and malformed timestamps without interrupting logging", async () => {
     renderAuthenticatedPage();
+    await fireEvent.click(await screen.findByRole("button", { name: "Logs" }));
     await waitFor(() => expect(logMessage).toBeTypeOf("function"));
 
     logMessage?.({ payload: { level: "UNKNOWN", message: "Unrecognized level", timestamp: Number.NaN } });
@@ -665,6 +673,7 @@ describe("activity log", () => {
 
     try {
       await locale.set("de");
+      await fireEvent.click(await screen.findByRole("button", { name: "Protokolle" }));
       logMessage?.({
         payload: {
           level: "INFO",
@@ -686,7 +695,7 @@ describe("activity log", () => {
 describe("logout", () => {
   it("does not log out when the confirmation is cancelled", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const logoutButton = await screen.findByRole("button", { name: "Logout" });
@@ -704,7 +713,7 @@ describe("logout", () => {
 
   it("keeps the authenticated view and displays an error when logout fails", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const logoutButton = await screen.findByRole("button", { name: "Logout" });
@@ -728,7 +737,7 @@ describe("logout", () => {
 describe("settings", () => {
   it("shows the authenticated user name", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
@@ -737,7 +746,7 @@ describe("settings", () => {
 
   it("displays language settings and switches language", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
@@ -756,7 +765,7 @@ describe("settings", () => {
 
   it("sets and persists an explicit theme preference", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const darkButton = await screen.findByRole("button", { name: "Dark" });
@@ -770,7 +779,7 @@ describe("settings", () => {
   it("loads and saves upload parallelism", async () => {
     uploadParallelism = 6;
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
@@ -807,7 +816,7 @@ describe("settings", () => {
   it("shows an error and restores upload parallelism when saving fails", async () => {
     uploadParallelism = 4;
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
     tauri.invoke.mockImplementation((command: string) => {
       if (command === "set_upload_parallelism") return Promise.reject(new Error("Database unavailable"));
       if (command === "get_auth_status") return Promise.resolve(true);
@@ -857,7 +866,7 @@ describe("theme preference", () => {
     colorSchemeListeners.forEach((listener) => listener({ matches: false } as MediaQueryListEvent));
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
 
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Dark" }));
     systemThemeIsDark = false;
@@ -871,7 +880,7 @@ describe("removable volume setup flow", () => {
   it("detects removable card, prompts user, opens picker with mount path, and invokes accept_removable_media_folder", async () => {
     tauri.open.mockResolvedValue("E:/DCIM");
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     tauri.invoke.mockImplementation((command: string) => {
       switch (command) {
@@ -945,7 +954,7 @@ describe("removable volume setup flow", () => {
   it("surfaces typed backend errors in feedback banner when accepting outside volume", async () => {
     tauri.open.mockResolvedValue("C:/NotOnCard");
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     tauri.invoke.mockImplementation((command: string) => {
       switch (command) {
@@ -992,7 +1001,7 @@ describe("removable volume setup flow", () => {
 
   it("dismisses prompt without opening dialog when dismiss button is clicked", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Dashboard", { selector: "h1" });
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     removableVolumeDetected!({
       payload: {

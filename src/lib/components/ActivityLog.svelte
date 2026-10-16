@@ -17,7 +17,7 @@
     <Clock class="w-3.5 h-3.5" />
     <span>{$t('activity_log')}</span>
   </h4>
-  <div class="desktop-card !p-4 h-[320px] overflow-y-auto space-y-1.5 selectable">
+  <div class="desktop-card !p-4 h-[calc(100vh-14rem)] min-h-[360px] overflow-y-auto space-y-1.5 selectable">
     {#if logs.length === 0}
       <div class="h-full flex items-center justify-center">
         <p class="text-xs text-slate-400 dark:text-zinc-500 italic">{$t('no_activity')}</p>

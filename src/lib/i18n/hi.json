@@ -1,6 +1,12 @@
 {
-  "dashboard": "डैशबोर्ड",
+  "dashboard": "सिंक्रनाइज़ेशन",
+  "logs": "लॉग",
   "settings": "सेटिंग्स",
+  "info": "जानकारी",
+  "app_name_label": "नाम",
+  "version_label": "संस्करण",
+  "license_label": "लाइसेंस",
+  "source_code_label": "स्रोत कोड",
   "login": "लॉग इन",
   "login_subtitle": "Lymic को अपने Immich सर्वर से कनेक्ट करें, ताकि आपकी तस्वीरें और यादें हमेशा सुरक्षित रहें।",
   "server_url": "सर्वर URL",
