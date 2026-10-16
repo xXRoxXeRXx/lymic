@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Folder, FolderPlus, Trash2 } from "lucide-svelte";
+  import { Album, Folder, FolderPlus, Trash2 } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import { createTargetAlbumCatalogue, type TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { WatchedFolder } from "./types";
@@ -55,8 +55,9 @@
             <p class="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{folder.path.split(/[/\\]/).pop()}</p>
             <p class="text-[11px] font-mono text-slate-400 dark:text-zinc-500 truncate">{folder.path}</p>
             {#if folder.target_album_id}
-              <p class="text-[11px] font-medium text-blue-600 dark:text-sky-400 truncate">
-                {$t('target_album')}: {catalogue.nameFor(folder.target_album_id) ?? $t('target_album_unavailable')}
+              <p class="text-[11px] font-medium text-blue-600 dark:text-sky-400 truncate flex items-center gap-1.5">
+                <Album class="w-3 h-3 shrink-0" />
+                <span class="truncate">{$t('target_album')}: {catalogue.nameFor(folder.target_album_id) ?? $t('target_album_unavailable')}</span>
               </p>
             {/if}
           </div>
