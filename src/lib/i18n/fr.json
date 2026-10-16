@@ -73,6 +73,7 @@
   "logout": "Se déconnecter",
   "logout_confirmation": "Voulez-vous vraiment vous déconnecter ?",
   "select_folder": "Sélectionner un dossier",
+  "add_folder": "Ajouter",
   "target_album": "Album cible",
   "target_album_unavailable": "Album indisponible",
   "target_album_modal_title": "Sélectionner l'album cible",

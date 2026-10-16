@@ -21,6 +21,7 @@ fn should_start_in_background(args: &[OsString], has_credentials: bool) -> bool 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub(crate) fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_autostart::Builder::new()

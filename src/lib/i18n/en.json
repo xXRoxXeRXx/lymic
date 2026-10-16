@@ -73,6 +73,7 @@
   "logout": "Logout",
   "logout_confirmation": "Do you really want to log out?",
   "select_folder": "Select Folder",
+  "add_folder": "Add",
   "target_album": "Target Album",
   "target_album_unavailable": "Unavailable album",
   "target_album_modal_title": "Select Target Album",

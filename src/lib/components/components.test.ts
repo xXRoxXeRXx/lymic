@@ -12,8 +12,9 @@ import InfoView from "./InfoView.svelte";
 import { localeCatalog } from "../i18n/locale-catalog";
 import TargetAlbumModal from "./TargetAlbumModal.svelte";
 
-const tauri = vi.hoisted(() => ({ invoke: vi.fn() }));
+const tauri = vi.hoisted(() => ({ invoke: vi.fn(), openUrl: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: tauri.openUrl }));
 
 beforeEach(() => tauri.invoke.mockResolvedValue([]));
 afterEach(cleanup);
@@ -448,15 +449,21 @@ describe("TargetAlbumModal", () => {
 });
 
 describe("InfoView", () => {
-  it("renders app name, version, license, and source code link", () => {
+  it("renders app name, version, license, and opens links via openUrl", async () => {
+    tauri.openUrl.mockResolvedValue(undefined);
     render(InfoView, { appVersion: "1.0.0" });
     expect(screen.getByText("Lymic (Unofficial Immich Desktop Client)")).toBeInTheDocument();
     expect(screen.getByText("v1.0.0")).toBeInTheDocument();
     expect(screen.getByText("MIT")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "https://github.com/xXRoxXeRXx/lymic/" });
     expect(link).toHaveAttribute("href", "https://github.com/xXRoxXeRXx/lymic/");
+    await fireEvent.click(link);
+    expect(tauri.openUrl).toHaveBeenCalledWith("https://github.com/xXRoxXeRXx/lymic/");
+
     const issueLink = screen.getByRole("link", { name: "https://github.com/xXRoxXeRXx/lymic/issues" });
     expect(issueLink).toHaveAttribute("href", "https://github.com/xXRoxXeRXx/lymic/issues");
+    await fireEvent.click(issueLink);
+    expect(tauri.openUrl).toHaveBeenCalledWith("https://github.com/xXRoxXeRXx/lymic/issues");
   });
 
   it("handles missing version gracefully", () => {

@@ -99,7 +99,7 @@
 
       <select
         id="locale"
-        class="glass-input !w-auto !py-1.5 !px-3 text-sm font-medium rounded-lg cursor-pointer"
+        class="glass-input !w-auto !py-1.5 !pl-3 !pr-8 text-sm font-medium rounded-lg cursor-pointer"
         value={$locale}
         onchange={(event) => onLocaleChange((event.currentTarget as HTMLSelectElement).value)}
       >
@@ -182,7 +182,7 @@
 
       <select
         id="upload-parallelism"
-        class="glass-input !w-auto !py-1.5 !px-3 text-sm font-medium rounded-lg cursor-pointer"
+        class="glass-input !w-20 !min-w-[5rem] !py-1.5 !pl-3.5 !pr-8 text-sm font-medium rounded-lg cursor-pointer text-left"
         value={uploadParallelism}
         onchange={onUploadParallelismChange}
         disabled={isSavingUploadParallelism}
@@ -194,43 +194,7 @@
     </div>
   </section>
 
-  <!-- Category 4: Account -->
-  <section class="space-y-3">
-    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 flex items-center gap-2">
-      <User class="w-3.5 h-3.5" />
-      <span>{$t('account')}</span>
-    </h2>
-
-    <div class="settings-card flex items-center justify-between gap-4">
-      <div class="flex items-start gap-3">
-        <div class="p-2 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5">
-          <User class="w-4 h-4" />
-        </div>
-        <div class="space-y-1">
-          <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm">{$t('account')}</p>
-          {#if currentUserName}
-            <p class="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              {$t('logged_in_as')} {currentUserName}
-            </p>
-          {/if}
-          <p class="text-xs text-slate-500 dark:text-slate-400">
-            {$t('logged_in_at')} <span class="font-mono text-[11px]">{serverUrl}</span>
-          </p>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        class="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/60 cursor-pointer"
-        onclick={onLogout}
-      >
-        <LogOut class="w-3.5 h-3.5" />
-        <span>{$t('logout')}</span>
-      </button>
-    </div>
-  </section>
-
-  <!-- Category 5: Updates -->
+  <!-- Category 4: Updates -->
   <section class="space-y-3">
     <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 flex items-center gap-2">
       <Sparkles class="w-3.5 h-3.5" />
@@ -263,6 +227,42 @@
         disabled={isCheckingForUpdates}
       >
         {isCheckingForUpdates ? $t('update_checking') : $t('check_for_updates')}
+      </button>
+    </div>
+  </section>
+
+  <!-- Category 5: Account (Moved to the bottom) -->
+  <section class="space-y-3">
+    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 flex items-center gap-2">
+      <User class="w-3.5 h-3.5" />
+      <span>{$t('account')}</span>
+    </h2>
+
+    <div class="settings-card flex items-center justify-between gap-4">
+      <div class="flex items-start gap-3">
+        <div class="p-2 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5">
+          <User class="w-4 h-4" />
+        </div>
+        <div class="space-y-1">
+          <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm">{$t('account')}</p>
+          {#if currentUserName}
+            <p class="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              {$t('logged_in_as')} {currentUserName}
+            </p>
+          {/if}
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            {$t('logged_in_at')} <span class="font-mono text-[11px]">{serverUrl}</span>
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/60 cursor-pointer"
+        onclick={onLogout}
+      >
+        <LogOut class="w-3.5 h-3.5" />
+        <span>{$t('logout')}</span>
       </button>
     </div>
   </section>

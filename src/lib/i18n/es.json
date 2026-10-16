@@ -73,6 +73,7 @@
   "logout": "Cerrar sesión",
   "logout_confirmation": "¿Seguro que quieres cerrar sesión?",
   "select_folder": "Seleccionar carpeta",
+  "add_folder": "Añadir",
   "target_album": "Álbum de destino",
   "target_album_unavailable": "Álbum no disponible",
   "target_album_modal_title": "Seleccionar álbum de destino",

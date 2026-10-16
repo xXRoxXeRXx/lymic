@@ -73,6 +73,7 @@
   "logout": "退出登录",
   "logout_confirmation": "确定要退出登录吗？",
   "select_folder": "选择文件夹",
+  "add_folder": "添加",
   "target_album": "目标相册",
   "target_album_unavailable": "相册不可用",
   "target_album_modal_title": "选择目标相册",

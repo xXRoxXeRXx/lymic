@@ -73,6 +73,7 @@
   "logout": "Выйти",
   "logout_confirmation": "Вы действительно хотите выйти?",
   "select_folder": "Выбрать папку",
+  "add_folder": "Добавить",
   "target_album": "Целевой альбом",
   "target_album_unavailable": "Альбом недоступен",
   "target_album_modal_title": "Выбор целевого альбома",

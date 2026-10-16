@@ -73,6 +73,7 @@
   "logout": "Abmelden",
   "logout_confirmation": "Möchtest du dich wirklich abmelden?",
   "select_folder": "Ordner auswählen",
+  "add_folder": "Hinzufügen",
   "target_album": "Zielalbum",
   "target_album_unavailable": "Nicht verfügbares Album",
   "target_album_modal_title": "Zielalbum auswählen",

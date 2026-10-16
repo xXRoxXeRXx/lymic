@@ -51,6 +51,7 @@ vi.mock("@tauri-apps/plugin-autostart", () => ({
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: tauri.open, confirm: tauri.confirm }));
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: tauri.check }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: tauri.relaunch }));
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
 
 function renderAuthenticatedPage() {

@@ -2,12 +2,22 @@
   import { Info, ExternalLink } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import logo from "#lib/assets/logo.png";
+  import { openUrl } from "@tauri-apps/plugin-opener";
 
   interface Props {
     appVersion?: string | null;
   }
 
   let { appVersion }: Props = $props();
+
+  async function openExternal(event: MouseEvent, url: string) {
+    event.preventDefault();
+    try {
+      await openUrl(url);
+    } catch (error) {
+      console.error("Failed to open URL", error);
+    }
+  }
 </script>
 
 <div class="max-w-2xl w-full space-y-6 animate-in pb-10">
@@ -59,7 +69,8 @@
           href="https://github.com/xXRoxXeRXx/lymic/"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-xs font-medium text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1.5 truncate"
+          class="text-xs font-medium text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1.5 truncate cursor-pointer"
+          onclick={(e) => openExternal(e, "https://github.com/xXRoxXeRXx/lymic/")}
         >
           <span class="truncate">https://github.com/xXRoxXeRXx/lymic/</span>
           <ExternalLink class="w-3 h-3 shrink-0" />
@@ -73,7 +84,8 @@
           href="https://github.com/xXRoxXeRXx/lymic/issues"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-xs font-medium text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1.5 truncate"
+          class="text-xs font-medium text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1.5 truncate cursor-pointer"
+          onclick={(e) => openExternal(e, "https://github.com/xXRoxXeRXx/lymic/issues")}
         >
           <span class="truncate">https://github.com/xXRoxXeRXx/lymic/issues</span>
           <ExternalLink class="w-3 h-3 shrink-0" />

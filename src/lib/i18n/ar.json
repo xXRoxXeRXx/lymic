@@ -73,6 +73,7 @@
   "logout": "تسجيل الخروج",
   "logout_confirmation": "هل أنت متأكد من رغبتك في تسجيل الخروج؟",
   "select_folder": "تحديد مجلد",
+  "add_folder": "إضافة",
   "target_album": "الألبوم المستهدف",
   "target_album_unavailable": "الألبوم غير متاح",
   "target_album_modal_title": "تحديد الألبوم المستهدف",

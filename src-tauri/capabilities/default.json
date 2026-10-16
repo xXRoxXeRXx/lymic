@@ -10,6 +10,7 @@
     "dialog:allow-open",
     "dialog:allow-confirm",
     "process:allow-restart",
-    "updater:default"
+    "updater:default",
+    "opener:default"
   ]
 }

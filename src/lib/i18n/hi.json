@@ -73,6 +73,7 @@
   "logout": "लॉग आउट",
   "logout_confirmation": "क्या आप वाकई लॉग आउट करना चाहते हैं?",
   "select_folder": "फ़ोल्डर चुनें",
+  "add_folder": "जोड़ें",
   "target_album": "लक्षित एल्बम",
   "target_album_unavailable": "एल्बम उपलब्ध नहीं है",
   "target_album_modal_title": "लक्षित एल्बम चुनें",

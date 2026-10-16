@@ -34,11 +34,13 @@
       <span>{$t('synced_folders')}</span>
     </h4>
     <button
-      class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm cursor-pointer"
-      aria-label={$t('select_folder')}
+      type="button"
+      class="flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm cursor-pointer"
+      aria-label={$t('add_folder')}
       onclick={onAddFolder}
     >
-      <FolderPlus class="w-4 h-4" />
+      <FolderPlus class="w-4 h-4 shrink-0" />
+      <span>{$t('add_folder')}</span>
     </button>
   </div>
 

@@ -73,6 +73,7 @@
   "logout": "লগআউট",
   "logout_confirmation": "আপনি কি সত্যিই লগআউট করতে চান?",
   "select_folder": "ফোল্ডার নির্বাচন করুন",
+  "add_folder": "যোগ করুন",
   "target_album": "টার্গেট অ্যালবাম",
   "target_album_unavailable": "অ্যালবামটি উপলভ্য নয়",
   "target_album_modal_title": "টার্গেট অ্যালবাম নির্বাচন করুন",

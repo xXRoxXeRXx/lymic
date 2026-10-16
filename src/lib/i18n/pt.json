@@ -73,6 +73,7 @@
   "logout": "Sair",
   "logout_confirmation": "Tem certeza de que deseja sair?",
   "select_folder": "Selecionar pasta",
+  "add_folder": "Adicionar",
   "target_album": "Álbum de destino",
   "target_album_unavailable": "Álbum indisponível",
   "target_album_modal_title": "Selecionar álbum de destino",
