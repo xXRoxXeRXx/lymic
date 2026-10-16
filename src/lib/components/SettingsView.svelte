@@ -24,6 +24,8 @@
     virtualLibraryEnabled: boolean;
     virtualLibraryPath: string;
     virtualLibraryConnectionStatus: string;
+    isClearingVirtualLibraryCache?: boolean;
+    virtualLibraryCacheClearResult?: { bytesFreed: number; filesDehydrated: number; pinnedFilesPreserved: number } | null;
     themePreference: ThemePreference;
     uploadParallelism: number;
     isSavingUploadParallelism: boolean;
@@ -34,6 +36,7 @@
     locales: readonly LocaleCatalogEntry[];
     onToggleAutostart: () => void;
     onToggleVirtualLibrary: () => void;
+    onClearVirtualLibraryCache?: () => void;
     onLocaleChange: (locale: string) => void;
     onThemeChange: (preference: ThemePreference) => void;
     onUploadParallelismChange: (event: Event) => void;
@@ -50,6 +53,8 @@
     virtualLibraryEnabled,
     virtualLibraryPath,
     virtualLibraryConnectionStatus,
+    isClearingVirtualLibraryCache = false,
+    virtualLibraryCacheClearResult = null,
     themePreference,
     uploadParallelism,
     isSavingUploadParallelism,
@@ -60,6 +65,7 @@
     locales,
     onToggleAutostart,
     onToggleVirtualLibrary,
+    onClearVirtualLibraryCache = () => {},
     onLocaleChange,
     onThemeChange,
     onUploadParallelismChange,
@@ -112,16 +118,26 @@
         </div>
       </div>
 
-      <button
-        type="button"
-        class="desktop-toggle {virtualLibraryEnabled ? 'enabled' : ''}"
-        onclick={onToggleVirtualLibrary}
-        aria-label={virtualLibraryEnabled ? 'Disable Virtual Library' : 'Enable Virtual Library'}
-        aria-pressed={virtualLibraryEnabled}
-      >
-        <div class="desktop-toggle-knob"></div>
-      </button>
+      <div class="flex items-center gap-2">
+        {#if virtualLibraryEnabled}
+          <button type="button" class="rounded-lg border border-slate-200 bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-slate-200 dark:hover:bg-zinc-700 cursor-pointer" onclick={onClearVirtualLibraryCache} disabled={isClearingVirtualLibraryCache}>
+            {isClearingVirtualLibraryCache ? "Clearing…" : "Clear Local Cache"}
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="desktop-toggle {virtualLibraryEnabled ? 'enabled' : ''}"
+          onclick={onToggleVirtualLibrary}
+          aria-label={virtualLibraryEnabled ? 'Disable Virtual Library' : 'Enable Virtual Library'}
+          aria-pressed={virtualLibraryEnabled}
+        >
+          <div class="desktop-toggle-knob"></div>
+        </button>
+      </div>
     </div>
+    {#if virtualLibraryCacheClearResult}
+      <p class="text-xs text-slate-500 dark:text-slate-400">Freed {virtualLibraryCacheClearResult.bytesFreed} bytes from {virtualLibraryCacheClearResult.filesDehydrated} file(s); kept {virtualLibraryCacheClearResult.pinnedFilesPreserved} pinned file(s).</p>
+    {/if}
 
     <!-- Language Card -->
     <div class="settings-card flex items-center justify-between gap-4">
