@@ -4,7 +4,7 @@ okf_version: "0.2"
 
 # Files
 
-- [Lymic Architecture Guide](quickstart.md) - A contributor-oriented map to Lymic's desktop runtime, synchronization systems, persistence, integrations, and verification workflow.
+- [Lymic Architecture Guide](quickstart.md) - Contributor entry point for routing Lymic changes to the owning runtime, frontend, synchronization, persistence, integration, security, and operations documentation. It defines the upload-only product boundary and the Rust/Svelte entrypoints to inspect first.
 
 # Directories
 

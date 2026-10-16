@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:be09a8fdaf491f0abeca781c5889afae077742019e0f7b220a42b5f69b96f238",
+  "pageVersion": "sha256:b7a4756bbcd766b87d7d30bfcafab3b36abbc49738c8f35bf7df5b78ed8eb6d0",
   "claims": [
     {
       "id": "claim_addffc2e2a704657a6384177bd1284dc",
       "statement": "The `add_folder` registration path normalizes and rejects duplicate or parent/child-overlapping roots, persists a not-found directory as a deferred watch, and asynchronously scans an immediately available root after watcher registration and persistence.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/commands/folders.rs#L111-L245",
+          "resource": "repo://src-tauri/src/commands/folders.rs#L108-L242",
           "version": "repo-lines-v1:sha256:0b7ceb8ace6e02f174048381413a7e49ff52b2caf865fbc36725509795d9a8d1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5ZWJmNmVhMGIyZGE5OTZiMjgzMjIyMTA3YWRhZDM3OTM5NGM4OGJkNjk3MTJhY2EyZGRlNmJkOTAxOWIxMTAwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0ODkzZjQwZTM3ODFlYjg5NmM4MmQwNDZhMDgwNjdhMTFlMzVjZGYyZjFkZmFmMjZmZWE5MGI4ZGI2Njc2NDEzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIzYTgyNWVlY2FjNmI5Zjk2ODkyYWZiNzk4ZDVmMzc0YWFkYjA0ZmI1Mjg3NzAyMmNmNWFhMjVmNDJlZDEzOGNlIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI5YzUwNzEzY2UzNjZmNGVkOTY4ZjgxOThkYTM4OWExNTA1MWZmOTRiMTNlYTUyMjVlNzhkYzZiOWYzYTllODdiIn0"
         },
         {
-          "resource": "repo://src-tauri/src/commands/folders.rs#L73-L108",
+          "resource": "repo://src-tauri/src/commands/folders.rs#L70-L105",
           "version": "repo-lines-v1:sha256:5df89e0e0eafc1d710ebef59f0bd2f1006bd9b85efd010b7b63e7857d8579624:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRmYWI4YzU3MGU0NDgxZTExMWEwYTdlM2IwMjMyZTVkY2E4NGM3ZWFlNjUyNjA3YmMxNjViZGE0MzkwOTc0ZTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2ZGE4MjZjNmQxZjlhZDdlM2QyOTc4YmE3ZGZkNDM4YmEyMWMwZmJiMjgxZWIzMzRkNDgyNmNhYzg4YTdjNzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwNjNjNGQxYWY4Y2Q4OWJiMGJkZDc2NTdmZmNiZjY4MDZhNjEwZDc5ZDZjOGQ0YzMwN2MyNDFkZjM5MDA1MjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJiM2ExNGMxZWEzYTZjNWY4NzEyNGQ5NDJhYjY5MDMxN2U1NzQ1YjVhYzA5MGExM2IwYzc1M2EwZTcxNzg3OTIifQ"
         },
         {
@@ -54,19 +54,15 @@
     },
     {
       "id": "claim_2487d0dc7ee34a76bb481bbe316dbf25",
-      "statement": "Removing a configured folder requires explicit confirmation when active or stored sync work exists; after confirmation the backend unwatches before cancelling and discarding path-scoped sync state, and it attempts watcher reconciliation if cleanup or folder deletion fails.",
+      "statement": "Folder removal uses a two-step confirmation protocol: an unconfirmed request only reports whether active coordinator work or stored sync work exists, and the frontend shows the corresponding warning before retrying with confirmation. The confirmed backend operation unwatches before cancelling and discarding path-scoped sync state, and it attempts watcher reconciliation if cleanup or folder deletion fails.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/commands/folders.rs#L19-L24",
-          "version": "repo-lines-v1:sha256:41036e77bd3dcd2e621dbaf1289e056c022203a2f1e00aafa06a1712dcec9e61:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2RjODQ3MjdlNzQwOWMxNjZmZWRiMDQ1NzBkNzJiMTQ3NDdlNDM2MzY5YTRiODQzNjc3NDg3Y2UyN2FkNjdhZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2ZjZjkzMTM2MWZmMDgzYmNlYjI2NDdmNTNhMGFlZjU1NWEzODljN2Y2MzE0MWU5YzU3NTY3YjdiNzM2MmRjMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjU4YzNjMjIwMzNhZTI1ZmI2MDExODNhOGJhNzFlZGQzNDNmMDE0MzljZTQ0NGY4ZmJiZDU2NjA2Mzc5ZDc5MyJ9"
-        },
-        {
-          "resource": "repo://src-tauri/src/commands/folders.rs#L413-L519",
-          "version": "repo-lines-v1:sha256:816f2dffb9f1a5468c452aaeaba1514584cbc4cb2ae7cfab03f5ecff04274de1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5ZTFlZTMzZWU5NWZhZWUxYzEwZTllYmYzZDNkZTQxYmIxOTI1MTVjYWQ3N2NkYTIwNWU1NDZkYTE3MDAxYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI2NDc1ZTk0YTkwNGFjNDliMzE1NGQ0NjcyYTY2ZTg2MjliODZkYWM3NGUzZTI5MzdiZTY5MjdhZTNkYTExYzUzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIwMGZjNmUyZTY1NDkwZDA2MWI3ZWJlODcwZmUyYmExMmZkMTZlYjg0YjczNDI1ZThhMDE0OTllOGFiZWU2NGNhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNTIxNjA0YjM1ZmM0MGFmMDBjYmE0ZWVhMmZkNWUyYzNhZjE4NjNiMzkxMTg1ZDdiZjRiYjA5ZTcyZDBjOGIzIn0"
+          "resource": "repo://src-tauri/src/commands/folders.rs#L410-L517",
+          "version": "repo-lines-v1:sha256:ea89c666f0418d37bb31658b4d1e6f79b2e3827583ff478fbd35936a5c17450c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5ZTFlZTMzZWU5NWZhZWUxYzEwZTllYmYzZDNkZTQxYmIxOTI1MTVjYWQ3N2NkYTIwNWU1NDZkYTE3MDAxYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIwMGZjNmUyZTY1NDkwZDA2MWI3ZWJlODcwZmUyYmExMmZkMTZlYjg0YjczNDI1ZThhMDE0OTllOGFiZWU2NGNhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI3YmM5OGQ2YjBkYzQ5MmM1MDE2ZGYxMDgwNWEzYTU0ZWI5YzE4NGE1YTYxMzdlN2Y0YmVjZmEwYzIyMDU1MGQwIn0"
         },
         {
           "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L292-L309",
-          "version": "repo-lines-v1:sha256:c1d2dc30c2a6438cfbae590abcb3dbf441a60331247906af201f554be9dc9da0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0N2I3OGIxODE5MzZjOWVjZjk4ZTI2ZmQ0ZDZmZjY0ZThkNWEyMTE2YWEyZDhiNTI3ODFlNDZmNzhhZWQxOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwMTY2YzA0YTFjYTk4MWY5YTdjYzVmN2FiOWM5MjY1NTJiYTFhM2Q1OTM1MjBiZjgwZTI5NTAzYmVkYTA1NjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkYmJiNzUwMDg1Y2E3NDdlZTNhZjg2MGY2OTY1NTc5N2NkMDllNGJhMTRjZjdhMzM3MmRkMDQ1MjQwYjE2MWYifQ"
+          "version": "repo-lines-v1:sha256:902fbfbad9a9c306c70ab2f84c7754cae83620004fcedd7b09e29387814bdfec:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0N2I3OGIxODE5MzZjOWVjZjk4ZTI2ZmQ0ZDZmZjY0ZThkNWEyMTE2YWEyZDhiNTI3ODFlNDZmNzhhZWQxOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhOWI2MzE0ZDYyYWIzOGM2NzZlODVhODU5ZTI4MzQwYzQxZmJjOTQ3NTAwNmFjNThlYWFkMjA1M2VjYmRjODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBmMmQ1ZjYwZDM5MWU0MDM5NGY2NDk2N2Q0MTI3NmUxZWE3YjJlYTZiMDFmMTE4OGMwM2I5MTc5MmU3MDVhZjUifQ"
         }
       ]
     },
@@ -79,7 +75,7 @@
           "version": "repo-lines-v1:sha256:cdea0260b5dbae8591ec8e8f52aa80dffdbb55f820f277aaa805e934bf74745d:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDA2ODEyNWUzYTFmZDUzYzRlOWE5OTQxMGY1ODQyNjgyYmVhNDAxM2YyNmExNDAyNmQ3YzczMTI2OTY0NTJlZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmQ1N2RkMGExMzllODc3MTgyMjYzYjJkY2I0MjhlNWQ1ZGM2YjY3Y2I4NWFiNjk4MTg2MmZkMzIyNjJiYTZkNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
         },
         {
-          "resource": "repo://src-tauri/src/commands/folders.rs#L265-L401",
+          "resource": "repo://src-tauri/src/commands/folders.rs#L262-L398",
           "version": "repo-lines-v1:sha256:2944aea7d7f96990de8ff8c6e96202f6a151a199f2e0b8eb7bf4d1042136396b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5ZTFlZTMzZWU5NWZhZWUxYzEwZTllYmYzZDNkZTQxYmIxOTI1MTVjYWQ3N2NkYTIwNWU1NDZkYTE3MDAxYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJiNTE0OGE0YmM2Mjk2MzIxMTE0ODU0NWZmY2Q2NzBmZjMwZTZiZGYzNTlkMWJmN2I0NTc0YWNlNDZkNGQ5NDA0IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiM2Q4OTYyZGE1NDI4OWM5ZjQ2ODFhOGYzOTYwYjZiMWUzYTI1NzhjMDRmZmNhZGY3YzIzNzE1ZWY4ZTAzOWM3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIyZWMwOWE5OTBhYTgwZjIxN2FiYWIxNGFmZGE3MWY3OWM5NDk3N2ZiNzI2Y2IzM2Y3MGRmZDM3MzVhZjYwMDg4In0"
         },
         {
@@ -90,35 +86,31 @@
     },
     {
       "id": "claim_d8dfcbcd8158460a9de12ca4ed385240",
-      "statement": "On a bound volume's arrival, the removable coordinator rebuilds its absolute folder path from the mount path and stored relative path, remaps changed persisted paths, reconciles watching, resets failed work below the folder, and triggers a scan; on removal it clears the active-volume entry, emits a removal event, and unwatches bound folders without deleting their rows. Windows supplies removable-drive device events, while the macOS and Linux monitor implementations are no-ops.",
+      "statement": "On a bound volume's arrival, the removable coordinator rebuilds each folder path from the mount path and stored relative path, remaps changed persisted paths, reconciles watching, resets failed work below the folder, and triggers a scan. On removal it clears the active-volume entry, emits a removal event, and unwatches bound folders without deleting their rows. Windows supplies removable-drive device events, while the macOS and Linux monitor implementations are no-ops.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/db/folders.rs#L123-L190",
-          "version": "repo-lines-v1:sha256:0401822ba229d41f6c6ebeb647041f6e635eb99a2a5264604967961e5f4d2670:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1ZTdhMGQ0NjYzMDE0MDY0ZDI5OGU5YmI1OTE3OWVmMWNkZjQ4Njk1NTNhZmYxY2U2NGE5YzU4ZGMyMDM1NWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4OTc3MWZlMWI2NjI4ODc1YWEyM2U3ZGJlNGFhNzE0NjFkMDBjZGZiNjZkZGYxMWI5ZDgyMGFjNTg5N2ZkZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1ZjZmNDY2ZTU5Y2ZjMzA3MDNjNDVmNzJhZjY1ZGU1NGFjMzYzZDM1NGNjMWEzMzMwMzUwYWNkNDUyNDM0YzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
-        },
-        {
-          "resource": "repo://src-tauri/src/db/queue.rs#L404-L448",
-          "version": "repo-lines-v1:sha256:3d66b03acee58b94dc88b4ef66a1064a0059e161d8ef3869cc51d6e6928b6f52:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2NmY0ZWZlZWI5YjQ4NjY0NzI0MmM0NDI0OTcyNTRlMDkzMWQ5MzliODY4OTJjNWRhMWY2ZGU0NTUzNmFmZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZkOWI5MDBkMjE3ZTI0YTlmYzNiNDcwOGM0NjFmYTkxMGU3YzJjNzdmNzk0MjczMTRiNGNmMmRlNjhhMjNjOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIifQ"
-        },
-        {
           "resource": "repo://src-tauri/src/removable/coordinator.rs#L45-L160",
-          "version": "repo-lines-v1:sha256:d3566aad1e6ef616aec581b70c8f77dcb4cce7781fb7012396f696348c9b9c6c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIxZWEyNGY2ODk4NTg2YTc3ZDYxZGM0ZjU2OTllM2JkNDQ0ZTQ4YWUxNzBjZmQ4ZmEyZDFkMjE5NWFmODhjMWZiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJlNmIwNDQ5MTQ2OTcyMmU4MzYzYTk0ZTQwNDQ1MzhlMDEzYTJhMjE3ZTM2YjFlNTY4YmE2MGFjYjdiNGM4ZjJlIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI0NmJjMDg3MDNlNmU2OTFmMzgxYzY2MTk5MmYyNmIyMzU3YWE4YmFmNWM5MDgwMWY0NDlmMzI2MDIyOTYzNGE3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MiwiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzNzk0ZDAyYTgxMjE5NDRkMTc2ZDI2NWU5YmI5Y2M1OWY2YWI4OTBiY2FkZjhhZWZkZWJkYmJiNGYyZWE4NDQ0In0"
+          "version": "repo-lines-v1:sha256:b18e91ef594fd2fca29a49fa48014c45374424e87bbfff8833a0a06994e857ca:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIxZWEyNGY2ODk4NTg2YTc3ZDYxZGM0ZjU2OTllM2JkNDQ0ZTQ4YWUxNzBjZmQ4ZmEyZDFkMjE5NWFmODhjMWZiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI1NTIyYzQyY2QxOWM2ZDAzZDgwOGM0NTI3MjA1NTI4MjViN2VhMWM1YjQ5MWIyMTg1MTFjYWM3NDE1Y2Y5ZDliIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI0NmJjMDg3MDNlNmU2OTFmMzgxYzY2MTk5MmYyNmIyMzU3YWE4YmFmNWM5MDgwMWY0NDlmMzI2MDIyOTYzNGE3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJiNGEzNjVhOTBlYzExZTkwNDMyNzUyY2Y5Mzc2ZWM1ZWQzNmI4MGJhNWU4ZTY4NTRmY2Y5ODk3MGQzMDQ0NDY5In0"
         },
         {
-          "resource": "repo://src-tauri/src/removable/linux.rs#L1-L24",
-          "version": "repo-lines-v1:sha256:03dc21346e398221092c8578ff20f346da43947f054cfd6e0c282b61ac12f732:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2NjczOTgyOTJjMmUzYTYyNDVkNTI3NzY5ZDc4MTA5OTRkNzhlMWYxZTAyN2ZmZmQxNDU2Nzc5ZWM0YzExODQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://src-tauri/src/removable/linux.rs",
+          "version": "repo-file-v1:sha256:33825e1833c740cd2ace66a4baee49bfc5f6c0164e947f8588f9cc59d15697b2"
         },
         {
-          "resource": "repo://src-tauri/src/removable/macos.rs#L1-L24",
-          "version": "repo-lines-v1:sha256:d4f2aa706d0b4ab9be1b76f1ffb90b692fb0a00406fae613d53c702f89f27d43:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM2NjhhZWFjYTU4OWQxM2M2ZTc1YjBhOTYyNDBkZDYxMWM0ZDgyMDc3ZTczNzBmYjI4MDJiNGEyNzE1ZDEwNjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://src-tauri/src/removable/macos.rs",
+          "version": "repo-file-v1:sha256:069406dfbd7a811ea348f295ebbd5a5e5fe124a0545d4935c44caf579c62060b"
         },
         {
-          "resource": "repo://src-tauri/src/removable/mod.rs#L34-L112",
-          "version": "repo-lines-v1:sha256:aa24071efb11c03510a94f15fb2e1a3d34485b3d21c7d5d3d0856f0d6e862edd:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc0YzRjMGI0Y2NhM2UxZGQyMzExNDNhMGJkZGE5NzkzOWVjMmNjNWRiOGVkOTg5MjEzZGNiNWFlMjVjZjI0YjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI1NGZmNjA3ZWI0MmJlMzU0MjRmNDZjYjA4MDJhMzM4Njk5ODE0OTI1OGZkM2U1MGM5ZmJiMTZmNzBlNzRjYjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://src-tauri/src/removable/mod.rs#L23-L110",
+          "version": "repo-lines-v1:sha256:55c01b1bb31e3c46c5e642746a56fdc7a0249224be2b5dd88c0c4d18cd9211e4:eyJzZWxlY3RlZExpbmVDb3VudCI6ODgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjMTEzMTk2OGE4ZGU4MTIwN2YwNjViYTc0Yjk2OTEwYjNhNzQ5NTdkNWZjNzZkMzg3NzcwYjYyZDA3N2E3Y2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2OTk4MDU5MWRmMjNlODZkZDVjMjI4MjY2ZmQ2NjAyYmY4YTUxMjUzODcxZTdlYWRiYjg5N2Y0OTNkMzk2OWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/removable/tests.rs#L306-L373",
+          "version": "repo-lines-v1:sha256:16a1ce0cab4e7af639392945125d03ff80b4f82e1b7bfed5872a5b553233a7c6:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4Y2UyNWY3NzExZDYwZWU5MTRjNzNjNWIzMWRiMzhhZTk3Y2Q4NDZlMTUxYWE2MzgyNTIzMmVmNTVmYzY3OTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3NzJlOTI3NWNiNmEyNGZmYTg5NTJjY2E3N2U2YTRhNWEyYWRlNjNjZWQ0MzUxYzZiYzU4NjBhYWZlNTIyZDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2MzkwMjM1N2ZiM2Q5ODVlMDUxNzUzMTU3ZjNkOGI1MzZhYTA4ZmIwZjk3MWVkY2Q0NDAzMDE1MzA4OGIxMDIifQ"
         },
         {
           "resource": "repo://src-tauri/src/removable/windows.rs#L149-L225",
-          "version": "repo-lines-v1:sha256:771c87b3a03509cfda3f1e8471dfbe506f145fb18b976337175bca9195a473c9:eyJzZWxlY3RlZExpbmVDb3VudCI6NzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjNWU2NDk4M2I0YjQwN2IyZDI3YTYxNWQwM2U0MDhkNDE4NDI0ZDZhODZkMTMzYjVkMWU2MTlkMWIwMTg4ODUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MjJjNDJjZDE5YzZkMDNkODA4YzQ1MjcyMDU1MjgyNWI3ZWExYzViNDkxYjIxODUxMWNhYzc0MTVjZjlkOWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyMzQyZDYyNTY3ZGRjMDE1NWJjNGUxYWNlNWNjOGJkMWUxYWVkYTcwYWM2ZTJlMjFjZDFiZGJlNWYxNjM0ZjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwNDYyMDMzNzkwMzNmOGYyZWQ2MDZiMWFlZjk1YmIyMmMzYjhiNTk0OGQ3YzQ0YWUzMTM5NzY4MmNlYTRjZDQifQ"
+          "version": "repo-lines-v1:sha256:213b2390b2a8e1808c22c7485ecee62e386259f7b7a08c7153a7f7545396cd9c:eyJzZWxlY3RlZExpbmVDb3VudCI6NzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjNWU2NDk4M2I0YjQwN2IyZDI3YTYxNWQwM2U0MDhkNDE4NDI0ZDZhODZkMTMzYjVkMWU2MTlkMWIwMTg4ODUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhkYjMzOWMxN2Q0Y2M1NGU3MGM0ZmNmZWNiNjExYmI5ZTdkMzYzZjI1YjE4ZTA5MjNhMWQzMDZjYzk1OTI0ZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyMzQyZDYyNTY3ZGRjMDE1NWJjNGUxYWNlNWNjOGJkMWUxYWVkYTcwYWM2ZTJlMjFjZDFiZGJlNWYxNjM0ZjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZjZThkMTM3ZmE0NGFjNjY0OGIzYTRhNmY1NmY1MGJhYmE2NzczNDE0NWQwNDc0YTRlNTU1Njk3ZmQyNmJlYzgifQ"
         },
         {
           "resource": "repo://src-tauri/src/removable/windows.rs#L41-L105",
@@ -152,43 +144,43 @@
       "evidence": [
         {
           "resource": "repo://src-tauri/src/db/folders.rs#L123-L190",
-          "version": "repo-lines-v1:sha256:0401822ba229d41f6c6ebeb647041f6e635eb99a2a5264604967961e5f4d2670:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1ZTdhMGQ0NjYzMDE0MDY0ZDI5OGU5YmI1OTE3OWVmMWNkZjQ4Njk1NTNhZmYxY2U2NGE5YzU4ZGMyMDM1NWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4OTc3MWZlMWI2NjI4ODc1YWEyM2U3ZGJlNGFhNzE0NjFkMDBjZGZiNjZkZGYxMWI5ZDgyMGFjNTg5N2ZkZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1ZjZmNDY2ZTU5Y2ZjMzA3MDNjNDVmNzJhZjY1ZGU1NGFjMzYzZDM1NGNjMWEzMzMwMzUwYWNkNDUyNDM0YzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+          "version": "repo-lines-v1:sha256:99ce48cfbe67c30b5f936aba5649b608e28b28f3b7668a69b295296fdc949649:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1ZTdhMGQ0NjYzMDE0MDY0ZDI5OGU5YmI1OTE3OWVmMWNkZjQ4Njk1NTNhZmYxY2U2NGE5YzU4ZGMyMDM1NWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1ZjZmNDY2ZTU5Y2ZjMzA3MDNjNDVmNzJhZjY1ZGU1NGFjMzYzZDM1NGNjMWEzMzMwMzUwYWNkNDUyNDM0YzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
           "resource": "repo://src-tauri/src/removable/coordinator.rs#L64-L112",
           "version": "repo-lines-v1:sha256:6665e5aeeeb6cd6d825c33c03db74f648b0289652ba9569e18d90788fc21fcd0:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlOWFjZDVlMzc5MmNkNjYwMzA0ZTRmZmQ2YTE0ODExOTBlOTU1N2Y3MDE1MDZlMGM0NjViNzNmMjllYTFkNjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3YTVmZmEzZTA5NWRmMDViNmIzMzMzODcxYWJhMWMxYjNlMjVhYjNkYmYxZDQ5MmYxNTRjMmNjMmIxMjJmNTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBlZjk3MDg3M2FiZGM2MGMxZDM5MGIwNTBjMDNlOWM0OGMyY2Q1MmZmYWQzNTFlZjk2NDI4M2Q3Yjc5ZDJjOTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRiMzNkZTVmMmUxMWVhYmVmZGVkZTYyMzEzMDVhNWExZTg1OWIzNWE0M2I4YTc1NzYyNGUyNzdhMjJjMWQ3ZjQifQ"
         },
         {
-          "resource": "repo://src-tauri/src/removable/tests.rs#L162-L249",
-          "version": "repo-lines-v1:sha256:a52d61416d402f3f7c3e98318c285af366d9e9c1da4c498730dfca9ca8ac2c1d:eyJzZWxlY3RlZExpbmVDb3VudCI6ODgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxOTQ4NGVlZGYzNjRmYjhjMTJmMWViOThmYmY2YTliNGY2NTBmNDI3ODc0YThkNzM1OTAxMGFhZGU0MzFiYzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMyNTM4YzI1YTEwMGVhZjc5NjlhOTdhMWRjYTlkMTAzNGE2ZmJmM2VlZDk3OTdkZDljMzllZDE5MTkxMDc1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxNmM3ZjYzNTExZTFkZTY2YzA1Zjk3MWQwMWUxYTY1MmRiMmNjYTI4NmIxZTcyNTMwNzIwMTE4MmM1OTMwYWEifQ"
+          "resource": "repo://src-tauri/src/removable/tests.rs#L162-L248",
+          "version": "repo-lines-v1:sha256:802d679dae17b967d0d93566e51b1cb0b16e09abb917e3efc61481bbd494eb30:eyJzZWxlY3RlZExpbmVDb3VudCI6ODcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxZDQ5OTZhNTE1M2EwNGU5YWVlYjllNDFjNjAyZWIwNjk1YTZhMjM3ZTgxNThmOGY2ZjgxZTBkNDBiNjAxMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3NzJlOTI3NWNiNmEyNGZmYTg5NTJjY2E3N2U2YTRhNWEyYWRlNjNjZWQ0MzUxYzZiYzU4NjBhYWZlNTIyZDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxNmM3ZjYzNTExZTFkZTY2YzA1Zjk3MWQwMWUxYTY1MmRiMmNjYTI4NmIxZTcyNTMwNzIwMTE4MmM1OTMwYWEifQ"
         }
       ]
     },
     {
       "id": "claim_8fd22c9e5dc34c8eb0667583e6a1381c",
-      "statement": "A volume removal preserves the watched-folder and removable-binding records for recovery, but reconciles every bound folder as unavailable; a reconnect resets only failed queue and sync-state records within that folder to pending and clears their failure reasons.",
+      "statement": "A volume removal preserves watched-folder and removable-binding records for recovery while reconciling every bound folder as unavailable. On reconnect, only failed queue and sync-state records within that folder are reset to pending and have their failure reasons cleared; resetting queue records also changes an idle singleton job to running.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/db/queue.rs#L404-L448",
-          "version": "repo-lines-v1:sha256:3d66b03acee58b94dc88b4ef66a1064a0059e161d8ef3869cc51d6e6928b6f52:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2NmY0ZWZlZWI5YjQ4NjY0NzI0MmM0NDI0OTcyNTRlMDkzMWQ5MzliODY4OTJjNWRhMWY2ZGU0NTUzNmFmZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZkOWI5MDBkMjE3ZTI0YTlmYzNiNDcwOGM0NjFmYTkxMGU3YzJjNzdmNzk0MjczMTRiNGNmMmRlNjhhMjNjOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIifQ"
+          "resource": "repo://src-tauri/src/db/queue.rs#L404-L445",
+          "version": "repo-lines-v1:sha256:69c72c888e8984dc3e59269c9295d95e4be44ed77c7018a827a00c529e6e7b37:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2NmY0ZWZlZWI5YjQ4NjY0NzI0MmM0NDI0OTcyNTRlMDkzMWQ5MzliODY4OTJjNWRhMWY2ZGU0NTUzNmFmZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwMGZkYTE0YTAyOTEwMzUzMDBhMzNmNDI1ZGIwMDkwZWJhYmIyNTA3ZTI1ODU4MWVlMTlmYzM1YmEyMzU4ODMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZkOWI5MDBkMjE3ZTI0YTlmYzNiNDcwOGM0NjFmYTkxMGU3YzJjNzdmNzk0MjczMTRiNGNmMmRlNjhhMjNjOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
         },
         {
-          "resource": "repo://src-tauri/src/removable/coordinator.rs#L117-L158",
-          "version": "repo-lines-v1:sha256:f873b7097d3fbf19b6e9aa7b0a69394ae1fb0f9c675900bf9710f5259889f767:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZkNmVhMjQ4NTJlMzcyZTcyMzYxN2M5ODJmZTBiNzRjOWQ1ZDllYjk1MGUwZTI4MWViMTczYTI0NTA5MzVlOTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5MTVkZWRjYjlmNWE4ZTI3YTFiODhiNmE3Yzk1NjA5OWZjMmI1NTk2ZGVjNTRkOTI2NTgzZTkyZGU2NmFmNWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY1MTYwNDUxYTJhNGYyNTkwMzlkMDhjNjFiZjkzMmZlZDQ4MDFmNGEyZjc1ZDYwOGRhZDNlYjZkMTIzNmUwMTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJmM2UzN2Y2NzljZDY2NzAyYjcxZjNmOThkN2IyYjYyZTAwMGEzM2FkYjQ4OTE1NDdjNjZhOTJkNDEyNGIxNzkifQ"
+          "resource": "repo://src-tauri/src/removable/coordinator.rs#L104-L111",
+          "version": "repo-lines-v1:sha256:4c3ca40cf9458aed7b8abd6df9495bd426c47e41ba0692920d75998b93314365:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDkwYWM1MzkyMTQ0MGU2NTI1YTU0YzMzZmRiZGFiYjhlOWJhY2E0MzViYmM3MTRkYjMzMGIwMTZmZjMwNjljOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjAwNDFlMDZhMDcxYTk2MmNkMjYzMmNmNmQ4NDJiYmRlM2JhMWYxZjE2ZDk0NjdhNTY5OWNhZTc3YzZlMjQxZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzllYWM4NzY4N2VkYTE4MGNhZmNiNTcyNTNhZDdjM2U4ZmI1NDBiYjRhMDE5ZTViZGRlODdhNDk5NzE4NzdhNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTI3ZDFhNTE4ZDhiMjYwMjZhYWY5NDQyNDI5ZmE5NDhkZDViZWRjZjczOWNiODBhOGYyMWFhYWI3MjUzNjYxMiJ9"
         },
         {
-          "resource": "repo://src-tauri/src/removable/tests.rs#L306-L374",
-          "version": "repo-lines-v1:sha256:67c9f76bc1ae977f24ef48df6a96dce6de09e2e4a024ae23bfe15c7b2fa0d0d2:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxOTQ4NGVlZGYzNjRmYjhjMTJmMWViOThmYmY2YTliNGY2NTBmNDI3ODc0YThkNzM1OTAxMGFhZGU0MzFiYzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVmYzc2NTZkM2RhN2NkMjM5N2QyYWViOTdkYWYxMjg4YTc2MWFlMjQ1OWM4MTI2Yzk4MTY2NjM5ZDk0MGIwOGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2MzkwMjM1N2ZiM2Q5ODVlMDUxNzUzMTU3ZjNkOGI1MzZhYTA4ZmIwZjk3MWVkY2Q0NDAzMDE1MzA4OGIxMDIifQ"
+          "resource": "repo://src-tauri/src/removable/tests.rs#L306-L373",
+          "version": "repo-lines-v1:sha256:16a1ce0cab4e7af639392945125d03ff80b4f82e1b7bfed5872a5b553233a7c6:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4Y2UyNWY3NzExZDYwZWU5MTRjNzNjNWIzMWRiMzhhZTk3Y2Q4NDZlMTUxYWE2MzgyNTIzMmVmNTVmYzY3OTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3NzJlOTI3NWNiNmEyNGZmYTg5NTJjY2E3N2U2YTRhNWEyYWRlNjNjZWQ0MzUxYzZiYzU4NjBhYWZlNTIyZDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2MzkwMjM1N2ZiM2Q5ODVlMDUxNzUzMTU3ZjNkOGI1MzZhYTA4ZmIwZjk3MWVkY2Q0NDAzMDE1MzA4OGIxMDIifQ"
         },
         {
-          "resource": "repo://src-tauri/src/removable/tests.rs#L430-L519",
-          "version": "repo-lines-v1:sha256:d7039d048ad3293be1eb42b7030e8f821e04fc28f33a6d6865c8ebc481e1cc5d:eyJzZWxlY3RlZExpbmVDb3VudCI6OTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxOTQ4NGVlZGYzNjRmYjhjMTJmMWViOThmYmY2YTliNGY2NTBmNDI3ODc0YThkNzM1OTAxMGFhZGU0MzFiYzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE1OTM3Njc5MWU2OTQ3NmY3YTA3MTg5NmRjMjViOTEzN2VmODQyM2UzZTk2MzQwY2NmYWMzMzIzZDQyY2E1MWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU3YWI0YzRhNzYzYzcwYzFmNmMzZTFmYjEwZTFhNjE2NDY3M2IwNzY1ZWE5NTNjZmJmYmRhZWZmODJlMjg1ZGUifQ"
+          "resource": "repo://src-tauri/src/removable/tests.rs#L430-L518",
+          "version": "repo-lines-v1:sha256:373e48b85b32310527fc99b257e038c9f270a05ec70dc4675f82d7ccdf252b5a:eyJzZWxlY3RlZExpbmVDb3VudCI6ODksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjZGNmZTI4MjkwMjJiZjQ4YzJiZTM2YWE1MTU1MWVkMTZhM2U4MGM5ZDIxYjMxMjdiYTdmYzE4MDc1OGNmNmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3NzJlOTI3NWNiNmEyNGZmYTg5NTJjY2E3N2U2YTRhNWEyYWRlNjNjZWQ0MzUxYzZiYzU4NjBhYWZlNTIyZDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU3YWI0YzRhNzYzYzcwYzFmNmMzZTFmYjEwZTFhNjE2NDY3M2IwNzY1ZWE5NTNjZmJmYmRhZWZmODJlMjg1ZGUifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-15T15:31:48.485Z"
+    "at": "2026-10-16T12:54:13.301Z"
   }
 }

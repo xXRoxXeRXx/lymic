@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:75ef81918ac8fe2f4f840e7df1e83c94164358012497301fa92fd771e0b3abed",
+  "pageVersion": "sha256:052c2775e01bd717404734e00a38e002b8dc330a481753d72db5e0bf2e8abb46",
   "claims": [
     {
       "id": "claim_cfbbe8313c3d41da8e6f2258cee78de1",
-      "statement": "The package scripts provide Vite development, Vitest, Svelte checking, and Tauri CLI entrypoints.",
+      "statement": "The package manifest defines Vite development, build, and preview scripts; a one-shot Vitest test script; SvelteKit synchronization plus Svelte checking (including watch mode); and a Tauri CLI entrypoint.",
       "evidence": [
         {
-          "resource": "repo://package.json",
-          "version": "repo-file-v1:sha256:d25a90805cab901ff64ea307c5031f655c764add49f17e26000571971f21563a"
+          "resource": "repo://package.json#L23-L31",
+          "version": "repo-lines-v1:sha256:34486a9048e9944cfdc475eee65e308aafbac54d51627425bd30870771052ff7:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzQ4MzNkNTk0OWMwM2E0MGNhOTUyNDkxNjEwYTY2NTk2NDRiM2FhNDY2MzYyZjc5OTAyMGRiZjE5ODE1NDdkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTMwZDZlYmEzYjU3NWZiYmQxZDBmZjdhZWIzMzI2MzdiZTc2ZGNjMWRhZjg3OGU4NDRlNDg3NDIwOGMzY2IzNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWI5Y2UwMzU3ODc0MmM5ZjNiNzg5OTc3ZTg1NTllMWMzYzk3Nzk5ZWYzMDU1ZTA2ZjE1YzM2YmFkMTg2MDFlNiJ9"
         }
       ]
     },
@@ -31,10 +31,82 @@
           "version": "repo-file-v1:sha256:c76e136a52aec96ff1cd27bcb2a411d6b9a3e79c36f84666f84eef2f00938b68"
         }
       ]
+    },
+    {
+      "id": "claim_8141a3c473d74475aa5d6f25e80545c8",
+      "statement": "Repository handoff guidance runs Svelte checking and Vitest plus Rust formatting, warning-denying Clippy, and locked tests against the `src-tauri/Cargo.toml` manifest; `npm run tauri dev` is the end-to-end desktop smoke-test entrypoint.",
+      "evidence": [
+        {
+          "resource": "repo://docs/agents/application-map.md#L100-L112",
+          "version": "repo-lines-v1:sha256:939518c3b6306c0c4e28d82fd539cb7fc84c1a21fe6f3130663acae8744f2374:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2N2EwODQ3MjUyZTNkMWNiYTkxYzU4MzIwNGQxYzk5MWQwZDYyYzM3OGIxMDYyOGQzNTRkYWEzMmY5OWYxMzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhMTc4NDdkYjMyYTM2ZGE0ZTU2YmQwOGIwNDkzYzdjNDM0ZmQ2ZjQ4OGQyN2IwZjM2M2I1NDNjNzZhZTVjMjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1NWNlM2Y1YzhiNWI3YjQ2ZmJjMWVjNzkwNzljZGMwYjZmZWM1NTRmYjIxNjVmODA2YWUzYzg1N2IxNDU2OTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjNGI3YWM5MWI1ODIyYjU5MTA4Y2ZjZmZkMmI5NzkwYzA5NjAwYTZlZDQxMDY3MjM4ZjQ5ZDNlNmExNWM5MmEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/Cargo.toml#L1-L16",
+          "version": "repo-lines-v1:sha256:2acbe151a7a6511b67ec111a8a489aaf4d9b0b5c85f41e8cfcc41a0be4693bea:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhM2NkNWE4MWIzZjlhNjIxYWE0OTNkOTBjNDVmNDJhYjU3MWQ0ZTQyYjhhZTVhZmYzNTFjYjBhMDJkMDZkODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjYjNlNzVkNzJjZDYzNjBkYTVmOWQ3Njc4ZTU3ZDZhODdhNmY5N2I3OWM3MjA5MTJhODI4ZWQ1NDhhZGI0NjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjNDUwYjhhZWIxMTM4YmYxNzVmZGMxZDk4Zjk1YWZjZDY3YzMyNzQ4MzY2YzE2ODA4NTVkOGRhYzE0NWFmZTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1f6eb4f9911c4eafb4c69c3a9f6a6e9d",
+      "statement": "The Rust database tests use isolated in-memory SQLite pools with the production migrations and cover recovery of a RUNNING job as PAUSED, queue path deduplication/order, and corrupt-database quarantine and repair.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/db/tests.rs#L11-L46",
+          "version": "repo-lines-v1:sha256:15c19c6cc875a7d7647cca22654b600ffe82cd7e4b71e4492036e51b962277d2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxYWE1ZjVhYjcwNTcyMTkyZDdkMjhhZGNjOTQ4NzVhOTdhYjdmZTdiOWE4MTA2MjJkZWFlZTE0NTA5MjFmZWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiM2YyZTExYjg1MzU5OGVmZjZhMWVhYmE0M2Y4MTQ5YjljNGY5OGFhODVlMjJjNDYwNjI5Zjg2OGI2ZmQ0ZWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJmNzQxMDllYWIxMWI3N2E2OTllNjA2NWY2NDM3MzVmNjhkYWFiMTdlMWEzZTYxMTQ3ODgwODFhNjk3NTczZWMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/db/tests.rs#L48-L85",
+          "version": "repo-lines-v1:sha256:96cdf1d559a7fe596c2abb83048ff07b1c160f7d382242d1bf9697651c066eb0:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxY2M0MDY4N2QyNDRlOWRhZjkxY2VkNDY1MjMyNjU2OWE0ZmI2ZGZjODFkMDNmYmU3MjNhNWVhM2NjYmU5ZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMwYmUwZjhmMTQ4NWMxYjg3YzE4N2QyODA1MTNmYmQ0Yjg1MTE3ZDE4NGE5MDkxODczYzJhMzNjZjNjYjQ1MzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0MjU5MzE1ZjBjZWJhYjQyYzVkZjc3ZTUzMDFlZGJkNTM3MmJmOTE1NDlhZDEzOTY3NGQ4YzAxYzc1ZWIxMzkifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/db/tests.rs#L734-L770",
+          "version": "repo-lines-v1:sha256:43f228f191ed569e21bd42f4dce945c46607186a4c9055ee979826164cc843fc:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxY2M0MDY4N2QyNDRlOWRhZjkxY2VkNDY1MjMyNjU2OWE0ZmI2ZGZjODFkMDNmYmU3MjNhNWVhM2NjYmU5ZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhZGYxNTM5NjJmMzJlM2RmNmFlNmZmZDNkMGY0YzFmMDhkNWI3MDIyNmY3Yzg0NjQ2Mzg0OTU5NWRlYzJhMGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc1MDZiY2ZkZmMwNjJhNjg5M2ZkNzhmM2Y0MWU2M2JjMDNlOWIzMjQxY2FkYTFkYmU5NGUxNWZmMjFiZjFkMTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE3YTU4MDA3MGY1NTVjNGE5NWI4M2E2ZTA0NTk1NzVkODg1NGQ1YzEzODQ1MGJkNDMwZjE5NmM2NzcwNTcyYTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1633ba4d251b4cb583d50ba4806da0e4",
+      "statement": "Removable-volume coordinator tests exercise remount path reconciliation, watcher reconciliation and rescanning, and verify that removal unwatches the folder without deleting its persisted folder or binding rows.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/removable/tests.rs#L161-L248",
+          "version": "repo-lines-v1:sha256:a52d61416d402f3f7c3e98318c285af366d9e9c1da4c498730dfca9ca8ac2c1d:eyJzZWxlY3RlZExpbmVDb3VudCI6ODgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxOTQ4NGVlZGYzNjRmYjhjMTJmMWViOThmYmY2YTliNGY2NTBmNDI3ODc0YThkNzM1OTAxMGFhZGU0MzFiYzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMyNTM4YzI1YTEwMGVhZjc5NjlhOTdhMWRjYTlkMTAzNGE2ZmJmM2VlZDk3OTdkZDljMzllZDE5MTkxMDc1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxNmM3ZjYzNTExZTFkZTY2YzA1Zjk3MWQwMWUxYTY1MmRiMmNjYTI4NmIxZTcyNTMwNzIwMTE4MmM1OTMwYWEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/removable/tests.rs#L305-L373",
+          "version": "repo-lines-v1:sha256:67c9f76bc1ae977f24ef48df6a96dce6de09e2e4a024ae23bfe15c7b2fa0d0d2:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxOTQ4NGVlZGYzNjRmYjhjMTJmMWViOThmYmY2YTliNGY2NTBmNDI3ODc0YThkNzM1OTAxMGFhZGU0MzFiYzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVmYzc2NTZkM2RhN2NkMjM5N2QyYWViOTdkYWYxMjg4YTc2MWFlMjQ1OWM4MTI2Yzk4MTY2NjM5ZDk0MGIwOGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2MzkwMjM1N2ZiM2Q5ODVlMDUxNzUzMTU3ZjNkOGI1MzZhYTA4ZmIwZjk3MWVkY2Q0NDAzMDE1MzA4OGIxMDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6b5dc71f510e444d9fbde43ddb8c1e40",
+      "statement": "Audit logs are JSON Lines files in the application data `logs` directory; the writer uses five 5-MiB rotating slots, reports queue saturation and recovery through its reporter, and the runtime attempts to append and flush a shutdown event on process exit.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/mod.rs#L129-L145",
+          "version": "repo-lines-v1:sha256:49cb99e87d0883d62a1f21d3ccc30d8c947492f7cc2461a63bdd5b7177183757:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2ZWM4ZDYwOGFhNjc5MmY4ZDk0ZjdkOWRlOTg0YmI4ZTg4MmYyYzg2MTIyM2MzMWQyOGFiM2MyNGVlNGFiZDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjNjQ3OWNjMjMwNDQwZmQ0MWU4MjI0MjE4Njc5Njk4NTU5ZDI4OTNiZDY3YjQzODBhZmFiODExYjM4YTU1YWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNmNDIyYTE2NDQ3ZGQ4NTEwMWM0YzgzODFkM2FhYjc4MzI0ZmUzNGNiM2VkMzg5OTIwODg3YWNlMjNmNDFhMDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY0MzU2M2NlNmY1NDMyOTFkNWNlNzZlNjZhNTk3ZGE1NTRjZTIyNjNlMWU5OGM2YjZjM2U3NzFmMTE0OTMxYmMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L127-L155",
+          "version": "repo-lines-v1:sha256:eec1d987cb575848979101c257b43e529f5ed772b1208defb937f0a86ae52296:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiNDM4Y2E3NDNmNjM4ZDM0ZTA3YzM5N2MxNDU4YWFjOGYyMWYyZGVkZTE5YTU5ODdiYTZkOGU4OTQ1MjZjMWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwNzFjNmU5MjJkNjRlM2MyZDEyZDFiNDAwODRjMzFjYzRlNzgwN2ZiNDJlN2Y3MjI5Y2M4ODYwNWU3ZmM4YjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBkZmE1Mjg4MWQxY2NkMWRjMzEwZGM1ZjhmMWY4OGUzZmIyOGJiOTUxNjJiMjcxMDg4Mzg3YzNkNzBmODMxZjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE2NGQxYjA4NjliOGE5OTM2NzlhOWQ1ZThjNjcxOGVhOTc4MjI2N2NhOGUxM2IzYTlmMjE1MmNiZmE4MmZlNWIifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L13-L18",
+          "version": "repo-lines-v1:sha256:a6ba225069f4528549165aa576c8d5c00502a0f92039fb3b5cdca0d13ac88a68:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjdlMzBiNTQ1YzZhMTNmOGYxNWUyMmQ3ZjEwNmU4ZjVjNzRhOTA0ZDE3NzI5MTBmY2EzNzgwODRlMTQ4ZGNhZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWU0YmUyODZmNDBmMThhMTIzZDI3MjBiNTcyYjdmYTEwODk5NmYzMjhlYjg0Yjc0M2U5YTA5YTNlMjQ5YzJiNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTBiZTY3MjM1NTgyOTk0YjI0NmJmYTYyYTJhNGNmYzFjNzRkZTQ4MzNmZGRkNjJhOWQ1MzQ1YTRiNjJjNDkxMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzA2ZGEzODAxZTFiZTE4Nzg4NmRkNzZlNmUwZjgyMTk4OTNlNDljNzdkZWRjNjY3MzMwNjQ3MzJiZTA4M2U4NyJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L193-L223",
+          "version": "repo-lines-v1:sha256:4f5bab9f6c0ceeab680a50c263d799963ecf1d77a7b93e15e0997a113cb6e6c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiZjBkNjQwNWQxMjM5MzMyM2I2NWE0YWI2MzA0ZjNiYTA4N2I5MDBkOTJiZGU2YjQzMzdiNTcxM2ZiMzdiMjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1NGZhMzM5YzhhMWFkYTRkNDY0MTA2OGYyMzVkM2EzMmU4MTAxZmQ3ZWNlYzM3ZWY3YTFmMTgyMzNiYjQ5NzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZmNzAxYmNiYzMwOTk4YTIzZTViYjA5NTQ1MWFlMGE5ODU1YTYyZWY5NjFiMzJlMTk1Yzg4NWYzNjljN2UyNzAifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L66-L114",
+          "version": "repo-lines-v1:sha256:d5c9aee6186122a4c09efb4cd2ed967b06df493ea8cbaff465c367b5ef6ffbf0:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA0YmZmZDEwMDc3NDFkMTJmODM0ZmFhNDEzNWQyOTA5NGU4NmFjMjhmMGFhYWRhMGQ2MDVmMjU4ODAwYmFkZTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5YjE5ODJlOGRkNzQ4MTE4MTQ2YjM5YTJkMDA2MmY0MDgxZTM0Nzc5Yjg2NzVjMjM0YzRmYjEyNGRjMzkzOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZjY2Q4YWM4YmY2MWNlMWNmYjYzMWEzZDU0ZDIxZjI0YmNkMmZhMjFlNGI5YWYwZjAzMjVmZWQ2NTc5MDJjZWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBhNzkwODBiNzU5YTE2OTQyN2YzOTMxOTdlMjY0MmRhZTBlNDgzZDkwNWFmNzViZWZlMmEzNDMxMzI2OTFkODkifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-15T07:26:54.164Z"
+    "at": "2026-10-16T12:54:13.301Z"
   }
 }

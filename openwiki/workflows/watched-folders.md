@@ -40,10 +40,10 @@ sources:
     resource: repo://src/lib/controllers/removable-volume-controller.svelte.ts
   - id: openwiki-source-9d08ef4075c63d08906a8b88
     resource: repo://src/lib/controllers/sync-controller.svelte.ts
+generated: { by: "openwiki/0.7.2", at: "2026-10-16T12:54:13.301Z" }
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-15T15:31:48.485Z
-generated: { by: "openwiki/0.7.2", at: "2026-10-15T15:31:48.485Z" }
+    at: 2026-10-16T12:54:13.301Z
 ---
 
 # Watched Folders and Removable Volumes
@@ -70,6 +70,8 @@ flowchart TD
     Scan -->|no| Reconcile["30-second reconciler retries it"]
 ```
 
+This is the registration path for both ordinary folders and accepted removable folders.
+
 Normalization makes a root absolute, removes lexical `.` and `..` components, and canonicalizes when possible. That preserves a usable absolute path for an offline folder while resolving available-path aliases. Comparisons are component based (and case-insensitive on Windows), so duplicate roots and parent/child pairs are rejected, but `Photos` and `Photos-Vacation` are siblings rather than conflicts. Scanner-side multi-root handling repeats the overlap protection, so old or otherwise invalid configuration cannot cause duplicate discovery during bulk scans.
 
 An existing non-directory and an access error are rejected; a `NotFound` error is retained as a deferred watch. For an available root, watcher registration precedes persistence. If persistence fails, the command attempts to undo that registration. Once a folder is persisted, the tray sync action is enabled even if the path is currently offline. An immediately registered root is scanned asynchronously and handed to synchronization only when authentication permits it.
@@ -86,9 +88,9 @@ The watcher callback forwards only create and modify events to a bounded channel
 
 ## Removing a folder
 
-When a root has active coordinator work or stored sync work, the first `remove_folder` response sets `requiresSyncCancellation`; the frontend presents a warning and repeats the command with `confirmCancellation: true` only after confirmation. Otherwise removal proceeds immediately.
+`remove_folder` is a two-step protocol. A request without `confirmCancellation: true` performs no deletion: it reports whether the root has active coordinator work or stored sync work. The frontend then shows either the sync-cancellation warning or the ordinary removal warning and retries with `confirmCancellation: true` only after the user confirms.
 
-For a known folder, the backend first unregisters its watcher, then cancels in-memory work and discards queued and sync-state data scoped to that root, and finally deletes the folder row. Component-aware path predicates prevent cleanup from reaching sibling roots. If data cleanup fails, it reconciles the watcher to the path's current availability; if folder deletion fails, it likewise tries to restore watching and logs a restoration failure. Removing the row also removes any removable binding by cascade. The tray sync action is disabled only when no persisted folders remain.
+For a known folder, the confirmed operation first unregisters its watcher, then cancels in-memory work and discards queued and sync-state data scoped to that root, and finally deletes the folder row. Component-aware path predicates prevent cleanup from reaching sibling roots. If data cleanup fails, it attempts to reconcile the watcher to the path's current availability; if folder deletion fails, it likewise tries to restore watching and logs a restoration failure. Removing the row also removes any removable binding by cascade. The tray sync action is disabled only when no persisted folders remain.
 
 ## Removable-volume lifecycle
 
@@ -96,40 +98,41 @@ A removable binding stores a watched-folder ID, stable `volume_id`, and a path r
 
 For the discovery prompt, the frontend first asks the user to choose a directory rooted at the volume mount, then uses the same album modal. Confirmation calls `accept_removable_media_folder(volumeId, path, targetAlbumId)`. The command rejects a disconnected volume, a volume already bound to a folder, or a selected path outside its mount; otherwise it calculates the relative path and delegates to ordinary watched-folder registration. If writing that binding fails after folder persistence, registration compensates by deleting the folder and unregistering its watcher.
 
-<!-- openwiki: mermaid parse failed and this diagram was converted to a text fence so it does not break rendering. Fix the diagram source and restore the mermaid fence. Parser error: Parse error on line 21: ...path; watch new path end Expecting '()', 'SOLID_OPEN_ARROW', 'DOTTED_OPEN_ARROW', 'SOLID_ARROW', 'SOLID_ARROW_TOP', 'SOLID_ARROW_BOTTOM', 'STICK_ARROW_TOP', 'STICK_ARROW_BOTTOM', 'SOLID_ARROW_TOP_DOTTED', 'SOLID_ARROW_BOTTOM_DOTTED', 'STICK_ARROW_TOP_DOTTED', 'STICK_ARROW_BOTTOM_DOTTED', 'SOLID_ARROW_TOP_REVERSE', 'SOLID_ARROW_BOTTOM_REVERSE', 'STICK_ARROW_TOP_REVERSE',  -->
-```text
+```mermaid
 sequenceDiagram
-    participant Monitor as Platform monitor
-    participant Coord as Volume coordinator
-    participant DB as SQLite
-    participant Watch as WatcherState
-    participant Sync as Scan / sync
-    participant UI as Prompt and folder flow
+    participant Monitor as Platform Monitor
+    participant Coordinator as Volume Coordinator
+    participant Database as SQLite
+    participant Watcher as Watcher State
+    participant Scanner as Scan and Sync
+    participant Frontend as Frontend
 
-    Monitor->>Coord: Arrival(volume ID, mount path, name)
-    Coord->>Coord: Register active volume
-    Coord->>DB: Look up bindings by volume ID
-    alt Unknown volume
-        Coord->>UI: removable-volume-detected
-        UI->>UI: Choose folder and album
-        UI->>DB: accept_removable_media_folder
-        DB-->>UI: Persist folder + relative binding
+    Monitor->>Coordinator: Arrival volume
+    Coordinator->>Database: Find bindings
+    alt No binding
+        Coordinator->>Frontend: Emit detected event
     else Bound volume
-        Coord->>DB: Construct mount path + relative path
-        opt Mount path changed
-            Coord->>DB: Remap folder, queue, state, and job paths
-            Coord->>Watch: Unwatch old path; watch new path
+        Coordinator->>Coordinator: Rebuild bound path
+        opt Path changed
+            Coordinator->>Database: Remap persisted paths
+            Coordinator->>Watcher: Unwatch old root
         end
-        Coord->>Watch: Reconcile new/current path
-        Coord->>DB: Reset failed work under that folder to PENDING
-        Coord->>Sync: Trigger scan and authenticated sync
+        Coordinator->>Watcher: Reconcile current root
+        Coordinator->>Database: Reset failed items
+        Coordinator->>Scanner: Spawn reconnect scan
     end
-    Monitor->>Coord: Removal(volume ID or mount path)
-    Coord->>Coord: Remove from active registry; emit removal
-    Coord->>Watch: Reconcile each bound folder unavailable
+    Monitor->>Coordinator: Removal volume ID or mount path
+    Coordinator->>Coordinator: Clear active volume
+    Coordinator->>Frontend: Emit removed event
+    Coordinator->>Database: Find bindings
+    Coordinator->>Watcher: Reconcile bound roots unavailable
 ```
 
-For a known arrival, the coordinator suppresses the discovery prompt. It reconstructs each bound path from the current mount path and stored relative path. If this differs from the persisted root, it atomically remaps the watched folder and path-scoped `sync_state`, `sync_queue` (including upload-unit IDs), and current job path before reconciling the watcher. For an unchanged mount it still reconciles the watcher. It then resets failed queue and sync-state entries below that folder to `PENDING` and clears their failure reasons; if queue rows were reset while the singleton job was idle, it changes that job to `RUNNING`. Finally it starts an asynchronous scan with source `removable_media_reconnect`.
+This shows arrival and removal handling after a platform monitor has emitted a volume event.
+
+For a known arrival, the coordinator suppresses the discovery prompt. It reconstructs each bound path from the current mount path and stored relative path. If this differs from the persisted root, it atomically remaps the watched folder and path-scoped `sync_state`, `sync_queue` (including upload-unit IDs), and current job path before watcher reconciliation and the reconnect scan. For an unchanged mount it still reconciles the watcher.
+
+Before triggering that scan, reconnect resets only failed queue and sync-state entries whose local paths are the bound folder or its descendants to `PENDING` and clears their failure reasons. If one or more queue rows changed while the singleton job was idle, it changes that job to `RUNNING`. The scan is asynchronous and uses the `removable_media_reconnect` source.
 
 On removal, the coordinator resolves the volume ID from the active registry when possible, removes it from that registry, emits `removable-volume-removed`, and reconciles each bound root as unavailable. It retains the folder and binding records so a later arrival can recover them. If watcher reconciliation fails, handling returns an error to the background consumer, which logs it.
 
@@ -143,4 +146,4 @@ The frontend queues at most one prompt for an undismissed volume ID, removes a p
 
 Keep command-side root validation aligned with scanner-side overlap filtering. Changes to watcher event handling must retain the overflow/error-to-full-rescan path, and changes to removal must preserve unwatch-before-cancellation cleanup and best-effort watcher restoration.
 
-Focused Rust tests cover duplicate, parent, child, and prefix-sibling roots; unavailable/re-registered watches; event-channel overflow and ambiguous events; removable acceptance bounds and existing bindings; active-volume tracking; changed and unchanged remounts; failed-work reset; and removal preserving database rows while unwatching. Frontend controller behavior covers volume prompt deduplication, notification conditions, cleanup, removable acceptance invocation, and remove-confirmation retry. For scan result synchronization, see [Synchronization Workflow](synchronization.md). Related persistence and IPC details are in [Local Persistence and Recovery](../data/local-state.md) and [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md).
+Focused Rust tests cover duplicate, parent, child, and prefix-sibling roots; unavailable/re-registered watches; event-channel overflow and ambiguous events; removable acceptance bounds and existing bindings; active-volume tracking; changed and unchanged remounts; path remapping; failed-work reset; and removal preserving database rows while unwatching. Frontend controller behavior covers volume prompt deduplication, notification conditions, cleanup, removable acceptance invocation, and remove-confirmation retry. For scan result synchronization, see [Synchronization Workflow](synchronization.md). Related persistence and IPC details are in [Local Persistence and Recovery](../data/local-state.md) and [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md).

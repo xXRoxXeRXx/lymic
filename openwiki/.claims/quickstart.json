@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:dfa8c510246c5c03a5b673434624d8981db72e92dd0ed4e5250780884dfb82a7",
+  "pageVersion": "sha256:60af6153c247bb34634dfc1257143a1706194a16898c0270f6d5fa7e9edbbdf3",
   "claims": [
     {
       "id": "claim_655ad282a57142a1afaa65a72307e791",
@@ -28,13 +28,71 @@
       "evidence": [
         {
           "resource": "repo://package.json",
-          "version": "repo-file-v1:sha256:d25a90805cab901ff64ea307c5031f655c764add49f17e26000571971f21563a"
+          "version": "repo-file-v1:sha256:de2d75a4ff7ae68e2eff8d4823451a98dc7ec7d2507479619fbbfbb3b5a93f72"
+        }
+      ]
+    },
+    {
+      "id": "claim_8164af830c6c4fdf9cea910645795126",
+      "statement": "The Svelte root creates concern-specific controllers and, on mount, starts controller lifecycles, hydrates authentication, synchronization, and preferences state, then begins sync event subscriptions after sync hydration.",
+      "evidence": [
+        {
+          "resource": "repo://src/routes/%2Bpage.svelte#L15-L73",
+          "version": "repo-lines-v1:sha256:0756042cc9343537ade790a6c3e26203b02d118b30cd77efb73970dd110e4efb:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmYTU2OWQ5OTE4YzA2NTdjZmVjMjFhMTNlNjU4MmU1MGRiMDUxMGRjOWM3YzVhOTYyODFjMzViMzdiOGJmZTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2ZDZiYmRhOTA4NTVhMWRhNmFmZGRiODc5MzVjMjQxNjUxMzMyYzA4OWJjMDVkMmE1ZWYwODRjYWViZDQwYjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxOGZlZThlYTdkNWQ3MzNhNTc1MjA0NzRiMWQ4MTk0NWJiYmQ3OWE5NjRlZWMxZmUzMWRkZmUyM2QyOWU3MDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d92a770678ed42a495fed503af12a41e",
+      "statement": "Lymic treats the durable queue as the synchronization recovery boundary: recovered work resumes from queued state rather than requiring a folder rescan, and persisted remote asset identity prevents an album-assignment retry from re-uploading an asset.",
+      "evidence": [
+        {
+          "resource": "repo://docs/agents/application-map.md#L49-L58",
+          "version": "repo-lines-v1:sha256:77da0f22e7f43473885d0a02708fdaafcc36c9e7f4728a612aa876cac9d4f033:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3NjkwZjEwYjNkNTk2YzY1MWU1MTdhYjlmMDU2M2UxNjQwYWMzMDBmMGFjNzlkZDJlYTNhOWI1OGE0NTA5MTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwNjhkMDQ3ZmMyYjBlZWExZjhjMjkwNmZlNDM3YjQ0MDE2YzE2YTQzN2RhMjFlNmI4MGUxYTZhMWFkNjVlMDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNiOGUzNzgyNDhiYTc3NmIwZjUyNmM1ODk4ODgxMGE1YjkyMTc3OTNkOTIzNDY0ZGQ3ODUyNmU5MzU3MDc4OWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIxOGFjZTNiYzRhYjQ0NDcxMDhhMzNmMzNhMmZiMDk3NTgyNDU2N2M4ZGM4MmUwM2M4ZmYwYTgzOWEyZjY5ZGYifQ"
+        },
+        {
+          "resource": "repo://docs/agents/application-map.md#L60-L70",
+          "version": "repo-lines-v1:sha256:4a0ce12e33eca7a52bcc2c91543266e1bfe5a8f4d5d2adf90faf7fab8ca08db8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzYWE3MjczMWY3ODc0YWIyYTEzMjQ3NGNjOTIwZTljMTBiMmJiZjJkZTU5MmNhNzA1NWY3OWUyZDRiZTlkOGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjY2FmMDY4ZmRhZmU5YjFkZjc3MTlmMGU3YWEwNDAwZmZiNmJjOGM1Zjk0YmIwMGE4NWYwZmMwNGQ0MDNkYWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1MDQxNWVjN2ZjNWIzMzM1ZDQ4YjcwYWNiNzFhMWZkYThkOTAyODY0OWVlYjRkMTEwN2UxYTMyMDc5MTRhN2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzZWEzYTZkYTBhNWI1M2I3NGM0NzUzMmRlYzkwMzE3YWM2OWUwYzQ1Y2UzNDE5MDk2MWI2NzJjYTE5ZDc1OWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e49336e703b44da1af2670daac1e9305",
+      "statement": "Credentials must remain in the native keyring and out of SQLite, logs, errors, and UI events; hashing and upload I/O must stream files rather than buffer whole files.",
+      "evidence": [
+        {
+          "resource": "repo://docs/agents/application-map.md#L60-L70",
+          "version": "repo-lines-v1:sha256:4a0ce12e33eca7a52bcc2c91543266e1bfe5a8f4d5d2adf90faf7fab8ca08db8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzYWE3MjczMWY3ODc0YWIyYTEzMjQ3NGNjOTIwZTljMTBiMmJiZjJkZTU5MmNhNzA1NWY3OWUyZDRiZTlkOGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjY2FmMDY4ZmRhZmU5YjFkZjc3MTlmMGU3YWEwNDAwZmZiNmJjOGM1Zjk0YmIwMGE4NWYwZmMwNGQ0MDNkYWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1MDQxNWVjN2ZjNWIzMzM1ZDQ4YjcwYWNiNzFhMWZkYThkOTAyODY0OWVlYjRkMTEwN2UxYTMyMDc5MTRhN2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzZWEzYTZkYTBhNWI1M2I3NGM0NzUzMmRlYzkwMzE3YWM2OWUwYzQ1Y2UzNDE5MDk2MWI2NzJjYTE5ZDc1OWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1421b05c7be446f688605560713fc9cc",
+      "statement": "Watched Folder paths are normalized and may not duplicate or overlap, while temporarily unavailable folders remain configured for watcher reconciliation instead of being silently removed.",
+      "evidence": [
+        {
+          "resource": "repo://docs/agents/application-map.md#L60-L63",
+          "version": "repo-lines-v1:sha256:4cfa08d5ec6d2f2412446dc6de157451f1585f7b59829f2332791cd274ee8631:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDNhYTcyNzMxZjc4NzRhYjJhMTMyNDc0Y2M5MjBlOWMxMGIyYmJmMmRlNTkyY2E3MDU1Zjc5ZTJkNGJlOWQ4ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmIwZTViZTMwMGJmNzk0YzEyYjMyZGJjNTVkY2I5ZmZiOWY1NTdkZWYzM2Q4OTgxN2ZhNmNiYWVlN2U5N2E4YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzUwNDE1ZWM3ZmM1YjMzMzVkNDhiNzBhY2I3MWExZmRhOGQ5MDI4NjQ5ZWViNGQxMTA3ZTFhMzIwNzkxNGE3ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTZmYzdkY2JmZjM4NTFhOWRhY2I0NDFkNmZkYjY5ZGYyZTEwMDE1ZjZiZjJmMTE4NjNmNzRjMGI5NzZjMTEyYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_43158402e49b4914857f9e4bdf1cd1c4",
+      "statement": "Tauri command and event names and payloads form a frontend/backend contract that must remain synchronized with Svelte callers, and database schema changes must be added as new forward-only migrations rather than edits to applied migrations.",
+      "evidence": [
+        {
+          "resource": "repo://docs/agents/application-map.md#L69-L70",
+          "version": "repo-lines-v1:sha256:4e999cd0587428db30998859bbd7973074c31c1e4b7942151b52e6ff00ecb59f:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGRkZThiOTA0NjMxZTlmYzdhZDA0ODA0ZWVhMzllZmI1N2M5NGMyZjc5NzYxM2M2NTczNDBkZTFhNGY1MTY4YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmNjYWYwNjhmZGFmZTliMWRmNzcxOWYwZTdhYTA0MDBmZmI2YmM4YzVmOTRiYjAwYTg1ZjBmYzA0ZDQwM2RhYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDA0Y2QwYWRhOWM5N2E1OWVjNzc4YTljODVjYjBhNmU0YjNjNjY1OTllM2RkOTcxN2NmNDQxYTgzZTRmNjc2ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODNlYTNhNmRhMGE1YjUzYjc0YzQ3NTMyZGVjOTAzMTdhYzY5ZTBjNDVjZTM0MTkwOTYxYjY3MmNhMTlkNzU5ZSJ9"
+        },
+        {
+          "resource": "repo://docs/agents/application-map.md#L72-L86",
+          "version": "repo-lines-v1:sha256:6721d01b8b6f9bdbe49d4cf79c4e5df2c2c11c925c93bb514e325dcc5ac43311:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2NjVkNmU0NmIyZDFmZWY0YWJhMzBmMWFhODdlZWE0ZTgzM2Q3NDU1OThiMTk3ZTAyYWJlNjhlNzE5MzZiOWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhYTE5ZjFiYTc0MDQ0M2Q3MDNlOTczYzE4N2RmZjc3ZmRiODc4M2VlZTg1MzFkM2I4N2NkMGQ2NzY2NDc3YTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhlYWVlYjA0YmI3Y2U4ZjhlN2M5N2FiNWZiZDYyMjRkZWJmNGU3MjUwYWVhNmNlMjA4Y2RhZDNmZDM2NTdiZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxZWY2MmFjNWFiYTAxZDIzZjA0Yzk1YWY4YmYxZjQ2ZmZhNmZiMjViYzczODZjMDE0MDEyNTRiZWI0MDE3ODIifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-15T07:26:54.164Z"
+    "at": "2026-10-16T12:54:13.301Z"
   }
 }
