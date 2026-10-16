@@ -94,6 +94,7 @@
   "target_album_close": "Dialog schließen",
   "target_album_no_albums_found": "Keine Alben gefunden",
   "remove_folder": "Ordner entfernen",
+  "remove_folder_confirmation": "Möchtest du diesen Ordner wirklich entfernen?",
   "remove_folder_sync_warning": "Dieser Ordner wird gerade synchronisiert. Wenn du ihn entfernst, werden aktive Uploads abgebrochen und noch ausstehende Dateien verworfen. Deine bereits auf dem Server gesicherten Fotos und Videos bleiben selbstverständlich erhalten. Möchtest du den Ordner wirklich entfernen?",
   "never": "Noch nie",
   "hero_tagline": "Immich Desktop Client",

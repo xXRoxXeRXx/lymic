@@ -94,6 +94,7 @@
   "target_album_close": "Cerrar diálogo",
   "target_album_no_albums_found": "No se encontraron álbumes",
   "remove_folder": "Eliminar carpeta",
+  "remove_folder_confirmation": "¿Seguro que quieres eliminar esta carpeta?",
   "remove_folder_sync_warning": "Esta carpeta se está sincronizando actualmente. Si la eliminas, se cancelarán las subidas activas y se descartarán los archivos pendientes. Las fotos y vídeos ya respaldados en el servidor se conservarán. ¿Seguro que quieres eliminar la carpeta?",
   "never": "Nunca",
   "hero_tagline": "Cliente de escritorio de Immich",

@@ -1,10 +1,17 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSyncController } from "./sync-controller.svelte";
 
 const tauri = vi.hoisted(() => ({ invoke: vi.fn(), confirm: vi.fn(), open: vi.fn(), listen: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm: tauri.confirm, open: tauri.open }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: tauri.listen }));
+
+beforeEach(() => {
+  tauri.invoke.mockClear();
+  tauri.confirm.mockClear();
+  tauri.open.mockClear();
+  tauri.listen.mockClear();
+});
 
 afterEach(() => vi.useRealTimers());
 
@@ -97,7 +104,7 @@ describe("sync controller", () => {
     expect(controller.dashboard.syncStatus).toBe("idle");
   });
 
-  it("uses the confirmed cancellation command only when required", async () => {
+  it("prompts with sync warning when active sync cancellation is required", async () => {
     tauri.invoke.mockImplementation((command: string) => {
       if (command === "remove_folder") return Promise.resolve({ requiresSyncCancellation: true });
       if (command === "get_folders" || command === "get_failed_syncs") return Promise.resolve([]);
@@ -108,8 +115,50 @@ describe("sync controller", () => {
 
     await controller.dashboard.onRemoveFolder(4);
 
+    expect(tauri.confirm).toHaveBeenCalledWith("remove_folder_sync_warning", {
+      title: "remove_folder",
+      kind: "warning",
+    });
     expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4 });
     expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4, confirmCancellation: true });
+  });
+
+  it("prompts with standard confirmation when removing an idle folder", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "remove_folder") return Promise.resolve({ requiresSyncCancellation: false });
+      if (command === "get_folders" || command === "get_failed_syncs") return Promise.resolve([]);
+      return Promise.resolve();
+    });
+    tauri.confirm.mockResolvedValue(true);
+    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+
+    await controller.dashboard.onRemoveFolder(4);
+
+    expect(tauri.confirm).toHaveBeenCalledWith("remove_folder_confirmation", {
+      title: "remove_folder",
+      kind: "warning",
+    });
+    expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4 });
+    expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4, confirmCancellation: true });
+  });
+
+  it("aborts folder removal when user declines confirmation", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "remove_folder") return Promise.resolve({ requiresSyncCancellation: false });
+      if (command === "get_folders" || command === "get_failed_syncs") return Promise.resolve([]);
+      return Promise.resolve();
+    });
+    tauri.confirm.mockResolvedValue(false);
+    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+
+    await controller.dashboard.onRemoveFolder(4);
+
+    expect(tauri.confirm).toHaveBeenCalledWith("remove_folder_confirmation", {
+      title: "remove_folder",
+      kind: "warning",
+    });
+    expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4 });
+    expect(tauri.invoke).not.toHaveBeenCalledWith("remove_folder", { id: 4, confirmCancellation: true });
   });
 
   it("opens the target album modal when a folder is selected from native picker", async () => {

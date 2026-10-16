@@ -16,11 +16,8 @@ pub(crate) struct RemoveFolderResult {
     requires_sync_cancellation: bool,
 }
 
-fn removal_requires_confirmation(
-    has_active_work: bool,
-    confirm_cancellation: Option<bool>,
-) -> bool {
-    has_active_work && !confirm_cancellation.unwrap_or(false)
+fn removal_requires_confirmation(confirm_cancellation: Option<bool>) -> bool {
+    !confirm_cancellation.unwrap_or(false)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -429,9 +426,9 @@ pub(crate) async fn remove_folder(
             || db::has_sync_work_in_folder(pool.inner(), &path)
                 .await
                 .map_err(|error| error.to_string())?;
-        if removal_requires_confirmation(has_active_work, confirm_cancellation) {
+        if removal_requires_confirmation(confirm_cancellation) {
             return Ok(RemoveFolderResult {
-                requires_sync_cancellation: true,
+                requires_sync_cancellation: has_active_work,
             });
         }
         {
@@ -524,11 +521,10 @@ mod tests {
     use super::{removal_requires_confirmation, RemoveFolderResult};
 
     #[test]
-    fn active_folder_requires_explicit_cancellation_confirmation() {
-        assert!(removal_requires_confirmation(true, None));
-        assert!(removal_requires_confirmation(true, Some(false)));
-        assert!(!removal_requires_confirmation(true, Some(true)));
-        assert!(!removal_requires_confirmation(false, None));
+    fn folder_removal_requires_explicit_confirmation() {
+        assert!(removal_requires_confirmation(None));
+        assert!(removal_requires_confirmation(Some(false)));
+        assert!(!removal_requires_confirmation(Some(true)));
 
         let result = RemoveFolderResult {
             requires_sync_cancellation: true,

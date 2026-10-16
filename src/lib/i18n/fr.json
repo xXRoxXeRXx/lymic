@@ -94,6 +94,7 @@
   "target_album_close": "Fermer le dialogue",
   "target_album_no_albums_found": "Aucun album trouvé",
   "remove_folder": "Supprimer le dossier",
+  "remove_folder_confirmation": "Voulez-vous vraiment supprimer ce dossier ?",
   "remove_folder_sync_warning": "Ce dossier est en cours de synchronisation. Si vous le supprimez, les téléversements actifs seront annulés et les fichiers en attente seront abandonnés. Les photos et vidéos déjà sauvegardées sur le serveur restent bien entendu conservées. Voulez-vous vraiment supprimer le dossier ?",
   "never": "Jamais",
   "hero_tagline": "Client de bureau Immich",

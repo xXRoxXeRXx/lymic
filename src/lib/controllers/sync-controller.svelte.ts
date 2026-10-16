@@ -292,14 +292,15 @@ export function createSyncController(options: SyncControllerOptions) {
   async function removeFolder(id: number) {
     try {
       const result = await invoke<RemoveFolderResult>("remove_folder", { id });
-      if (result?.requiresSyncCancellation) {
-        const confirmed = await confirm(options.t("remove_folder_sync_warning"), {
-          title: options.t("remove_folder"),
-          kind: "warning",
-        });
-        if (!confirmed) return;
-        await invoke<RemoveFolderResult>("remove_folder", { id, confirmCancellation: true });
-      }
+      const warningMessage = result?.requiresSyncCancellation
+        ? options.t("remove_folder_sync_warning")
+        : options.t("remove_folder_confirmation");
+      const confirmed = await confirm(warningMessage, {
+        title: options.t("remove_folder"),
+        kind: "warning",
+      });
+      if (!confirmed) return;
+      await invoke<RemoveFolderResult>("remove_folder", { id, confirmCancellation: true });
       await refreshFolders();
       await refreshFailedSyncs();
     } catch (error) {

@@ -94,6 +94,7 @@
   "target_album_close": "Fechar diálogo",
   "target_album_no_albums_found": "Nenhum álbum encontrado",
   "remove_folder": "Remover pasta",
+  "remove_folder_confirmation": "Tem certeza de que deseja remover esta pasta?",
   "remove_folder_sync_warning": "Esta pasta está sendo sincronizada no momento. Removê-la cancelará os envios ativos e descartará os arquivos pendentes. As fotos e vídeos já salvos no servidor permanecerão intactos. Deseja realmente remover a pasta?",
   "never": "Nunca",
   "hero_tagline": "Cliente desktop do Immich",

@@ -94,6 +94,7 @@
   "target_album_close": "关闭对话框",
   "target_album_no_albums_found": "未找到相册",
   "remove_folder": "移除文件夹",
+  "remove_folder_confirmation": "确定要移除此文件夹吗？",
   "remove_folder_sync_warning": "该文件夹正在同步中。移除它将取消正在进行的上传并丢弃未完成的文件。已保存在服务器上的照片和视频不受影响。确定要移除该文件夹吗？",
   "never": "从未",
   "hero_tagline": "Immich 桌面客户端",
