@@ -5,7 +5,7 @@ description: Tauri composition, startup recovery, managed Rust services, backgro
 tags: [architecture, tauri, svelte, runtime]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-15T15:31:48.485Z
+    at: 2026-10-16T12:54:13.301Z
 sources:
   - id: openwiki-source-3638749eb6f61a23896edb4d
     resource: repo://src-tauri/src/app/background.rs
@@ -25,7 +25,7 @@ sources:
     resource: repo://src/lib/tauri/sync-event-subscription.ts
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
-generated: { by: "openwiki/0.7.2", at: "2026-10-15T15:31:48.485Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-10-16T12:54:13.301Z" }
 ---
 
 # Desktop Runtime and Lifecycle
@@ -34,7 +34,7 @@ Lymic is a Tauri desktop application. The Svelte 5 webview owns presentation and
 
 ## Composition root and ordering
 
-`src-tauri/src/lib.rs` exposes `run`, which delegates to `app::run`. The Tauri builder installs notification, autostart, dialog, process, and updater plugins. Its `setup` callback is the composition root: it computes whether an autostart launch may remain hidden, initializes host state, starts consumers, builds the tray, and queues main-window display when appropriate. The invoke handler is the authoritative command registry for authentication, albums, folders and removable-media acceptance, sync control and status, settings, and the database-recovery notice.
+`src-tauri/src/lib.rs` exposes `run`, which delegates to `app::run`. The Tauri builder installs opener, notification, autostart, dialog, process, and updater plugins. Its `setup` callback is the composition root: it computes whether an autostart launch may remain hidden, initializes host state, starts consumers, builds the tray, and queues main-window display when appropriate. The invoke handler is the authoritative command registry for authentication, albums, folders and removable-media acceptance, sync control and status, settings, and the database-recovery notice.
 
 The ordering is intentional. `startup::initialize` performs all required setup and manages shared state before `background::spawn` is given its receivers. Only then does the app initialize the tray. Initialization or tray construction errors propagate out of `setup`; the builder consequently does not enter a healthy event-loop runtime. Startup phase audit events mark the individual readiness, failure, tray, queued/displayed-window, and event-loop-ready milestones.
 
