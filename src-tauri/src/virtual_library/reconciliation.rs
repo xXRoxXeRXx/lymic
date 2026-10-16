@@ -3,7 +3,10 @@ use super::{
     sync_root::CloudFilter,
     timeline::{RemoteVisualAsset, TimelineProjection},
 };
-use crate::db::{replace_virtual_library_snapshot, VirtualLibraryBinding};
+use crate::db::{
+    apply_virtual_library_delta, replace_virtual_library_snapshot,
+    virtual_library_reconciliation_cursor, VirtualLibraryBinding,
+};
 use futures::future::BoxFuture;
 use sqlx::SqlitePool;
 use std::{collections::HashSet, sync::Arc};
@@ -25,11 +28,96 @@ pub(crate) trait VisualLibraryCatalog: Send + Sync {
     ) -> BoxFuture<'_, Result<Vec<RemoteAlbum>, String>>;
 }
 
+/// The narrow remote boundary used by periodic synchronization. `updated_after`
+/// is the durable cursor from the previous successful run.
+pub(crate) trait UpdatedVisualLibraryCatalog: Send + Sync {
+    fn updated_visual_assets_page(
+        &self,
+        updated_after: Option<&str>,
+        page: u32,
+        page_size: usize,
+    ) -> BoxFuture<'_, Result<Vec<RemoteVisualAsset>, String>>;
+}
+
+impl UpdatedVisualLibraryCatalog for crate::immich::ImmichClient {
+    fn updated_visual_assets_page(&self, updated_after: Option<&str>, page: u32, page_size: usize) -> BoxFuture<'_, Result<Vec<RemoteVisualAsset>, String>> {
+        let updated_after = updated_after.map(str::to_owned);
+        Box::pin(async move {
+            self.visual_assets_updated_after(updated_after.as_deref(), page, page_size)
+                .await
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ReconciliationProgress {
     pub(crate) completed: usize,
     pub(crate) total: usize,
     pub(crate) percent: u8,
+}
+
+/// Projects just the assets changed since the last committed cursor. The
+/// cursor advances only after all placeholders and their durable bindings were
+/// written, making the operation safe to retry after interruption.
+pub(crate) async fn reconcile_library_delta(
+    pool: &SqlitePool,
+    root: &str,
+    catalog: &dyn UpdatedVisualLibraryCatalog,
+    filter: Arc<dyn CloudFilter>,
+    cursor: &str,
+) -> Result<usize, String> {
+    let updated_after = virtual_library_reconciliation_cursor(pool)
+        .await
+        .map_err(|error| error.to_string())?;
+    let assets = all_pages(|page| {
+        catalog.updated_visual_assets_page(updated_after.as_deref(), page, RECONCILIATION_PAGE_SIZE)
+    })
+    .await?;
+    let timeline = TimelineProjection::new(filter);
+    let mut bindings = Vec::new();
+    for asset in &assets {
+        for projection_path in timeline.project(root, asset)? {
+            bindings.push(VirtualLibraryBinding {
+                asset_id: asset.id.clone(),
+                projection_path,
+                version: asset.version.clone(),
+            });
+        }
+    }
+    apply_virtual_library_delta(pool, &bindings, cursor)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(assets.len())
+}
+
+/// Runs one configured-library delta using the current credentials. This is
+/// shared by startup, the ten-minute timer, and the user-initiated refresh.
+pub(crate) async fn refresh_configured_library(
+    pool: &SqlitePool,
+    root: &crate::virtual_library::sync_root::SyncRootLifecycle,
+) -> Result<usize, String> {
+    let status = crate::db::get_virtual_library_status(pool)
+        .await
+        .map_err(|error| error.to_string())?;
+    if !status.enabled {
+        return Err("Virtual Library is not enabled.".to_string());
+    }
+    let credentials = crate::auth::get_credentials()?.ok_or("Not logged in")?;
+    let client = crate::immich::ImmichClient::new(
+        credentials.server_url,
+        credentials.api_key,
+        credentials.allow_local_http,
+        credentials.cloudflare_client_id,
+        credentials.cloudflare_client_secret,
+    )?;
+    reconcile_library_delta(
+        pool,
+        &status.path,
+        &client,
+        root.projection_filter(),
+        &chrono::Utc::now().to_rfc3339(),
+    )
+    .await
 }
 
 /// Enumerates all pages before publishing a durable snapshot. A failure leaves
@@ -170,6 +258,16 @@ mod tests {
         assets: Vec<RemoteVisualAsset>,
         albums: Vec<RemoteAlbum>,
     }
+    impl UpdatedVisualLibraryCatalog for Catalog {
+        fn updated_visual_assets_page(
+            &self,
+            _: Option<&str>,
+            page: u32,
+            size: usize,
+        ) -> BoxFuture<'_, Result<Vec<RemoteVisualAsset>, String>> {
+            self.visual_assets_page(page, size)
+        }
+    }
     impl VisualLibraryCatalog for Catalog {
         fn visual_assets_page(
             &self,
@@ -245,5 +343,24 @@ mod tests {
         );
         assert_eq!(filter.paths.lock().unwrap().len(), 102);
         assert_eq!(updates.lock().unwrap().last(), Some(&100));
+    }
+
+    #[tokio::test]
+    async fn delta_queries_from_the_stored_cursor_and_advances_it_after_projecting_new_assets() {
+        struct DeltaCatalog { seen: Mutex<Vec<Option<String>>>, assets: Vec<RemoteVisualAsset> }
+        impl UpdatedVisualLibraryCatalog for DeltaCatalog {
+            fn updated_visual_assets_page(&self, cursor: Option<&str>, page: u32, size: usize) -> BoxFuture<'_, Result<Vec<RemoteVisualAsset>, String>> {
+                self.seen.lock().unwrap().push(cursor.map(str::to_owned));
+                Box::pin(async move { Ok(self.assets.iter().skip((page as usize - 1) * size).take(size).cloned().collect()) })
+            }
+        }
+        let db = crate::db::init_at_path(&std::env::temp_dir().join(format!("delta-{}.db", uuid::Uuid::new_v4()))).await.unwrap().pool;
+        crate::db::replace_virtual_library_snapshot(&db, &[], "2026-01-01T00:00:00Z").await.unwrap();
+        let catalog = DeltaCatalog { seen: Mutex::new(Vec::new()), assets: vec![asset(9)] };
+        let filter = Arc::new(Filter::default());
+        assert_eq!(reconcile_library_delta(&db, "C:\\Library", &catalog, filter.clone(), "2026-01-02T00:00:00Z").await.unwrap(), 1);
+        assert_eq!(*catalog.seen.lock().unwrap(), vec![Some("2026-01-01T00:00:00Z".into())]);
+        assert_eq!(crate::db::virtual_library_reconciliation_cursor(&db).await.unwrap(), Some("2026-01-02T00:00:00Z".into()));
+        assert_eq!(filter.paths.lock().unwrap().len(), 1);
     }
 }

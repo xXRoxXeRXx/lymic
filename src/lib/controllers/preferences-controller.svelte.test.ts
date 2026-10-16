@@ -47,6 +47,16 @@ describe("preferences controller", () => {
     expect(controller.isClearingVirtualLibraryCache).toBe(false);
   });
 
+  it("requests an immediate Virtual Library refresh from settings", async () => {
+    tauri.invoke.mockResolvedValue(3);
+    const controller = createPreferencesController({ reportError: vi.fn(), addLog: vi.fn(), locale: () => "en", setLocale: vi.fn() });
+
+    await controller.refreshVirtualLibrary();
+
+    expect(tauri.invoke).toHaveBeenCalledWith("refresh_virtual_library");
+    expect(controller.isRefreshingVirtualLibrary).toBe(false);
+  });
+
   it("restores the select value when upload parallelism persistence fails", async () => {
     tauri.invoke.mockRejectedValue(new Error("Database unavailable"));
     const reportError = vi.fn();

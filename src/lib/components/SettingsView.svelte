@@ -25,6 +25,7 @@
     virtualLibraryPath: string;
     virtualLibraryConnectionStatus: string;
     isClearingVirtualLibraryCache?: boolean;
+    isRefreshingVirtualLibrary?: boolean;
     virtualLibraryCacheClearResult?: { bytesFreed: number; filesDehydrated: number; pinnedFilesPreserved: number } | null;
     themePreference: ThemePreference;
     uploadParallelism: number;
@@ -37,6 +38,7 @@
     onToggleAutostart: () => void;
     onToggleVirtualLibrary: () => void;
     onClearVirtualLibraryCache?: () => void;
+    onRefreshVirtualLibrary?: () => void;
     onLocaleChange: (locale: string) => void;
     onThemeChange: (preference: ThemePreference) => void;
     onUploadParallelismChange: (event: Event) => void;
@@ -54,6 +56,7 @@
     virtualLibraryPath,
     virtualLibraryConnectionStatus,
     isClearingVirtualLibraryCache = false,
+    isRefreshingVirtualLibrary = false,
     virtualLibraryCacheClearResult = null,
     themePreference,
     uploadParallelism,
@@ -66,6 +69,7 @@
     onToggleAutostart,
     onToggleVirtualLibrary,
     onClearVirtualLibraryCache = () => {},
+    onRefreshVirtualLibrary = () => {},
     onLocaleChange,
     onThemeChange,
     onUploadParallelismChange,
@@ -120,6 +124,9 @@
 
       <div class="flex items-center gap-2">
         {#if virtualLibraryEnabled}
+          <button type="button" class="rounded-lg border border-slate-200 bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-slate-200 dark:hover:bg-zinc-700 cursor-pointer" onclick={onRefreshVirtualLibrary} disabled={isRefreshingVirtualLibrary}>
+            {isRefreshingVirtualLibrary ? "Refreshing…" : "Refresh Library"}
+          </button>
           <button type="button" class="rounded-lg border border-slate-200 bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-slate-200 dark:hover:bg-zinc-700 cursor-pointer" onclick={onClearVirtualLibraryCache} disabled={isClearingVirtualLibraryCache}>
             {isClearingVirtualLibraryCache ? "Clearing…" : "Clear Local Cache"}
           </button>

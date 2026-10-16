@@ -15,6 +15,7 @@ use std::sync::atomic::Ordering;
 use tauri::Manager;
 
 pub(crate) fn spawn(handle: tauri::AppHandle, startup: StartupContext) {
+    spawn_virtual_library_reconciliation(handle.clone());
     spawn_deferred_watches(handle.clone());
     spawn_startup_sync(handle.clone());
     spawn_watcher_consumer(
@@ -24,6 +25,21 @@ pub(crate) fn spawn(handle: tauri::AppHandle, startup: StartupContext) {
         startup.rescan_notify,
     );
     spawn_removable_volume_consumer(handle, startup.volume_events);
+}
+
+/// Keeps the Virtual Library current even when no webview is open. The first
+/// tick runs immediately at startup; later checks are intentionally modest so
+/// a large library never causes repeated full scans.
+fn spawn_virtual_library_reconciliation(handle: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10 * 60));
+        loop {
+            interval.tick().await;
+            let Some(pool) = handle.try_state::<sqlx::SqlitePool>() else { return; };
+            let Some(root) = handle.try_state::<crate::virtual_library::sync_root::SyncRootLifecycle>() else { return; };
+            let _ = crate::virtual_library::reconciliation::refresh_configured_library(pool.inner(), root.inner()).await;
+        }
+    });
 }
 
 fn spawn_removable_volume_consumer(
