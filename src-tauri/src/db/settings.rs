@@ -17,6 +17,21 @@ pub struct VirtualLibraryStatus {
     pub connection_status: crate::virtual_library::sync_root::ConnectionStatus,
 }
 
+/// Resolves the display default to a path Windows APIs can actually open.
+/// `%USERPROFILE%` is shell syntax; filesystem APIs do not expand it.
+pub fn default_virtual_library_path() -> String {
+    std::env::var_os("USERPROFILE")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
+        .map(|home| {
+            home.join("Pictures")
+                .join("Lymic")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .unwrap_or_else(|| DEFAULT_VIRTUAL_LIBRARY_PATH.to_string())
+}
+
 pub async fn get_virtual_library_status(
     pool: &SqlitePool,
 ) -> Result<VirtualLibraryStatus, sqlx::Error> {
@@ -32,7 +47,12 @@ pub async fn get_virtual_library_status(
     .fetch_optional(pool)
     .await?
     .filter(|value| !value.is_empty())
-    .unwrap_or_else(|| DEFAULT_VIRTUAL_LIBRARY_PATH.to_string());
+    .map(|value| {
+        (value == DEFAULT_VIRTUAL_LIBRARY_PATH)
+            .then(default_virtual_library_path)
+            .unwrap_or(value)
+    })
+    .unwrap_or_else(default_virtual_library_path);
 
     Ok(VirtualLibraryStatus {
         enabled,

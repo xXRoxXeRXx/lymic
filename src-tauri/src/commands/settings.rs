@@ -93,6 +93,12 @@ pub(crate) async fn set_virtual_library_enabled(
             return Err(error);
         }
         crate::db::set_virtual_library_enabled(pool.inner(), true).await?;
+        crate::virtual_library::reconciliation::refresh_configured_library(
+            pool.inner(),
+            root.inner(),
+            &app,
+        )
+        .await?;
     } else {
         root.disable()?;
         crate::virtual_library::shell_extension::unregister_for_current_user()?;
