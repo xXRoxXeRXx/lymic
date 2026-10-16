@@ -1,0 +1,17 @@
+# Read-only Windows Virtual Library via Cloud Files API
+
+On Windows, Lymic provides an optional read-only Virtual Library under `%USERPROFILE%\Pictures\Lymic` using the Windows Cloud Filter API (`cldapi.dll`). Assets from the authenticated Immich library are projected as on-demand placeholders under canonical date paths (`All Photos/YYYY/MM Month/<asset>`) and album directories (`Albums/<album>/<asset>`). Explorer delete, move, and write operations on virtual projections are denied (`STATUS_ACCESS_DENIED`), keeping asset lifecycle and uploads strictly within Watched Folders and Lymic's synchronization engine. Remote Live Photos are projected as paired image and video placeholders. Thumbnails are served by a lightweight COM `IThumbnailProvider` DLL registered under `SyncRootManager` in the Windows registry, avoiding Sparse Packages and commercial code-signing certificate requirements.
+
+## Considered Options
+
+- **Bidirectional read-write virtual root with Explorer drag-and-drop ingestion**: Allow pasting files directly into Explorer folders and uploading them to Immich. Rejected because detecting Live Photo pairs via arbitrary timing windows (e.g. 10-second debounce) is fragile, Explorer file locking creates race conditions, and mixing ad-hoc writes with the Watched Folder queue violates Lymic's synchronization architecture.
+- **Multi-view projection including Persons and Places**: Project virtual hierarchies for `Persons/<person>/` and `Places/<country>/<city>/`. Rejected because multiple NTFS placeholders for the same remote asset cause placeholder explosion, redundant metadata tracking, complex path sanitization for person/place names, and cache confusion.
+- **Sparse Package with Windows App Identity and in-process Explorer extensions**: Package Lymic with a Sparse Package manifest and sign it with a Windows code-signing certificate to declare modern shell extension handlers. Rejected because public releases would be blocked without an expensive commercial code-signing certificate, and hosting custom COM shell extensions in `explorer.exe` risks desktop shell instability. A minimal COM thumbnail provider registered directly in the registry under `SyncRootManager` achieves cached thumbnail rendering without packaging overhead.
+- **Permitting standard Explorer file deletion**: Allow the user to press Delete in Explorer to remove virtual files or directories. Rejected because Windows Explorer does not differentiate between local cache eviction and remote deletion. Deletion attempts are synchronously blocked with `STATUS_ACCESS_DENIED` to prevent accidental loss of remote assets; users manage local disk space through native Cloud Files commands ("Free up space") or Immich.
+
+## Consequences
+
+- Adds a Windows-only `cloud_files` module in Tauri and a minimal companion COM DLL (`lymic-shell-ext`) registered via the Windows installer.
+- Incremental reconciliation runs on application startup, periodically (every 10 minutes), and via a manual "Refresh Library" action in settings, pruning locally cached placeholders when assets are removed remotely.
+- Explorer provides native on-demand hydration, cloud status icons, and standard "Free up space" / "Always keep on this device" context menu actions out of the box.
+- Disabling the Virtual Library or logging out deregisters the sync root (`CfUnregisterSyncRoot`) and cleans up the virtual directory structure.
