@@ -26,6 +26,40 @@ pub(crate) trait CloudFilter: Send + Sync {
     fn unregister(&self, path: &str) -> Result<(), String>;
     fn create_directory(&self, path: &str) -> Result<(), String>;
     fn create_placeholder(&self, path: &str, metadata: PlaceholderMetadata) -> Result<(), String>;
+    fn acknowledge_change(
+        &self,
+        notification: ChangeNotification,
+        request: ChangeRequest,
+        completion_status: i32,
+    ) -> Result<(), String>;
+}
+
+/// The Cloud Files change notification currently being serviced.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ChangeNotification {
+    Delete,
+    Rename,
+}
+
+/// The opaque keys that identify one pending Cloud Files callback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ChangeRequest {
+    pub(crate) connection_key: i64,
+    pub(crate) transfer_key: i64,
+    pub(crate) request_key: i64,
+}
+
+// Microsoft requires a STATUS_CLOUD_FILE_* value when rejecting an ACK_DELETE
+// or ACK_RENAME request. STATUS_ACCESS_DENIED is converted to
+// STATUS_CLOUD_FILE_UNSUCCESSFUL by the platform.
+pub(crate) const STATUS_CLOUD_FILE_ACCESS_DENIED: i32 = 0xC000_CF18_u32 as i32;
+
+fn deny_change(
+    filter: &dyn CloudFilter,
+    notification: ChangeNotification,
+    request: ChangeRequest,
+) -> Result<(), String> {
+    filter.acknowledge_change(notification, request, STATUS_CLOUD_FILE_ACCESS_DENIED)
 }
 
 pub(crate) struct SyncRootLifecycle {
@@ -104,6 +138,14 @@ impl CloudFilter for PlatformCloudFilter {
     fn create_placeholder(&self, _: &str, _: PlaceholderMetadata) -> Result<(), String> {
         Err("Virtual Library is only available on Windows".into())
     }
+    fn acknowledge_change(
+        &self,
+        _: ChangeNotification,
+        _: ChangeRequest,
+        _: i32,
+    ) -> Result<(), String> {
+        Err("Virtual Library is only available on Windows".into())
+    }
 }
 
 #[cfg(windows)]
@@ -130,11 +172,19 @@ impl CloudFilter for PlatformCloudFilter {
     fn create_placeholder(&self, path: &str, metadata: PlaceholderMetadata) -> Result<(), String> {
         native::create_placeholder(path, metadata)
     }
+    fn acknowledge_change(
+        &self,
+        notification: ChangeNotification,
+        request: ChangeRequest,
+        completion_status: i32,
+    ) -> Result<(), String> {
+        native::acknowledge_change(notification, request, completion_status)
+    }
 }
 #[cfg(windows)]
 mod native {
     #![allow(dead_code)] // Some Cloud Filter calls are consumed by follow-up reconciliation work.
-    use super::PlaceholderMetadata;
+    use super::{ChangeNotification, ChangeRequest, PlaceholderMetadata};
     use std::path::Path;
     use windows_sys::core::GUID;
     use windows_sys::Win32::Storage::CloudFilters::*;
@@ -186,10 +236,20 @@ mod native {
     }
     pub(super) fn connect(path: &str) -> Result<i64, String> {
         let path = wide(path);
-        let table = [CF_CALLBACK_REGISTRATION {
-            Type: CF_CALLBACK_TYPE_NONE,
-            Callback: None,
-        }];
+        let table = [
+            CF_CALLBACK_REGISTRATION {
+                Type: CF_CALLBACK_TYPE_NOTIFY_DELETE,
+                Callback: Some(deny_delete),
+            },
+            CF_CALLBACK_REGISTRATION {
+                Type: CF_CALLBACK_TYPE_NOTIFY_RENAME,
+                Callback: Some(deny_rename),
+            },
+            CF_CALLBACK_REGISTRATION {
+                Type: CF_CALLBACK_TYPE_NONE,
+                Callback: None,
+            },
+        ];
         let mut key = 0;
         result("CfConnectSyncRoot", unsafe {
             CfConnectSyncRoot(
@@ -201,6 +261,80 @@ mod native {
             )
         })?;
         Ok(key)
+    }
+    unsafe extern "system" fn deny_delete(
+        callback_info: *const CF_CALLBACK_INFO,
+        _: *const CF_CALLBACK_PARAMETERS,
+    ) {
+        if let Some(callback_info) = callback_info.as_ref() {
+            let _ = super::deny_change(
+                &super::PlatformCloudFilter,
+                ChangeNotification::Delete,
+                ChangeRequest {
+                    connection_key: callback_info.ConnectionKey,
+                    transfer_key: callback_info.TransferKey,
+                    request_key: callback_info.RequestKey,
+                },
+            );
+        }
+    }
+    unsafe extern "system" fn deny_rename(
+        callback_info: *const CF_CALLBACK_INFO,
+        _: *const CF_CALLBACK_PARAMETERS,
+    ) {
+        if let Some(callback_info) = callback_info.as_ref() {
+            let _ = super::deny_change(
+                &super::PlatformCloudFilter,
+                ChangeNotification::Rename,
+                ChangeRequest {
+                    connection_key: callback_info.ConnectionKey,
+                    transfer_key: callback_info.TransferKey,
+                    request_key: callback_info.RequestKey,
+                },
+            );
+        }
+    }
+    pub(super) fn acknowledge_change(
+        notification: ChangeNotification,
+        request: ChangeRequest,
+        completion_status: i32,
+    ) -> Result<(), String> {
+        let (operation_type, parameters) = match notification {
+            ChangeNotification::Delete => (
+                CF_OPERATION_TYPE_ACK_DELETE,
+                CF_OPERATION_PARAMETERS {
+                    ParamSize: std::mem::size_of::<CF_OPERATION_PARAMETERS_0_2>() as u32,
+                    Anonymous: CF_OPERATION_PARAMETERS_0 {
+                        AckDelete: CF_OPERATION_PARAMETERS_0_2 {
+                            Flags: CF_OPERATION_ACK_DELETE_FLAG_NONE,
+                            CompletionStatus: completion_status,
+                        },
+                    },
+                },
+            ),
+            ChangeNotification::Rename => (
+                CF_OPERATION_TYPE_ACK_RENAME,
+                CF_OPERATION_PARAMETERS {
+                    ParamSize: std::mem::size_of::<CF_OPERATION_PARAMETERS_0_3>() as u32,
+                    Anonymous: CF_OPERATION_PARAMETERS_0 {
+                        AckRename: CF_OPERATION_PARAMETERS_0_3 {
+                            Flags: CF_OPERATION_ACK_RENAME_FLAG_NONE,
+                            CompletionStatus: completion_status,
+                        },
+                    },
+                },
+            ),
+        };
+        let operation = CF_OPERATION_INFO {
+            StructSize: std::mem::size_of::<CF_OPERATION_INFO>() as u32,
+            Type: operation_type,
+            ConnectionKey: request.connection_key,
+            TransferKey: request.transfer_key,
+            CorrelationVector: std::ptr::null(),
+            SyncStatus: std::ptr::null(),
+            RequestKey: request.request_key,
+        };
+        result("CfExecute", unsafe { CfExecute(&operation, &parameters) })
     }
     pub(super) fn unregister(path: &str) -> Result<(), String> {
         let path = wide(path);
@@ -310,6 +444,15 @@ mod tests {
         fn create_placeholder(&self, _: &str, _: PlaceholderMetadata) -> Result<(), String> {
             Ok(())
         }
+        fn acknowledge_change(
+            &self,
+            _: ChangeNotification,
+            _: ChangeRequest,
+            _: i32,
+        ) -> Result<(), String> {
+            self.0.lock().unwrap().push("acknowledge_change");
+            Ok(())
+        }
     }
     #[test]
     fn lifecycle_registers_connects_and_cleans_up() {
@@ -320,6 +463,116 @@ mod tests {
         assert_eq!(
             *calls.lock().unwrap(),
             ["register", "connect", "disconnect", "unregister"]
+        );
+    }
+
+    #[test]
+    fn deleting_a_virtual_placeholder_is_synchronously_rejected_without_a_remote_mutation() {
+        #[derive(Default)]
+        struct RecordingFilter(Mutex<Vec<(ChangeNotification, ChangeRequest, i32)>>);
+        impl CloudFilter for RecordingFilter {
+            fn register(&self, _: &str) -> Result<(), String> {
+                Ok(())
+            }
+            fn connect(&self, _: &str) -> Result<i64, String> {
+                Ok(1)
+            }
+            fn disconnect(&self, _: i64) -> Result<(), String> {
+                Ok(())
+            }
+            fn unregister(&self, _: &str) -> Result<(), String> {
+                Ok(())
+            }
+            fn create_directory(&self, _: &str) -> Result<(), String> {
+                Ok(())
+            }
+            fn create_placeholder(&self, _: &str, _: PlaceholderMetadata) -> Result<(), String> {
+                Ok(())
+            }
+            fn acknowledge_change(
+                &self,
+                notification: ChangeNotification,
+                request: ChangeRequest,
+                completion_status: i32,
+            ) -> Result<(), String> {
+                self.0
+                    .lock()
+                    .unwrap()
+                    .push((notification, request, completion_status));
+                Ok(())
+            }
+        }
+        let filter = RecordingFilter::default();
+        let request = ChangeRequest {
+            connection_key: 1,
+            transfer_key: 2,
+            request_key: 3,
+        };
+
+        deny_change(&filter, ChangeNotification::Delete, request).unwrap();
+
+        assert_eq!(
+            *filter.0.lock().unwrap(),
+            [(
+                ChangeNotification::Delete,
+                request,
+                STATUS_CLOUD_FILE_ACCESS_DENIED
+            )]
+        );
+    }
+
+    #[test]
+    fn renaming_a_virtual_placeholder_is_synchronously_rejected_with_a_cloud_file_status() {
+        #[derive(Default)]
+        struct RecordingFilter(Mutex<Vec<(ChangeNotification, ChangeRequest, i32)>>);
+        impl CloudFilter for RecordingFilter {
+            fn register(&self, _: &str) -> Result<(), String> {
+                Ok(())
+            }
+            fn connect(&self, _: &str) -> Result<i64, String> {
+                Ok(1)
+            }
+            fn disconnect(&self, _: i64) -> Result<(), String> {
+                Ok(())
+            }
+            fn unregister(&self, _: &str) -> Result<(), String> {
+                Ok(())
+            }
+            fn create_directory(&self, _: &str) -> Result<(), String> {
+                Ok(())
+            }
+            fn create_placeholder(&self, _: &str, _: PlaceholderMetadata) -> Result<(), String> {
+                Ok(())
+            }
+            fn acknowledge_change(
+                &self,
+                notification: ChangeNotification,
+                request: ChangeRequest,
+                completion_status: i32,
+            ) -> Result<(), String> {
+                self.0
+                    .lock()
+                    .unwrap()
+                    .push((notification, request, completion_status));
+                Ok(())
+            }
+        }
+        let filter = RecordingFilter::default();
+        let request = ChangeRequest {
+            connection_key: 4,
+            transfer_key: 5,
+            request_key: 6,
+        };
+
+        deny_change(&filter, ChangeNotification::Rename, request).unwrap();
+
+        assert_eq!(
+            *filter.0.lock().unwrap(),
+            [(
+                ChangeNotification::Rename,
+                request,
+                STATUS_CLOUD_FILE_ACCESS_DENIED
+            )]
         );
     }
 }

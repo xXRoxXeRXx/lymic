@@ -173,6 +173,14 @@ mod tests {
                 .push((path.to_owned(), metadata));
             Ok(())
         }
+        fn acknowledge_change(
+            &self,
+            _: crate::virtual_library::sync_root::ChangeNotification,
+            _: crate::virtual_library::sync_root::ChangeRequest,
+            _: i32,
+        ) -> Result<(), String> {
+            Ok(())
+        }
     }
 
     #[test]
