@@ -61,6 +61,10 @@ fn sync_root_key() -> String {
 pub(crate) fn registration_operations(dll_path: &Path) -> Vec<RegistryOperation> {
     let class_key = class_key();
     let inproc_key = format!("{class_key}\\InprocServer32");
+    let dll_path_str = {
+        let s = dll_path.to_string_lossy();
+        s.strip_prefix(r"\\?\").unwrap_or(&s).to_string()
+    };
     vec![
         RegistryOperation::SetDefaultValue {
             key: class_key,
@@ -68,7 +72,7 @@ pub(crate) fn registration_operations(dll_path: &Path) -> Vec<RegistryOperation>
         },
         RegistryOperation::SetDefaultValue {
             key: inproc_key.clone(),
-            value: dll_path.to_string_lossy().into_owned(),
+            value: dll_path_str,
         },
         RegistryOperation::SetValue {
             key: inproc_key,

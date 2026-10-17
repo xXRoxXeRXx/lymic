@@ -180,6 +180,9 @@ impl ThumbnailCache {
     }
 
     fn evict_to_cap(&self) -> Result<(), String> {
+        if self.max_bytes == 0 {
+            return Ok(());
+        }
         let mut entries = Vec::new();
         let mut total = 0_u64;
         let access = self

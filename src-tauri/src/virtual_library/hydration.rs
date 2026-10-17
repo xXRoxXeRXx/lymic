@@ -99,9 +99,12 @@ impl HydrationDispatcher {
             .insert(request.into(), cancellation.clone());
         let dispatcher = self.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = dispatcher
-                .hydrate_cancellable(asset_id, request, cancellation)
-                .await;
+            if let Err(error) = dispatcher
+                .hydrate_cancellable(asset_id.clone(), request, cancellation)
+                .await
+            {
+                eprintln!("Hydration error for asset {}: {error}", asset_id.as_str());
+            }
             dispatcher
                 .cancellations
                 .lock()
@@ -145,13 +148,14 @@ impl HydrationDispatcher {
         let mut offset = request.required_offset;
         let mut heartbeat = tokio::time::interval(PROGRESS_HEARTBEAT_INTERVAL);
         heartbeat.tick().await;
-        self.transfer
-            .report_progress(request, request.required_length, 0)?;
+        let _ = self
+            .transfer
+            .report_progress(request, request.required_length, 0);
         loop {
             let chunk = tokio::select! {
                 _ = cancellation.cancelled() => return Ok(()),
                 _ = heartbeat.tick() => {
-                    self.transfer.report_progress(request, request.required_length, offset - request.required_offset)?;
+                    let _ = self.transfer.report_progress(request, request.required_length, offset - request.required_offset);
                     continue;
                 }
                 chunk = stream.next() => chunk,
@@ -173,11 +177,11 @@ impl HydrationDispatcher {
                         i64::try_from(part.len()).map_err(|_| "original chunk is too large")?,
                     )
                     .ok_or_else(|| "original asset offset overflow".to_string())?;
-                self.transfer.report_progress(
+                let _ = self.transfer.report_progress(
                     request,
                     request.required_length,
                     offset - request.required_offset,
-                )?;
+                );
             }
         }
         if cancellation.is_cancelled() {

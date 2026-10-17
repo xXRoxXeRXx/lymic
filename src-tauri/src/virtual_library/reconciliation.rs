@@ -214,11 +214,13 @@ pub(crate) async fn refresh_configured_library(
         credentials.cloudflare_client_id,
         credentials.cloudflare_client_secret,
     )?;
-    if virtual_library_reconciliation_cursor(pool)
+    let cursor = virtual_library_reconciliation_cursor(pool)
         .await
-        .map_err(|error| error.to_string())?
-        .is_none()
-    {
+        .map_err(|error| error.to_string())?;
+    let is_missing_projections = !std::path::Path::new(&status.path)
+        .join("All Photos")
+        .exists();
+    if cursor.is_none() || is_missing_projections {
         reconcile_initial_library(
             pool,
             &status.path,

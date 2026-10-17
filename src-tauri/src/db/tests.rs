@@ -359,7 +359,7 @@ mod database_tests {
             get_virtual_library_status(&pool).await.unwrap(),
             VirtualLibraryStatus {
                 enabled: false,
-                path: DEFAULT_VIRTUAL_LIBRARY_PATH.to_string(),
+                path: default_virtual_library_path(),
                 connection_status:
                     crate::virtual_library::sync_root::ConnectionStatus::Disconnected,
             }
@@ -370,7 +370,7 @@ mod database_tests {
             get_virtual_library_status(&pool).await.unwrap(),
             VirtualLibraryStatus {
                 enabled: true,
-                path: DEFAULT_VIRTUAL_LIBRARY_PATH.to_string(),
+                path: default_virtual_library_path(),
                 connection_status:
                     crate::virtual_library::sync_root::ConnectionStatus::Disconnected,
             }

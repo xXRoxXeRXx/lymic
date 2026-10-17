@@ -194,13 +194,44 @@ mod native {
         cache: &ThumbnailCache,
         request: ThumbnailRequest,
     ) -> Option<ThumbnailResponse> {
-        let path = cache.get(&request.asset_id, &request.version)?;
-        let image = std::fs::read(path).ok()?;
-        (!image.is_empty()).then_some(ThumbnailResponse::Hit {
-            image,
-            width: request.width,
-            height: request.height,
-        })
+        if let Some(path) = cache.get(&request.asset_id, &request.version) {
+            if let Ok(image) = std::fs::read(path) {
+                if !image.is_empty() {
+                    return Some(ThumbnailResponse::Hit {
+                        image,
+                        width: request.width,
+                        height: request.height,
+                    });
+                }
+            }
+        }
+        if let Ok(Some(credentials)) = crate::auth::get_credentials() {
+            if let Ok(client) = crate::immich::ImmichClient::new(
+                credentials.server_url,
+                credentials.api_key,
+                credentials.allow_local_http,
+                credentials.cloudflare_client_id,
+                credentials.cloudflare_client_secret,
+            ) {
+                let remote_id = crate::immich::RemoteAssetId::new(&request.asset_id);
+                if let Ok(path) = tauri::async_runtime::block_on(cache.get_or_fetch(
+                    &client,
+                    &remote_id,
+                    &request.version,
+                )) {
+                    if let Ok(image) = std::fs::read(path) {
+                        if !image.is_empty() {
+                            return Some(ThumbnailResponse::Hit {
+                                image,
+                                width: request.width,
+                                height: request.height,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn read_request(pipe: HANDLE) -> Option<ThumbnailRequest> {

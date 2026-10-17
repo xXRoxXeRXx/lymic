@@ -58,7 +58,7 @@ impl ImmichClient {
         page: u32,
         page_size: usize,
     ) -> Result<Vec<crate::virtual_library::timeline::RemoteVisualAsset>, String> {
-        let mut query = json!({ "page": page, "size": page_size });
+        let mut query = json!({ "page": page, "size": page_size, "withExif": true });
         if let Some(updated_after) = updated_after {
             query["updatedAfter"] = json!(updated_after);
         }
@@ -105,9 +105,12 @@ pub(crate) fn parse_visual_asset(
         .or_else(|| text("version"))
         .unwrap_or_default();
     let file_size = asset
-        .get("originalFileSize")
+        .pointer("/exifInfo/fileSizeInByte")
         .and_then(serde_json::Value::as_u64)
+        .or_else(|| asset.get("fileSizeInByte").and_then(serde_json::Value::as_u64))
+        .or_else(|| asset.get("originalFileSize").and_then(serde_json::Value::as_u64))
         .or_else(|| asset.get("fileSize").and_then(serde_json::Value::as_u64))
+        .or_else(|| asset.get("size").and_then(serde_json::Value::as_u64))
         .unwrap_or(0);
     let captured_at = text("fileCreatedAt")
         .or_else(|| text("localDateTime"))
@@ -139,9 +142,13 @@ pub(crate) fn parse_visual_asset(
                         .unwrap_or_default(),
                     file_name,
                     file_size: video
-                        .get("originalFileSize")
+                        .get("exifInfo")
+                        .and_then(|exif| exif.get("fileSizeInByte"))
                         .and_then(serde_json::Value::as_u64)
+                        .or_else(|| video.get("fileSizeInByte").and_then(serde_json::Value::as_u64))
+                        .or_else(|| video.get("originalFileSize").and_then(serde_json::Value::as_u64))
                         .or_else(|| video.get("fileSize").and_then(serde_json::Value::as_u64))
+                        .or_else(|| video.get("size").and_then(serde_json::Value::as_u64))
                         .unwrap_or(0),
                 },
             )
@@ -521,6 +528,19 @@ mod tests {
         });
         let parsed = super::parse_visual_asset(&asset).unwrap();
         assert_eq!(parsed.live_photo_video.unwrap().id, "video");
+    }
+
+    #[test]
+    fn parses_file_size_from_exif_info() {
+        let asset = serde_json::json!({
+            "id": "image-exif",
+            "originalFileName": "IMG_1234.JPG",
+            "exifInfo": {
+                "fileSizeInByte": 24589123
+            }
+        });
+        let parsed = super::parse_visual_asset(&asset).unwrap();
+        assert_eq!(parsed.file_size, 24589123);
     }
 
     #[test]

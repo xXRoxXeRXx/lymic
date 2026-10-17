@@ -43,7 +43,7 @@ pub(crate) fn run() {
                     crate::thumbnail_cache::local_thumbnail_cache_dir(app.handle())
                 {
                     crate::thumbnail_pipe::start_server(std::sync::Arc::new(
-                        crate::thumbnail_cache::ThumbnailCache::new(cache_dir, 0),
+                        crate::thumbnail_cache::ThumbnailCache::new(cache_dir, 500 * 1024 * 1024),
                     ));
                 }
             }

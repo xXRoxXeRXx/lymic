@@ -209,23 +209,50 @@ impl CloudFilter for PlatformCloudFilter {
 
 #[cfg(windows)]
 struct PlatformCloudFilter {
-    hydration: Option<std::sync::Arc<crate::virtual_library::hydration::HydrationDispatcher>>,
+    hydration: std::sync::RwLock<Option<std::sync::Arc<crate::virtual_library::hydration::HydrationDispatcher>>>,
 }
 #[cfg(windows)]
 impl PlatformCloudFilter {
     fn new(client: Option<std::sync::Arc<crate::immich::ImmichClient>>) -> Self {
         Self {
-            hydration: client.map(|client| {
+            hydration: std::sync::RwLock::new(client.map(|client| {
                 std::sync::Arc::new(crate::virtual_library::hydration::HydrationDispatcher::new(
                     client,
-                    std::sync::Arc::new(native::WindowsDataTransfer),
+                    std::sync::Arc::new(native::WindowsDataTransfer::default()),
                 ))
-            }),
+            })),
         }
     }
 
+    fn hydration_dispatcher(
+        &self,
+    ) -> Option<std::sync::Arc<crate::virtual_library::hydration::HydrationDispatcher>> {
+        if let Ok(guard) = self.hydration.read() {
+            if let Some(dispatcher) = guard.as_ref() {
+                return Some(dispatcher.clone());
+            }
+        }
+        let credentials = crate::auth::get_credentials().ok().flatten()?;
+        let client = crate::immich::ImmichClient::new(
+            credentials.server_url,
+            credentials.api_key,
+            credentials.allow_local_http,
+            credentials.cloudflare_client_id,
+            credentials.cloudflare_client_secret,
+        )
+        .ok()?;
+        let dispatcher = std::sync::Arc::new(crate::virtual_library::hydration::HydrationDispatcher::new(
+            std::sync::Arc::new(client),
+            std::sync::Arc::new(native::WindowsDataTransfer::default()),
+        ));
+        if let Ok(mut guard) = self.hydration.write() {
+            *guard = Some(dispatcher.clone());
+        }
+        Some(dispatcher)
+    }
+
     fn cancel_hydration(&self, request: crate::virtual_library::hydration::FetchDataRequest) {
-        if let Some(hydration) = &self.hydration {
+        if let Some(hydration) = self.hydration_dispatcher() {
             hydration.cancel(request);
         }
     }
@@ -343,7 +370,10 @@ mod native {
         // Development restarts (and normal application restarts) reconnect to
         // an existing registration. Cloud Files reports this as already
         // connected instead of requiring the sync root to be registered again.
-        if registration_result >= 0 || registration_result == 0x8007_017Ai32 {
+        const ERROR_CLOUD_FILE_SYNC_ROOT_ALREADY_CONNECTED: i32 = 0x8007_017A_u32 as i32;
+        if registration_result >= 0
+            || registration_result == ERROR_CLOUD_FILE_SYNC_ROOT_ALREADY_CONNECTED
+        {
             Ok(())
         } else {
             result("CfRegisterSyncRoot", registration_result)
@@ -359,6 +389,10 @@ mod native {
             CF_CALLBACK_REGISTRATION {
                 Type: CF_CALLBACK_TYPE_CANCEL_FETCH_DATA,
                 Callback: Some(cancel_fetch_data),
+            },
+            CF_CALLBACK_REGISTRATION {
+                Type: CF_CALLBACK_TYPE_FETCH_PLACEHOLDERS,
+                Callback: Some(fetch_placeholders),
             },
             CF_CALLBACK_REGISTRATION {
                 Type: CF_CALLBACK_TYPE_NOTIFY_DELETE,
@@ -394,7 +428,8 @@ mod native {
             return;
         };
         let filter = (info.CallbackContext as *const PlatformCloudFilter).as_ref();
-        let Some(dispatcher) = filter.and_then(|filter| filter.hydration.as_ref()) else {
+        let Some(dispatcher) = filter.and_then(|filter| filter.hydration_dispatcher()) else {
+            eprintln!("fetch_data callback: no hydration dispatcher available");
             return;
         };
         let identity = std::slice::from_raw_parts(
@@ -405,6 +440,10 @@ mod native {
             .ok()
             .and_then(|identity| identity.get("assetId")?.as_str().map(str::to_owned));
         let fetch = parameters.Anonymous.FetchData;
+        eprintln!(
+            "fetch_data callback: asset_id={:?}, offset={}, len={}",
+            asset_id, fetch.RequiredFileOffset, fetch.RequiredLength
+        );
         let Some(asset_id) =
             asset_id.filter(|_| fetch.RequiredFileOffset >= 0 && fetch.RequiredLength >= 0)
         else {
@@ -420,6 +459,42 @@ mod native {
                 required_length: fetch.RequiredLength,
             },
         );
+    }
+
+    const fn cf_size_of_op_param<T>() -> u32 {
+        (std::mem::offset_of!(CF_OPERATION_PARAMETERS, Anonymous) + std::mem::size_of::<T>()) as u32
+    }
+
+    unsafe extern "system" fn fetch_placeholders(
+        callback_info: *const CF_CALLBACK_INFO,
+        _: *const CF_CALLBACK_PARAMETERS,
+    ) {
+        let Some(info) = callback_info.as_ref() else {
+            return;
+        };
+        let mut parameters = CF_OPERATION_PARAMETERS {
+            ParamSize: cf_size_of_op_param::<CF_OPERATION_PARAMETERS_0_7>(),
+            Anonymous: CF_OPERATION_PARAMETERS_0 {
+                TransferPlaceholders: CF_OPERATION_PARAMETERS_0_7 {
+                    Flags: CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAG_DISABLE_ON_DEMAND_POPULATION,
+                    CompletionStatus: 0,
+                    PlaceholderTotalCount: 0,
+                    PlaceholderArray: std::ptr::null_mut(),
+                    PlaceholderCount: 0,
+                    EntriesProcessed: 0,
+                },
+            },
+        };
+        let operation = CF_OPERATION_INFO {
+            StructSize: std::mem::size_of::<CF_OPERATION_INFO>() as u32,
+            Type: CF_OPERATION_TYPE_TRANSFER_PLACEHOLDERS,
+            ConnectionKey: info.ConnectionKey,
+            TransferKey: info.TransferKey,
+            CorrelationVector: std::ptr::null(),
+            SyncStatus: std::ptr::null(),
+            RequestKey: info.RequestKey,
+        };
+        let _ = CfExecute(&operation, &mut parameters);
     }
 
     unsafe extern "system" fn cancel_fetch_data(
@@ -441,45 +516,33 @@ mod native {
         });
     }
 
-    pub(super) struct WindowsDataTransfer;
-    impl DataTransfer for WindowsDataTransfer {
-        fn report_progress(
-            &self,
-            request: FetchDataRequest,
-            total: i64,
-            completed: i64,
-        ) -> Result<(), String> {
-            result("CfReportProviderProgress2", unsafe {
-                CfReportProviderProgress2(
-                    request.connection_key,
-                    request.transfer_key,
-                    request.request_key,
-                    total,
-                    completed,
-                    0,
-                )
-            })
-        }
+    #[derive(Default)]
+    pub(super) struct WindowsDataTransfer {
+        pending: std::sync::Mutex<std::collections::HashMap<i64, (i64, Vec<u8>)>>,
+    }
 
-        fn transfer_data(
-            &self,
+    impl WindowsDataTransfer {
+        fn execute_chunk(
             request: FetchDataRequest,
             offset: i64,
-            bytes: Bytes,
-            completed: bool,
+            bytes: &[u8],
         ) -> Result<(), String> {
+            if bytes.is_empty() {
+                return Ok(());
+            }
+            let length: i64 = bytes
+                .len()
+                .try_into()
+                .map_err(|_| "original chunk is too large")?;
             let mut parameters = CF_OPERATION_PARAMETERS {
-                ParamSize: std::mem::size_of::<CF_OPERATION_PARAMETERS_0_6>() as u32,
+                ParamSize: cf_size_of_op_param::<CF_OPERATION_PARAMETERS_0_6>(),
                 Anonymous: CF_OPERATION_PARAMETERS_0 {
                     TransferData: CF_OPERATION_PARAMETERS_0_6 {
                         Flags: CF_OPERATION_TRANSFER_DATA_FLAG_NONE,
-                        CompletionStatus: if completed { 0 } else { 0 },
+                        CompletionStatus: 0,
                         Buffer: bytes.as_ptr().cast(),
                         Offset: offset,
-                        Length: bytes
-                            .len()
-                            .try_into()
-                            .map_err(|_| "original chunk is too large")?,
+                        Length: length,
                     },
                 },
             };
@@ -492,9 +555,84 @@ mod native {
                 SyncStatus: std::ptr::null(),
                 RequestKey: request.request_key,
             };
-            result("CfExecute", unsafe {
-                CfExecute(&operation, &mut parameters)
-            })
+            let hr = unsafe { CfExecute(&operation, &mut parameters) };
+            if hr < 0 {
+                eprintln!(
+                    "CfExecute TransferData failed: hr=0x{:08X}, offset={}, len={}",
+                    hr as u32, offset, length
+                );
+                return Err(format!("CfExecute TransferData failed (0x{:08X})", hr as u32));
+            }
+            Ok(())
+        }
+    }
+
+    impl DataTransfer for WindowsDataTransfer {
+        fn report_progress(
+            &self,
+            request: FetchDataRequest,
+            total: i64,
+            completed: i64,
+        ) -> Result<(), String> {
+            let res = unsafe {
+                CfReportProviderProgress2(
+                    request.connection_key,
+                    request.transfer_key,
+                    request.request_key,
+                    total,
+                    completed,
+                    0,
+                )
+            };
+            if res < 0 {
+                eprintln!("CfReportProviderProgress2 returned 0x{:08X}", res as u32);
+            }
+            Ok(())
+        }
+
+        fn transfer_data(
+            &self,
+            request: FetchDataRequest,
+            offset: i64,
+            bytes: Bytes,
+            completed: bool,
+        ) -> Result<(), String> {
+            let mut chunks_to_send = Vec::new();
+            {
+                let mut pending = self.pending.lock().unwrap();
+                let entry = pending
+                    .entry(request.transfer_key)
+                    .or_insert_with(|| (offset, Vec::new()));
+                if !bytes.is_empty() {
+                    entry.1.extend_from_slice(&bytes);
+                }
+
+                const ALIGNMENT: usize = 4096;
+
+                while entry.1.len() >= ALIGNMENT && !completed {
+                    let send_len = (entry.1.len() / ALIGNMENT) * ALIGNMENT;
+                    let chunk_offset = entry.0;
+                    let chunk_bytes = entry.1[..send_len].to_vec();
+                    entry.0 += send_len as i64;
+                    entry.1.drain(..send_len);
+                    chunks_to_send.push((chunk_offset, chunk_bytes));
+                }
+
+                if completed {
+                    let (final_offset, final_bytes) = pending
+                        .remove(&request.transfer_key)
+                        .unwrap_or((offset, Vec::new()));
+                    if !final_bytes.is_empty() {
+                        chunks_to_send.push((final_offset, final_bytes));
+                    }
+                }
+            }
+
+            for (chunk_offset, chunk_bytes) in chunks_to_send {
+                Self::execute_chunk(request, chunk_offset, &chunk_bytes)?;
+            }
+
+            Ok(())
         }
     }
     unsafe extern "system" fn deny_delete(
@@ -502,15 +640,17 @@ mod native {
         _: *const CF_CALLBACK_PARAMETERS,
     ) {
         if let Some(callback_info) = callback_info.as_ref() {
-            let _ = super::deny_change(
-                &super::PlatformCloudFilter { hydration: None },
-                ChangeNotification::Delete,
-                ChangeRequest {
-                    connection_key: callback_info.ConnectionKey,
-                    transfer_key: callback_info.TransferKey,
-                    request_key: callback_info.RequestKey,
-                },
-            );
+            if let Some(filter) = (callback_info.CallbackContext as *const PlatformCloudFilter).as_ref() {
+                let _ = super::deny_change(
+                    filter,
+                    ChangeNotification::Delete,
+                    ChangeRequest {
+                        connection_key: callback_info.ConnectionKey,
+                        transfer_key: callback_info.TransferKey,
+                        request_key: callback_info.RequestKey,
+                    },
+                );
+            }
         }
     }
     unsafe extern "system" fn deny_rename(
@@ -518,15 +658,17 @@ mod native {
         _: *const CF_CALLBACK_PARAMETERS,
     ) {
         if let Some(callback_info) = callback_info.as_ref() {
-            let _ = super::deny_change(
-                &super::PlatformCloudFilter { hydration: None },
-                ChangeNotification::Rename,
-                ChangeRequest {
-                    connection_key: callback_info.ConnectionKey,
-                    transfer_key: callback_info.TransferKey,
-                    request_key: callback_info.RequestKey,
-                },
-            );
+            if let Some(filter) = (callback_info.CallbackContext as *const PlatformCloudFilter).as_ref() {
+                let _ = super::deny_change(
+                    filter,
+                    ChangeNotification::Rename,
+                    ChangeRequest {
+                        connection_key: callback_info.ConnectionKey,
+                        transfer_key: callback_info.TransferKey,
+                        request_key: callback_info.RequestKey,
+                    },
+                );
+            }
         }
     }
     pub(super) fn acknowledge_change(
@@ -538,7 +680,7 @@ mod native {
             ChangeNotification::Delete => (
                 CF_OPERATION_TYPE_ACK_DELETE,
                 CF_OPERATION_PARAMETERS {
-                    ParamSize: std::mem::size_of::<CF_OPERATION_PARAMETERS_0_2>() as u32,
+                    ParamSize: cf_size_of_op_param::<CF_OPERATION_PARAMETERS_0_2>(),
                     Anonymous: CF_OPERATION_PARAMETERS_0 {
                         AckDelete: CF_OPERATION_PARAMETERS_0_2 {
                             Flags: CF_OPERATION_ACK_DELETE_FLAG_NONE,
@@ -550,7 +692,7 @@ mod native {
             ChangeNotification::Rename => (
                 CF_OPERATION_TYPE_ACK_RENAME,
                 CF_OPERATION_PARAMETERS {
-                    ParamSize: std::mem::size_of::<CF_OPERATION_PARAMETERS_0_3>() as u32,
+                    ParamSize: cf_size_of_op_param::<CF_OPERATION_PARAMETERS_0_3>(),
                     Anonymous: CF_OPERATION_PARAMETERS_0 {
                         AckRename: CF_OPERATION_PARAMETERS_0_3 {
                             Flags: CF_OPERATION_ACK_RENAME_FLAG_NONE,
@@ -621,7 +763,7 @@ mod native {
                 .len()
                 .try_into()
                 .map_err(|_| "file identity is too long".to_string())?,
-            Flags: CF_PLACEHOLDER_CREATE_FLAG_MARK_IN_SYNC,
+            Flags: CF_PLACEHOLDER_CREATE_FLAG_MARK_IN_SYNC | CF_PLACEHOLDER_CREATE_FLAG_SUPERSEDE,
             Result: 0,
             CreateUsn: 0,
         };
@@ -704,18 +846,34 @@ mod native {
     fn placeholder_standard_info(
         handle: windows_sys::Win32::Foundation::HANDLE,
     ) -> Result<CF_PLACEHOLDER_STANDARD_INFO, String> {
-        let mut info = std::mem::MaybeUninit::<CF_PLACEHOLDER_STANDARD_INFO>::zeroed();
+        let mut buffer = vec![0_u8; std::mem::size_of::<CF_PLACEHOLDER_STANDARD_INFO>() + 4096];
         let mut returned = 0;
-        result("CfGetPlaceholderInfo", unsafe {
+        let res = unsafe {
             CfGetPlaceholderInfo(
                 handle,
                 CF_PLACEHOLDER_INFO_STANDARD,
-                info.as_mut_ptr().cast(),
-                std::mem::size_of::<CF_PLACEHOLDER_STANDARD_INFO>() as u32,
+                buffer.as_mut_ptr().cast(),
+                buffer.len() as u32,
                 &mut returned,
             )
-        })?;
-        Ok(unsafe { info.assume_init() })
+        };
+        const ERROR_MORE_DATA: i32 = 0x800700EA_u32 as i32;
+        if res == ERROR_MORE_DATA && returned > buffer.len() as u32 {
+            buffer.resize(returned as usize, 0);
+            result("CfGetPlaceholderInfo", unsafe {
+                CfGetPlaceholderInfo(
+                    handle,
+                    CF_PLACEHOLDER_INFO_STANDARD,
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len() as u32,
+                    &mut returned,
+                )
+            })?;
+        } else if res < 0 {
+            return Err(format!("CfGetPlaceholderInfo failed (HRESULT 0x{:08X})", res as u32));
+        }
+        let info = unsafe { *(buffer.as_ptr() as *const CF_PLACEHOLDER_STANDARD_INFO) };
+        Ok(info)
     }
     fn windows_file_time(timestamp: chrono::DateTime<chrono::Utc>) -> i64 {
         const WINDOWS_EPOCH_OFFSET_SECONDS: i64 = 11_644_473_600;
@@ -934,3 +1092,4 @@ mod tests {
         );
     }
 }
+

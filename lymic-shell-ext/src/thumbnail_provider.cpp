@@ -1,5 +1,7 @@
 #include <windows.h>
-#include <cldapi.h>
+typedef LONG NTSTATUS;
+#include <cfapi.h>
+#include <thumbcache.h>
 #include <shobjidl_core.h>
 #include <wincodec.h>
 #include <wrl/client.h>
@@ -148,19 +150,30 @@ HRESULT bitmap_from_image(const std::vector<BYTE>& image, HBITMAP* bitmap) {
   return S_OK;
 }
 
-class ThumbnailProvider final : public IThumbnailProvider, public IInitializeWithFile {
+class ThumbnailProvider final : public IThumbnailProvider, public IInitializeWithFile, public IInitializeWithItem {
  public:
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
     if (!object) return E_POINTER;
     *object = nullptr;
     if (iid == IID_IUnknown || iid == IID_IThumbnailProvider) *object = static_cast<IThumbnailProvider*>(this);
     else if (iid == IID_IInitializeWithFile) *object = static_cast<IInitializeWithFile*>(this);
+    else if (iid == IID_IInitializeWithItem) *object = static_cast<IInitializeWithItem*>(this);
     else return E_NOINTERFACE;
     AddRef(); return S_OK;
   }
   ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
   ULONG STDMETHODCALLTYPE Release() override { const ULONG references = --references_; if (!references) delete this; return references; }
   HRESULT STDMETHODCALLTYPE Initialize(LPCWSTR path, DWORD) override { if (!path || initialized_) return initialized_ ? HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED) : E_INVALIDARG; path_ = path; initialized_ = true; return S_OK; }
+  HRESULT STDMETHODCALLTYPE Initialize(IShellItem* item, DWORD) override {
+    if (!item || initialized_) return initialized_ ? HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED) : E_INVALIDARG;
+    LPWSTR path = nullptr;
+    const HRESULT result = item->GetDisplayName(SIGDN_FILESYSPATH, &path);
+    if (FAILED(result)) return result;
+    path_ = path;
+    CoTaskMemFree(path);
+    initialized_ = true;
+    return S_OK;
+  }
   HRESULT STDMETHODCALLTYPE GetThumbnail(UINT cx, HBITMAP* bitmap, WTS_ALPHATYPE* alpha) override {
     if (!bitmap || !alpha || !initialized_) return E_INVALIDARG;
     *bitmap = nullptr; *alpha = WTSAT_UNKNOWN;
@@ -186,10 +199,11 @@ class ClassFactory final : public IClassFactory {
 };
 }  // namespace
 
-extern "C" __declspec(dllexport) HRESULT __stdcall DllGetClassObject(REFCLSID clsid, REFIID iid, void** object) {
+STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** object) {
   if (!IsEqualCLSID(clsid, CLSID_LymicThumbnailProvider)) return CLASS_E_CLASSNOTAVAILABLE;
   auto* factory = new (std::nothrow) ClassFactory;
   if (!factory) return E_OUTOFMEMORY;
   const HRESULT result = factory->QueryInterface(iid, object); factory->Release(); return result;
 }
-extern "C" __declspec(dllexport) HRESULT __stdcall DllCanUnloadNow() { return S_OK; }
+STDAPI DllCanUnloadNow() { return S_OK; }
+

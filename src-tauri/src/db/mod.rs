@@ -60,8 +60,8 @@ pub(crate) use virtual_library::{
 pub use init::init_at_path;
 #[cfg(test)]
 pub use settings::{
-    validate_thumbnail_cache_cap_bytes, validate_upload_parallelism,
-    DEFAULT_THUMBNAIL_CACHE_CAP_BYTES, DEFAULT_UPLOAD_PARALLELISM, DEFAULT_VIRTUAL_LIBRARY_PATH,
+    default_virtual_library_path, validate_upload_parallelism, DEFAULT_THUMBNAIL_CACHE_CAP_BYTES,
+    DEFAULT_UPLOAD_PARALLELISM,
 };
 
 #[cfg(test)]
