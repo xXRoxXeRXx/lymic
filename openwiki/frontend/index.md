@@ -1,3 +1,3 @@
 # Files
 
-- [Frontend State and Tauri IPC](ui-and-ipc.md) - How Svelte controllers own interface state and coordinate named Tauri commands with live backend events.
+- [Frontend State and Tauri IPC](ui-and-ipc.md) - Ownership and lifecycle guide for the authenticated Svelte shell, its controller-backed views, and the Tauri command and event contracts that keep synchronization state current.
