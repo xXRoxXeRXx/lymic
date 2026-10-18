@@ -12,7 +12,14 @@
 
 > Lymic is an upload-oriented client, not a two-way filesystem mirror. It does not download remote assets, mirror remote deletions, rename local files, or manage albums as part of its normal synchronization workflow.
 
-![Lymic Screenshot](lymic_screen.png)
+<p align="center">
+  <img src="docs/assets/login.png" alt="Lymic Login" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/assets/sync.png" alt="Lymic Synchronization" width="49%">
+  <img src="docs/assets/settings.png" alt="Lymic Settings" width="49%">
+</p>
 
 ---
 
