@@ -112,7 +112,7 @@ pub(crate) fn run() {
             crate::commands::settings::get_locale_catalog,
             crate::commands::settings::update_locale,
             crate::commands::settings::record_webview_startup_phase_probe,
-            crate::commands::settings::get_database_recovery_notice
+            crate::commands::settings::get_database_recovery_notice,
         ])
         .on_window_event(tray::hide_on_close)
         .build(tauri::generate_context!())

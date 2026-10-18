@@ -9,7 +9,7 @@ use crate::{
 };
 use tauri::menu::{Menu, MenuItem, MenuItemKind};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 pub(crate) fn set_sync_enabled(app: &tauri::AppHandle, enabled: bool) {
     let Some(tray_menu) = app.try_state::<TrayMenuState>() else {

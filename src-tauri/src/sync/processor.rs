@@ -114,7 +114,7 @@ impl RunProcessor {
 
         let mut uploaded = 0;
         for chunk in hashed_units.chunks(BULK_CHECK_CHUNK_SIZE) {
-            if !can_start_work(&coordinator) {
+            if !can_start_work(coordinator) {
                 break;
             }
 

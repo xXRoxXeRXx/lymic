@@ -312,8 +312,9 @@ impl<'a> Synchronization<'a> {
         let pool = self.pool.clone();
         let cleanup_pool = self.pool.clone();
         let coordinator = self.coordinator.clone();
+        self.running.store(true, Ordering::SeqCst);
         tauri::async_runtime::spawn(async move {
-            if let Err(error) = crate::sync::queue_runner::run_sync_pipeline(
+            let result = crate::sync::queue_runner::run_sync_pipeline(
                 app.clone(),
                 pool,
                 client,
@@ -322,8 +323,11 @@ impl<'a> Synchronization<'a> {
                 coordinator,
                 audit_context,
             )
-            .await
-            {
+            .await;
+            app.state::<crate::sync::SyncState>()
+                .0
+                .store(false, Ordering::SeqCst);
+            if let Err(error) = result {
                 emit_sync_error(&app, &error);
                 if let Ok(snapshot) = db::set_sync_status(&cleanup_pool, "IDLE").await {
                     crate::app::tray::update_sync_action(&app, &snapshot);
