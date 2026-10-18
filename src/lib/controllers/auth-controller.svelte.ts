@@ -14,6 +14,7 @@ export function createAuthController(options: {
   let isAuthenticated = $state(false);
   let serverUrl = $state("");
   let currentUserName = $state("");
+  let profileImage = $state<string | null>(null);
   let apiKey = $state("");
   let allowLocalHttp = $state(false);
   let cloudflareClientId = $state("");
@@ -24,9 +25,20 @@ export function createAuthController(options: {
 
   async function loadCurrentUser() {
     try {
-      currentUserName = await invoke<string>("get_current_user_name");
-    } catch (error) {
-      console.warn("Failed to load current user", error);
+      const user = await invoke<{ displayName?: string; profileImage?: string | null } | string>("get_current_user");
+      if (typeof user === "string") {
+        currentUserName = user;
+        profileImage = null;
+      } else if (user && typeof user === "object") {
+        currentUserName = user.displayName ?? "";
+        profileImage = user.profileImage ?? null;
+      }
+    } catch {
+      try {
+        currentUserName = await invoke<string>("get_current_user_name");
+      } catch (error) {
+        console.warn("Failed to load current user", error);
+      }
     }
   }
 
@@ -88,6 +100,7 @@ export function createAuthController(options: {
       cloudflareClientId = "";
       cloudflareClientSecret = "";
       currentUserName = "";
+      profileImage = null;
       await options.onLogout();
     } catch (error) {
       console.error("Logout failed", error);
@@ -100,6 +113,8 @@ export function createAuthController(options: {
     get serverUrl() { return serverUrl; },
     set serverUrl(value: string) { serverUrl = value; },
     get currentUserName() { return currentUserName; },
+    get displayName() { return currentUserName; },
+    get profileImage() { return profileImage; },
     get apiKey() { return apiKey; },
     set apiKey(value: string) { apiKey = value; },
     get allowLocalHttp() { return allowLocalHttp; },

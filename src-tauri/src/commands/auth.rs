@@ -1,7 +1,9 @@
 use crate::app::events::log_to_ui_key;
 use crate::audit::{audit_event, audit_safe_error};
+use crate::commands::profile_cache::{self, CurrentUser};
 use crate::{auth, immich};
 use serde_json::json;
+use tauri::Manager;
 
 fn normalize_cloudflare_access_credentials(
     client_id: Option<String>,
@@ -98,6 +100,9 @@ pub(crate) async fn login(
 
 #[tauri::command]
 pub(crate) async fn logout(app: tauri::AppHandle) -> Result<(), String> {
+    if let Ok(cache_dir) = app.path().app_cache_dir() {
+        let _ = profile_cache::clear_profile_cache(&cache_dir.join("profile_cache"));
+    }
     let operation_id = crate::audit::AuditEvent::operation_id();
     let actor_id = auth::get_credentials()
         .ok()
@@ -163,14 +168,100 @@ pub(crate) async fn get_server_url() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub(crate) async fn get_current_user_name() -> Result<String, String> {
-    let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-    let client = immich::ImmichClient::new(
+pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUser, String> {
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| format!("Failed to get app cache dir: {e}"))?
+        .join("profile_cache");
+
+    let credentials = match auth::get_credentials() {
+        Ok(Some(creds)) => creds,
+        Ok(None) => return Err("Not logged in".to_string()),
+        Err(e) => return Err(e),
+    };
+
+    let client = match immich::ImmichClient::new(
         credentials.server_url,
         credentials.api_key,
         credentials.allow_local_http,
         credentials.cloudflare_client_id,
         credentials.cloudflare_client_secret,
-    )?;
-    client.current_user().await
+    ) {
+        Ok(c) => c,
+        Err(_) => {
+            if let Some(cached) = profile_cache::load_cached_profile(&cache_dir) {
+                return Ok(cached);
+            }
+            return Ok(CurrentUser {
+                display_name: String::new(),
+                profile_image: None,
+            });
+        }
+    };
+
+    match client.current_user_info().await {
+        Ok(user_info) => {
+            if user_info.has_profile_image {
+                match client.get_profile_image(&user_info.id).await {
+                    Ok((bytes, content_type)) => {
+                        let _ = profile_cache::save_cached_profile(
+                            &cache_dir,
+                            &user_info.id,
+                            &user_info.display_name,
+                            Some(&bytes),
+                            content_type.as_deref(),
+                        );
+                        let profile_image =
+                            Some(profile_cache::to_data_url(&bytes, content_type.as_deref()));
+                        Ok(CurrentUser {
+                            display_name: user_info.display_name,
+                            profile_image,
+                        })
+                    }
+                    Err(_) => {
+                        let cached_image = profile_cache::load_cached_profile(&cache_dir)
+                            .and_then(|c| c.profile_image);
+                        Ok(CurrentUser {
+                            display_name: user_info.display_name,
+                            profile_image: cached_image,
+                        })
+                    }
+                }
+            } else {
+                let _ = profile_cache::clear_profile_cache(&cache_dir);
+                let _ = profile_cache::save_cached_profile(
+                    &cache_dir,
+                    &user_info.id,
+                    &user_info.display_name,
+                    None,
+                    None,
+                );
+                Ok(CurrentUser {
+                    display_name: user_info.display_name,
+                    profile_image: None,
+                })
+            }
+        }
+        Err(_) => {
+            if let Some(cached) = profile_cache::load_cached_profile(&cache_dir) {
+                Ok(cached)
+            } else {
+                Ok(CurrentUser {
+                    display_name: String::new(),
+                    profile_image: None,
+                })
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn get_current_user_name(app: tauri::AppHandle) -> Result<String, String> {
+    let user = get_current_user(app).await?;
+    if user.display_name.is_empty() {
+        Err("Current user response did not include a name".to_string())
+    } else {
+        Ok(user.display_name)
+    }
 }

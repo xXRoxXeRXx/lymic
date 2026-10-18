@@ -49,6 +49,14 @@
   });
   const updater = createUpdateController(() => sync.isActive);
 
+  let profileImageLoadFailed = $state(false);
+
+  $effect(() => {
+    if (auth.profileImage) {
+      profileImageLoadFailed = false;
+    }
+  });
+
   onMount(() => {
     sync.startLifecycle();
     updater.startLifecycle();
@@ -176,7 +184,17 @@
       <!-- Bottom: User & Status info -->
       <div class="pt-3 px-2">
         <div class="flex items-center gap-2 text-[11px] text-slate-400 dark:text-zinc-500">
-          <User class="w-3.5 h-3.5 shrink-0" />
+          {#if auth.profileImage && !profileImageLoadFailed}
+            <img
+              src={auth.profileImage}
+              alt={auth.currentUserName || "User profile"}
+              class="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+              onerror={() => profileImageLoadFailed = true}
+              data-testid="sidebar-profile-image"
+            />
+          {:else}
+            <User class="w-3.5 h-3.5 shrink-0" data-testid="sidebar-user-icon" />
+          {/if}
           <span class="truncate font-medium" title={auth.currentUserName || auth.serverUrl}>
             {auth.currentUserName || "Connected"}
           </span>

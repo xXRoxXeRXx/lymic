@@ -151,4 +151,117 @@ describe("auth controller", () => {
     expect(controller.loginError).toBe("local_http_not_allowed");
     expect(controller.loginErrorCode).toBe("LOCAL_HTTP_NOT_ALLOWED");
   });
+
+  it("hydrates current user profile image and display name when authenticated", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user") {
+        return Promise.resolve({
+          displayName: "Meyer",
+          profileImage: "data:image/jpeg;base64,dGVzdA==",
+        });
+      }
+      return Promise.resolve();
+    });
+    const controller = createAuthController({
+      formatError: String,
+      onLogin: vi.fn(),
+      onLogout: vi.fn(),
+      reportError: vi.fn(),
+      t: (key) => key,
+    });
+
+    await controller.hydrate();
+
+    expect(controller.isAuthenticated).toBe(true);
+    expect(controller.currentUserName).toBe("Meyer");
+    expect(controller.profileImage).toBe("data:image/jpeg;base64,dGVzdA==");
+  });
+
+  it("refreshes profile image and display name after login", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "login") return Promise.resolve();
+      if (command === "get_current_user") {
+        return Promise.resolve({
+          displayName: "Meyer",
+          profileImage: "data:image/jpeg;base64,bmV3SW1hZ2U=",
+        });
+      }
+      return Promise.resolve();
+    });
+    const controller = createAuthController({
+      formatError: String,
+      onLogin: vi.fn(),
+      onLogout: vi.fn(),
+      reportError: vi.fn(),
+      t: (key) => key,
+    });
+    controller.serverUrl = "https://immich.example";
+    controller.apiKey = "token";
+
+    await controller.login();
+
+    expect(controller.isAuthenticated).toBe(true);
+    expect(controller.currentUserName).toBe("Meyer");
+    expect(controller.profileImage).toBe("data:image/jpeg;base64,bmV3SW1hZ2U=");
+  });
+
+  it("clears profile image and display name on logout", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user") {
+        return Promise.resolve({
+          displayName: "Meyer",
+          profileImage: "data:image/jpeg;base64,dGVzdA==",
+        });
+      }
+      if (command === "logout") return Promise.resolve();
+      return Promise.resolve();
+    });
+    tauri.confirm.mockResolvedValue(true);
+    const controller = createAuthController({
+      formatError: String,
+      onLogin: vi.fn(),
+      onLogout: vi.fn(),
+      reportError: vi.fn(),
+      t: (key) => key,
+    });
+
+    await controller.hydrate();
+    expect(controller.profileImage).toBe("data:image/jpeg;base64,dGVzdA==");
+
+    await controller.logout();
+    expect(controller.isAuthenticated).toBe(false);
+    expect(controller.currentUserName).toBe("");
+    expect(controller.profileImage).toBeNull();
+  });
+
+  it("retains null profileImage when user has no profile image", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_auth_status") return Promise.resolve(true);
+      if (command === "get_server_url") return Promise.resolve("https://immich.example");
+      if (command === "get_current_user") {
+        return Promise.resolve({
+          displayName: "Meyer",
+          profileImage: null,
+        });
+      }
+      return Promise.resolve();
+    });
+    const controller = createAuthController({
+      formatError: String,
+      onLogin: vi.fn(),
+      onLogout: vi.fn(),
+      reportError: vi.fn(),
+      t: (key) => key,
+    });
+
+    await controller.hydrate();
+    expect(controller.isAuthenticated).toBe(true);
+    expect(controller.currentUserName).toBe("Meyer");
+    expect(controller.profileImage).toBeNull();
+  });
 });
+

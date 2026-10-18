@@ -38,9 +38,20 @@ pub(crate) struct ImmichClient {
 #[derive(Deserialize)]
 struct CurrentUserResponse {
     #[serde(default)]
+    id: String,
+    #[serde(default)]
     name: String,
     #[serde(default)]
     email: String,
+    #[serde(rename = "profileImagePath", default)]
+    profile_image_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CurrentUserInfo {
+    pub id: String,
+    pub display_name: String,
+    pub has_profile_image: bool,
 }
 
 impl ImmichClient {
@@ -134,6 +145,10 @@ impl ImmichClient {
     }
 
     pub(crate) async fn current_user(&self) -> Result<String, String> {
+        self.current_user_info().await.map(|info| info.display_name)
+    }
+
+    pub(crate) async fn current_user_info(&self) -> Result<CurrentUserInfo, String> {
         let response = self
             .client
             .get(self.endpoint_url("users/me"))
@@ -157,10 +172,48 @@ impl ImmichClient {
             user.name.trim()
         };
         if display_name.is_empty() {
-            Err("Current user response did not include a name".to_string())
-        } else {
-            Ok(display_name.to_string())
+            return Err("Current user response did not include a name".to_string());
         }
+        let has_profile_image = user
+            .profile_image_path
+            .as_deref()
+            .map(|path| !path.trim().is_empty())
+            .unwrap_or(false);
+        Ok(CurrentUserInfo {
+            id: user.id,
+            display_name: display_name.to_string(),
+            has_profile_image,
+        })
+    }
+
+    pub(crate) async fn get_profile_image(
+        &self,
+        user_id: &str,
+    ) -> Result<(Vec<u8>, Option<String>), String> {
+        let response = self
+            .client
+            .get(self.endpoint_url(&format!("users/{user_id}/profile-image")))
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Connection failed: {}", error))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Server returned error: {}",
+                response_status_error(response).await?
+            ));
+        }
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| format!("Failed to read profile image: {}", e))?
+            .to_vec();
+        Ok((bytes, content_type))
     }
 
     pub(crate) async fn check_assets_exist(
@@ -734,5 +787,64 @@ mod tests {
             .unwrap_err();
         assert!(error.is_retryable());
         assert!(error.to_string().contains("missing results array"));
+    }
+
+    #[tokio::test]
+    async fn current_user_info_parses_profile_image_metadata() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut stream).await;
+            let body = r#"{"id":"user-uuid-123","name":"Meyer","email":"meyer@example.com","profileImagePath":"profile/user-uuid-123.jpg"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        let info = client.current_user_info().await.unwrap();
+        assert_eq!(info.id, "user-uuid-123");
+        assert_eq!(info.display_name, "Meyer");
+        assert!(info.has_profile_image);
+    }
+
+    #[tokio::test]
+    async fn fetches_profile_image_bytes_with_auth_headers() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            requests_tx
+                .send(read_http_request(&mut stream).await)
+                .await
+                .unwrap();
+            let fake_image = b"\xFF\xD8\xFF\xE0\x00\x10JFIF";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                fake_image.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+            stream.write_all(fake_image).await.unwrap();
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        let (bytes, mime) = client.get_profile_image("user-uuid-123").await.unwrap();
+        assert_eq!(bytes, b"\xFF\xD8\xFF\xE0\x00\x10JFIF");
+        assert_eq!(mime.as_deref(), Some("image/jpeg"));
+
+        let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(request.starts_with("GET /api/users/user-uuid-123/profile-image HTTP/1.1"));
+        assert!(request.contains("x-api-key: test-key"));
     }
 }

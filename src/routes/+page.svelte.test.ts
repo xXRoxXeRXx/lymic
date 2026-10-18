@@ -61,6 +61,8 @@ function renderAuthenticatedPage() {
         return Promise.resolve(true);
       case "get_server_url":
         return Promise.resolve("https://immich.example");
+      case "get_current_user":
+        return Promise.resolve({ displayName: "Meyer", profileImage: null });
       case "get_current_user_name":
         return Promise.resolve("Meyer");
       case "get_folders":
@@ -1053,6 +1055,77 @@ describe("removable volume setup flow", () => {
       expect(screen.queryByText(/EOS_DIGITAL/)).not.toBeInTheDocument();
     });
     expect(tauri.open).not.toHaveBeenCalled();
+  });
+
+  it("renders profile image in sidebar when available", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      switch (command) {
+        case "get_auth_status":
+          return Promise.resolve(true);
+        case "get_server_url":
+          return Promise.resolve("https://immich.example");
+        case "get_current_user":
+          return Promise.resolve({
+            displayName: "Meyer",
+            profileImage: "data:image/jpeg;base64,dGVzdA==",
+          });
+        case "get_folders":
+          return Promise.resolve([]);
+        case "get_failed_syncs":
+          return Promise.resolve([]);
+        case "get_upload_parallelism":
+          return Promise.resolve(3);
+        case "get_sync_status":
+          return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
+        case "update_locale":
+          return Promise.resolve();
+        default:
+          return Promise.resolve();
+      }
+    });
+    render(Page);
+    await screen.findByText("Synchronization", { selector: "h1" });
+
+    const avatar = await screen.findByTestId("sidebar-profile-image");
+    expect(avatar).toHaveAttribute("src", "data:image/jpeg;base64,dGVzdA==");
+    expect(screen.getByText("Meyer")).toBeInTheDocument();
+  });
+
+  it("degrades silently to standard user icon when profile image fails to load", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      switch (command) {
+        case "get_auth_status":
+          return Promise.resolve(true);
+        case "get_server_url":
+          return Promise.resolve("https://immich.example");
+        case "get_current_user":
+          return Promise.resolve({
+            displayName: "Meyer",
+            profileImage: "data:image/jpeg;base64,invalid",
+          });
+        case "get_folders":
+          return Promise.resolve([]);
+        case "get_failed_syncs":
+          return Promise.resolve([]);
+        case "get_upload_parallelism":
+          return Promise.resolve(3);
+        case "get_sync_status":
+          return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
+        case "update_locale":
+          return Promise.resolve();
+        default:
+          return Promise.resolve();
+      }
+    });
+    render(Page);
+    await screen.findByText("Synchronization", { selector: "h1" });
+
+    const avatar = await screen.findByTestId("sidebar-profile-image");
+    await fireEvent.error(avatar);
+
+    expect(screen.queryByTestId("sidebar-profile-image")).not.toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-user-icon")).toBeInTheDocument();
+    expect(screen.getByText("Meyer")).toBeInTheDocument();
   });
 });
 
