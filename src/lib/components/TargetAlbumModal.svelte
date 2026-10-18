@@ -1,17 +1,17 @@
 <script lang="ts">
   import { Album, AlertCircle, Check, Folder, Loader2, Plus, RefreshCw, Search, X } from "lucide-svelte";
   import { t } from "svelte-i18n";
-  import { createTargetAlbumCatalogue, type TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
+  import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
   interface Props {
     isOpen: boolean;
     folderPath: string;
     onConfirm: (targetAlbumId: string | null) => void;
     onCancel: () => void;
-    catalogue?: TargetAlbumCatalogue;
+    catalogue: TargetAlbumCatalogue;
   }
 
-  let { isOpen, folderPath, onConfirm, onCancel, catalogue = createTargetAlbumCatalogue() }: Props = $props();
+  let { isOpen, folderPath, onConfirm, onCancel, catalogue }: Props = $props();
 
   let selectedAlbumId = $state<string | null>(null);
   let searchQuery = $state("");

@@ -3,16 +3,16 @@ import type { ThemePreference } from "../components/types";
 import { isSupportedLocale } from "../i18n";
 import { localeCatalog, type LocaleCatalogEntry } from "../i18n/locale-catalog";
 import type { UiLogMessage } from "./types";
-import { tauriDesktopAdapter, type DesktopAdapter } from "../tauri/desktop-adapter";
+import type { DesktopAdapter } from "../tauri/desktop-adapter";
 
 export function createPreferencesController(options: {
   reportError(error: unknown): void;
   addLog(message: UiLogMessage): void;
   locale(): string;
   setLocale(locale: string): void;
-  adapter?: DesktopAdapter;
+  adapter: DesktopAdapter;
 }) {
-  const adapter = options.adapter ?? tauriDesktopAdapter;
+  const { adapter } = options;
   const themeStorageKey = "lymic-theme";
   const savedTheme = typeof localStorage === "undefined" ? null : localStorage.getItem(themeStorageKey);
   const initialTheme: ThemePreference = savedTheme === "system" || savedTheme === "light" || savedTheme === "dark"

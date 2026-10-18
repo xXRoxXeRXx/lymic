@@ -18,13 +18,18 @@
   import { createPreferencesController } from "#lib/controllers/preferences-controller.svelte.ts";
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
   import { createRemovableVolumeController } from "#lib/controllers/removable-volume-controller.svelte.ts";
+  import { createTargetAlbumCatalogue } from "#lib/controllers/target-album-catalogue.svelte.ts";
+  import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("dashboard");
+  const desktop = tauriDesktopAdapter;
   const feedback = createFeedbackController(() => $t("unknown_error"));
+  const targetAlbumCatalogue = createTargetAlbumCatalogue(desktop);
   const removable = createRemovableVolumeController({
     t: (key, params) => $t(key, params),
   });
   const sync = createSyncController({
+    adapter: desktop,
     reportError: feedback.report,
     t: (key) => $t(key),
     locale: () => $locale ?? "en",
@@ -32,6 +37,7 @@
   });
 
   const auth = createAuthController({
+    adapter: desktop,
     formatError: feedback.formatError,
     reportError: feedback.report,
     t: (key) => $t(key),
@@ -42,12 +48,13 @@
     },
   });
   const preferences = createPreferencesController({
+    adapter: desktop,
     reportError: feedback.report,
     addLog: sync.addLog,
     locale: () => $locale ?? "en",
     setLocale: (value) => $locale = value,
   });
-  const updater = createUpdateController(() => sync.isActive);
+  const updater = createUpdateController(() => sync.isActive, desktop);
 
   let profileImageLoadFailed = $state(false);
 
@@ -243,6 +250,7 @@
           <DashboardView
             dashboard={sync.dashboard}
             serverUrl={auth.serverUrl}
+            catalogue={targetAlbumCatalogue}
           />
         {:else if currentView === "logs"}
           <ActivityLog logs={sync.dashboard.logs} />
@@ -291,6 +299,7 @@
       folderPath={sync.pendingFolderPath ?? ""}
       onConfirm={sync.confirmAddFolder}
       onCancel={sync.cancelAddFolder}
+      catalogue={targetAlbumCatalogue}
     />
   {/if}
 </div>

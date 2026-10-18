@@ -1,5 +1,5 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { tauriDesktopAdapter, type CurrentUser, type DesktopAdapter } from "../tauri/desktop-adapter";
+import type { CurrentUser, DesktopAdapter } from "../tauri/desktop-adapter";
 
 const LOCAL_HTTP_NOT_ALLOWED_ERROR = "LOCAL_HTTP_NOT_ALLOWED";
 const CLOUDFLARE_ACCESS_PAIR_REQUIRED_ERROR = "CLOUDFLARE_ACCESS_PAIR_REQUIRED";
@@ -10,9 +10,9 @@ export function createAuthController(options: {
   onLogout: () => Promise<void> | void;
   reportError: (error: unknown) => void;
   t: (key: string) => string;
-  adapter?: DesktopAdapter;
+  adapter: DesktopAdapter;
 }) {
-  const adapter = options.adapter ?? tauriDesktopAdapter;
+  const { adapter } = options;
   let isAuthenticated = $state(false);
   let serverUrl = $state("");
   let currentUserName = $state("");
