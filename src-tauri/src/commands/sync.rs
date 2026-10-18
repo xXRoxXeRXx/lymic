@@ -1,17 +1,18 @@
-use crate::app::events::{emit_sync_error, log_to_ui_folder, log_to_ui_key};
-use crate::audit::{audit_event, audit_safe_error, SyncAuditContext};
-use crate::sync::{SyncCoordinator, SyncState};
+//! Thin Tauri adapters for the synchronization application service.
+
 use crate::{
-    auth, db,
-    sync::{
-        create_authenticated_client, ensure_sync_has_folders, load_upload_parallelism,
-        log_overlapping_folders, prepare_failed_sync_retry, run_sync_pipeline,
-        scan_folders_for_media, ScanResult, SyncSummary,
-    },
+    db,
+    sync::{load_upload_parallelism, SyncCoordinator, SyncState, Synchronization},
 };
-use serde_json::json;
-use std::sync::atomic::Ordering;
-use tauri::Emitter;
+
+fn synchronization<'a>(
+    app: &'a tauri::AppHandle,
+    pool: &'a sqlx::SqlitePool,
+    sync_state: &'a SyncState,
+    coordinator: &'a SyncCoordinator,
+) -> Synchronization<'a> {
+    Synchronization::new(app, pool, &sync_state.0, &coordinator.0)
+}
 
 #[tauri::command]
 pub(crate) async fn start_sync(
@@ -19,107 +20,32 @@ pub(crate) async fn start_sync(
     pool: tauri::State<'_, sqlx::SqlitePool>,
     sync_state: tauri::State<'_, SyncState>,
     sync_coordinator: tauri::State<'_, SyncCoordinator>,
-) -> Result<SyncSummary, String> {
-    let folders = db::get_folders(pool.inner())
-        .await
-        .map_err(|e| e.to_string())?;
-    ensure_sync_has_folders(&folders)?;
-
-    let command_operation_id = crate::audit::AuditEvent::operation_id();
-    // Attempt to set sync_state to true. If it was already true, return early.
-    if sync_state
-        .0
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        log_to_ui_key(
-            &app,
-            "WARN",
-            "Manual sync already in progress. Ignoring request.",
-            "log_sync_already_in_progress",
-        );
-        return Err("Sync already in progress".to_string());
-    }
-
-    let running_snapshot = match db::set_sync_status(pool.inner(), "RUNNING").await {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
-            sync_state.0.store(false, Ordering::SeqCst);
-            return Err(error.to_string());
-        }
-    };
-    crate::app::tray::update_sync_action(&app, &running_snapshot);
-    log_to_ui_key(
+) -> Result<crate::sync::SyncSummary, String> {
+    synchronization(
         &app,
-        "INFO",
-        "Starting manual synchronization...",
-        "log_starting_sync",
-    );
-    // Ensure we reset the state when we're done, even if we fail.
-    let result = async {
-        let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-        let audit_context = SyncAuditContext::from_credentials(&credentials, "manual_sync");
-        let client =
-            create_authenticated_client(&app, credentials).ok_or("Invalid server configuration")?;
-
-        for folder in &folders {
-            log_to_ui_folder(
-                &app,
-                "INFO",
-                &format!("Scanning folder: {}", folder.path),
-                "log_scanning_folder",
-                &folder.path,
-            );
-        }
-        let folder_paths = folders
-            .into_iter()
-            .map(|folder| std::path::PathBuf::from(folder.path))
-            .collect();
-        let scan_result = scan_folders_for_media(folder_paths).await?;
-        log_overlapping_folders(&app, &scan_result);
-
-        run_sync_pipeline(
-            app.clone(),
-            pool.inner().clone(),
-            client,
-            scan_result,
-            false,
-            sync_coordinator.0.clone(),
-            audit_context,
-        )
-        .await
-    }
-    .await;
-
-    sync_state.0.store(false, Ordering::SeqCst);
-    if let Err(error) = &result {
-        if let Ok(snapshot) = db::set_sync_status(pool.inner(), "IDLE").await {
-            crate::app::tray::update_sync_action(&app, &snapshot);
-        }
-        audit_event(
-            &app,
-            crate::audit::AuditEvent::new(
-                &command_operation_id,
-                "sync.aborted",
-                crate::audit::Outcome::Failure,
-                crate::audit::Severity::Error,
-                None,
-                "manual_sync",
-                "Manual synchronization aborted",
-                json!({ "failure_reason": audit_safe_error(error, &[]) }),
-            ),
-        );
-    }
-    result
+        pool.inner(),
+        sync_state.inner(),
+        sync_coordinator.inner(),
+    )
+    .start()
+    .await
 }
 
 #[tauri::command]
 pub(crate) async fn get_sync_status(
+    app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
+    sync_state: tauri::State<'_, SyncState>,
+    sync_coordinator: tauri::State<'_, SyncCoordinator>,
 ) -> Result<db::SyncSnapshot, String> {
-    db::get_sync_snapshot(pool.inner())
-        .await
-        .map_err(|error| error.to_string())
+    synchronization(
+        &app,
+        pool.inner(),
+        sync_state.inner(),
+        sync_coordinator.inner(),
+    )
+    .status()
+    .await
 }
 
 #[tauri::command]
@@ -134,17 +60,12 @@ pub(crate) async fn pause_sync(
 pub(crate) async fn pause_sync_inner(
     app: &tauri::AppHandle,
     pool: &sqlx::SqlitePool,
-    sync_coordinator: &std::sync::Arc<crate::sync::SyncCoordinatorInner>,
+    coordinator: &std::sync::Arc<crate::sync::SyncCoordinatorInner>,
 ) -> Result<db::SyncSnapshot, String> {
-    sync_coordinator.paused.store(true, Ordering::SeqCst);
-    // A runner changes this to PAUSED at its next safe block boundary. Persisting it
-    // immediately also makes a close/crash between request and boundary safe.
-    let snapshot = db::set_sync_status(pool, "PAUSED")
+    let running = std::sync::atomic::AtomicBool::new(false);
+    Synchronization::new(app, pool, &running, coordinator)
+        .pause()
         .await
-        .map_err(|error| error.to_string())?;
-    crate::app::tray::update_sync_action(app, &snapshot);
-    let _ = app.emit("sync-paused", &snapshot);
-    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -159,78 +80,12 @@ pub(crate) async fn resume_sync(
 pub(crate) async fn resume_sync_inner(
     app: &tauri::AppHandle,
     pool: &sqlx::SqlitePool,
-    sync_coordinator: &std::sync::Arc<crate::sync::SyncCoordinatorInner>,
+    coordinator: &std::sync::Arc<crate::sync::SyncCoordinatorInner>,
 ) -> Result<db::SyncSnapshot, String> {
-    let snapshot = db::get_sync_snapshot(pool)
+    let running = std::sync::atomic::AtomicBool::new(false);
+    Synchronization::new(app, pool, &running, coordinator)
+        .resume()
         .await
-        .map_err(|error| error.to_string())?;
-    if snapshot.status != "PAUSED" {
-        return Ok(snapshot);
-    }
-    sync_coordinator.paused.store(false, Ordering::SeqCst);
-    let snapshot = db::set_sync_status(pool, "RUNNING")
-        .await
-        .map_err(|error| error.to_string())?;
-    crate::app::tray::update_sync_action(app, &snapshot);
-    sync_coordinator.resume.notify_waiters();
-    let _ = app.emit("sync-resumed", &snapshot);
-
-    // If no in-memory runner owns the lock, this is recovered work. Rebuild the
-    // scan result from the persisted queue rather than rescanning watched folders.
-    if let Ok(guard) = sync_coordinator.lock.try_lock() {
-        drop(guard);
-        let has_pending = db::has_pending_sync_queue_items(pool)
-            .await
-            .map_err(|error| error.to_string())?;
-        if has_pending {
-            let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-            let audit_context = SyncAuditContext::from_credentials(&credentials, "resume_sync");
-            let client = create_authenticated_client(app, credentials)
-                .ok_or("Invalid server configuration")?;
-            audit_event(
-                app,
-                audit_context.event(
-                    "sync.resumed",
-                    crate::audit::Outcome::Info,
-                    crate::audit::Severity::Info,
-                    "Synchronization resumed",
-                    json!({}),
-                ),
-            );
-            let app_for_runner = app.clone();
-            let pool_for_runner = pool.clone();
-            let pool_for_cleanup = pool.clone();
-            let coordinator = sync_coordinator.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = run_sync_pipeline(
-                    app_for_runner.clone(),
-                    pool_for_runner,
-                    client,
-                    ScanResult::default(),
-                    true,
-                    coordinator,
-                    audit_context,
-                )
-                .await
-                {
-                    emit_sync_error(&app_for_runner, &error);
-                    if let Ok(snapshot) = db::set_sync_status(&pool_for_cleanup, "IDLE").await {
-                        crate::app::tray::update_sync_action(&app_for_runner, &snapshot);
-                    }
-                }
-            });
-        } else {
-            let completed_snapshot = db::complete_sync_job_if_finished(pool)
-                .await
-                .map_err(|error| error.to_string())?
-                .ok_or_else(|| "Sync queue is still processing.".to_string());
-            let completed_snapshot = completed_snapshot?;
-            crate::app::tray::update_sync_action(app, &completed_snapshot);
-            let _ = app.emit("sync-progress-snapshot", &completed_snapshot);
-            return Ok(completed_snapshot);
-        }
-    }
-    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -263,71 +118,13 @@ pub(crate) async fn retry_failed_syncs(
     pool: tauri::State<'_, sqlx::SqlitePool>,
     sync_state: tauri::State<'_, SyncState>,
     sync_coordinator: tauri::State<'_, SyncCoordinator>,
-) -> Result<SyncSummary, String> {
-    if sync_state
-        .0
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        return Err("Sync already in progress".to_string());
-    }
-
-    let command_operation_id = crate::audit::AuditEvent::operation_id();
-    let running_snapshot = match db::set_sync_status(pool.inner(), "RUNNING").await {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
-            sync_state.0.store(false, Ordering::SeqCst);
-            return Err(error.to_string());
-        }
-    };
-    crate::app::tray::update_sync_action(&app, &running_snapshot);
-    let result = async {
-        let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-        let audit_context = SyncAuditContext::from_credentials(&credentials, "retry_failed_syncs");
-        let client =
-            create_authenticated_client(&app, credentials).ok_or("Invalid server configuration")?;
-        let failed_paths = db::get_failed_syncs(pool.inner())
-            .await
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .map(|entry| entry.local_path)
-            .collect();
-        let scan_result = prepare_failed_sync_retry(failed_paths).await?;
-        db::discard_failed_sync_paths(pool.inner(), &scan_result.discarded_paths)
-            .await
-            .map_err(|error| error.to_string())?;
-
-        run_sync_pipeline(
-            app.clone(),
-            pool.inner().clone(),
-            client,
-            scan_result,
-            false,
-            sync_coordinator.0.clone(),
-            audit_context,
-        )
-        .await
-    }
-    .await;
-
-    sync_state.0.store(false, Ordering::SeqCst);
-    if let Err(error) = &result {
-        if let Ok(snapshot) = db::set_sync_status(pool.inner(), "IDLE").await {
-            crate::app::tray::update_sync_action(&app, &snapshot);
-        }
-        audit_event(
-            &app,
-            crate::audit::AuditEvent::new(
-                &command_operation_id,
-                "sync.retry_aborted",
-                crate::audit::Outcome::Failure,
-                crate::audit::Severity::Error,
-                None,
-                "retry_failed_syncs",
-                "Failed synchronization retry aborted",
-                json!({ "failure_reason": audit_safe_error(error, &[]) }),
-            ),
-        );
-    }
-    result
+) -> Result<crate::sync::SyncSummary, String> {
+    synchronization(
+        &app,
+        pool.inner(),
+        sync_state.inner(),
+        sync_coordinator.inner(),
+    )
+    .retry()
+    .await
 }
