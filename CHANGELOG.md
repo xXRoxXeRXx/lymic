@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-10-18
+
+### Added
+- **Immich user profile avatar**:
+  - Displays the authenticated user's profile avatar in the sidebar.
+  - Caches user avatars locally in the application data directory with isolated namespaces per user and server.
+  - Cleans up cached avatar files on logout and falls back gracefully to the standard user icon when no avatar is set, during loading errors, or when rate-limited.
+- **Typed desktop adapter**:
+  - Introduces a centralized, typed `DesktopAdapter` interface and composition root in the frontend to decouple controllers and UI components from direct Tauri invoke calls, improving testability and code organization.
+
+### Changed
+- **Synchronization service architecture**:
+  - Encapsulates sync coordination and lifecycle management into an isolated `SynchronizationService` in the Rust core, keeping Tauri command adapters thin.
+  - Extracts per-run processing (`ProcessorRunner`) and standardizes queue runner processor outcomes for cleaner lifecycle handling and resilient queue progression.
+  - Aligns lifecycle state transitions and prevents regressions when stopping, pausing, or canceling synchronizations.
+
 ## [0.20.0] - 2026-10-16
 
 ### Added
