@@ -63,8 +63,6 @@ function renderAuthenticatedPage() {
         return Promise.resolve("https://immich.example");
       case "get_current_user":
         return Promise.resolve({ displayName: "Meyer", profileImage: null });
-      case "get_current_user_name":
-        return Promise.resolve("Meyer");
       case "get_folders":
         return Promise.resolve(watchedFolders);
       case "get_failed_syncs":
@@ -252,7 +250,7 @@ describe("application updates", () => {
       if (command === "get_sync_status") return Promise.resolve({ status: "PAUSED", total: 1, succeeded: 0, failed: 0, currentPath: null });
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve([]);
       if (command === "get_failed_syncs") return Promise.resolve([]);
       if (command === "get_upload_parallelism") return Promise.resolve(3);
@@ -280,7 +278,7 @@ describe("sync dashboard", () => {
       }
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve([]);
       if (command === "get_upload_parallelism") return Promise.resolve(3);
@@ -306,7 +304,7 @@ describe("sync dashboard", () => {
       }
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve([]);
       if (command === "get_upload_parallelism") return Promise.resolve(3);
@@ -337,7 +335,7 @@ describe("sync dashboard", () => {
       }
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve([]);
       if (command === "get_upload_parallelism") return Promise.resolve(3);
@@ -457,7 +455,7 @@ describe("sync dashboard", () => {
       }
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
       return Promise.resolve();
@@ -484,7 +482,7 @@ describe("sync dashboard", () => {
       }
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
       return Promise.resolve();
@@ -514,7 +512,7 @@ describe("sync dashboard", () => {
       }
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve([]);
       if (command === "get_upload_parallelism") return Promise.resolve(3);
@@ -540,7 +538,7 @@ describe("sync dashboard", () => {
       if (command === "remove_folder") return Promise.resolve({ requiresSyncCancellation: true });
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve([]);
       if (command === "get_upload_parallelism") return Promise.resolve(3);
@@ -563,7 +561,7 @@ describe("sync dashboard", () => {
       if (command === "remove_folder") return Promise.resolve({ requiresSyncCancellation: false });
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve([]);
       if (command === "get_upload_parallelism") return Promise.resolve(3);
@@ -601,7 +599,7 @@ describe("sync dashboard", () => {
       }
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
       return Promise.resolve();
@@ -628,7 +626,7 @@ describe("sync dashboard", () => {
       }
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
       return Promise.resolve();
@@ -651,7 +649,7 @@ describe("sync dashboard", () => {
       if (command === "start_sync") return Promise.resolve({ processed: 1, uploaded: 1, failed: 0 });
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
       return Promise.resolve();
@@ -830,7 +828,7 @@ describe("settings", () => {
       }
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
       if (command === "get_upload_parallelism") return Promise.resolve(uploadParallelism);
@@ -856,7 +854,7 @@ describe("settings", () => {
       if (command === "set_upload_parallelism") return Promise.reject(new Error("Database unavailable"));
       if (command === "get_auth_status") return Promise.resolve(true);
       if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user_name") return Promise.resolve("Meyer");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
       if (command === "get_folders") return Promise.resolve(watchedFolders);
       if (command === "get_failed_syncs") return Promise.resolve(failedSyncs);
       if (command === "get_upload_parallelism") return Promise.resolve(uploadParallelism);
@@ -923,8 +921,8 @@ describe("removable volume setup flow", () => {
           return Promise.resolve(true);
         case "get_server_url":
           return Promise.resolve("https://immich.example");
-        case "get_current_user_name":
-          return Promise.resolve("Meyer");
+        case "get_current_user":
+          return Promise.resolve({ displayName: "Meyer", profileImage: null });
         case "get_folders":
           return Promise.resolve(watchedFolders);
         case "get_failed_syncs":
@@ -997,8 +995,8 @@ describe("removable volume setup flow", () => {
           return Promise.resolve(true);
         case "get_server_url":
           return Promise.resolve("https://immich.example");
-        case "get_current_user_name":
-          return Promise.resolve("Meyer");
+        case "get_current_user":
+          return Promise.resolve({ displayName: "Meyer", profileImage: null });
         case "get_folders":
           return Promise.resolve(watchedFolders);
         case "get_failed_syncs":

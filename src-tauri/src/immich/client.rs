@@ -137,15 +137,11 @@ impl ImmichClient {
     }
 
     pub(crate) async fn validate_connection(&self) -> Result<(), String> {
-        self.current_user().await.map(|_| ())
+        self.current_user_info().await.map(|_| ())
     }
 
     pub(crate) fn uses_http(&self) -> bool {
         self.server_url.scheme() == "http"
-    }
-
-    pub(crate) async fn current_user(&self) -> Result<String, String> {
-        self.current_user_info().await.map(|info| info.display_name)
     }
 
     pub(crate) async fn current_user_info(&self) -> Result<CurrentUserInfo, String> {
@@ -190,6 +186,7 @@ impl ImmichClient {
         &self,
         user_id: &str,
     ) -> Result<(Vec<u8>, Option<String>), String> {
+        const MAX_PROFILE_IMAGE_BYTES: usize = 10 * 1024 * 1024;
         let response = self
             .client
             .get(self.endpoint_url(&format!("users/{user_id}/profile-image")))
@@ -203,16 +200,25 @@ impl ImmichClient {
                 response_status_error(response).await?
             ));
         }
+        if let Some(len) = response.content_length() {
+            if len as usize > MAX_PROFILE_IMAGE_BYTES {
+                return Err("Profile image exceeds maximum allowed size".to_string());
+            }
+        }
         let content_type = response
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
             .and_then(|v| v.to_str().ok())
+            .filter(|ct| ct.starts_with("image/"))
             .map(|s| s.to_string());
         let bytes = response
             .bytes()
             .await
             .map_err(|e| format!("Failed to read profile image: {}", e))?
             .to_vec();
+        if bytes.len() > MAX_PROFILE_IMAGE_BYTES {
+            return Err("Profile image exceeds maximum allowed size".to_string());
+        }
         Ok((bytes, content_type))
     }
 
@@ -846,5 +852,68 @@ mod tests {
         let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
         assert!(request.starts_with("GET /api/users/user-uuid-123/profile-image HTTP/1.1"));
         assert!(request.contains("x-api-key: test-key"));
+    }
+
+    #[tokio::test]
+    async fn fetches_profile_image_with_cloudflare_access_headers() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            requests_tx
+                .send(read_http_request(&mut stream).await)
+                .await
+                .unwrap();
+            let fake_image = b"\xFF\xD8\xFF\xE0\x00\x10JFIF";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                fake_image.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+            stream.write_all(fake_image).await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            Some("cf-id".to_string()),
+            Some("cf-secret".to_string()),
+        )
+        .unwrap();
+        let (bytes, mime) = client.get_profile_image("user-uuid-123").await.unwrap();
+        assert_eq!(bytes, b"\xFF\xD8\xFF\xE0\x00\x10JFIF");
+        assert_eq!(mime.as_deref(), Some("image/jpeg"));
+
+        let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(request.starts_with("GET /api/users/user-uuid-123/profile-image HTTP/1.1"));
+        assert!(request.contains("x-api-key: test-key"));
+        assert!(request.contains("cf-access-client-id: cf-id"));
+        assert!(request.contains("cf-access-client-secret: cf-secret"));
+    }
+
+    #[tokio::test]
+    async fn filters_non_image_content_type() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut stream).await;
+            let fake_body = b"not an image";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                fake_body.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+            stream.write_all(fake_body).await.unwrap();
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        let (bytes, mime) = client.get_profile_image("user-123").await.unwrap();
+        assert_eq!(bytes, b"not an image");
+        assert_eq!(mime, None);
     }
 }

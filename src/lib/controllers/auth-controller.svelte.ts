@@ -4,6 +4,11 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 const LOCAL_HTTP_NOT_ALLOWED_ERROR = "LOCAL_HTTP_NOT_ALLOWED";
 const CLOUDFLARE_ACCESS_PAIR_REQUIRED_ERROR = "CLOUDFLARE_ACCESS_PAIR_REQUIRED";
 
+export type CurrentUser = {
+  displayName: string;
+  profileImage: string | null;
+};
+
 export function createAuthController(options: {
   formatError: (error: unknown) => string;
   onLogin: () => Promise<void> | void;
@@ -25,20 +30,11 @@ export function createAuthController(options: {
 
   async function loadCurrentUser() {
     try {
-      const user = await invoke<{ displayName?: string; profileImage?: string | null } | string>("get_current_user");
-      if (typeof user === "string") {
-        currentUserName = user;
-        profileImage = null;
-      } else if (user && typeof user === "object") {
-        currentUserName = user.displayName ?? "";
-        profileImage = user.profileImage ?? null;
-      }
-    } catch {
-      try {
-        currentUserName = await invoke<string>("get_current_user_name");
-      } catch (error) {
-        console.warn("Failed to load current user", error);
-      }
+      const user = await invoke<CurrentUser>("get_current_user");
+      currentUserName = user.displayName;
+      profileImage = user.profileImage;
+    } catch (error) {
+      console.warn("Failed to load current user", error);
     }
   }
 
@@ -113,7 +109,6 @@ export function createAuthController(options: {
     get serverUrl() { return serverUrl; },
     set serverUrl(value: string) { serverUrl = value; },
     get currentUserName() { return currentUserName; },
-    get displayName() { return currentUserName; },
     get profileImage() { return profileImage; },
     get apiKey() { return apiKey; },
     set apiKey(value: string) { apiKey = value; },

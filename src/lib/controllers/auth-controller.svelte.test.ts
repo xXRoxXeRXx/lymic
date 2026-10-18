@@ -14,7 +14,7 @@ describe("auth controller", () => {
   it("retains successful authentication when the optional account lookup fails", async () => {
     tauri.invoke.mockImplementation((command: string) => {
       if (command === "login") return Promise.resolve();
-      if (command === "get_current_user_name") return Promise.reject(new Error("Profile unavailable"));
+      if (command === "get_current_user") return Promise.reject(new Error("Profile unavailable"));
       return Promise.resolve();
     });
     const controller = createAuthController({
@@ -35,7 +35,7 @@ describe("auth controller", () => {
 
   it("forwards a complete Cloudflare Access pair to Tauri", async () => {
     tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_current_user_name") return Promise.resolve("User");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "User", profileImage: null });
       return Promise.resolve();
     });
     const controller = createAuthController({
@@ -82,7 +82,7 @@ describe("auth controller", () => {
 
   it("treats whitespace-only Cloudflare Access credentials as disabled", async () => {
     tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_current_user_name") return Promise.resolve("User");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "User", profileImage: null });
       return Promise.resolve();
     });
     const controller = createAuthController({
@@ -110,7 +110,7 @@ describe("auth controller", () => {
 
   it("forwards the local HTTP opt-in to Tauri and resets it on logout", async () => {
     tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_current_user_name") return Promise.resolve("User");
+      if (command === "get_current_user") return Promise.resolve({ displayName: "User", profileImage: null });
       return Promise.resolve();
     });
     tauri.confirm.mockResolvedValue(true);

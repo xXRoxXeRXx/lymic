@@ -3,7 +3,18 @@ use crate::audit::{audit_event, audit_safe_error};
 use crate::commands::profile_cache::{self, CurrentUser};
 use crate::{auth, immich};
 use serde_json::json;
+use std::path::PathBuf;
 use tauri::Manager;
+
+const PROFILE_CACHE_DIR: &str = "profile_cache";
+
+pub(crate) fn profile_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let cache_root = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| format!("Failed to get app cache dir: {e}"))?;
+    Ok(cache_root.join(PROFILE_CACHE_DIR))
+}
 
 fn normalize_cloudflare_access_credentials(
     client_id: Option<String>,
@@ -52,7 +63,7 @@ pub(crate) async fn login(
 
     // Build a temporary ImmichClient purely to reuse its URL normalisation and
     // pooled reqwest Client. The client is discarded after the connection test.
-    let result = async {
+    let result: Result<(), String> = async {
         let temp_client = immich::ImmichClient::new(
             server_url.clone(),
             api_key.clone(),
@@ -67,7 +78,11 @@ pub(crate) async fn login(
             temp_client.uses_http(),
             cloudflare_client_id.clone(),
             cloudflare_client_secret.clone(),
-        )
+        )?;
+        if let Ok(cache_dir) = profile_cache_dir(&app) {
+            profile_cache::clear_profile_cache(&cache_dir);
+        }
+        Ok(())
     }
     .await;
     audit_event(
@@ -100,15 +115,17 @@ pub(crate) async fn login(
 
 #[tauri::command]
 pub(crate) async fn logout(app: tauri::AppHandle) -> Result<(), String> {
-    if let Ok(cache_dir) = app.path().app_cache_dir() {
-        let _ = profile_cache::clear_profile_cache(&cache_dir.join("profile_cache"));
-    }
     let operation_id = crate::audit::AuditEvent::operation_id();
     let actor_id = auth::get_credentials()
         .ok()
         .flatten()
         .map(|credentials| crate::audit::actor_id(&credentials.server_url, &credentials.api_key));
     let result = auth::delete_credentials();
+    if result.is_ok() {
+        if let Ok(cache_dir) = profile_cache_dir(&app) {
+            profile_cache::clear_profile_cache(&cache_dir);
+        }
+    }
     audit_event(
         &app,
         crate::audit::AuditEvent::new(
@@ -137,22 +154,6 @@ pub(crate) async fn logout(app: tauri::AppHandle) -> Result<(), String> {
     result
 }
 
-#[cfg(test)]
-mod tests {
-    use super::normalize_cloudflare_access_credentials;
-
-    #[test]
-    fn normalizes_whitespace_only_cloudflare_access_credentials_to_disabled() {
-        assert_eq!(
-            normalize_cloudflare_access_credentials(
-                Some(" \t ".to_string()),
-                Some("\n".to_string())
-            ),
-            (None, None),
-        );
-    }
-}
-
 #[tauri::command]
 pub(crate) async fn get_auth_status() -> Result<bool, String> {
     Ok(auth::get_credentials()?.is_some())
@@ -169,99 +170,96 @@ pub(crate) async fn get_server_url() -> Result<String, String> {
 
 #[tauri::command]
 pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUser, String> {
-    let cache_dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|e| format!("Failed to get app cache dir: {e}"))?
-        .join("profile_cache");
+    let cache_dir = profile_cache_dir(&app)?;
 
     let credentials = match auth::get_credentials() {
         Ok(Some(creds)) => creds,
         Ok(None) => return Err("Not logged in".to_string()),
         Err(e) => return Err(e),
     };
+    let account_id = crate::audit::actor_id(&credentials.server_url, &credentials.api_key);
 
     let client = match immich::ImmichClient::new(
-        credentials.server_url,
-        credentials.api_key,
+        credentials.server_url.clone(),
+        credentials.api_key.clone(),
         credentials.allow_local_http,
-        credentials.cloudflare_client_id,
-        credentials.cloudflare_client_secret,
+        credentials.cloudflare_client_id.clone(),
+        credentials.cloudflare_client_secret.clone(),
     ) {
         Ok(c) => c,
-        Err(_) => {
-            if let Some(cached) = profile_cache::load_cached_profile(&cache_dir) {
-                return Ok(cached);
-            }
-            return Ok(CurrentUser {
-                display_name: String::new(),
-                profile_image: None,
-            });
+        Err(err) => {
+            eprintln!("Failed to initialize Immich client: {err}");
+            return Ok(profile_cache::resolve_profile(
+                &cache_dir,
+                &account_id,
+                profile_cache::ProfileFetchOutcome::RefreshFailed,
+            ));
         }
     };
 
-    match client.current_user_info().await {
+    let outcome = match client.current_user_info().await {
         Ok(user_info) => {
             if user_info.has_profile_image {
                 match client.get_profile_image(&user_info.id).await {
                     Ok((bytes, content_type)) => {
-                        let _ = profile_cache::save_cached_profile(
-                            &cache_dir,
-                            &user_info.id,
-                            &user_info.display_name,
-                            Some(&bytes),
-                            content_type.as_deref(),
-                        );
-                        let profile_image =
-                            Some(profile_cache::to_data_url(&bytes, content_type.as_deref()));
-                        Ok(CurrentUser {
+                        profile_cache::ProfileFetchOutcome::SuccessWithImage {
+                            user_id: user_info.id,
                             display_name: user_info.display_name,
-                            profile_image,
-                        })
+                            bytes,
+                            content_type,
+                        }
                     }
-                    Err(_) => {
-                        let cached_image = profile_cache::load_cached_profile(&cache_dir)
-                            .and_then(|c| c.profile_image);
-                        Ok(CurrentUser {
+                    Err(err) => {
+                        eprintln!("Failed to fetch profile image: {err}");
+                        profile_cache::ProfileFetchOutcome::ImageFetchFailed {
+                            user_id: user_info.id,
                             display_name: user_info.display_name,
-                            profile_image: cached_image,
-                        })
+                        }
                     }
                 }
             } else {
-                let _ = profile_cache::clear_profile_cache(&cache_dir);
-                let _ = profile_cache::save_cached_profile(
-                    &cache_dir,
-                    &user_info.id,
-                    &user_info.display_name,
-                    None,
-                    None,
-                );
-                Ok(CurrentUser {
+                profile_cache::ProfileFetchOutcome::SuccessNoImage {
+                    user_id: user_info.id,
                     display_name: user_info.display_name,
-                    profile_image: None,
-                })
+                }
             }
         }
-        Err(_) => {
-            if let Some(cached) = profile_cache::load_cached_profile(&cache_dir) {
-                Ok(cached)
-            } else {
-                Ok(CurrentUser {
-                    display_name: String::new(),
-                    profile_image: None,
-                })
-            }
+        Err(err) => {
+            eprintln!("Failed to refresh current user: {err}");
+            profile_cache::ProfileFetchOutcome::RefreshFailed
         }
+    };
+
+    // Guard against logout race: confirm credentials still match before resolving/persisting
+    let current_creds = auth::get_credentials().ok().flatten();
+    let is_still_same_account = current_creds
+        .as_ref()
+        .map(|c| crate::audit::actor_id(&c.server_url, &c.api_key) == account_id)
+        .unwrap_or(false);
+
+    if !is_still_same_account {
+        return Err("Session changed during profile refresh".to_string());
     }
+
+    Ok(profile_cache::resolve_profile(
+        &cache_dir,
+        &account_id,
+        outcome,
+    ))
 }
 
-#[tauri::command]
-pub(crate) async fn get_current_user_name(app: tauri::AppHandle) -> Result<String, String> {
-    let user = get_current_user(app).await?;
-    if user.display_name.is_empty() {
-        Err("Current user response did not include a name".to_string())
-    } else {
-        Ok(user.display_name)
+#[cfg(test)]
+mod tests {
+    use super::normalize_cloudflare_access_credentials;
+
+    #[test]
+    fn normalizes_whitespace_only_cloudflare_access_credentials_to_disabled() {
+        assert_eq!(
+            normalize_cloudflare_access_credentials(
+                Some(" \t ".to_string()),
+                Some("\n".to_string())
+            ),
+            (None, None),
+        );
     }
 }
