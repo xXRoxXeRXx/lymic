@@ -10,6 +10,334 @@ use crate::{
 use std::sync::{atomic::Ordering, Arc};
 use tauri::{Emitter, Manager};
 
+/// Durable synchronization state transitions, independent of the desktop shell.
+///
+/// `Synchronization` owns the surrounding desktop orchestration; this smaller
+/// collaborator is deliberately kept free of Tauri so its state-machine
+/// contract can be exercised against the real SQLite schema.
+pub(crate) struct SynchronizationLifecycle<'a> {
+    pool: &'a sqlx::SqlitePool,
+    running: &'a std::sync::atomic::AtomicBool,
+    coordinator: Arc<crate::sync::SyncCoordinatorInner>,
+}
+
+impl<'a> SynchronizationLifecycle<'a> {
+    pub(crate) fn new(
+        pool: &'a sqlx::SqlitePool,
+        running: &'a std::sync::atomic::AtomicBool,
+        coordinator: Arc<crate::sync::SyncCoordinatorInner>,
+    ) -> Self {
+        Self {
+            pool,
+            running,
+            coordinator,
+        }
+    }
+
+    pub(crate) async fn start(&self) -> Result<db::SyncSnapshot, String> {
+        if self
+            .running
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err("Sync already in progress".to_string());
+        }
+
+        match db::set_sync_status(self.pool, "RUNNING").await {
+            Ok(snapshot) => Ok(snapshot),
+            Err(error) => {
+                self.running.store(false, Ordering::SeqCst);
+                Err(error.to_string())
+            }
+        }
+    }
+
+    pub(crate) fn finish(&self) {
+        self.running.store(false, Ordering::SeqCst);
+    }
+
+    pub(crate) async fn abort(&self) -> Result<db::SyncSnapshot, String> {
+        self.finish();
+        db::set_sync_status(self.pool, "IDLE")
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub(crate) async fn pause(&self) -> Result<db::SyncSnapshot, String> {
+        self.coordinator.paused.store(true, Ordering::SeqCst);
+        db::set_sync_status(self.pool, "PAUSED")
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub(crate) async fn resume(&self) -> Result<db::SyncSnapshot, String> {
+        let snapshot = self.status().await?;
+        if snapshot.status != "PAUSED" {
+            return Ok(snapshot);
+        }
+
+        self.coordinator.paused.store(false, Ordering::SeqCst);
+        let snapshot = db::set_sync_status(self.pool, "RUNNING")
+            .await
+            .map_err(|error| error.to_string())?;
+        self.coordinator.resume.notify_waiters();
+        Ok(snapshot)
+    }
+
+    pub(crate) async fn status(&self) -> Result<db::SyncSnapshot, String> {
+        db::get_sync_snapshot(self.pool)
+            .await
+            .map_err(|error| error.to_string())
+    }
+}
+
+/// The synchronization application service.
+///
+/// It is the one entry point for a synchronization run and localizes the
+/// desktop effects around the durable lifecycle transitions.
+pub(crate) struct Synchronization<'a> {
+    app: &'a tauri::AppHandle,
+    pool: &'a sqlx::SqlitePool,
+    running: &'a std::sync::atomic::AtomicBool,
+    coordinator: &'a Arc<crate::sync::SyncCoordinatorInner>,
+}
+
+impl<'a> Synchronization<'a> {
+    pub(crate) fn new(
+        app: &'a tauri::AppHandle,
+        pool: &'a sqlx::SqlitePool,
+        running: &'a std::sync::atomic::AtomicBool,
+        coordinator: &'a Arc<crate::sync::SyncCoordinatorInner>,
+    ) -> Self {
+        Self {
+            app,
+            pool,
+            running,
+            coordinator,
+        }
+    }
+
+    fn lifecycle(&self) -> SynchronizationLifecycle<'_> {
+        SynchronizationLifecycle::new(self.pool, self.running, self.coordinator.clone())
+    }
+
+    pub(crate) async fn start(&self) -> Result<crate::sync::SyncSummary, String> {
+        let folders = db::get_folders(self.pool)
+            .await
+            .map_err(|error| error.to_string())?;
+        ensure_sync_has_folders(&folders)?;
+        let operation_id = crate::audit::AuditEvent::operation_id();
+        let running_snapshot = match self.lifecycle().start().await {
+            Ok(snapshot) => snapshot,
+            Err(error) if error == "Sync already in progress" => {
+                crate::app::events::log_to_ui_key(
+                    self.app,
+                    "WARN",
+                    "Manual sync already in progress. Ignoring request.",
+                    "log_sync_already_in_progress",
+                );
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
+        crate::app::tray::update_sync_action(self.app, &running_snapshot);
+        crate::app::events::log_to_ui_key(
+            self.app,
+            "INFO",
+            "Starting manual synchronization...",
+            "log_starting_sync",
+        );
+
+        let result = async {
+            let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
+            let audit_context = SyncAuditContext::from_credentials(&credentials, "manual_sync");
+            let client = create_authenticated_client(self.app, credentials)
+                .ok_or("Invalid server configuration")?;
+            for folder in &folders {
+                crate::app::events::log_to_ui_folder(
+                    self.app,
+                    "INFO",
+                    &format!("Scanning folder: {}", folder.path),
+                    "log_scanning_folder",
+                    &folder.path,
+                );
+            }
+            let paths = folders
+                .into_iter()
+                .map(|folder| std::path::PathBuf::from(folder.path))
+                .collect();
+            let scan_result = scan_folders_for_media(paths).await?;
+            log_overlapping_folders(self.app, &scan_result);
+            crate::sync::queue_runner::run_sync_pipeline(
+                self.app.clone(),
+                self.pool.clone(),
+                client,
+                scan_result,
+                false,
+                self.coordinator.clone(),
+                audit_context,
+            )
+            .await
+        }
+        .await;
+
+        self.lifecycle().finish();
+        if let Err(error) = &result {
+            if let Ok(snapshot) = self.lifecycle().abort().await {
+                crate::app::tray::update_sync_action(self.app, &snapshot);
+            }
+            crate::audit::audit_event(
+                self.app,
+                crate::audit::AuditEvent::new(
+                    &operation_id,
+                    "sync.aborted",
+                    crate::audit::Outcome::Failure,
+                    crate::audit::Severity::Error,
+                    None,
+                    "manual_sync",
+                    "Manual synchronization aborted",
+                    serde_json::json!({ "failure_reason": crate::audit::audit_safe_error(error, &[]) }),
+                ),
+            );
+        }
+        result
+    }
+
+    pub(crate) async fn retry(&self) -> Result<crate::sync::SyncSummary, String> {
+        let operation_id = crate::audit::AuditEvent::operation_id();
+        let running_snapshot = self.lifecycle().start().await?;
+        crate::app::tray::update_sync_action(self.app, &running_snapshot);
+        let result = async {
+            let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
+            let audit_context =
+                SyncAuditContext::from_credentials(&credentials, "retry_failed_syncs");
+            let client = create_authenticated_client(self.app, credentials)
+                .ok_or("Invalid server configuration")?;
+            let failed_paths = db::get_failed_syncs(self.pool)
+                .await
+                .map_err(|error| error.to_string())?
+                .into_iter()
+                .map(|entry| entry.local_path)
+                .collect();
+            let scan_result = crate::sync::prepare_failed_sync_retry(failed_paths).await?;
+            db::discard_failed_sync_paths(self.pool, &scan_result.discarded_paths)
+                .await
+                .map_err(|error| error.to_string())?;
+            crate::sync::queue_runner::run_sync_pipeline(
+                self.app.clone(),
+                self.pool.clone(),
+                client,
+                scan_result,
+                false,
+                self.coordinator.clone(),
+                audit_context,
+            )
+            .await
+        }
+        .await;
+        self.lifecycle().finish();
+        if let Err(error) = &result {
+            if let Ok(snapshot) = self.lifecycle().abort().await {
+                crate::app::tray::update_sync_action(self.app, &snapshot);
+            }
+            crate::audit::audit_event(
+                self.app,
+                crate::audit::AuditEvent::new(
+                    &operation_id,
+                    "sync.retry_aborted",
+                    crate::audit::Outcome::Failure,
+                    crate::audit::Severity::Error,
+                    None,
+                    "retry_failed_syncs",
+                    "Failed synchronization retry aborted",
+                    serde_json::json!({ "failure_reason": crate::audit::audit_safe_error(error, &[]) }),
+                ),
+            );
+        }
+        result
+    }
+
+    pub(crate) async fn pause(&self) -> Result<db::SyncSnapshot, String> {
+        let snapshot = self.lifecycle().pause().await?;
+        crate::app::tray::update_sync_action(self.app, &snapshot);
+        let _ = self.app.emit("sync-paused", &snapshot);
+        Ok(snapshot)
+    }
+
+    pub(crate) async fn resume(&self) -> Result<db::SyncSnapshot, String> {
+        let previous = self.lifecycle().status().await?;
+        if previous.status != "PAUSED" {
+            return Ok(previous);
+        }
+        let snapshot = self.lifecycle().resume().await?;
+        crate::app::tray::update_sync_action(self.app, &snapshot);
+        let _ = self.app.emit("sync-resumed", &snapshot);
+        self.resume_recovered_work(&snapshot).await
+    }
+
+    async fn resume_recovered_work(
+        &self,
+        snapshot: &db::SyncSnapshot,
+    ) -> Result<db::SyncSnapshot, String> {
+        if snapshot.status != "RUNNING" || self.coordinator.lock.try_lock().is_err() {
+            return Ok(snapshot.clone());
+        }
+        let has_pending = db::has_pending_sync_queue_items(self.pool)
+            .await
+            .map_err(|error| error.to_string())?;
+        if !has_pending {
+            let completed = db::complete_sync_job_if_finished(self.pool)
+                .await
+                .map_err(|error| error.to_string())?
+                .ok_or_else(|| "Sync queue is still processing.".to_string())?;
+            crate::app::tray::update_sync_action(self.app, &completed);
+            let _ = self.app.emit("sync-progress-snapshot", &completed);
+            return Ok(completed);
+        }
+        let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
+        let audit_context = SyncAuditContext::from_credentials(&credentials, "resume_sync");
+        let client = create_authenticated_client(self.app, credentials)
+            .ok_or("Invalid server configuration")?;
+        crate::audit::audit_event(
+            self.app,
+            audit_context.event(
+                "sync.resumed",
+                crate::audit::Outcome::Info,
+                crate::audit::Severity::Info,
+                "Synchronization resumed",
+                serde_json::json!({}),
+            ),
+        );
+        let app = self.app.clone();
+        let pool = self.pool.clone();
+        let cleanup_pool = self.pool.clone();
+        let coordinator = self.coordinator.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = crate::sync::queue_runner::run_sync_pipeline(
+                app.clone(),
+                pool,
+                client,
+                ScanResult::default(),
+                true,
+                coordinator,
+                audit_context,
+            )
+            .await
+            {
+                emit_sync_error(&app, &error);
+                if let Ok(snapshot) = db::set_sync_status(&cleanup_pool, "IDLE").await {
+                    crate::app::tray::update_sync_action(&app, &snapshot);
+                }
+            }
+        });
+        Ok(snapshot.clone())
+    }
+
+    pub(crate) async fn status(&self) -> Result<db::SyncSnapshot, String> {
+        self.lifecycle().status().await
+    }
+}
+
 pub(crate) use crate::media::events::{add_event_paths, log_overlapping_folders};
 pub(crate) use crate::media::model::{Asset, FileFailure, ScanResult};
 pub(crate) use crate::media::scanner::scan_folders_for_media;
@@ -160,6 +488,29 @@ pub(crate) async fn sync_scan_result_if_authenticated(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn lifecycle_persists_pause_and_resume_without_a_desktop_runtime() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator.clone());
+
+        assert_eq!(lifecycle.start().await.unwrap().status, "RUNNING");
+        assert_eq!(lifecycle.pause().await.unwrap().status, "PAUSED");
+        assert!(coordinator.paused.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(lifecycle.resume().await.unwrap().status, "RUNNING");
+        assert!(!coordinator.paused.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(lifecycle.status().await.unwrap().status, "RUNNING");
+    }
 
     #[tokio::test]
     async fn sync_folder_guard_rejects_an_empty_database() {
