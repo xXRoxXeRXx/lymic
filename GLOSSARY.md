@@ -28,6 +28,10 @@ _Avoid_: remote filesystem, destination folder
 An optional album in the Immich Library associated with one Watched Folder. Every asset discovered in that folder is intended to belong to this album.
 _Avoid_: target folder, sync album, destination album
 
+**Exclusion Pattern**:
+A user-defined rule on a Watched Folder that excludes matching paths from Media Asset discovery.
+_Avoid_: ignore rule, filter, exclusion filter
+
 ## Media
 
 **Media Asset**:
