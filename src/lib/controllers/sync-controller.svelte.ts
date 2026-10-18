@@ -1,6 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import type { FailedSyncEntry, LogEntry, SyncStatus, WatchedFolder } from "../components/types";
+import { tauriDesktopAdapter, type DesktopAdapter } from "../tauri/desktop-adapter";
 import { subscribeToSyncEvents } from "../tauri/sync-event-subscription";
 import { toBcp47Locale } from "../i18n";
 import type {
@@ -37,6 +37,7 @@ export interface DashboardViewState {
 }
 
 export interface SyncControllerOptions {
+  adapter?: DesktopAdapter;
   reportError(error: unknown): void;
   t(key: string): string;
   locale(): string;
@@ -44,6 +45,7 @@ export interface SyncControllerOptions {
 }
 
 export function createSyncController(options: SyncControllerOptions) {
+  const adapter = options.adapter ?? tauriDesktopAdapter;
 
   let syncStatus = $state<SyncStatus>("idle");
   let lastSync = $state<string | null>(null);
@@ -120,7 +122,7 @@ export function createSyncController(options: SyncControllerOptions) {
 
   async function refreshFailedSyncs() {
     try {
-      failedSyncs = await invoke<FailedSyncEntry[]>("get_failed_syncs");
+      failedSyncs = await adapter.getFailedSyncs();
       if (failedSyncs.length > 0 && syncStatus === "idle") syncStatus = "error";
     } catch (error) {
       console.error("Failed to load sync failures", error);
@@ -130,7 +132,7 @@ export function createSyncController(options: SyncControllerOptions) {
 
   async function refreshFolders() {
     try {
-      watchedFolders = await invoke<WatchedFolder[]>("get_folders");
+      watchedFolders = await adapter.getFolders();
     } catch (error) {
       console.error("Failed to load folders", error);
       options.reportError(error);
@@ -140,7 +142,7 @@ export function createSyncController(options: SyncControllerOptions) {
   async function hydrate() {
     await refreshFolders();
     try {
-      applySyncSnapshot(await invoke<SyncSnapshot>("get_sync_status"));
+      applySyncSnapshot(await adapter.getSyncStatus());
     } catch (error) {
       console.warn("Failed to load sync status", error);
     }
@@ -182,7 +184,7 @@ export function createSyncController(options: SyncControllerOptions) {
     syncTotal = 0;
     resetTransferStats();
     try {
-      await finishSync(await invoke<SyncSummary>("start_sync"));
+      await finishSync(await adapter.startSync());
     } catch (error) {
       console.error("Sync failed", error);
       syncStatus = "error";
@@ -195,7 +197,7 @@ export function createSyncController(options: SyncControllerOptions) {
 
     isSyncActionPending = true;
     try {
-      applySyncSnapshot(await invoke<SyncSnapshot>(syncStatus === "syncing" ? "pause_sync" : "resume_sync"));
+      applySyncSnapshot(await (syncStatus === "syncing" ? adapter.pauseSync() : adapter.resumeSync()));
     } catch (error) {
       options.reportError(error);
     } finally {
@@ -213,7 +215,7 @@ export function createSyncController(options: SyncControllerOptions) {
     syncTotal = 0;
     resetTransferStats();
     try {
-      await finishSync(await invoke<SyncSummary>("retry_failed_syncs"));
+      await finishSync(await adapter.retryFailedSyncs());
     } catch (error) {
       console.error("Failed to retry sync failures", error);
       options.reportError(error);
@@ -264,16 +266,12 @@ export function createSyncController(options: SyncControllerOptions) {
     pendingVolume = null;
     try {
       if (volume) {
-        await invoke<number>("accept_removable_media_folder", {
-          volumeId: volume.volumeId,
-          path,
-          targetAlbumId,
-        });
+        await adapter.acceptRemovableMediaFolder(volume.volumeId, path, targetAlbumId);
         if (options.onRemovableVolumeAccepted) {
           options.onRemovableVolumeAccepted(volume.volumeId);
         }
       } else {
-        await invoke<number>("add_folder", { path, targetAlbumId });
+        await adapter.addFolder(path, targetAlbumId);
       }
       await refreshFolders();
     } catch (error) {
@@ -291,7 +289,7 @@ export function createSyncController(options: SyncControllerOptions) {
 
   async function removeFolder(id: number) {
     try {
-      const result = await invoke<RemoveFolderResult>("remove_folder", { id });
+      const result = await adapter.removeFolder(id);
       const warningMessage = result?.requiresSyncCancellation
         ? options.t("remove_folder_sync_warning")
         : options.t("remove_folder_confirmation");
@@ -300,7 +298,7 @@ export function createSyncController(options: SyncControllerOptions) {
         kind: "warning",
       });
       if (!confirmed) return;
-      await invoke<RemoveFolderResult>("remove_folder", { id, confirmCancellation: true });
+      await adapter.removeFolder(id, true);
       await refreshFolders();
       await refreshFailedSyncs();
     } catch (error) {
@@ -420,4 +418,3 @@ export function createSyncController(options: SyncControllerOptions) {
     removeFolder,
   };
 }
-

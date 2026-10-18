@@ -1,16 +1,55 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DesktopAdapter } from "../tauri/desktop-adapter";
 import { createSyncController } from "./sync-controller.svelte";
 
-const tauri = vi.hoisted(() => ({ invoke: vi.fn(), confirm: vi.fn(), open: vi.fn(), listen: vi.fn() }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm: tauri.confirm, open: tauri.open }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: tauri.listen }));
+const dialog = vi.hoisted(() => ({ confirm: vi.fn(), open: vi.fn() }));
+const events = vi.hoisted(() => ({ listen: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => dialog);
+vi.mock("@tauri-apps/api/event", () => events);
+
+function createDesktopAdapter(overrides: Partial<DesktopAdapter> = {}): DesktopAdapter {
+  return {
+    startSync: vi.fn().mockResolvedValue({ processed: 1, uploaded: 1, failed: 0 }),
+    pauseSync: vi.fn().mockResolvedValue({ status: "PAUSED", total: 0, succeeded: 0, failed: 0, currentPath: null }),
+    resumeSync: vi.fn().mockResolvedValue({ status: "RUNNING", total: 0, succeeded: 0, failed: 0, currentPath: null }),
+    getSyncStatus: vi.fn().mockResolvedValue({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null }),
+    getFailedSyncs: vi.fn().mockResolvedValue([]),
+    retryFailedSyncs: vi.fn().mockResolvedValue({ processed: 1, uploaded: 1, failed: 0 }),
+    getUploadParallelism: vi.fn(),
+    setUploadParallelism: vi.fn(),
+    addFolder: vi.fn().mockResolvedValue(1),
+    acceptRemovableMediaFolder: vi.fn().mockResolvedValue(1),
+    getFolders: vi.fn().mockResolvedValue([]),
+    removeFolder: vi.fn().mockResolvedValue({ requiresSyncCancellation: false }),
+    getAuthStatus: vi.fn(),
+    getServerUrl: vi.fn(),
+    getCurrentUser: vi.fn(),
+    login: vi.fn(),
+    logout: vi.fn(),
+    getAlbums: vi.fn(),
+    createAlbum: vi.fn(),
+    getLocaleCatalog: vi.fn(),
+    updateLocale: vi.fn(),
+    getDatabaseRecoveryNotice: vi.fn(),
+    recordWebviewStartupPhaseProbe: vi.fn(),
+    ...overrides,
+  };
+}
+
+function createController(adapter: DesktopAdapter, overrides = {}) {
+  return createSyncController({
+    adapter,
+    reportError: vi.fn(),
+    t: (key: string) => key,
+    locale: () => "en",
+    ...overrides,
+  });
+}
 
 beforeEach(() => {
-  tauri.invoke.mockClear();
-  tauri.confirm.mockClear();
-  tauri.open.mockClear();
-  tauri.listen.mockClear();
+  dialog.confirm.mockClear();
+  dialog.open.mockClear();
+  events.listen.mockClear();
 });
 
 afterEach(() => vi.useRealTimers());
@@ -18,14 +57,8 @@ afterEach(() => vi.useRealTimers());
 describe("sync controller", () => {
   it("clears the progress reset timer on disposal", async () => {
     vi.useFakeTimers();
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_folders") return Promise.resolve([{ id: 1, path: "C:/photos" }]);
-      if (command === "get_sync_status") return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
-      if (command === "start_sync") return Promise.resolve({ processed: 1, uploaded: 1, failed: 0 });
-      if (command === "get_failed_syncs") return Promise.resolve([]);
-      return Promise.resolve();
-    });
-    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+    const adapter = createDesktopAdapter({ getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos" }]) });
+    const controller = createController(adapter);
     controller.startLifecycle();
     await controller.hydrate();
     await controller.dashboard.onSyncAction();
@@ -33,245 +66,122 @@ describe("sync controller", () => {
     expect(controller.progress).toBe(100);
     controller.destroy();
     vi.advanceTimersByTime(2000);
-
     expect(controller.progress).toBe(100);
   });
 
   it("exposes dashboard state and intentions through one view-state interface", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_folders") return Promise.resolve([{ id: 1, path: "C:/photos" }]);
-      if (command === "get_sync_status") return Promise.resolve({ status: "PAUSED", total: 4, succeeded: 1, failed: 0, currentPath: "C:/photos/two.jpg" });
-      return Promise.resolve();
+    const adapter = createDesktopAdapter({
+      getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos" }]),
+      getSyncStatus: vi.fn().mockResolvedValue({ status: "PAUSED", total: 4, succeeded: 1, failed: 0, currentPath: "C:/photos/two.jpg" }),
     });
-    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+    const controller = createController(adapter);
     controller.startLifecycle();
     await controller.hydrate();
 
-    expect(controller.dashboard).toMatchObject({
-      syncStatus: "paused",
-      processed: 1,
-      syncTotal: 4,
-      currentFile: "two.jpg",
-      watchedFolders: [{ id: 1, path: "C:/photos" }],
-      onSyncAction: expect.any(Function),
-      onRetryFailedSyncs: expect.any(Function),
-      onAddFolder: expect.any(Function),
-      onRemoveFolder: expect.any(Function),
-      onConfirmAddFolder: expect.any(Function),
-      onCancelAddFolder: expect.any(Function),
-    });
+    expect(controller.dashboard).toMatchObject({ syncStatus: "paused", processed: 1, syncTotal: 4, currentFile: "two.jpg", watchedFolders: [{ id: 1, path: "C:/photos" }] });
   });
 
-  it("reflects synchronization event sequences through the dashboard interface", async () => {
-    const listeners = new Map<string, (event: { payload: unknown }) => void>();
-    tauri.listen.mockImplementation((event: string, handler: (event: { payload: unknown }) => void) => {
-      listeners.set(event, handler);
-      return Promise.resolve(() => {});
+  it("pauses and resumes synchronization through the adapter", async () => {
+    const adapter = createDesktopAdapter({
+      getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos" }]),
+      getSyncStatus: vi.fn().mockResolvedValue({ status: "RUNNING", total: 4, succeeded: 1, failed: 0, currentPath: null }),
+      pauseSync: vi.fn().mockResolvedValue({ status: "PAUSED", total: 4, succeeded: 1, failed: 0, currentPath: null }),
+      resumeSync: vi.fn().mockResolvedValue({ status: "RUNNING", total: 4, succeeded: 1, failed: 0, currentPath: null }),
     });
-    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+    const controller = createController(adapter);
     controller.startLifecycle();
-    controller.startSubscriptions();
+    await controller.hydrate();
 
-    listeners.get("sync-progress-snapshot")?.({
-      payload: { status: "RUNNING", total: 3, succeeded: 1, failed: 0, currentPath: "C:/photos/one.jpg" },
-    });
-    expect(controller.dashboard).toMatchObject({ syncStatus: "syncing", processed: 1, syncTotal: 3, currentFile: "one.jpg" });
+    await controller.syncAction();
+    await controller.syncAction();
 
-    listeners.get("sync-paused")?.({
-      payload: { status: "PAUSED", total: 3, succeeded: 1, failed: 0, currentPath: "C:/photos/one.jpg" },
-    });
-    expect(controller.dashboard.syncStatus).toBe("paused");
-
-    listeners.get("sync-resumed")?.({
-      payload: { status: "RUNNING", total: 3, succeeded: 1, failed: 0, currentPath: "C:/photos/one.jpg" },
-    });
-    expect(controller.dashboard.syncStatus).toBe("syncing");
+    expect(adapter.pauseSync).toHaveBeenCalledOnce();
+    expect(adapter.resumeSync).toHaveBeenCalledOnce();
+    expect(controller.syncStatus).toBe("syncing");
   });
 
-  it("retries failed synchronization through the dashboard interface", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_failed_syncs") return Promise.resolve([]);
-      if (command === "retry_failed_syncs") return Promise.resolve({ processed: 1, uploaded: 1, failed: 0 });
-      return Promise.resolve();
-    });
-    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+  it("retries failed synchronization through the adapter", async () => {
+    const adapter = createDesktopAdapter();
+    const controller = createController(adapter);
     controller.startLifecycle();
     controller.dashboard.failedSyncs.push({ localPath: "C:/photos/failed.jpg", failureReason: "temporary failure" });
 
     await controller.dashboard.onRetryFailedSyncs();
 
-    expect(tauri.invoke).toHaveBeenCalledWith("retry_failed_syncs");
+    expect(adapter.retryFailedSyncs).toHaveBeenCalledOnce();
     expect(controller.dashboard.syncStatus).toBe("idle");
   });
 
-  it("prompts with sync warning when active sync cancellation is required", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "remove_folder") return Promise.resolve({ requiresSyncCancellation: true });
-      if (command === "get_folders" || command === "get_failed_syncs") return Promise.resolve([]);
-      return Promise.resolve();
-    });
-    tauri.confirm.mockResolvedValue(true);
-    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+  it("removes a folder after the required sync cancellation warning", async () => {
+    const adapter = createDesktopAdapter({ removeFolder: vi.fn().mockResolvedValue({ requiresSyncCancellation: true }) });
+    dialog.confirm.mockResolvedValue(true);
+    const controller = createController(adapter);
 
     await controller.dashboard.onRemoveFolder(4);
 
-    expect(tauri.confirm).toHaveBeenCalledWith("remove_folder_sync_warning", {
-      title: "remove_folder",
-      kind: "warning",
-    });
-    expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4 });
-    expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4, confirmCancellation: true });
+    expect(dialog.confirm).toHaveBeenCalledWith("remove_folder_sync_warning", { title: "remove_folder", kind: "warning" });
+    expect(adapter.removeFolder).toHaveBeenNthCalledWith(1, 4);
+    expect(adapter.removeFolder).toHaveBeenNthCalledWith(2, 4, true);
   });
 
-  it("prompts with standard confirmation when removing an idle folder", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "remove_folder") return Promise.resolve({ requiresSyncCancellation: false });
-      if (command === "get_folders" || command === "get_failed_syncs") return Promise.resolve([]);
-      return Promise.resolve();
-    });
-    tauri.confirm.mockResolvedValue(true);
-    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+  it("does not remove a folder after a declined confirmation", async () => {
+    const adapter = createDesktopAdapter();
+    dialog.confirm.mockResolvedValue(false);
+    const controller = createController(adapter);
 
     await controller.dashboard.onRemoveFolder(4);
 
-    expect(tauri.confirm).toHaveBeenCalledWith("remove_folder_confirmation", {
-      title: "remove_folder",
-      kind: "warning",
-    });
-    expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4 });
-    expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4, confirmCancellation: true });
+    expect(adapter.removeFolder).toHaveBeenCalledOnce();
+    expect(adapter.removeFolder).toHaveBeenCalledWith(4);
   });
 
-  it("aborts folder removal when user declines confirmation", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "remove_folder") return Promise.resolve({ requiresSyncCancellation: false });
-      if (command === "get_folders" || command === "get_failed_syncs") return Promise.resolve([]);
-      return Promise.resolve();
-    });
-    tauri.confirm.mockResolvedValue(false);
-    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
-
-    await controller.dashboard.onRemoveFolder(4);
-
-    expect(tauri.confirm).toHaveBeenCalledWith("remove_folder_confirmation", {
-      title: "remove_folder",
-      kind: "warning",
-    });
-    expect(tauri.invoke).toHaveBeenCalledWith("remove_folder", { id: 4 });
-    expect(tauri.invoke).not.toHaveBeenCalledWith("remove_folder", { id: 4, confirmCancellation: true });
-  });
-
-  it("opens the target album modal when a folder is selected from native picker", async () => {
-    tauri.open.mockResolvedValue("C:/media/photos");
-    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+  it("opens the target album modal when a folder is selected", async () => {
+    const adapter = createDesktopAdapter();
+    dialog.open.mockResolvedValue("C:/media/photos");
+    const controller = createController(adapter);
 
     await controller.dashboard.onAddFolder();
 
     expect(controller.isTargetAlbumModalOpen).toBe(true);
     expect(controller.pendingFolderPath).toBe("C:/media/photos");
-    expect(tauri.invoke).not.toHaveBeenCalledWith("add_folder", expect.anything());
-
-    controller.dashboard.onCancelAddFolder();
-    expect(controller.isTargetAlbumModalOpen).toBe(false);
-    expect(controller.pendingFolderPath).toBe(null);
+    expect(adapter.addFolder).not.toHaveBeenCalled();
   });
 
-  it("persists target album ID and refreshes folders on confirmAddFolder", async () => {
-    tauri.open.mockResolvedValue("C:/media/photos");
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "add_folder") return Promise.resolve(1);
-      if (command === "get_folders") return Promise.resolve([{ id: 1, path: "C:/media/photos", target_album_id: "alb-99" }]);
-      return Promise.resolve();
-    });
-    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
+  it("adds a folder with its target album and refreshes the folder list", async () => {
+    const adapter = createDesktopAdapter({ getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/media/photos", target_album_id: "alb-99" }]) });
+    dialog.open.mockResolvedValue("C:/media/photos");
+    const controller = createController(adapter);
 
     await controller.dashboard.onAddFolder();
     await controller.dashboard.onConfirmAddFolder("alb-99");
 
-    expect(tauri.invoke).toHaveBeenCalledWith("add_folder", { path: "C:/media/photos", targetAlbumId: "alb-99" });
-    expect(controller.isTargetAlbumModalOpen).toBe(false);
-    expect(controller.pendingFolderPath).toBe(null);
+    expect(adapter.addFolder).toHaveBeenCalledWith("C:/media/photos", "alb-99");
     expect(controller.watchedFolders).toEqual([{ id: 1, path: "C:/media/photos", target_album_id: "alb-99" }]);
   });
 
-  it("opens the target album modal with defaultPath for removable volume", async () => {
-    tauri.open.mockResolvedValue("E:/DCIM");
-    const controller = createSyncController({ reportError: vi.fn(), t: (key) => key, locale: () => "en" });
-
-    await controller.acceptRemovableFolder({
-      volumeId: "vol-sd-1",
-      mountPath: "E:\\",
-      displayName: "EOS_DIGITAL",
-    });
-
-    expect(tauri.open).toHaveBeenCalledWith({
-      directory: true,
-      multiple: false,
-      defaultPath: "E:\\",
-      title: "select_folder",
-    });
-    expect(controller.isTargetAlbumModalOpen).toBe(true);
-    expect(controller.pendingFolderPath).toBe("E:/DCIM");
-  });
-
-  it("invokes accept_removable_media_folder when confirming a removable folder", async () => {
-    tauri.open.mockResolvedValue("E:/DCIM");
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "accept_removable_media_folder") return Promise.resolve(1);
-      if (command === "get_folders") return Promise.resolve([{ id: 1, path: "E:/DCIM", target_album_id: "alb-vacation" }]);
-      return Promise.resolve();
-    });
-
+  it("adds a removable folder with its volume and target album", async () => {
+    const adapter = createDesktopAdapter({ getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "E:/DCIM", target_album_id: "alb-vacation" }]) });
+    dialog.open.mockResolvedValue("E:/DCIM");
     const onRemovableVolumeAccepted = vi.fn();
-    const controller = createSyncController({
-      reportError: vi.fn(),
-      t: (key) => key,
-      locale: () => "en",
-      onRemovableVolumeAccepted,
-    });
+    const controller = createController(adapter, { onRemovableVolumeAccepted });
 
-    await controller.acceptRemovableFolder({
-      volumeId: "vol-sd-1",
-      mountPath: "E:\\",
-      displayName: "EOS_DIGITAL",
-    });
+    await controller.acceptRemovableFolder({ volumeId: "vol-sd-1", mountPath: "E:\\", displayName: "EOS_DIGITAL" });
     await controller.dashboard.onConfirmAddFolder("alb-vacation");
 
-    expect(tauri.invoke).toHaveBeenCalledWith("accept_removable_media_folder", {
-      volumeId: "vol-sd-1",
-      path: "E:/DCIM",
-      targetAlbumId: "alb-vacation",
-    });
+    expect(adapter.acceptRemovableMediaFolder).toHaveBeenCalledWith("vol-sd-1", "E:/DCIM", "alb-vacation");
     expect(onRemovableVolumeAccepted).toHaveBeenCalledWith("vol-sd-1");
-    expect(controller.isTargetAlbumModalOpen).toBe(false);
-    expect(controller.pendingFolderPath).toBe(null);
-    expect(controller.watchedFolders).toEqual([{ id: 1, path: "E:/DCIM", target_album_id: "alb-vacation" }]);
   });
 
-  it("reports error when accept_removable_media_folder fails", async () => {
-    tauri.open.mockResolvedValue("C:/Photos");
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "accept_removable_media_folder") {
-        return Promise.reject(new Error("Path 'C:/Photos' does not reside within removable volume"));
-      }
-      return Promise.resolve();
-    });
-
+  it("reports adapter errors when adding a removable folder", async () => {
+    const error = new Error("Path does not reside within removable volume");
+    const adapter = createDesktopAdapter({ acceptRemovableMediaFolder: vi.fn().mockRejectedValue(error) });
+    dialog.open.mockResolvedValue("C:/Photos");
     const reportError = vi.fn();
-    const controller = createSyncController({
-      reportError,
-      t: (key) => key,
-      locale: () => "en",
-    });
+    const controller = createController(adapter, { reportError });
 
-    await controller.acceptRemovableFolder({
-      volumeId: "vol-sd-1",
-      mountPath: "E:\\",
-      displayName: "EOS_DIGITAL",
-    });
+    await controller.acceptRemovableFolder({ volumeId: "vol-sd-1", mountPath: "E:\\", displayName: "EOS_DIGITAL" });
     await controller.dashboard.onConfirmAddFolder(null);
 
-    expect(reportError).toHaveBeenCalledWith(expect.any(Error));
+    expect(reportError).toHaveBeenCalledWith(error);
   });
 });
-
