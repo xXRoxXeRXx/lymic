@@ -5,7 +5,7 @@ use crate::{
     app::events::{emit_sync_error, log_to_ui_error},
     commands::sync,
     db,
-    sync::SyncCoordinator,
+    sync::{SyncCoordinator, SyncState, Synchronization},
 };
 use tauri::menu::{Menu, MenuItem, MenuItemKind};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -219,21 +219,23 @@ pub(crate) fn setup(
 
 async fn handle_sync_action(app: tauri::AppHandle) {
     let pool = app.state::<sqlx::SqlitePool>().inner().clone();
+    let running = app.state::<SyncState>().inner().0.clone();
     let coordinator = app.state::<SyncCoordinator>().inner().0.clone();
     let result = async {
         let snapshot = db::get_sync_snapshot(&pool)
             .await
             .map_err(|error| error.to_string())?;
         match decide_sync_action(&snapshot.status) {
-            TrayAction::Pause => sync::pause_sync_inner(&app, &pool, &coordinator)
+            TrayAction::Pause => sync::pause_sync_inner(&app, &pool, &running, &coordinator)
                 .await
                 .map(|_| ()),
-            TrayAction::Resume => sync::resume_sync_inner(&app, &pool, &coordinator)
+            TrayAction::Resume => sync::resume_sync_inner(&app, &pool, &running, &coordinator)
                 .await
                 .map(|_| ()),
-            TrayAction::Start => app
-                .emit("trigger-sync", ())
-                .map_err(|error| error.to_string()),
+            TrayAction::Start => Synchronization::new(&app, &pool, &running, &coordinator)
+                .start()
+                .await
+                .map(|_| ()),
         }
     }
     .await;
@@ -242,7 +244,7 @@ async fn handle_sync_action(app: tauri::AppHandle) {
         log_to_ui_error(
             &app,
             "ERROR",
-            &format!("Tray synchronization action failed: {error}"),
+            &tray_sync_action_error_message(&error),
             "log_tray_sync_action_failed",
             &error,
         );
@@ -258,6 +260,10 @@ async fn handle_sync_action(app: tauri::AppHandle) {
             &error.to_string(),
         ),
     }
+}
+
+fn tray_sync_action_error_message(error: &str) -> String {
+    format!("Tray synchronization action failed: {error}")
 }
 
 pub(crate) fn hide_on_close(window: &tauri::Window, event: &tauri::WindowEvent) {
@@ -318,6 +324,14 @@ mod tests {
         assert_eq!(decide_sync_action("RUNNING"), TrayAction::Pause);
         assert_eq!(decide_sync_action("PAUSED"), TrayAction::Resume);
         assert_eq!(decide_sync_action("IDLE"), TrayAction::Start);
+    }
+
+    #[test]
+    fn tray_action_failure_keeps_the_underlying_error_visible() {
+        assert_eq!(
+            tray_sync_action_error_message("database unavailable"),
+            "Tray synchronization action failed: database unavailable"
+        );
     }
 
     #[test]
