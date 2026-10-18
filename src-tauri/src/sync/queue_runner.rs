@@ -9,7 +9,10 @@ use crate::{
     db,
     immich::{ImmichClient, SidecarDirectoryCache},
     media::model::ScanResult,
-    sync::{processor::SyncSummary, JobByteProgress, SyncCoordinatorInner},
+    sync::{
+        processor::{RunProcessor, SyncSummary},
+        JobByteProgress, SyncCoordinatorInner,
+    },
 };
 use serde_json::json;
 use std::sync::{atomic::Ordering, Arc};
@@ -71,6 +74,16 @@ pub(crate) async fn run_sync_pipeline(
     );
     let transfer_stats = progress.transfer_stats();
     let sidecar_cache = SidecarDirectoryCache::new();
+    let processor = RunProcessor::new(
+        app.clone(),
+        pool.clone(),
+        client,
+        audit_context.clone(),
+        progress.clone(),
+        coordinator.clone(),
+        sidecar_cache,
+    )
+    .await?;
     transfer_stats.set_active(true);
     let _transfer_cleanup = TransferStatsCleanup {
         app: app.clone(),
@@ -197,17 +210,7 @@ pub(crate) async fn run_sync_pipeline(
                     .map(|asset| asset.path.clone()),
             )
             .await;
-        let result = crate::sync::processor::process_recovered_upload_units(
-            app.clone(),
-            pool.clone(),
-            client.clone(),
-            block,
-            audit_context.clone(),
-            progress.clone(),
-            coordinator.clone(),
-            sidecar_cache.clone(),
-        )
-        .await;
+        let result = processor.process(block).await;
         coordinator.unregister_active_work(&active_work).await;
         let result = result?;
         totals.processed += result.processed;
