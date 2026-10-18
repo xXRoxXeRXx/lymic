@@ -216,10 +216,7 @@ pub(crate) async fn run_sync_pipeline(
         totals.processed += result.processed;
         totals.uploaded += result.uploaded;
         totals.failed += result.failed;
-        if let Some(queue_results) = terminal_queue_results(&result) {
-            let snapshot = db::finalize_queued_block(&pool, queue_results)
-                .await
-                .map_err(|error| format!("Could not persist queue block: {}", error))?;
+        if let Some(snapshot) = persist_processor_results(&pool, &result).await? {
             crate::app::tray::update_sync_action(&app, &snapshot);
             progress.sync_from_snapshot(
                 snapshot.total_bytes.max(0) as u64,
@@ -274,9 +271,39 @@ fn terminal_queue_results(summary: &SyncSummary) -> Option<&[(String, String)]> 
     (!summary.queue_results.is_empty()).then_some(&summary.queue_results)
 }
 
+/// Commits only the terminal outcomes returned by a processor block.
+///
+/// A processor may stop at a pause boundary after handling part of a loaded
+/// block. Leaving the remainder pending is what makes a later resume lossless.
+async fn persist_processor_results(
+    pool: &sqlx::SqlitePool,
+    summary: &SyncSummary,
+) -> Result<Option<db::SyncSnapshot>, String> {
+    let Some(queue_results) = terminal_queue_results(summary) else {
+        return Ok(None);
+    };
+    db::finalize_queued_block(pool, queue_results)
+        .await
+        .map(Some)
+        .map_err(|error| format!("Could not persist queue block: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn test_pool() -> sqlx::SqlitePool {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    }
 
     #[test]
     fn queue_window_is_limited_to_fifty_items() {
@@ -305,5 +332,46 @@ mod tests {
                 .as_slice()
             )
         );
+    }
+
+    #[tokio::test]
+    async fn processor_outcomes_finalize_only_completed_work_and_leave_pause_remainder_pending() {
+        let pool = test_pool().await;
+        let units = ["first.jpg", "second.jpg", "third.jpg"]
+            .into_iter()
+            .map(|path| db::QueueUploadUnit {
+                image: db::QueueUploadAsset {
+                    path: path.to_string(),
+                    size: 1,
+                    mtime: 1,
+                    target_album_id: None,
+                },
+                live_photo_video: None,
+            })
+            .collect::<Vec<_>>();
+        db::enqueue_upload_units(&pool, &units, &[]).await.unwrap();
+
+        let snapshot = persist_processor_results(
+            &pool,
+            &SyncSummary {
+                processed: 2,
+                uploaded: 1,
+                failed: 1,
+                queue_results: vec![
+                    ("first.jpg".to_string(), "SYNCED".to_string()),
+                    ("second.jpg".to_string(), "FAILED".to_string()),
+                ],
+            },
+        )
+        .await
+        .unwrap()
+        .expect("terminal processor outcomes update the durable queue");
+
+        assert_eq!((snapshot.succeeded, snapshot.failed), (1, 1));
+        let remaining = db::next_queued_upload_units(&pool, SYNC_QUEUE_BLOCK_SIZE)
+            .await
+            .unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].image.local_path, "third.jpg");
     }
 }
