@@ -1,16 +1,26 @@
 ﻿import { describe, expect, it, vi } from "vitest";
 import { createPreferencesController } from "./preferences-controller.svelte";
 import { localeCatalog } from "../i18n/locale-catalog";
+import type { DesktopAdapter } from "../tauri/desktop-adapter";
 
-const tauri = vi.hoisted(() => ({ invoke: vi.fn(), enable: vi.fn(), disable: vi.fn(), isEnabled: vi.fn() }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
+const tauri = vi.hoisted(() => ({ enable: vi.fn(), disable: vi.fn(), isEnabled: vi.fn() }));
 vi.mock("@tauri-apps/plugin-autostart", () => tauri);
+
+function createDesktopAdapter(overrides: Partial<DesktopAdapter> = {}): DesktopAdapter {
+  return {
+    startSync: vi.fn(), pauseSync: vi.fn(), resumeSync: vi.fn(), getSyncStatus: vi.fn(), getFailedSyncs: vi.fn(), retryFailedSyncs: vi.fn(),
+    getUploadParallelism: vi.fn().mockResolvedValue(3), setUploadParallelism: vi.fn(), addFolder: vi.fn(), acceptRemovableMediaFolder: vi.fn(), getFolders: vi.fn(), removeFolder: vi.fn(),
+    getAuthStatus: vi.fn(), getServerUrl: vi.fn(), getCurrentUser: vi.fn(), login: vi.fn(), logout: vi.fn(), getAlbums: vi.fn(), createAlbum: vi.fn(),
+    getLocaleCatalog: vi.fn().mockResolvedValue(localeCatalog), updateLocale: vi.fn(), getDatabaseRecoveryNotice: vi.fn().mockResolvedValue(null), recordWebviewStartupPhaseProbe: vi.fn(),
+    ...overrides,
+  };
+}
 
 describe("preferences controller", () => {
   it("restores the select value when upload parallelism persistence fails", async () => {
-    tauri.invoke.mockRejectedValue(new Error("Database unavailable"));
+    const adapter = createDesktopAdapter({ setUploadParallelism: vi.fn().mockRejectedValue(new Error("Database unavailable")) });
     const reportError = vi.fn();
-    const controller = createPreferencesController({ reportError, addLog: vi.fn(), locale: () => "en", setLocale: vi.fn() });
+    const controller = createPreferencesController({ reportError, addLog: vi.fn(), locale: () => "en", setLocale: vi.fn(), adapter });
     const select = document.createElement("select");
     select.innerHTML = '<option value="3">3</option><option value="7">7</option>';
     select.value = "7";
@@ -24,24 +34,17 @@ describe("preferences controller", () => {
   });
 
   it("adds structured database recovery notice to activity log", async () => {
-    tauri.invoke.mockImplementation(async (cmd: string) => {
-      if (cmd === "get_database_recovery_notice") {
-        return {
+    const adapter = createDesktopAdapter({
+      getDatabaseRecoveryNotice: vi.fn().mockResolvedValue({
           message: "Database rebuilt",
           key: "log_database_repaired_notice",
           reason: "disk corruption",
           backup: "/backups/db.bak",
           count: 2,
-        };
-      }
-      if (cmd === "get_upload_parallelism") return 3;
-      if (cmd === "get_locale_catalog") {
-        return localeCatalog;
-      }
-      return null;
+      }),
     });
     const addLog = vi.fn();
-    const controller = createPreferencesController({ reportError: vi.fn(), addLog, locale: () => "en", setLocale: vi.fn() });
+    const controller = createPreferencesController({ reportError: vi.fn(), addLog, locale: () => "en", setLocale: vi.fn(), adapter });
     await controller.hydrate();
     expect(controller.locales).toEqual(localeCatalog);
     expect(addLog).toHaveBeenCalledWith(expect.objectContaining({

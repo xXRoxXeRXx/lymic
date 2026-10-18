@@ -1,28 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DesktopAdapter } from "../tauri/desktop-adapter";
 import { createAuthController } from "./auth-controller.svelte";
 
-const tauri = vi.hoisted(() => ({ invoke: vi.fn(), confirm: vi.fn() }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
+const tauri = vi.hoisted(() => ({ confirm: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm: tauri.confirm }));
+
+function createDesktopAdapter(overrides: Partial<DesktopAdapter> = {}): DesktopAdapter {
+  return {
+    startSync: vi.fn(), pauseSync: vi.fn(), resumeSync: vi.fn(), getSyncStatus: vi.fn(), getFailedSyncs: vi.fn(), retryFailedSyncs: vi.fn(),
+    getUploadParallelism: vi.fn(), setUploadParallelism: vi.fn(), addFolder: vi.fn(), acceptRemovableMediaFolder: vi.fn(), getFolders: vi.fn(), removeFolder: vi.fn(),
+    getAuthStatus: vi.fn().mockResolvedValue(false), getServerUrl: vi.fn(), getCurrentUser: vi.fn(), login: vi.fn(), logout: vi.fn(),
+    getAlbums: vi.fn(), createAlbum: vi.fn(), getLocaleCatalog: vi.fn(), updateLocale: vi.fn(), getDatabaseRecoveryNotice: vi.fn(), recordWebviewStartupPhaseProbe: vi.fn(),
+    ...overrides,
+  };
+}
 
 describe("auth controller", () => {
   beforeEach(() => {
-    tauri.invoke.mockReset();
     tauri.confirm.mockReset();
   });
 
   it("retains successful authentication when the optional account lookup fails", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "login") return Promise.resolve();
-      if (command === "get_current_user") return Promise.reject(new Error("Profile unavailable"));
-      return Promise.resolve();
-    });
+    const adapter = createDesktopAdapter({ getCurrentUser: vi.fn().mockRejectedValue(new Error("Profile unavailable")) });
     const controller = createAuthController({
       formatError: String,
       onLogin: vi.fn(),
       onLogout: vi.fn(),
       reportError: vi.fn(),
       t: (key) => key,
+      adapter,
     });
     controller.serverUrl = "https://immich.example";
     controller.apiKey = "token";
@@ -34,16 +40,14 @@ describe("auth controller", () => {
   });
 
   it("forwards a complete Cloudflare Access pair to Tauri", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_current_user") return Promise.resolve({ displayName: "User", profileImage: null });
-      return Promise.resolve();
-    });
+    const adapter = createDesktopAdapter({ getCurrentUser: vi.fn().mockResolvedValue({ displayName: "User", profileImage: null }) });
     const controller = createAuthController({
       formatError: String,
       onLogin: vi.fn(),
       onLogout: vi.fn(),
       reportError: vi.fn(),
       t: (key) => key,
+      adapter,
     });
     controller.serverUrl = "https://immich.example";
     controller.apiKey = "token";
@@ -52,7 +56,7 @@ describe("auth controller", () => {
 
     await controller.login();
 
-    expect(tauri.invoke).toHaveBeenCalledWith("login", {
+    expect(adapter.login).toHaveBeenCalledWith({
       serverUrl: "https://immich.example",
       apiKey: "token",
       allowLocalHttp: false,
@@ -62,12 +66,14 @@ describe("auth controller", () => {
   });
 
   it("rejects an incomplete Cloudflare Access pair before invoking Tauri", async () => {
+    const adapter = createDesktopAdapter();
     const controller = createAuthController({
       formatError: String,
       onLogin: vi.fn(),
       onLogout: vi.fn(),
       reportError: vi.fn(),
       t: (key) => key,
+      adapter,
     });
     controller.serverUrl = "https://immich.example";
     controller.apiKey = "token";
@@ -77,20 +83,18 @@ describe("auth controller", () => {
 
     expect(controller.loginError).toBe("cloudflare_access_pair_required");
     expect(controller.loginErrorCode).toBe("CLOUDFLARE_ACCESS_PAIR_REQUIRED");
-    expect(tauri.invoke).not.toHaveBeenCalled();
+    expect(adapter.login).not.toHaveBeenCalled();
   });
 
   it("treats whitespace-only Cloudflare Access credentials as disabled", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_current_user") return Promise.resolve({ displayName: "User", profileImage: null });
-      return Promise.resolve();
-    });
+    const adapter = createDesktopAdapter({ getCurrentUser: vi.fn().mockResolvedValue({ displayName: "User", profileImage: null }) });
     const controller = createAuthController({
       formatError: String,
       onLogin: vi.fn(),
       onLogout: vi.fn(),
       reportError: vi.fn(),
       t: (key) => key,
+      adapter,
     });
     controller.serverUrl = "https://immich.example";
     controller.apiKey = "token";
@@ -99,7 +103,7 @@ describe("auth controller", () => {
 
     await controller.login();
 
-    expect(tauri.invoke).toHaveBeenCalledWith("login", {
+    expect(adapter.login).toHaveBeenCalledWith({
       serverUrl: "https://immich.example",
       apiKey: "token",
       allowLocalHttp: false,
@@ -109,10 +113,7 @@ describe("auth controller", () => {
   });
 
   it("forwards the local HTTP opt-in to Tauri and resets it on logout", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_current_user") return Promise.resolve({ displayName: "User", profileImage: null });
-      return Promise.resolve();
-    });
+    const adapter = createDesktopAdapter({ getCurrentUser: vi.fn().mockResolvedValue({ displayName: "User", profileImage: null }) });
     tauri.confirm.mockResolvedValue(true);
     const controller = createAuthController({
       formatError: String,
@@ -120,6 +121,7 @@ describe("auth controller", () => {
       onLogout: vi.fn(),
       reportError: vi.fn(),
       t: (key) => key,
+      adapter,
     });
     controller.serverUrl = "http://localhost";
     controller.apiKey = "token";
@@ -127,7 +129,7 @@ describe("auth controller", () => {
 
     await controller.login();
 
-    expect(tauri.invoke).toHaveBeenCalledWith("login", expect.objectContaining({
+    expect(adapter.login).toHaveBeenCalledWith(expect.objectContaining({
       allowLocalHttp: true,
     }));
     await controller.logout();
@@ -135,13 +137,14 @@ describe("auth controller", () => {
   });
 
   it("localizes the backend local HTTP validation error", async () => {
-    tauri.invoke.mockRejectedValue("LOCAL_HTTP_NOT_ALLOWED: HTTP is allowed only for localhost");
+    const adapter = createDesktopAdapter({ login: vi.fn().mockRejectedValue("LOCAL_HTTP_NOT_ALLOWED: HTTP is allowed only for localhost") });
     const controller = createAuthController({
       formatError: String,
       onLogin: vi.fn(),
       onLogout: vi.fn(),
       reportError: vi.fn(),
       t: (key) => key,
+      adapter,
     });
     controller.serverUrl = "http://immich.example";
     controller.apiKey = "token";
@@ -153,16 +156,12 @@ describe("auth controller", () => {
   });
 
   it("hydrates current user profile image and display name when authenticated", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_auth_status") return Promise.resolve(true);
-      if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user") {
-        return Promise.resolve({
+    const adapter = createDesktopAdapter({
+      getAuthStatus: vi.fn().mockResolvedValue(true), getServerUrl: vi.fn().mockResolvedValue("https://immich.example"),
+      getCurrentUser: vi.fn().mockResolvedValue({
           displayName: "Meyer",
           profileImage: "data:image/jpeg;base64,dGVzdA==",
-        });
-      }
-      return Promise.resolve();
+      }),
     });
     const controller = createAuthController({
       formatError: String,
@@ -170,6 +169,7 @@ describe("auth controller", () => {
       onLogout: vi.fn(),
       reportError: vi.fn(),
       t: (key) => key,
+      adapter,
     });
 
     await controller.hydrate();
@@ -180,22 +180,17 @@ describe("auth controller", () => {
   });
 
   it("refreshes profile image and display name after login", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "login") return Promise.resolve();
-      if (command === "get_current_user") {
-        return Promise.resolve({
+    const adapter = createDesktopAdapter({ getCurrentUser: vi.fn().mockResolvedValue({
           displayName: "Meyer",
           profileImage: "data:image/jpeg;base64,bmV3SW1hZ2U=",
-        });
-      }
-      return Promise.resolve();
-    });
+    }) });
     const controller = createAuthController({
       formatError: String,
       onLogin: vi.fn(),
       onLogout: vi.fn(),
       reportError: vi.fn(),
       t: (key) => key,
+      adapter,
     });
     controller.serverUrl = "https://immich.example";
     controller.apiKey = "token";
@@ -208,17 +203,12 @@ describe("auth controller", () => {
   });
 
   it("clears profile image and display name on logout", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_auth_status") return Promise.resolve(true);
-      if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user") {
-        return Promise.resolve({
+    const adapter = createDesktopAdapter({
+      getAuthStatus: vi.fn().mockResolvedValue(true), getServerUrl: vi.fn().mockResolvedValue("https://immich.example"),
+      getCurrentUser: vi.fn().mockResolvedValue({
           displayName: "Meyer",
           profileImage: "data:image/jpeg;base64,dGVzdA==",
-        });
-      }
-      if (command === "logout") return Promise.resolve();
-      return Promise.resolve();
+      }),
     });
     tauri.confirm.mockResolvedValue(true);
     const controller = createAuthController({
@@ -227,6 +217,7 @@ describe("auth controller", () => {
       onLogout: vi.fn(),
       reportError: vi.fn(),
       t: (key) => key,
+      adapter,
     });
 
     await controller.hydrate();
@@ -239,16 +230,12 @@ describe("auth controller", () => {
   });
 
   it("retains null profileImage when user has no profile image", async () => {
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_auth_status") return Promise.resolve(true);
-      if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user") {
-        return Promise.resolve({
+    const adapter = createDesktopAdapter({
+      getAuthStatus: vi.fn().mockResolvedValue(true), getServerUrl: vi.fn().mockResolvedValue("https://immich.example"),
+      getCurrentUser: vi.fn().mockResolvedValue({
           displayName: "Meyer",
           profileImage: null,
-        });
-      }
-      return Promise.resolve();
+      }),
     });
     const controller = createAuthController({
       formatError: String,
@@ -256,6 +243,7 @@ describe("auth controller", () => {
       onLogout: vi.fn(),
       reportError: vi.fn(),
       t: (key) => key,
+      adapter,
     });
 
     await controller.hydrate();
@@ -264,4 +252,3 @@ describe("auth controller", () => {
     expect(controller.profileImage).toBeNull();
   });
 });
-

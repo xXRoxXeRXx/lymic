@@ -1,13 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
+import { tauriDesktopAdapter, type CurrentUser, type DesktopAdapter } from "../tauri/desktop-adapter";
 
 const LOCAL_HTTP_NOT_ALLOWED_ERROR = "LOCAL_HTTP_NOT_ALLOWED";
 const CLOUDFLARE_ACCESS_PAIR_REQUIRED_ERROR = "CLOUDFLARE_ACCESS_PAIR_REQUIRED";
-
-export type CurrentUser = {
-  displayName: string;
-  profileImage: string | null;
-};
 
 export function createAuthController(options: {
   formatError: (error: unknown) => string;
@@ -15,7 +10,9 @@ export function createAuthController(options: {
   onLogout: () => Promise<void> | void;
   reportError: (error: unknown) => void;
   t: (key: string) => string;
+  adapter?: DesktopAdapter;
 }) {
+  const adapter = options.adapter ?? tauriDesktopAdapter;
   let isAuthenticated = $state(false);
   let serverUrl = $state("");
   let currentUserName = $state("");
@@ -30,7 +27,7 @@ export function createAuthController(options: {
 
   async function loadCurrentUser() {
     try {
-      const user = await invoke<CurrentUser>("get_current_user");
+      const user: CurrentUser = await adapter.getCurrentUser();
       currentUserName = user.displayName;
       profileImage = user.profileImage;
     } catch (error) {
@@ -39,9 +36,9 @@ export function createAuthController(options: {
   }
 
   async function hydrate() {
-    isAuthenticated = await invoke<boolean>("get_auth_status");
+    isAuthenticated = await adapter.getAuthStatus();
     if (!isAuthenticated) return;
-    serverUrl = await invoke<string>("get_server_url");
+    serverUrl = await adapter.getServerUrl();
     await loadCurrentUser();
   }
 
@@ -58,7 +55,7 @@ export function createAuthController(options: {
     loginError = "";
     loginErrorCode = "";
     try {
-      await invoke<void>("login", {
+      await adapter.login({
         serverUrl,
         apiKey,
         allowLocalHttp,
@@ -88,7 +85,7 @@ export function createAuthController(options: {
     });
     if (!shouldLogout) return;
     try {
-      await invoke<void>("logout");
+      await adapter.logout();
       isAuthenticated = false;
       apiKey = "";
       allowLocalHttp = false;

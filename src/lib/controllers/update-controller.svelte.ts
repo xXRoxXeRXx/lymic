@@ -1,9 +1,9 @@
 import { getVersion } from "@tauri-apps/api/app";
-import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
+import { tauriDesktopAdapter, type DesktopAdapter } from "../tauri/desktop-adapter";
 
-export function createUpdateController(isSyncActive: () => boolean) {
+export function createUpdateController(isSyncActive: () => boolean, adapter: DesktopAdapter = tauriDesktopAdapter) {
   let appVersion = $state<string | undefined>();
   let availableUpdate = $state<Update | null>(null);
   let isUpdateDialogOpen = $state(false);
@@ -16,7 +16,7 @@ export function createUpdateController(isSyncActive: () => boolean) {
 
   async function record(phase: string) {
     try {
-      await invoke<void>("record_webview_startup_phase_probe", { phase });
+      await adapter.recordWebviewStartupPhaseProbe(phase);
     } catch (error) {
       console.warn("Failed to record webview startup phase", phase, error);
     }

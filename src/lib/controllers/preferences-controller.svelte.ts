@@ -1,16 +1,18 @@
-import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { ThemePreference } from "../components/types";
 import { isSupportedLocale } from "../i18n";
 import { localeCatalog, type LocaleCatalogEntry } from "../i18n/locale-catalog";
 import type { UiLogMessage } from "./types";
+import { tauriDesktopAdapter, type DesktopAdapter } from "../tauri/desktop-adapter";
 
 export function createPreferencesController(options: {
   reportError(error: unknown): void;
   addLog(message: UiLogMessage): void;
   locale(): string;
   setLocale(locale: string): void;
+  adapter?: DesktopAdapter;
 }) {
+  const adapter = options.adapter ?? tauriDesktopAdapter;
   const themeStorageKey = "lymic-theme";
   const savedTheme = typeof localStorage === "undefined" ? null : localStorage.getItem(themeStorageKey);
   const initialTheme: ThemePreference = savedTheme === "system" || savedTheme === "light" || savedTheme === "dark"
@@ -43,7 +45,7 @@ export function createPreferencesController(options: {
 
   async function hydrate() {
     try {
-      const catalog = await invoke<LocaleCatalogEntry[]>("get_locale_catalog");
+      const catalog = await adapter.getLocaleCatalog();
       if (Array.isArray(catalog)) locales = catalog;
     } catch (error) {
       options.reportError(error);
@@ -56,20 +58,14 @@ export function createPreferencesController(options: {
     }
 
     try {
-      uploadParallelism = await invoke<number>("get_upload_parallelism");
+      uploadParallelism = await adapter.getUploadParallelism();
     } catch (error) {
       console.error("Failed to load upload parallelism", error);
       options.reportError(error);
     }
 
     try {
-      const notice = await invoke<{
-        message: string;
-        key: string;
-        reason: string;
-        backup: string;
-        count: number;
-      } | null>("get_database_recovery_notice");
+      const notice = await adapter.getDatabaseRecoveryNotice();
       if (notice) {
         options.addLog({
           level: "WARN",
@@ -92,7 +88,7 @@ export function createPreferencesController(options: {
     options.setLocale(value);
     if (typeof localStorage !== "undefined") localStorage.setItem("lymic-locale", value);
     try {
-      await invoke("update_locale", { locale: value });
+      await adapter.updateLocale(value);
     } catch (error) {
       console.error(error);
     }
@@ -115,7 +111,7 @@ export function createPreferencesController(options: {
     const previousValue = uploadParallelism;
     isSavingUploadParallelism = true;
     try {
-      await invoke<void>("set_upload_parallelism", { uploadParallelism: nextValue });
+      await adapter.setUploadParallelism(nextValue);
       uploadParallelism = nextValue;
     } catch (error) {
       console.error("Failed to update upload parallelism", error);
