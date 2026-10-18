@@ -5,7 +5,7 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
-pub(crate) struct SyncState(pub(crate) AtomicBool);
+pub(crate) struct SyncState(pub(crate) std::sync::Arc<AtomicBool>);
 
 pub(crate) struct SyncCoordinator(pub(crate) std::sync::Arc<SyncCoordinatorInner>);
 

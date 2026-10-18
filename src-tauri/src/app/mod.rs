@@ -152,6 +152,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn desktop_adapter_commands_are_registered_with_tauri() {
+        let adapter = include_str!("../../../src/lib/tauri/desktop-adapter.ts");
+        let registrations = include_str!("mod.rs");
+        for command in [
+            "start_sync",
+            "pause_sync",
+            "resume_sync",
+            "get_sync_status",
+            "get_failed_syncs",
+            "retry_failed_syncs",
+            "get_upload_parallelism",
+            "set_upload_parallelism",
+            "add_folder",
+            "accept_removable_media_folder",
+            "get_folders",
+            "remove_folder",
+            "get_auth_status",
+            "get_server_url",
+            "get_current_user",
+            "login",
+            "logout",
+            "get_albums",
+            "create_album",
+            "get_locale_catalog",
+            "update_locale",
+            "get_database_recovery_notice",
+            "record_webview_startup_phase_probe",
+        ] {
+            assert!(
+                adapter.contains(&format!("\"{command}\"")),
+                "adapter must invoke {command}"
+            );
+            assert!(
+                registrations.contains(&format!("::{command},")),
+                "Tauri must register {command}"
+            );
+        }
+    }
+
+    #[test]
     fn autostart_with_credentials_starts_in_background() {
         assert!(should_start_in_background(
             &[OsString::from("lymic"), OsString::from(AUTOSTART_ARGUMENT)],

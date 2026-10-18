@@ -52,18 +52,25 @@ pub(crate) async fn get_sync_status(
 pub(crate) async fn pause_sync(
     app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
+    sync_state: tauri::State<'_, SyncState>,
     sync_coordinator: tauri::State<'_, SyncCoordinator>,
 ) -> Result<db::SyncSnapshot, String> {
-    pause_sync_inner(&app, pool.inner(), &sync_coordinator.inner().0).await
+    pause_sync_inner(
+        &app,
+        pool.inner(),
+        &sync_state.inner().0,
+        &sync_coordinator.inner().0,
+    )
+    .await
 }
 
 pub(crate) async fn pause_sync_inner(
     app: &tauri::AppHandle,
     pool: &sqlx::SqlitePool,
+    running: &std::sync::atomic::AtomicBool,
     coordinator: &std::sync::Arc<crate::sync::SyncCoordinatorInner>,
 ) -> Result<db::SyncSnapshot, String> {
-    let running = std::sync::atomic::AtomicBool::new(false);
-    Synchronization::new(app, pool, &running, coordinator)
+    Synchronization::new(app, pool, running, coordinator)
         .pause()
         .await
 }
@@ -72,18 +79,25 @@ pub(crate) async fn pause_sync_inner(
 pub(crate) async fn resume_sync(
     app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
+    sync_state: tauri::State<'_, SyncState>,
     sync_coordinator: tauri::State<'_, SyncCoordinator>,
 ) -> Result<db::SyncSnapshot, String> {
-    resume_sync_inner(&app, pool.inner(), &sync_coordinator.inner().0).await
+    resume_sync_inner(
+        &app,
+        pool.inner(),
+        &sync_state.inner().0,
+        &sync_coordinator.inner().0,
+    )
+    .await
 }
 
 pub(crate) async fn resume_sync_inner(
     app: &tauri::AppHandle,
     pool: &sqlx::SqlitePool,
+    running: &std::sync::atomic::AtomicBool,
     coordinator: &std::sync::Arc<crate::sync::SyncCoordinatorInner>,
 ) -> Result<db::SyncSnapshot, String> {
-    let running = std::sync::atomic::AtomicBool::new(false);
-    Synchronization::new(app, pool, &running, coordinator)
+    Synchronization::new(app, pool, running, coordinator)
         .resume()
         .await
 }
@@ -98,7 +112,9 @@ pub(crate) async fn get_failed_syncs(
 async fn get_failed_syncs_inner(
     pool: &sqlx::SqlitePool,
 ) -> Result<Vec<db::FailedSyncEntry>, String> {
-    Synchronization::failed_syncs(pool).await
+    db::get_failed_syncs(pool)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -109,7 +125,7 @@ pub(crate) async fn get_upload_parallelism(
 }
 
 async fn get_upload_parallelism_inner(pool: &sqlx::SqlitePool) -> Result<usize, String> {
-    Synchronization::upload_parallelism(pool).await
+    crate::sync::load_upload_parallelism(pool).await
 }
 
 #[tauri::command]
@@ -124,7 +140,7 @@ async fn set_upload_parallelism_inner(
     pool: &sqlx::SqlitePool,
     upload_parallelism: usize,
 ) -> Result<(), String> {
-    Synchronization::set_upload_parallelism(pool, upload_parallelism).await
+    db::set_upload_parallelism(pool, upload_parallelism).await
 }
 
 #[tauri::command]

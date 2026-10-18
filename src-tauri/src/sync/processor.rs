@@ -86,7 +86,7 @@ impl RunProcessor {
         let mut hashed_units = Vec::new();
         let mut hashing = FuturesUnordered::new();
         for unit in units {
-            if !can_start_work(&coordinator) {
+            if !can_start_work(coordinator) {
                 break;
             }
             hashing.push(hash_unit(
@@ -123,16 +123,16 @@ impl RunProcessor {
 
             for unit in chunk {
                 if let Some(asset) = unit.assets().next() {
-                    if is_path_cancelled(&coordinator, &asset.path).await {
+                    if is_path_cancelled(coordinator, &asset.path).await {
                         continue;
                     }
                 }
 
                 if let Some(remote_id) = &unit.image.remote_id {
                     match begin_upload_unit_completion_or_fail(
-                        &pool,
-                        &app,
-                        &audit_context,
+                        pool,
+                        app,
+                        audit_context,
                         unit.clone(),
                         remote_id.clone(),
                         0,
@@ -150,7 +150,7 @@ impl RunProcessor {
                             queue_results.extend_from_slice(completion.queue_results());
                         }
                     }
-                    progress.advance(&app, unit.byte_size());
+                    progress.advance(app, unit.byte_size());
                 } else {
                     units_to_check.push(unit.clone());
                 }
@@ -178,7 +178,7 @@ impl RunProcessor {
                     }
                 }
                 let bulk_check =
-                    check_assets_exist_with_backoff(&client, hashes, &app, &audit_context);
+                    check_assets_exist_with_backoff(client, hashes, app, audit_context);
                 let existing = if cancellations.is_empty() {
                     bulk_check.await?
                 } else {
@@ -187,7 +187,7 @@ impl RunProcessor {
                         _ = wait_for_any_cancellation(cancellations) => continue,
                     }
                 };
-                if !can_start_work(&coordinator) {
+                if !can_start_work(coordinator) {
                     break;
                 }
                 existing
@@ -198,7 +198,7 @@ impl RunProcessor {
             let mut upload_units = Vec::new();
             for unit in units_to_check {
                 if let Some(asset) = unit.assets().next() {
-                    if is_path_cancelled(&coordinator, &asset.path).await {
+                    if is_path_cancelled(coordinator, &asset.path).await {
                         continue;
                     }
                 }
@@ -207,13 +207,12 @@ impl RunProcessor {
                 let is_duplicate = existing.iter().any(|d| &d.hash == image_hash);
 
                 if is_duplicate {
-                    match album_batch::resolve_duplicate_remote_id(&client, &unit, &existing).await
-                    {
+                    match album_batch::resolve_duplicate_remote_id(client, &unit, &existing).await {
                         Ok(remote_id) => {
                             match begin_upload_unit_completion_or_fail(
-                                &pool,
-                                &app,
-                                &audit_context,
+                                pool,
+                                app,
+                                audit_context,
                                 unit.clone(),
                                 remote_id,
                                 0,
@@ -231,11 +230,11 @@ impl RunProcessor {
                                     queue_results.extend_from_slice(completion.queue_results());
                                 }
                             }
-                            progress.advance(&app, unit.byte_size());
+                            progress.advance(app, unit.byte_size());
                         }
                         Err(error_msg) => {
                             log_to_ui_file_error(
-                                &app,
+                                app,
                                 "ERROR",
                                 &error_msg,
                                 "log_duplicate_resolve_failed",
@@ -243,7 +242,7 @@ impl RunProcessor {
                                 &error_msg,
                             );
                             audit_event(
-                                &app,
+                                app,
                                 audit_context.event(
                                     "album.duplicate.resolution.failed",
                                     audit::Outcome::Failure,
@@ -256,9 +255,9 @@ impl RunProcessor {
                                 ),
                             );
                             let failure =
-                                completion::fail_upload_unit(&pool, &unit, &error_msg).await?;
+                                completion::fail_upload_unit(pool, &unit, &error_msg).await?;
                             queue_results.extend_from_slice(failure.queue_results());
-                            progress.advance(&app, unit.byte_size());
+                            progress.advance(app, unit.byte_size());
                         }
                     }
                 } else {
@@ -268,12 +267,12 @@ impl RunProcessor {
 
             let mut pending = upload_units.into_iter();
             let mut uploads = FuturesUnordered::new();
-            while can_start_work(&coordinator) && uploads.len() < upload_parallelism {
+            while can_start_work(coordinator) && uploads.len() < upload_parallelism {
                 let Some(unit) = pending.next() else {
                     break;
                 };
                 let path = unit.image.path.clone();
-                if is_path_cancelled(&coordinator, &path).await {
+                if is_path_cancelled(coordinator, &path).await {
                     continue;
                 }
                 let cancellation = coordinator
@@ -298,10 +297,10 @@ impl RunProcessor {
                 if let Some(pending_album) = outcome.pending_album_unit {
                     pending_album_units.push(pending_album);
                 }
-                if can_start_work(&coordinator) {
+                if can_start_work(coordinator) {
                     if let Some(unit) = pending.next() {
                         let path = unit.image.path.clone();
-                        if is_path_cancelled(&coordinator, &path).await {
+                        if is_path_cancelled(coordinator, &path).await {
                             continue;
                         }
                         let cancellation = coordinator
@@ -322,12 +321,12 @@ impl RunProcessor {
                 }
             }
 
-            if can_start_work(&coordinator) && !pending_album_units.is_empty() {
+            if can_start_work(coordinator) && !pending_album_units.is_empty() {
                 album_batch::assign_pending_album_units(
-                    &client,
-                    &pool,
-                    &app,
-                    &audit_context,
+                    client,
+                    pool,
+                    app,
+                    audit_context,
                     pending_album_units,
                     &mut queue_results,
                     &mut uploaded,
@@ -335,7 +334,7 @@ impl RunProcessor {
                 .await?;
             }
 
-            if !can_start_work(&coordinator) {
+            if !can_start_work(coordinator) {
                 break;
             }
         }

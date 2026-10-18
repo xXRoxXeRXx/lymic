@@ -103,28 +103,6 @@ pub(crate) struct Synchronization<'a> {
 }
 
 impl<'a> Synchronization<'a> {
-    /// Retrieves durable failures for the desktop command surface.
-    pub(crate) async fn failed_syncs(
-        pool: &sqlx::SqlitePool,
-    ) -> Result<Vec<db::FailedSyncEntry>, String> {
-        db::get_failed_syncs(pool)
-            .await
-            .map_err(|error| error.to_string())
-    }
-
-    /// Reads the configured concurrency limit used by synchronization runs.
-    pub(crate) async fn upload_parallelism(pool: &sqlx::SqlitePool) -> Result<usize, String> {
-        crate::sync::load_upload_parallelism(pool).await
-    }
-
-    /// Persists the concurrency limit used by future synchronization runs.
-    pub(crate) async fn set_upload_parallelism(
-        pool: &sqlx::SqlitePool,
-        upload_parallelism: usize,
-    ) -> Result<(), String> {
-        db::set_upload_parallelism(pool, upload_parallelism).await
-    }
-
     pub(crate) fn new(
         app: &'a tauri::AppHandle,
         pool: &'a sqlx::SqlitePool,
@@ -484,12 +462,24 @@ pub(crate) async fn sync_scan_result_if_authenticated(
         return;
     }
 
+    // Automatic producers use the same durable lifecycle gate as manual work.
+    // When another run owns it, the queued work remains durable and that run will
+    // pick it up instead of starting a competing pipeline.
+    let running = app.state::<crate::sync::SyncState>().0.clone();
+    let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator.clone());
+    let started = match lifecycle.start().await {
+        Ok(snapshot) => snapshot,
+        Err(_) => return,
+    };
+    crate::app::tray::update_sync_action(&app, &started);
+
     if let Ok(Some(credentials)) = auth::get_credentials() {
         let audit_context = SyncAuditContext::from_credentials(&credentials, source);
         if let Some(client) = create_authenticated_client(&app, credentials) {
             let app_for_runner = app.clone();
+            let cleanup_pool = pool.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(error) = run_sync_pipeline(
+                let result = run_sync_pipeline(
                     app_for_runner.clone(),
                     pool,
                     client,
@@ -498,12 +488,23 @@ pub(crate) async fn sync_scan_result_if_authenticated(
                     coordinator,
                     audit_context,
                 )
-                .await
-                {
+                .await;
+                app_for_runner
+                    .state::<crate::sync::SyncState>()
+                    .0
+                    .store(false, Ordering::SeqCst);
+                if let Err(error) = result {
                     emit_sync_error(&app_for_runner, &error);
+                    if let Ok(snapshot) = db::set_sync_status(&cleanup_pool, "IDLE").await {
+                        crate::app::tray::update_sync_action(&app_for_runner, &snapshot);
+                    }
                 }
             });
+        } else {
+            let _ = lifecycle.abort().await;
         }
+    } else {
+        let _ = lifecycle.abort().await;
     }
 }
 
