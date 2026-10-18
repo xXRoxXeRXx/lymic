@@ -4,16 +4,16 @@
   import FailedSyncsModal from "./FailedSyncsModal.svelte";
   import FolderList from "./FolderList.svelte";
   import TargetAlbumModal from "./TargetAlbumModal.svelte";
-  import { createTargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
+  import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { DashboardViewState } from "../controllers/sync-controller.svelte";
 
   interface Props {
     dashboard: DashboardViewState;
     serverUrl?: string;
+    catalogue: TargetAlbumCatalogue;
   }
 
-  let { dashboard }: Props = $props();
-  const targetAlbumCatalogue = createTargetAlbumCatalogue();
+  let { dashboard, catalogue }: Props = $props();
 
   const transferredBytes = $derived(dashboard.transferredBytes);
   const transferRateBytesPerSecond = $derived(dashboard.transferRateBytesPerSecond);
@@ -91,7 +91,7 @@
   </section>
 
   <!-- Bottom: Folder List -->
-  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} catalogue={targetAlbumCatalogue} />
+  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} {catalogue} />
 </div>
 
 <TargetAlbumModal
@@ -99,5 +99,5 @@
   folderPath={dashboard.pendingFolderPath ?? ""}
   onConfirm={dashboard.onConfirmAddFolder}
   onCancel={dashboard.onCancelAddFolder}
-  catalogue={targetAlbumCatalogue}
+  {catalogue}
 />

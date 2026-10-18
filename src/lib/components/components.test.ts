@@ -11,6 +11,8 @@ import SettingsView from "./SettingsView.svelte";
 import InfoView from "./InfoView.svelte";
 import { localeCatalog } from "../i18n/locale-catalog";
 import TargetAlbumModal from "./TargetAlbumModal.svelte";
+import { createTargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
+import type { Album } from "./types";
 
 const tauri = vi.hoisted(() => ({ invoke: vi.fn(), openUrl: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
@@ -18,6 +20,13 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: tauri.openUrl }));
 
 beforeEach(() => tauri.invoke.mockResolvedValue([]));
 afterEach(cleanup);
+
+function createCatalogue() {
+  return createTargetAlbumCatalogue({
+    getAlbums: () => tauri.invoke("get_albums") as Promise<Album[]>,
+    createAlbum: (name) => tauri.invoke("create_album", { name }) as Promise<Album>,
+  });
+}
 
 describe("LoginView", () => {
   it("binds fields, shows errors, and disables incomplete login", async () => {
@@ -162,6 +171,7 @@ describe("LoginView", () => {
 describe("DashboardView", () => {
   const props = {
     serverUrl: "https://immich.example",
+    catalogue: createCatalogue(),
     dashboard: {
       syncStatus: "idle" as const, lastSync: "10:00", progress: 0, processed: 0, syncTotal: 0, currentFile: "",
       transferredBytes: 0, transferRateBytesPerSecond: null, estimatedSecondsRemaining: null,
@@ -232,7 +242,7 @@ describe("FolderList and ActivityLog", () => {
     const onAddFolder = vi.fn();
     const onRemoveFolder = vi.fn();
     tauri.invoke.mockResolvedValue([{ id: "album-1", albumName: "Summer holidays" }]);
-    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder });
+    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder, catalogue: createCatalogue() });
     expect(await screen.findByText("Target Album: Summer holidays")).toBeInTheDocument();
     await fireEvent.click(screen.getAllByRole("button")[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Remove folder: C:/photos" }));
@@ -248,6 +258,7 @@ describe("FolderList and ActivityLog", () => {
       watchedFolders: [],
       onAddFolder: vi.fn(),
       onRemoveFolder: vi.fn(),
+      catalogue: createCatalogue(),
     });
 
     await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("get_albums"));
@@ -261,7 +272,7 @@ describe("FolderList and ActivityLog", () => {
   });
 
   it("renders the empty folder state", () => {
-    render(FolderList, { watchedFolders: [], onAddFolder: vi.fn(), onRemoveFolder: vi.fn() });
+    render(FolderList, { watchedFolders: [], onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), catalogue: createCatalogue() });
     expect(screen.getByText("No folders added yet.")).toBeInTheDocument();
   });
 
@@ -359,6 +370,7 @@ describe("TargetAlbumModal", () => {
       folderPath: "C:/Users/test/Pictures/Holiday",
       onConfirm,
       onCancel,
+      catalogue: createCatalogue(),
     });
 
     expect(screen.getByRole("heading", { name: "Select Target Album" })).toBeInTheDocument();
@@ -388,6 +400,7 @@ describe("TargetAlbumModal", () => {
       folderPath: "D:/Photos",
       onConfirm,
       onCancel: vi.fn(),
+      catalogue: createCatalogue(),
     });
 
     const albumBtn = await screen.findByText("Summer 2026");
@@ -407,6 +420,7 @@ describe("TargetAlbumModal", () => {
       folderPath: "D:/Photos",
       onConfirm: vi.fn(),
       onCancel: vi.fn(),
+      catalogue: createCatalogue(),
     });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Create new album" }));
@@ -445,6 +459,7 @@ describe("TargetAlbumModal", () => {
       folderPath: "D:/Photos",
       onConfirm,
       onCancel: vi.fn(),
+      catalogue: createCatalogue(),
     });
 
     expect(await screen.findByText("Failed to load albums")).toBeInTheDocument();
@@ -466,6 +481,7 @@ describe("TargetAlbumModal", () => {
       folderPath: "D:/Photos",
       onConfirm: vi.fn(),
       onCancel,
+      catalogue: createCatalogue(),
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));

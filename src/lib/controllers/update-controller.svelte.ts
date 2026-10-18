@@ -1,9 +1,9 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { tauriDesktopAdapter, type DesktopAdapter } from "../tauri/desktop-adapter";
+import type { DesktopAdapter } from "../tauri/desktop-adapter";
 
-export function createUpdateController(isSyncActive: () => boolean, adapter: DesktopAdapter = tauriDesktopAdapter) {
+export function createUpdateController(isSyncActive: () => boolean, adapter: DesktopAdapter) {
   let appVersion = $state<string | undefined>();
   let availableUpdate = $state<Update | null>(null);
   let isUpdateDialogOpen = $state(false);

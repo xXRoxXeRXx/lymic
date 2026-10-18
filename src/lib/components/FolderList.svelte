@@ -1,17 +1,17 @@
 <script lang="ts">
   import { Album, Folder, FolderPlus, Trash2 } from "lucide-svelte";
   import { t } from "svelte-i18n";
-  import { createTargetAlbumCatalogue, type TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
+  import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { WatchedFolder } from "./types";
 
   interface Props {
     watchedFolders: WatchedFolder[];
     onAddFolder: () => void;
     onRemoveFolder: (id: number) => void;
-    catalogue?: TargetAlbumCatalogue;
+    catalogue: TargetAlbumCatalogue;
   }
 
-  let { watchedFolders, onAddFolder, onRemoveFolder, catalogue = createTargetAlbumCatalogue() }: Props = $props();
+  let { watchedFolders, onAddFolder, onRemoveFolder, catalogue }: Props = $props();
   let targetAlbumIds = new Set<string>();
 
   $effect(() => {

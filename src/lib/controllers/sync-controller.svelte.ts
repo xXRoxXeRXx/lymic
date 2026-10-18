@@ -1,6 +1,6 @@
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import type { FailedSyncEntry, LogEntry, SyncStatus, WatchedFolder } from "../components/types";
-import { tauriDesktopAdapter, type DesktopAdapter } from "../tauri/desktop-adapter";
+import type { DesktopAdapter } from "../tauri/desktop-adapter";
 import { subscribeToSyncEvents } from "../tauri/sync-event-subscription";
 import { toBcp47Locale } from "../i18n";
 import type {
@@ -37,7 +37,7 @@ export interface DashboardViewState {
 }
 
 export interface SyncControllerOptions {
-  adapter?: DesktopAdapter;
+  adapter: DesktopAdapter;
   reportError(error: unknown): void;
   t(key: string): string;
   locale(): string;
@@ -45,7 +45,7 @@ export interface SyncControllerOptions {
 }
 
 export function createSyncController(options: SyncControllerOptions) {
-  const adapter = options.adapter ?? tauriDesktopAdapter;
+  const { adapter } = options;
 
   let syncStatus = $state<SyncStatus>("idle");
   let lastSync = $state<string | null>(null);
