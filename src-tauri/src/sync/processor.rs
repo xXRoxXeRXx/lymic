@@ -34,322 +34,328 @@ pub(crate) struct SyncSummary {
 
 pub(crate) const BULK_CHECK_CHUNK_SIZE: usize = 100;
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn process_recovered_upload_units(
+/// Processes bounded queue blocks for one synchronization run.
+///
+/// The run owns the collaborators that must stay consistent across blocks, while
+/// `process` remains the sole block-level entry point for the queue runner.
+pub(crate) struct RunProcessor {
     app: tauri::AppHandle,
     pool: sqlx::SqlitePool,
     client: Arc<ImmichClient>,
-    units: Vec<UploadUnit>,
     audit_context: SyncAuditContext,
     progress: JobByteProgress,
     coordinator: Arc<SyncCoordinatorInner>,
     sidecar_cache: SidecarDirectoryCache,
-) -> Result<SyncSummary, String> {
-    process_upload_units(
-        app,
-        pool,
-        client,
-        units,
-        Vec::new(),
-        audit_context,
-        progress,
-        coordinator,
-        sidecar_cache,
-    )
-    .await
+    upload_parallelism: usize,
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn process_upload_units(
-    app: tauri::AppHandle,
-    pool: sqlx::SqlitePool,
-    client: Arc<ImmichClient>,
-    units: Vec<UploadUnit>,
-    failures: Vec<crate::media::model::FileFailure>,
-    audit_context: SyncAuditContext,
-    progress: JobByteProgress,
-    coordinator: Arc<SyncCoordinatorInner>,
-    sidecar_cache: SidecarDirectoryCache,
-) -> Result<SyncSummary, String> {
-    let upload_parallelism = load_upload_parallelism(&pool).await?;
-    let mut queue_results = Vec::new();
-    for failure in failures {
-        log_to_ui_file_error(
-            &app,
-            "ERROR",
-            &format!("File scan failed for '{}': {}", failure.path, failure.error),
-            "log_file_scan_failed",
-            &failure.path,
-            &failure.error,
-        );
-        let _ = db::mark_sync_failed(&pool, &failure.path, 0, 0, &failure.error).await;
-        queue_results.push((failure.path, "FAILED".to_string()));
-    }
-    let mut hashed_units = Vec::new();
-    let mut hashing = FuturesUnordered::new();
-    for unit in units {
-        if !can_start_work(&coordinator) {
-            break;
-        }
-        hashing.push(hash_unit(
-            unit,
-            pool.clone(),
-            app.clone(),
-            progress.clone(),
-            audit_context.clone(),
-        ));
-        if hashing.len() == 4 {
-            if let Some(outcome) = hashing.next().await {
-                queue_results.extend(outcome.queue_results);
-                if let Some(unit) = outcome.unit {
-                    hashed_units.push(unit);
-                }
-            }
-        }
-    }
-    while let Some(outcome) = hashing.next().await {
-        queue_results.extend(outcome.queue_results);
-        if let Some(unit) = outcome.unit {
-            hashed_units.push(unit);
-        }
+impl RunProcessor {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn new(
+        app: tauri::AppHandle,
+        pool: sqlx::SqlitePool,
+        client: Arc<ImmichClient>,
+        audit_context: SyncAuditContext,
+        progress: JobByteProgress,
+        coordinator: Arc<SyncCoordinatorInner>,
+        sidecar_cache: SidecarDirectoryCache,
+    ) -> Result<Self, String> {
+        let upload_parallelism = load_upload_parallelism(&pool).await?;
+        Ok(Self {
+            app,
+            pool,
+            client,
+            audit_context,
+            progress,
+            coordinator,
+            sidecar_cache,
+            upload_parallelism,
+        })
     }
 
-    let mut uploaded = 0;
-    for chunk in hashed_units.chunks(BULK_CHECK_CHUNK_SIZE) {
-        if !can_start_work(&coordinator) {
-            break;
-        }
-
-        let mut pending_album_units: Vec<PendingAlbumUnit> = Vec::new();
-        let mut units_to_check: Vec<HashedUploadUnit> = Vec::new();
-
-        for unit in chunk {
-            if let Some(asset) = unit.assets().next() {
-                if is_path_cancelled(&coordinator, &asset.path).await {
-                    continue;
-                }
-            }
-
-            if let Some(remote_id) = &unit.image.remote_id {
-                match begin_upload_unit_completion_or_fail(
-                    &pool,
-                    &app,
-                    &audit_context,
-                    unit.clone(),
-                    remote_id.clone(),
-                    0,
-                )
-                .await?
-                {
-                    UploadUnitCompletion::PendingAlbum(pending) => {
-                        pending_album_units.push(*pending)
-                    }
-                    UploadUnitCompletion::Complete(completion) => {
-                        queue_results.extend_from_slice(completion.queue_results());
-                        uploaded += completion.uploaded_count();
-                    }
-                    UploadUnitCompletion::Failed { completion, .. } => {
-                        queue_results.extend_from_slice(completion.queue_results());
-                    }
-                }
-                progress.advance(&app, unit.byte_size());
-            } else {
-                units_to_check.push(unit.clone());
-            }
-        }
-
-        let existing = if !units_to_check.is_empty() {
-            let hashes = units_to_check
-                .iter()
-                .flat_map(|unit| unit.assets())
-                .filter_map(|asset| {
-                    asset
-                        .checksums
-                        .as_ref()
-                        .map(|checksums| checksums.sha1_base64.clone())
-                })
-                .collect();
-            let mut cancellations = Vec::new();
-            for unit in &units_to_check {
-                if let Some(asset) = unit.assets().next() {
-                    if let Some(cancellation) = coordinator.cancellation_for_path(&asset.path).await
-                    {
-                        cancellations.push(cancellation);
-                    }
-                }
-            }
-            let bulk_check = check_assets_exist_with_backoff(&client, hashes, &app, &audit_context);
-            let existing = if cancellations.is_empty() {
-                bulk_check.await?
-            } else {
-                tokio::select! {
-                    result = bulk_check => result?,
-                    _ = wait_for_any_cancellation(cancellations) => continue,
-                }
-            };
+    pub(crate) async fn process(&self, units: Vec<UploadUnit>) -> Result<SyncSummary, String> {
+        let app = &self.app;
+        let pool = &self.pool;
+        let client = &self.client;
+        let audit_context = &self.audit_context;
+        let progress = &self.progress;
+        let coordinator = &self.coordinator;
+        let sidecar_cache = &self.sidecar_cache;
+        let upload_parallelism = self.upload_parallelism;
+        let mut queue_results = Vec::new();
+        let mut hashed_units = Vec::new();
+        let mut hashing = FuturesUnordered::new();
+        for unit in units {
             if !can_start_work(&coordinator) {
                 break;
             }
-            existing
-        } else {
-            Vec::new()
-        };
-
-        let mut upload_units = Vec::new();
-        for unit in units_to_check {
-            if let Some(asset) = unit.assets().next() {
-                if is_path_cancelled(&coordinator, &asset.path).await {
-                    continue;
-                }
-            }
-
-            let image_hash = &unit.image.checksums.as_ref().unwrap().sha1_base64;
-            let is_duplicate = existing.iter().any(|d| &d.hash == image_hash);
-
-            if is_duplicate {
-                match album_batch::resolve_duplicate_remote_id(&client, &unit, &existing).await {
-                    Ok(remote_id) => {
-                        match begin_upload_unit_completion_or_fail(
-                            &pool,
-                            &app,
-                            &audit_context,
-                            unit.clone(),
-                            remote_id,
-                            0,
-                        )
-                        .await?
-                        {
-                            UploadUnitCompletion::PendingAlbum(pending) => {
-                                pending_album_units.push(*pending)
-                            }
-                            UploadUnitCompletion::Complete(completion) => {
-                                queue_results.extend_from_slice(completion.queue_results());
-                                uploaded += completion.uploaded_count();
-                            }
-                            UploadUnitCompletion::Failed { completion, .. } => {
-                                queue_results.extend_from_slice(completion.queue_results());
-                            }
-                        }
-                        progress.advance(&app, unit.byte_size());
-                    }
-                    Err(error_msg) => {
-                        log_to_ui_file_error(
-                            &app,
-                            "ERROR",
-                            &error_msg,
-                            "log_duplicate_resolve_failed",
-                            &unit.image.path,
-                            &error_msg,
-                        );
-                        audit_event(
-                            &app,
-                            audit_context.event(
-                                "album.duplicate.resolution.failed",
-                                audit::Outcome::Failure,
-                                audit::Severity::Error,
-                                "Failed to resolve duplicate asset remote ID for target album",
-                                json!({
-                                    "local_path": unit.image.path,
-                                "failure_reason": audit_context.safe_error(&error_msg),
-                                }),
-                            ),
-                        );
-                        let failure =
-                            completion::fail_upload_unit(&pool, &unit, &error_msg).await?;
-                        queue_results.extend_from_slice(failure.queue_results());
-                        progress.advance(&app, unit.byte_size());
-                    }
-                }
-            } else {
-                upload_units.push(unit);
-            }
-        }
-
-        let mut pending = upload_units.into_iter();
-        let mut uploads = FuturesUnordered::new();
-        while can_start_work(&coordinator) && uploads.len() < upload_parallelism {
-            let Some(unit) = pending.next() else {
-                break;
-            };
-            let path = unit.image.path.clone();
-            if is_path_cancelled(&coordinator, &path).await {
-                continue;
-            }
-            let cancellation = coordinator
-                .cancellation_for_path(&path)
-                .await
-                .unwrap_or_default();
-            uploads.push(upload_unit(
+            hashing.push(hash_unit(
                 unit,
-                client.clone(),
                 pool.clone(),
                 app.clone(),
                 progress.clone(),
                 audit_context.clone(),
-                cancellation,
-                sidecar_cache.clone(),
             ));
-        }
-        while let Some(outcome) = uploads.next().await {
-            let outcome = outcome?;
-            uploaded += outcome.uploaded;
-            queue_results.extend(outcome.queue_results);
-            if let Some(pending_album) = outcome.pending_album_unit {
-                pending_album_units.push(pending_album);
-            }
-            if can_start_work(&coordinator) {
-                if let Some(unit) = pending.next() {
-                    let path = unit.image.path.clone();
-                    if is_path_cancelled(&coordinator, &path).await {
-                        continue;
+            if hashing.len() == 4 {
+                if let Some(outcome) = hashing.next().await {
+                    queue_results.extend(outcome.queue_results);
+                    if let Some(unit) = outcome.unit {
+                        hashed_units.push(unit);
                     }
-                    let cancellation = coordinator
-                        .cancellation_for_path(&path)
-                        .await
-                        .unwrap_or_default();
-                    uploads.push(upload_unit(
-                        unit,
-                        client.clone(),
-                        pool.clone(),
-                        app.clone(),
-                        progress.clone(),
-                        audit_context.clone(),
-                        cancellation,
-                        sidecar_cache.clone(),
-                    ));
                 }
             }
         }
-
-        if can_start_work(&coordinator) && !pending_album_units.is_empty() {
-            album_batch::assign_pending_album_units(
-                &client,
-                &pool,
-                &app,
-                &audit_context,
-                pending_album_units,
-                &mut queue_results,
-                &mut uploaded,
-            )
-            .await?;
+        while let Some(outcome) = hashing.next().await {
+            queue_results.extend(outcome.queue_results);
+            if let Some(unit) = outcome.unit {
+                hashed_units.push(unit);
+            }
         }
 
-        if !can_start_work(&coordinator) {
-            break;
+        let mut uploaded = 0;
+        for chunk in hashed_units.chunks(BULK_CHECK_CHUNK_SIZE) {
+            if !can_start_work(&coordinator) {
+                break;
+            }
+
+            let mut pending_album_units: Vec<PendingAlbumUnit> = Vec::new();
+            let mut units_to_check: Vec<HashedUploadUnit> = Vec::new();
+
+            for unit in chunk {
+                if let Some(asset) = unit.assets().next() {
+                    if is_path_cancelled(&coordinator, &asset.path).await {
+                        continue;
+                    }
+                }
+
+                if let Some(remote_id) = &unit.image.remote_id {
+                    match begin_upload_unit_completion_or_fail(
+                        &pool,
+                        &app,
+                        &audit_context,
+                        unit.clone(),
+                        remote_id.clone(),
+                        0,
+                    )
+                    .await?
+                    {
+                        UploadUnitCompletion::PendingAlbum(pending) => {
+                            pending_album_units.push(*pending)
+                        }
+                        UploadUnitCompletion::Complete(completion) => {
+                            queue_results.extend_from_slice(completion.queue_results());
+                            uploaded += completion.uploaded_count();
+                        }
+                        UploadUnitCompletion::Failed { completion, .. } => {
+                            queue_results.extend_from_slice(completion.queue_results());
+                        }
+                    }
+                    progress.advance(&app, unit.byte_size());
+                } else {
+                    units_to_check.push(unit.clone());
+                }
+            }
+
+            let existing = if !units_to_check.is_empty() {
+                let hashes = units_to_check
+                    .iter()
+                    .flat_map(|unit| unit.assets())
+                    .filter_map(|asset| {
+                        asset
+                            .checksums
+                            .as_ref()
+                            .map(|checksums| checksums.sha1_base64.clone())
+                    })
+                    .collect();
+                let mut cancellations = Vec::new();
+                for unit in &units_to_check {
+                    if let Some(asset) = unit.assets().next() {
+                        if let Some(cancellation) =
+                            coordinator.cancellation_for_path(&asset.path).await
+                        {
+                            cancellations.push(cancellation);
+                        }
+                    }
+                }
+                let bulk_check =
+                    check_assets_exist_with_backoff(&client, hashes, &app, &audit_context);
+                let existing = if cancellations.is_empty() {
+                    bulk_check.await?
+                } else {
+                    tokio::select! {
+                        result = bulk_check => result?,
+                        _ = wait_for_any_cancellation(cancellations) => continue,
+                    }
+                };
+                if !can_start_work(&coordinator) {
+                    break;
+                }
+                existing
+            } else {
+                Vec::new()
+            };
+
+            let mut upload_units = Vec::new();
+            for unit in units_to_check {
+                if let Some(asset) = unit.assets().next() {
+                    if is_path_cancelled(&coordinator, &asset.path).await {
+                        continue;
+                    }
+                }
+
+                let image_hash = &unit.image.checksums.as_ref().unwrap().sha1_base64;
+                let is_duplicate = existing.iter().any(|d| &d.hash == image_hash);
+
+                if is_duplicate {
+                    match album_batch::resolve_duplicate_remote_id(&client, &unit, &existing).await
+                    {
+                        Ok(remote_id) => {
+                            match begin_upload_unit_completion_or_fail(
+                                &pool,
+                                &app,
+                                &audit_context,
+                                unit.clone(),
+                                remote_id,
+                                0,
+                            )
+                            .await?
+                            {
+                                UploadUnitCompletion::PendingAlbum(pending) => {
+                                    pending_album_units.push(*pending)
+                                }
+                                UploadUnitCompletion::Complete(completion) => {
+                                    queue_results.extend_from_slice(completion.queue_results());
+                                    uploaded += completion.uploaded_count();
+                                }
+                                UploadUnitCompletion::Failed { completion, .. } => {
+                                    queue_results.extend_from_slice(completion.queue_results());
+                                }
+                            }
+                            progress.advance(&app, unit.byte_size());
+                        }
+                        Err(error_msg) => {
+                            log_to_ui_file_error(
+                                &app,
+                                "ERROR",
+                                &error_msg,
+                                "log_duplicate_resolve_failed",
+                                &unit.image.path,
+                                &error_msg,
+                            );
+                            audit_event(
+                                &app,
+                                audit_context.event(
+                                    "album.duplicate.resolution.failed",
+                                    audit::Outcome::Failure,
+                                    audit::Severity::Error,
+                                    "Failed to resolve duplicate asset remote ID for target album",
+                                    json!({
+                                        "local_path": unit.image.path,
+                                    "failure_reason": audit_context.safe_error(&error_msg),
+                                    }),
+                                ),
+                            );
+                            let failure =
+                                completion::fail_upload_unit(&pool, &unit, &error_msg).await?;
+                            queue_results.extend_from_slice(failure.queue_results());
+                            progress.advance(&app, unit.byte_size());
+                        }
+                    }
+                } else {
+                    upload_units.push(unit);
+                }
+            }
+
+            let mut pending = upload_units.into_iter();
+            let mut uploads = FuturesUnordered::new();
+            while can_start_work(&coordinator) && uploads.len() < upload_parallelism {
+                let Some(unit) = pending.next() else {
+                    break;
+                };
+                let path = unit.image.path.clone();
+                if is_path_cancelled(&coordinator, &path).await {
+                    continue;
+                }
+                let cancellation = coordinator
+                    .cancellation_for_path(&path)
+                    .await
+                    .unwrap_or_default();
+                uploads.push(upload_unit(
+                    unit,
+                    client.clone(),
+                    pool.clone(),
+                    app.clone(),
+                    progress.clone(),
+                    audit_context.clone(),
+                    cancellation,
+                    sidecar_cache.clone(),
+                ));
+            }
+            while let Some(outcome) = uploads.next().await {
+                let outcome = outcome?;
+                uploaded += outcome.uploaded;
+                queue_results.extend(outcome.queue_results);
+                if let Some(pending_album) = outcome.pending_album_unit {
+                    pending_album_units.push(pending_album);
+                }
+                if can_start_work(&coordinator) {
+                    if let Some(unit) = pending.next() {
+                        let path = unit.image.path.clone();
+                        if is_path_cancelled(&coordinator, &path).await {
+                            continue;
+                        }
+                        let cancellation = coordinator
+                            .cancellation_for_path(&path)
+                            .await
+                            .unwrap_or_default();
+                        uploads.push(upload_unit(
+                            unit,
+                            client.clone(),
+                            pool.clone(),
+                            app.clone(),
+                            progress.clone(),
+                            audit_context.clone(),
+                            cancellation,
+                            sidecar_cache.clone(),
+                        ));
+                    }
+                }
+            }
+
+            if can_start_work(&coordinator) && !pending_album_units.is_empty() {
+                album_batch::assign_pending_album_units(
+                    &client,
+                    &pool,
+                    &app,
+                    &audit_context,
+                    pending_album_units,
+                    &mut queue_results,
+                    &mut uploaded,
+                )
+                .await?;
+            }
+
+            if !can_start_work(&coordinator) {
+                break;
+            }
         }
+
+        Ok(summarize_block(queue_results, uploaded))
     }
+}
 
+fn summarize_block(queue_results: Vec<(String, String)>, uploaded: usize) -> SyncSummary {
     let failed = queue_results
         .iter()
         .filter(|(_, status)| status == "FAILED")
         .count();
     let processed = queue_results.len();
-    Ok(SyncSummary {
+    SyncSummary {
         processed,
         uploaded,
         failed,
         queue_results,
-    })
+    }
 }
 
 async fn wait_for_any_cancellation(cancellations: Vec<CancellationToken>) {
@@ -778,6 +784,28 @@ pub(crate) async fn load_upload_parallelism(pool: &sqlx::SqlitePool) -> Result<u
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn block_summary_preserves_terminal_error_records() {
+        let summary = summarize_block(
+            vec![
+                ("photo.jpg".to_string(), "SYNCED".to_string()),
+                ("broken.jpg".to_string(), "FAILED".to_string()),
+            ],
+            1,
+        );
+
+        assert_eq!(summary.processed, 2);
+        assert_eq!(summary.uploaded, 1);
+        assert_eq!(summary.failed, 1);
+        assert_eq!(
+            summary.queue_results,
+            vec![
+                ("photo.jpg".to_string(), "SYNCED".to_string()),
+                ("broken.jpg".to_string(), "FAILED".to_string()),
+            ]
+        );
+    }
 
     #[tokio::test]
     async fn pipeline_upload_parallelism_loader_uses_the_configured_value() {
