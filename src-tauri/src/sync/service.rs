@@ -103,6 +103,28 @@ pub(crate) struct Synchronization<'a> {
 }
 
 impl<'a> Synchronization<'a> {
+    /// Retrieves durable failures for the desktop command surface.
+    pub(crate) async fn failed_syncs(
+        pool: &sqlx::SqlitePool,
+    ) -> Result<Vec<db::FailedSyncEntry>, String> {
+        db::get_failed_syncs(pool)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    /// Reads the configured concurrency limit used by synchronization runs.
+    pub(crate) async fn upload_parallelism(pool: &sqlx::SqlitePool) -> Result<usize, String> {
+        crate::sync::load_upload_parallelism(pool).await
+    }
+
+    /// Persists the concurrency limit used by future synchronization runs.
+    pub(crate) async fn set_upload_parallelism(
+        pool: &sqlx::SqlitePool,
+        upload_parallelism: usize,
+    ) -> Result<(), String> {
+        db::set_upload_parallelism(pool, upload_parallelism).await
+    }
+
     pub(crate) fn new(
         app: &'a tauri::AppHandle,
         pool: &'a sqlx::SqlitePool,
