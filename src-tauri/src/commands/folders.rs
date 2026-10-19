@@ -73,21 +73,22 @@ pub(crate) fn sanitize_target_album_id(target_album_id: Option<String>) -> Optio
 pub(crate) fn normalize_exclusion_patterns(patterns: Vec<String>) -> Result<Vec<String>, String> {
     let mut normalized = Vec::new();
     for pattern in patterns {
-        let pattern = pattern
-            .trim()
-            .replace('\\', "/")
-            .trim_start_matches('/')
-            .to_string();
+        let pattern = pattern.trim().to_string();
         if pattern.is_empty() {
             continue;
         }
-        if pattern.contains("..")
+        if pattern.contains('\\')
+            || pattern.starts_with('/')
+            || pattern.contains("..")
             || pattern.contains('?')
             || pattern.contains('[')
             || pattern.contains(']')
+            || pattern.contains('{')
+            || pattern.contains('}')
+            || pattern.contains('!')
         {
             return Err(format!(
-                "Invalid exclusion pattern '{pattern}'. Use relative paths with * or **."
+                "Invalid exclusion pattern '{pattern}'. Use relative paths with names, * and ** only."
             ));
         }
         if !normalized
@@ -641,7 +642,7 @@ mod tests {
     fn exclusion_patterns_are_normalized_deduplicated_and_validated() {
         assert_eq!(
             super::normalize_exclusion_patterns(vec![
-                " Screenshots\\** ".into(),
+                " Screenshots/** ".into(),
                 "screenshots/**".into(),
                 "".into()
             ])
@@ -649,6 +650,9 @@ mod tests {
             vec!["Screenshots/**"]
         );
         assert!(super::normalize_exclusion_patterns(vec!["../private/**".into()]).is_err());
+        for invalid in ["Screenshots\\**", "/private/**", "!keep.jpg", "*.{jpg,png}"] {
+            assert!(super::normalize_exclusion_patterns(vec![invalid.into()]).is_err());
+        }
     }
 
     #[test]

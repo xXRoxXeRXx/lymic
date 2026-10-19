@@ -176,5 +176,13 @@
   "removable_card_detected_title": "এসডি কার্ড সনাক্ত হয়েছে",
   "removable_card_detected_body": "কার্ড {name} ({path}) সিঙ্ক করার জন্য প্রস্তুত।",
   "removable_prompt_sync": "কার্ড সিঙ্ক করুন",
-  "removable_prompt_dismiss": "খারিজ করুন"
+  "removable_prompt_dismiss": "খারিজ করুন",
+  "folder_exclusions": "Exclusions",
+  "folder_exclusions_help": "Add a relative pattern. Use * within a segment and ** across folders.",
+  "folder_exclusions_example": "e.g. **/exports/** or *.mp4",
+  "folder_exclusions_add": "Add",
+  "folder_exclusions_remove": "Remove exclusion",
+  "folder_exclusions_invalid_pattern": "Use a relative pattern with names, * and ** only.",
+  "folder_exclusions_all_warning": "This rule set excludes all media in this Watched Folder.",
+  "folder_exclusions_save": "Save exclusions"
 }
