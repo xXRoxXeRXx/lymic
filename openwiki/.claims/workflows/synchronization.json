@@ -1,24 +1,32 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:d474326a9b3e1c83c30b898bf4b750b687b216558ec1972009347d3ac94c6eb1",
+  "pageVersion": "sha256:2847880e535c31f2071551f3fe5ab985b6441bee18efd4ed3a94ebf6158f02bc",
   "claims": [
     {
       "id": "claim_848996a20edf4179920298c99a8f4a33",
-      "statement": "The manual sync command scans configured folders and passes its result into the synchronization pipeline after durable status is set to RUNNING.",
+      "statement": "A manual `start_sync` requires watched folders, atomically acquires the in-memory running gate, persists `RUNNING`, authenticates and scans configured folders, then passes the scan result to the durable synchronization pipeline; an error resets the job to `IDLE` and records an aborted audit event.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/commands/sync.rs",
-          "version": "repo-file-v1:sha256:2275ad3332e53a6798afca4f55cee7e4d421d715c62e1e15ed8ead89f346f951"
+          "resource": "repo://src-tauri/src/sync/service.rs#L124-L199",
+          "version": "repo-lines-v1:sha256:8e09e9ca7691a5196322a1da6755d6654a37ad048585eb81adca6f588df00d1a:eyJzZWxlY3RlZExpbmVDb3VudCI6NzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmZmQ2YzZhNDlkMGY5NTdkY2Q0YTljNDQ4ZTMyZmYwNzg0MjZmNWJmMzQzM2RjNzFlMDVhNDI4ZmZlYjc5MGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1YzI1MmE3ODVhOTNmZWNiZWQ1ZDE2OTU3Mjc2NjUwNDU5YjI2YjljOGQ2YzBiMzhlMmQwOWUxNzM2OWZlMjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkxYTQ1OTQxOGNhYzVmMzVlZTk5ZDI5YTYxN2Y5NWYwZTY3NGQ2YzA0MGU1MDkzNzQ2NDYyNTYyMmMwMTg0YjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIyOTZkMDE3ZTllZWU2NWUyMjM3YWY1MTI0NWY4MWExZWY0ZTYwMjRkZTFiMjA5M2M0OTUyOGU1YzBlZjdlZWEifQ"
         }
       ]
     },
     {
       "id": "claim_6f16f126bf464dedbd3da8ecfe97f73e",
-      "statement": "Resume starts recovered work from pending persisted queue items with an empty scan result when no in-memory runner owns the coordinator lock.",
+      "statement": "Resume changes a paused job to `RUNNING` and notifies an in-memory runner; when no runner owns the coordinator lock, it either completes an empty durable queue or spawns recovery from pending persisted queue items with an empty scan result.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/commands/sync.rs",
-          "version": "repo-file-v1:sha256:2275ad3332e53a6798afca4f55cee7e4d421d715c62e1e15ed8ead89f346f951"
+          "resource": "repo://src-tauri/src/db/queue.rs#L319-L325",
+          "version": "repo-lines-v1:sha256:30a48e24c8b58a116fd45ed60c36cca7488ba8ed781f8507eceeecb34775e8a5:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2NhYmNlZDI0YWFjNTAzY2YzM2Q3OGY1ZTEzZDE3MmJlNWI4ZDc0MmFmNTIwOTg3ZDM2OGZlODc1YTJkNDhjZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzVmNmY0NjZlNTljZmMzMDcwM2M0NWY3MmFmNjVkZTU0YWMzNjNkMzU0Y2MxYTMzMzAzNTBhY2Q0NTI0MzRjNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDM5MWI4OTAxMDExMDA2NWM0NzY0NWRkNzRlMmVjYzkzZmEwNDkyMWVlODhjNDBiYjkyN2Y0NDM0NDk3NjkyMSJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/db/queue.rs#L420-L427",
+          "version": "repo-lines-v1:sha256:6bac364f33d0c3318da0680ed486626f0d918f72bcdb71bbf161478db36ad5be:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGI1ZTUxM2FhNjc0YjNlNzllMTFkMDdjZjJkOWJjZDI2MjQ3N2EzNDFhZmViYWMzMzlhMDYxMDM5NjI5MDBiNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDNjOTk5MDRlNzMxMzZlZWQ3ZGZjZWRkYzhjZjUxMTAzNmVlNDYwNjFjZDE3ZjJjNWM4ZDU4ZWZiMDYxY2M0OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTc3YTZhYWE0ZWQ5OGI1MDkyMWJjYTA5MmVkODI3MWQ2ZjUxNmU2MzgwMmJlYjFhYzQwZDcyNWUxNTdhNTRjNSJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L266-L336",
+          "version": "repo-lines-v1:sha256:425a766531896c3bb715041e23b164e1484f3b03312aab3890be9aa3fa0bcd49:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5YTkxMWVhZjMyYWRjYjFhMDhhNjQxNWQ2MDMyMTc5MzZmNjk1MTM1MzRiMjkxNzhlOGMzZGIxMWE5MTlhNWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExODdjZjVjMTQ0Njg5MDYxMTJmN2I3NWEwMTYwMzhhZDFkY2U3Y2UxOWI0NzIzZTk3MTQ4NmIyNTEwYjc0ZmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQxNzUxOThlODY4OGRmMjJmYjZkMTQxZmYzNTFlNTE1MGM5YzQ4NTg5YjZmNmFhMGFiZmY4YWQwMWYyZDg4MjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdjOWNhMmU1YThkNDY5NGM3ZWM2NDgxZjNlZGU1OGI4NmJiNzRlOThkNjI4NjdkYjViNzFjN2JmMGE0NWI4MzEifQ"
         }
       ]
     },
@@ -31,10 +39,162 @@
           "version": "repo-file-v1:sha256:c76e136a52aec96ff1cd27bcb2a411d6b9a3e79c36f84666f84eef2f00938b68"
         }
       ]
+    },
+    {
+      "id": "claim_e446ea39949c4a9797cb60d213a6144e",
+      "statement": "The durable SQLite queue, rather than a scan result, is the runner's source of work: scans are enqueued before execution, automatic producers retain work when paused or another lifecycle gate is active, and the coordinator lock serializes runners.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/sync/queue_runner.rs#L48-L79",
+          "version": "repo-lines-v1:sha256:2e2668a47df43981357b6f54c02c4bc405bbcc26021a872e42759074e2f2673e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBmM2I0NDg0NTQzZDUyZWZkMjFhMzYzN2I2MjgyMTk0YTZmYmZjYWM0OGI2MzRmNDExMzA0ZmRkMTgyOGVmOWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ4ODU5MjEwZWJjYjEyY2Y2OGM2MTYyMjJmYzU2MGMxZjY4ZTJmYTMxZjYzMDQ5M2RmODA5NTg4ODdkNTdhZjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc0ZjRlOGNiNDJmYmI3YjRjNTBiYTEwMmMyZjg2YzYzMjhiY2I5Y2M4NjkyZDU1MjhiOTZhOWUxNjQzNzAyNGMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L433-L511",
+          "version": "repo-lines-v1:sha256:261fc4de4eaaddbd3123115d5142889db3bc8d67ce15dd037660ea59c2104ceb:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyN2VhODE5MGI2ZDViZjBlZDhhZWI3ZTM1Yzk1ZDBhZTZhOTBlMjNiN2Q0NGM2MzQyNTMwYTVhODliZjhiODciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_da15fd7fac28486683bdef44aa98e893",
+      "statement": "On application startup, recovery changes an interrupted durable `RUNNING` job to `PAUSED`, requiring explicit user confirmation before pending work can resume because the process cannot determine whether an in-flight HTTP upload completed.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/startup.rs#L68-L92",
+          "version": "repo-lines-v1:sha256:1900e9a3e67b22ca513878948672eb18568b534309e05f922e529867bd32f4f2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmMDQ1MGRiMDNjYzRjMzVmNTQ4OTEyYzI2MjhkMGM0NWRjOGZkMTYwZDQ1NmFiMTkyMWMxY2ZjZTI2NWMwMzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZTQyMDhjZDZmZmI4YzRhMzU0N2IyZjU0YWRhMTk5NzhjM2YzNjVlNzhmOTUwMmVmNTE0NWNkZDJhYTg1NDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFjMDQ3ZDk0NzZhMDQxYzI0NmFmYTU5MjdmY2Y3NGFhOGUxMzYwZGY0YWUzMDQ3M2MwNzgwZjFkZDA5M2Q5YjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYzZDJmZWY0NzVkMTZjZjYxZjU5OTExODg2MDg2ZjQ3NDBiNmRkODY1OWNlYjgyZDA2YmRjOWNkZDg1ZDE3YWQifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/db/queue.rs#L79-L86",
+          "version": "repo-lines-v1:sha256:f981186215896d585534fb0e44f0234d23b24e6358b4f61505f4bc5f21c6f13a:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmU5MTE1OWFiMTRhNTFhMDRmNzhmNGUwYmIzNzg1OTI5YzFhOWFiYjJmNTAwMjBjMGViMTBhNWI1NTVjNDRjYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmU0Mjg3ZDUzZmJlYWYxZjU4MmQwYTA5NjJkYzA4OWE2NzIwNmJjYmVkMzBlMDE1Mzg3NGMzZmM4MWIwNTU5NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmM4ZTY1NTUyNTljNzBjMmU0ZGRmMTlkOWI4ZTY3OWVkZjE5NmJhMmY0MTA0YzRlYTU0OTVjNjI2YTg5MWFkYSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_deb6bc15157c4895b00729703976811f",
+      "statement": "Queue entries retain upload-unit grouping and terminal state; the runner processes up to 50 pending upload units at a time, commits only returned terminal outcomes, and leaves unprocessed work pending across a pause.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/db/queue.rs#L45-L71",
+          "version": "repo-lines-v1:sha256:1d7fe9d6dd10baa3766910813de435d501c398c9bb1e513b4c055c6bf235efc2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwN2RlNzNjMjY2MmNjZjJhZTU0NmE3N2Y3ZjIyNDk2ZTcwYmUzYjkzNTI5ZDY0NWYzNzI2YzIzNTE1MmYzNWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc2YzQ1N2ZlZjBiZGQ0ZDUxZTA2ZDdlZjZlNWNjOGQwYjgxYTdjM2M0OWY5YTg1NmY3NGRiOWExZDc2OWU2MjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQyMGI5YzczYmJmOWVkZjJhZDFiYTVlYzM4ODgxMzZlN2E1MTA2MmNmODg2NTMxNzVmZmExNzQ2NzE4NGU0YzgifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/queue_runner.rs#L119-L180",
+          "version": "repo-lines-v1:sha256:ab03763419d8a38a4a4ee7629e38b3fd91c67795c1bdeeaa20453aca8a309bce:eyJzZWxlY3RlZExpbmVDb3VudCI6NjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk4YjRjYmIxMmYxMjA1ZDI4YWI0NTM3ZDhjMmU3MTE1Zjk4YmNmNjZmY2EwNDY4ZGYyODNjZWY0NTZiNGU2ZGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExNDE3MTJmYjVmYmMxMGMwNzY1ZDllN2FiYjRlOGZkOTYyZmMxOWU0NjBiMjEyMWZlZDFkNDU3MmUyYjllMjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY5OTU5MzYxMGFlMGZmNjc3YzdjMzlhZTk4YzZiOGZjNGNhZDMxOWIxZTFmMjdhYzAzYjYzZDQyZjkxZDAxMDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZjMDFkZDgxMWViMWMzYjVkYmM2ZDJkNGU2YzkyMzNhYTk4MjAzZDNiMDA2OTJlNzViMzVmOGVmYzIzZDI4NzgifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/queue_runner.rs#L22-L22",
+          "version": "repo-lines-v1:sha256:194afc30d74ba4086ebc914459cae0cde72695416aafb86d37531ce5067e78fc:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTk0YWZjMzBkNzRiYTQwODZlYmM5MTQ0NTljYWUwY2RlNzI2OTU0MTZhYWZiODZkMzc1MzFjZTUwNjdlNzhmYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTk0YWZjMzBkNzRiYTQwODZlYmM5MTQ0NTljYWUwY2RlNzI2OTU0MTZhYWZiODZkMzc1MzFjZTUwNjdlNzhmYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTc5NDM3MDFjNDZkOGVlZmY4NzhkNmNmNWRkZWE2NGZmZDIyNTI4MmQzMmViNjQ1ZWIyZTgwMTJiZjI2OTdiMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWY0MjlhOTExYzM0YzkxYWVkMzgwYTkzYjYxMDFmOGEzMjg2YThmNTIwYTRiOGIwNTZkN2MxOWY1Y2I5Y2MxYiJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/queue_runner.rs#L316-L330",
+          "version": "repo-lines-v1:sha256:7a1f6acdc823616c8e60b8cfb76e1e983790883797b50b757b5b02c7aa0f8add:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVkNTZkMTFlMTQzMzM1NDQzODBjZDQwMzc2YzYwMmI5N2M2ZTljMzQwYjU3MDY3OTY1MTkwZjAyODM3YTRlNzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliM2ZiODhjMDVmNTYwZWQ4YzQxMTRmNDNkZTI3MDQzYWFjMjk1Zjg1YjdhYzI4ODY2YzI2MmE0MmMxZDliNWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ0YjcyZWE3YjMwNTJkNTlhOWViNDg0NjhkM2VmMTQxNTE1ZmExNGJlNzE2ODIyNDNmMTRlZjc2ZjY1MGU2OTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a98041bd69eb44c7982443a467f8ab17",
+      "statement": "The processor reuses a hash cache only after size and modification-time validation, bulk-checks Immich in chunks of at most 100, resolves duplicates through the same completion path as uploads, and limits concurrent uploads by the persisted upload-parallelism setting.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/sync.rs#L121-L144",
+          "version": "repo-lines-v1:sha256:da3ab90e62437a006f4dd876684c3567a72e2304f91793cb25ea663971ad3af5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjljM2Q4NTUzOTdkZGRhMTBjZWZlNjNhZTgzMTdjNDgwYzNhNjM1ZTgyYjBmZDg2NWYxZGI5OGMyOGYwYTAxZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJlYzA5YTk5MGFhODBmMjE3YWJhYjE0YWZkYTcxZjc5Yzk0OTc3ZmI3MjZjYjMzZjcwZGZkMzczNWFmNjAwODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiZjkxMjJhNTNmNTQwYmZiYTg3N2M5M2FmNzc4ZjIyNjk2YjBjYmQ3NWE0OGQwNDBkM2E1YjIyN2Y1NDhkNDUifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L115-L265",
+          "version": "repo-lines-v1:sha256:21a6ac2ed7bf20702d65ed8087f5224127048d8c16b9681359c3329637cca954:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwNTM2MDYyMWE2YzRlNzFmMTk0NDJjY2JmZGJmYTIxNDY4OTliMGRjZTAxODE2NjVmNjI0NmVhZDVlYzFjYTdlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwYzY0NzljYzIzMDQ0MGZkNDFlODIyNDIxODY3OTY5ODU1OWQyODkzYmQ2N2I0MzgwYWZhYjgxMWIzOGE1NWFhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkYTlmODZkMjhlNzg0ZjlmZDMxZmI3MmQxNWY2MGNiY2VhYWZkZDY2OWNiZDViNmRhNzg4OGEwMjMzMjFlYmI5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0MWI3MGE3MTkzNTNhNjA0NjNkNWE4YmRmN2QyZjYyMWQyN2ViZDYyYzk1ZGI1MDJjNGFkMWFjYTZhODdiNGM4In0"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L35-L35",
+          "version": "repo-lines-v1:sha256:5512cfd3aab7fb662482eca67945ec774b9e9b4bd1e530c860907071c3c62dd3:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTUxMmNmZDNhYWI3ZmI2NjI0ODJlY2E2Nzk0NWVjNzc0YjllOWI0YmQxZTUzMGM4NjA5MDcwNzFjM2M2MmRkMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTUxMmNmZDNhYWI3ZmI2NjI0ODJlY2E2Nzk0NWVjNzc0YjllOWI0YmQxZTUzMGM4NjA5MDcwNzFjM2M2MmRkMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWE1ZjRiMzc5NDZkOTNjM2JhN2FhYzU3MzhjMTI3ZjlmYzRiYmNjYTcyZGNlNmU5OTM4ZTNmMDIyYmI3NjIwNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjY1OGU2ZTAxNjFkYTNmNjhmMjEyYTdkYTVhN2E3MmY2ZjY2ODRlNGMxYTAwNGQyYTA2ZTQxNjAyNzYxZWFlNCJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L385-L459",
+          "version": "repo-lines-v1:sha256:56b30a354b16be806de5de5fca0a334093fdf4a26bc1c9af697f45cc86212177:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiYjkzZWRiNDc2YmU1YTY4OGMwMzEwYmNlZDNkYmU2NjVhZGNlNjNhNjJjYjM3ZjEzYWE1NjlhODcwOTVkODEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlNDYyYmQ4NWVhMzUyMjgyMmE5YWQzZWIyNDA5OWIwMzJhMWI2MjdiZWNmZDdjNTgzMWU5OTI3ZDRiYWM0MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ4OTFmZTI4MzgxYjU1MGNhYzk0MmIxZTU2YmVlOWZhZGYyZjQzNjg1NGJkOTdkMjljOTViMzJiZmMxMWM3NjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4ZDk2ZjFiZjBmZjQ4ZWE3MzllNmMzZTRiYzEzNjIyZDRiMGYyMDkyY2FmMjQ4ZjAzOTE1YTFkOGRlYWViMDcifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L76-L84",
+          "version": "repo-lines-v1:sha256:710cb2ab801d882d32f74a5531ea1ca2cde2cc8f3b929d8773a28a653c618670:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmUxMjk0ZWJlODY1OTNlZjE3NGZmNzU2MTAxOGVlYjcxYWYxNzhiNDNhN2EzM2U3YzI1MGYyNWM4ZjE3MmExZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODQ2OWRjZDk0Y2I1ZjU1NWIwZTk5ZjZhOWM2OGEyODBkODVlM2RkYmQ3ZTY1ODY0MjViNGJjODY3ZTdjMDAxOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZWI5YTA4YmMyOWY2ZWJlYmU5YTVmMDE5MDNkOTg0NWRiY2I1ODQyYTQ1NWYwN2Q1ZjQwMDJkYWMzMmE1YzYwNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWFhZGZmMTIyODNhZjA5YWEzMzAxY2NhOWVlYWIyNTc1OTA5OWZmMjE0YWNhNTIxNzBlNTg0M2Q3OWYyNTU4NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_72ef4849b3964229a5b16cc379141a2a",
+      "statement": "An upload unit is reported synchronized only after its remote ID and local synchronized state are durably persisted; target-album units remain nonterminal until batch assignment succeeds, while completion-persistence failure is converted to a retryable failed queue outcome.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/sync/completion.rs#L143-L177",
+          "version": "repo-lines-v1:sha256:f552d4003ca9bccdaf39f77269de1d396e52cbab7600fc0b5721b550a059047c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU0NWQ1ZGEwYTZhNWJhNjE5NmNjNzVkZDMyZWRiZWU5MTUyNWMyODMxZDQ2NjZkNDJlZmEzNTQ5YzZlZmVlNzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0NzVlOTRhOTA0YWM0OWIzMTU0ZDQ2NzJhNjZlODYyOWI4NmRhYzc0ZTNlMjkzN2JlNjkyN2FlM2RhMTFjNTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwNjNjNGQxYWY4Y2Q4OWJiMGJkZDc2NTdmZmNiZjY4MDZhNjEwZDc5ZDZjOGQ0YzMwN2MyNDFkZjM5MDA1MjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/completion.rs#L60-L140",
+          "version": "repo-lines-v1:sha256:b55d1e313d23d19de5764b2b37522c1bd1b0a74145101915c2e22c8cb6809d5a:eyJzZWxlY3RlZExpbmVDb3VudCI6ODEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlZDVjOTg1ODdhMDAxZDg0NDNiOGFkZDhhN2YxMTdkMDlhYTlhYWU5MDk4OWJlNzFkZDM4YTJmMzFhNjdiYWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0NzVlOTRhOTA0YWM0OWIzMTU0ZDQ2NzJhNjZlODYyOWI4NmRhYzc0ZTNlMjkzN2JlNjkyN2FlM2RhMTFjNTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEwN2E3MzIzMzVjOGY4YTFkODY5ZTRmNmRiOGM2ZjY3YzgwNWU5ZWRhZmFiMzIyMWFmMjQyYmY3OGM5YjZkYmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY5NjMwMTc5NjVlMDg1MTljYzE3OTQ4M2ZjZTlhNWNkZjkzYzI0OWVkODQzZWQzMTU0MGIzOTMwMTIxNzg1YzEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L714-L764",
+          "version": "repo-lines-v1:sha256:5f8c144bf00fbb974a4aaaf58b6940fe5a2981853f5363cc7f3733013617d213:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhNmNiNzdhOThmNmMyZGIzYTgzNDhlZGViM2QzNjQyZjI1M2U1ZjFhYTZmMzVhMDY1ZDMxM2Y4ZWMwYWYzZjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwNjNjNGQxYWY4Y2Q4OWJiMGJkZDc2NTdmZmNiZjY4MDZhNjEwZDc5ZDZjOGQ0YzMwN2MyNDFkZjM5MDA1MjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg1OTk1YTZiNmQxYjAzNDc1ZDFkYzU5ZTRkZjc3YjJlMDNkNzAwNjY0MDEzMWVmMjViMDMxOTNjODcxYmE4ZjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_487dffcbae00442c97284357000fbc74",
+      "statement": "Retry failed synchronization revalidates persisted failed paths against current exclusions, media support, metadata, and readability; discarded missing or excluded paths are removed while other validation failures are retained as failed queue entries.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/media/scanner.rs#L369-L419",
+          "version": "repo-lines-v1:sha256:f213090fbe7d76ca0c32f134c48bba5daf19f099c10b6763fe0da0541a1a9d14:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRmNTk5NTM1Yzc5ZTZmNTZjMzNjNmUzZTEyNzU1NDc3ZWNhNDRkOTZhMTI3ZDBmZGMyNTMzZjRhM2QzMTg5ZTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFlY2NhNTNlZWU0NDFmZWY1YzNhYmYyOGUyMTg2NWRjOTZjOTc0ZWM2ZGExNDE3YzQ4M2U0ODhiYjYxN2YyYWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiYzk4ZDZiMGRjNDkyYzUwMTZkZjEwODA1YTNhNTRlYjljMTg0YTVhNjEzN2U3ZjRiZWNmYTBjMjIwNTUwZDAifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L202-L256",
+          "version": "repo-lines-v1:sha256:b76de8c71b76bad0b45f70cc81b096730bdf9a3346799e0eae0c7d0ef0130866:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1YzA4OTkxYzZjMzY0NDNlMTlhOTFjMmFhODJhZTk2YTQ2MmNjNTQ5ZWUwYWEwYzQ1M2E3YTNiY2U3ZmU5MzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1YzI1MmE3ODVhOTNmZWNiZWQ1ZDE2OTU3Mjc2NjUwNDU5YjI2YjljOGQ2YzBiMzhlMmQwOWUxNzM2OWZlMjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBmODJmOWNkYTU2NDllZDUyNmZlMzUyMThkNjdkN2UyOTNmNGZkODI5NmU3YjRjMWU1ZTVhY2Q2YjlkZjlmZDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEwZDJlNTZkZGViNjllZTEzNjFhMTg0YWY4YTFkNzQ5NWU2MzI3MTgwOGE1NzliMGVjOTQ3NzA2NzUzMDk4MGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_93c00a2e535b4a0fba77b0329e8228c4",
+      "statement": "The runner emits durable progress snapshots plus current-path, percentage, lifecycle, and transfer-statistics events; transfer rate uses a three-second window and reporting is throttled to 250 milliseconds, with paused transfers suppressing ETA.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/sync/progress.rs#L15-L18",
+          "version": "repo-lines-v1:sha256:b56cf59361ca126af22c7567fd3f2cdfcffae7f91b25dc4e2e7e1b11451a9918:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGExOTAxMmE3MzgwMzAyN2FkY2MyYWY3NWYzNzdhNDFjMTUyYmM2ZmM1MWJhODRlZWU5MDdlZDVmOTU3NmMzMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWRmZjc4ZTU3NjBlNDk4NTZkNGZlZDI2YzYxZmI0NzBmOGZiNWNjOWY4ZjE4NDY5MzIzOGQzMGRkMTAzMDhkNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWU4OTE5YTgwNTg1NmFmM2YxZTc0MmFjNzE4YzM3MmQ2OGUxZGE0NjVkMjZhZTk3YjEwNzI2YjFhOTE1NDc0ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTU2NTA4MzZmYTRlODQ5Njk1M2ExMjUxMGZmMDZmZDBjMjRkNzgwOGRlN2MxMmI2MDRhYjM4MjMzM2YzMjMyOSJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/progress.rs#L164-L181",
+          "version": "repo-lines-v1:sha256:d29192245934a3dd76eb84d7c820b593b02a54b9f478519dca57ee3a5e5cf0e2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmYzViNWVhOGY5YThkM2ViZjc5YTkxNDAyMmMyMzlkYmM5ZGVjNjIxYWEzYzdiM2NiN2U4ZmUyNTU4OGFmYzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjA0NDkxNDY5NzIyZTgzNjNhOTRlNDA0NDUzOGUwMTNhMmEyMTdlMzZiMWU1NjhiYTYwYWNiN2I0YzhmMmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxMGE4YWFkMWNmODk1YWIxZGU0N2E3ZjA1NjAzYTM1NWQwYTYxNmI2NzllODU2NTZjYTdhYjRkYWE2OWJmYjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjExZDZlNWVhZjZjNzk5ZWI2Yjg1ZTJlMjgzNGViMTA3MjU2YTA2OGM0OGJlMzMxZmYzMDRjN2Y2NjhkMTNlYzgifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/progress.rs#L220-L243",
+          "version": "repo-lines-v1:sha256:da5d83d7aaa16a7e7b17b7794f7e8c99b1ef8884de7c0b6192b607e9b3a2ccdc:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1ZjgyOTg2ODkwZDAzMzAzMzNlZDFlYWVmMDZhYWExZWFiYjg4ZjBmMGQ3NWJkYWY5MDA1YzMwMzk4NzViZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgzNjMzNzNkZDgzM2I5ZDYyNDgxODZmMWVjODhiNWE4ODBhZGMyMzE4MzFlMzUwOGE3MDBjN2Q1ZWVkNjk2MDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMxN2M1YTY4NTI2YTY5M2Y3NzQ5MmFhNjY1ODMyZTNjYjgwYzUwNWE2NWVmOTY4MGY5MjVmYjEyZWJmOGU4ZWYifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/progress.rs#L290-L296",
+          "version": "repo-lines-v1:sha256:5d014d5e3f8115a6fb7b8ad46346d4c17b11bd2541c417bccf48e1f60e986b6a:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGFiMzAyYTUxZDVkYWRlOWIzYTYxYzU1OWRkNmJkZWRkMWIxNmMyMjk3OWM2ZjQ1OWM0NjEwZTNlNDllOTg1MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDg5M2Y0MGUzNzgxZWI4OTZjODJkMDQ2YTA4MDY3YTExZTM1Y2RmMmYxZGZhZjI2ZmVhOTBiOGRiNjY3NjQxMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGFmYzFjZGExYzU2OWI1MTY1NGE0N2Y0M2MwNDc0NjljODdkYmRmZTE1MzMyNjJjMGY2OTY5YzNiYTgzZDBkNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTA2MjY2YzgxZGE1OGEwYTQ4ODFhOWE1NzgyZTI2ZGI4MGVmODZmODg3ZTY0Yjk4ZDI4OTQ3MGM4ZTMyNzMzOSJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/queue_runner.rs#L273-L297",
+          "version": "repo-lines-v1:sha256:da1a105201469f002cba306f80c9f6ae823b3520a27de60057529b835ae48d78:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1OGNkYjg2ZjQ2YTNmYmM1ZmNjNTllMGJlMzgwYzg1NTc2MTZkOGRlNTRiMzJjYThlOTc2NmI3NmM2OGFjZjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE4Y2FjZTBiY2FiNmI5MjBkMTYyNzM2ODg1ODgxNGE1MjliYTg3NzQzYzQxOTczODk2ZTllMmJlZjM5YjU1ZmEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/queue_runner.rs#L80-L81",
+          "version": "repo-lines-v1:sha256:a1c10721a6f58bda11ad5d1fcd616c1f63ad20a279dc2533e7f250f92b28687c:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2MzNDYyNjhlZTc3NDI2ZmQ0ZTY0NGZjNGRmZTU3YzA4NThjZTZlNTVlMTI3YWNhOGQ2YjU1OGY3MmY0ZTY5NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzRkNjE0NTcwY2RmZGEyODIxZmQ5MmE0ZTg2NjQzZTNjMTNkY2E4NDEzODRmYjA4YWM2MDcwZTEzY2RlOWIzMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTdmNDZiNTA3ZDk1ZDlkYjYxY2U0MGVjMzNkMjYwODBhMjFhODRlNDExOTYwNjBhMzQ2ZjA4ZTIyZGM0ZmRmOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjU1MDAzMDI1MTZkYmUzMGJmY2JiODZmMmNiNzc2YzdmNjhhNGZlZmI1MjU2OTZhYTFlZGEzMTRmMDI5ZjY4YiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_843b72b891464ef789605b0332041c0d",
+      "statement": "Immich bulk existence checks retry retryable errors at most three times with exponential one- and two-second delays; non-retryable errors or exhaustion abort the synchronization pipeline.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/sync/retry.rs#L10-L12",
+          "version": "repo-lines-v1:sha256:95d30ee26c4c209fb696efd6df817a7494ba2ede94ad580bdffe2288d5826a60:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjBlYmM5YzAwMzBkMzVhMTg4M2JmMGIwZWUyZjVmZTFhMjAyNTI5MTA3NGMyYTE1MzY0ZjZmZTcyMmYzZTE2ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTNiMjE2YTNkNzM3NDM4M2I1MWMyZWVmNGJjNDlhNzYzNWYyZTViMjY5Nzc5MzY4ODE4NWRkY2ZjNDZlN2M0MiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2U0MzZjY2ZkNWVmMmQ1M2ZiNDE2ZDdjYjgzMTc1NzhmMjYyOGM1ZWEwMzg3MmM2NDg3ZGNmOWRmZGMwNDBiNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTgzZWU5YzNjZmNhODgxNDEzODlkZjNkMjdlYTZmNmRhM2JhYjE3ZGJmMjU2ZmNmNzI5Yjc4MTFhZmYyMTYwNSJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/retry.rs#L14-L115",
+          "version": "repo-lines-v1:sha256:8784a14b2fbe03a79155d8b8905486ae73ca4976712eed0195ccc56a188d91f7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIxMWY2NzBlMmVhNzdmOWY5YzQyNTI4ODA0MTFmZTY2NGM3MWZlN2ViOWVjYjUzNDUzNmU4MjMyOGQ5NmU1ODY1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzOGMyMzZjZmE4MmZkZTc3MzFlNjdjYzcxZWY1YmJiNWYwYjA5ODBiYTRjYWZlNDA4NmUyOGNhZjI1YzNhMWM5IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIwN2RmOWE4Y2M3YzQzNjc3MjA3YTI5Y2U2ZjgyMzA2NGNlZjA2YzQyOGY1ZDc0YThiNzQ2Yzk0ZGJlNzk2YmYxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhYzdkMTk3ZjhiNDg2MTY4YTY4N2UxNzM4YWM1MWE0YzIzNTAwZDBlMDc3MmVmMmZhMTg3NWNmNWY2MDI1NzU0In0"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-15T07:26:54.164Z"
+    "at": "2026-10-19T15:10:01.321Z"
   }
 }

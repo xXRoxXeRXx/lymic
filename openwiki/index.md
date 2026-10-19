@@ -4,7 +4,7 @@ okf_version: "0.2"
 
 # Files
 
-- [Lymic Architecture Guide](quickstart.md) - Contributor entry point for routing Lymic changes to the owning runtime, frontend, synchronization, persistence, integration, security, and operations documentation. It defines the upload-only product boundary and the Rust/Svelte entrypoints to inspect first.
+- [Lymic Codebase Guide](quickstart.md) - Contributor routing guide from Lymic's Tauri and Svelte entry points to the runtime, UI/IPC boundary, synchronization, folders, persistence, Immich, security, diagnostics, and development guidance.
 
 # Directories
 

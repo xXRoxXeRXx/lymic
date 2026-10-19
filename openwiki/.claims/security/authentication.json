@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:b00fd36974b7d231c96e1bad925bde46059fb2d1fa146e298c9f4e5bfe4ecf5b",
+  "pageVersion": "sha256:141fba393e003889b097a3e835c1fec2957757a4ed9df18ec5f58ee8108831b5",
   "claims": [
     {
       "id": "claim_afeedd4cb859431c9a37bc5a7e691a7d",
@@ -18,7 +18,7 @@
       "evidence": [
         {
           "resource": "repo://src-tauri/src/immich/client.rs",
-          "version": "repo-file-v1:sha256:faf94a399bfce8eb6a619d4cd45184ac250cd23d0fb6d502fdfd4c95fc9de7d9"
+          "version": "repo-file-v1:sha256:06edb124f92d8733b1bba78f731271745333414c6b4ab3eb418a95ed97e58039"
         }
       ]
     },
@@ -28,13 +28,147 @@
       "evidence": [
         {
           "resource": "repo://src-tauri/src/commands/auth.rs",
-          "version": "repo-file-v1:sha256:a95e006b6627de464b3b5bfac412ff7c5e7d5cbc492d3018e5c0acc96bf9f6dc"
+          "version": "repo-file-v1:sha256:d18a63e33d3eecdeca7a7b1af6b671bedc150ad0fd685e18ec987b2b6937918f"
+        }
+      ]
+    },
+    {
+      "id": "claim_3a9d6e7733074d8ba37475c4139d9560",
+      "statement": "Credentials are serialized as AuthConfig and stored in a fixed native-keyring entry; absent entries represent logged-out state, deletion is idempotent for an absent entry, and legacy credential JSON defaults local HTTP and Cloudflare Access to disabled.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/auth.rs#L104-L122",
+          "version": "repo-lines-v1:sha256:354de9dabad0ee1580dcffcb3d1722c9474fd5a0df662a16c1c3394bf9ae5ba2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI4MmIxYTcwYTRiYjczNDUxMjI0YWVmNWRjZTc5Zjc5N2JkMjZjMGMyYTM2NjVkNzZjMGQ0MGU3NGMyM2FhNTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/auth.rs#L32-L52",
+          "version": "repo-lines-v1:sha256:459b240460c890332a24642c1a841370cb7dd57a2d0daaf94de48127dda188d1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiZGMzZTM0YTFkY2Y3MDM2ZDMyNzJhNjk1OTYxM2MyNzYzZDRhMTcxZDkxODcwNjhlMjRmZmQ4MzFjN2IxNjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4OTc3MWZlMWI2NjI4ODc1YWEyM2U3ZGJlNGFhNzE0NjFkMDBjZGZiNjZkZGYxMWI5ZDgyMGFjNTg5N2ZkZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/auth.rs#L5-L15",
+          "version": "repo-lines-v1:sha256:4509bf5a6334ba3dbb389f49e4672796ac6557614d298d700d979b8c5f9ebd00:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiMzE1MjhmOGE0YWZhNTNkMDdjMTQzODc1YTZmMTkzMDg1NDJiNmQ4M2I0N2ZiNjE3Y2Y2YjU5NDIyODk3OGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNlN2QwY2FhYWM2YzI0NTk2Nzc1NzdhZTMxMTBlMTU0MTgzNjZmMmZjMWZmZTQ4ZTgwZjA2ZjZhODQwYTBiNTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiODMzMzJmNjljNDE4ZjI4ZmJmYzNjNGVhZjk4Y2I3NDVhYTlkNDkyMmM2NmQwM2Y1ZDVlMzM2NjM5N2U3YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/auth.rs#L59-L68",
+          "version": "repo-lines-v1:sha256:39e7979c08bcc64eb8a7b9d282f9545526b48422d8c462f53d7016bb5f8c42d5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyYjVlZGY1OTQ5Y2ZlYTY3ODIyY2Y2OTExMzIzNjNkNjhkNmYxZTE2OWY1ZTBkNGY3YzE0ZTVmYTFlNmQ0ZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ2NjlmMDE5Y2E5NzlkMDg3NzE4YjVmYTBkNDNhMzA4ZTUxNzAwZDBlMGY3NTExOTczOTEyZDkwZjcyMGQ3ODUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI0ZWFkZmY3YTYyZDJmZTYwOTliZGVmZmRlZDE2ODU2YjhiNTlkZDMxMDI0MjhmMTIzZjA2NTlmOTdjYmI5YmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b1c6b80965fa41ae8c233deae24be244",
+      "statement": "Cloudflare Access is enabled only by a complete, valid client-ID/client-secret pair; whitespace-only values are normalized away, the secret request header is marked sensitive, and the frontend refuses an incomplete pair before calling Tauri.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs#L19-L28",
+          "version": "repo-lines-v1:sha256:830f803cddd6eb85a43f10ff6f2283ebdd85a0f1bbdf8fc084f9c7e04bd2d23c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjMTBjYmJhMjAzNDdlMTAzZTE3MzNlMDU2NjczNjFhNWU1NTI2ZDA3ZTMwMWI2ZDRjOTc2OGE1YjZjNzk5MTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg0Yzk3MTM0NzZjY2Y0YmMzZWRkODYyYmQ3ZGUyNDkyNmU2NTY5YTNmMTc3NDhhYzQ3Yjg2NWUxZWRiOGMxZTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlNmRjMTUwZmIwZjg2NzVkM2U2YTVlNTdjNTlhODM5NWIyMjQ1NDJhMTExMWJhZDBmMDZmNTlhMDA5ZGJhZWEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/immich/client.rs#L98-L120",
+          "version": "repo-lines-v1:sha256:7ffd0d19b52b4916ca43532d902045d82ed311aa13f3d32d7b4d2b584d0bf178:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzNTg4M2FkNTJjNjU4YTg4Mzk2NTY0YjNkYjIyYTNhNzA3ODQ5MzkxZDdlOTdmNmVjNjk0Zjk0ZTZiYzA1ZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1Y2RlZjgwODVhZTc0YWI2MzZkNjQ1OWY1YzZkNWZiZmIwZGIyNjRmMWIwZDc1YmFjNTE5YzliM2Y2NzE3YWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk1Y2NlNDYwMjM5MjFlM2EzN2IyZDYxMDVmMjA0YmQ2MmIyNGJhYjExZjIxMDk5YTYwODk3NjY4NjM3NGQ3OGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM5ZDY4YzY3ODlkNjZmY2NjZTUzOTFhYzJjZWE4ZWM1YTg2ZDkyMmE0ZmUxYjlhZDc2MzYxNjk0OWYzODE5MzQifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/auth-controller.svelte.ts#L45-L64",
+          "version": "repo-lines-v1:sha256:b697f14482163358f73fd691b6257e73e877ed2c0404ffb72ae7d63dd80e784c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4M2I3N2NkMDVkMTRlMTNiNTkzNTcwMDgyYTIyNzc5MjIyYzZiODc0ZjI0NWIyMDE1ZjBjMmFhNmUyNTI1YjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxN2FmMTEwMWM5N2I3YzJmNTI1NDA3ODJlNjM0Y2M0NDQwZjBlOTcwMzQxZTUyZjk3NTIzMTFkNzhiN2Q3ZDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNmYzQ0ZDI1NWI3MzBhMDgxYzgxN2QzNTExYTJjNjhiMTUwYzMyNTM3NTc4N2E5YWYxOGI3Yzg3NWY0MTllMGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU3MTczNjJkOWNkOTU1ZDc3NzE3NTFlYmExODBkNDFjNjkxZjBhZTAzZjlmOGE2NDNiYTA1M2I4MTJjYmJiM2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_08885665f91b461dac5cad29fe481b9f",
+      "statement": "The frontend invokes registered Tauri authentication commands, hydrates an authenticated session from stored credentials and current-user data, and keeps a successful login authenticated if the optional profile lookup fails.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/mod.rs#L92-L97",
+          "version": "repo-lines-v1:sha256:490236327211ee6c7c985e3a251b94d350125f7525ebdda5a56beeb6704ff48a:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmEzYjk1YWUzODIxYmNmZmM0NDNiNDM5ZTFmNjk3NzUyZTE2MDVkN2Q1NWZmMDY4ZjhkOTg3MTYzMWEyNGRkMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTkxMTUyZjQ4MzE3NDUzMjlkYWEyNDgyMDU2MWUyYmFkNTkxODM2ODc0Y2U5MDczYmU2MzQzYzY4ZTk4NDllYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmIwMTZmMTYzY2FhYWMzZjEwZWM2ODhmMThhMWMyNzI5NTI5ODUwNjc4ZGFmYzRiMDA3ODgxYjI2MTY2N2U0NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzY1MzZiMjMwOGQ0ZWJkYTE2ZTI3Y2UxMmFkZjc5MWNkZDZjYzA1ODc5NWIwMDIwOWZkMzQwOWZkZGYyNTAyOSJ9"
+        },
+        {
+          "resource": "repo://src/lib/controllers/auth-controller.svelte.test.ts#L23-L40",
+          "version": "repo-lines-v1:sha256:33215cd3a2c34c71fc8ea56a38efb40ec1758cef68910fdae46d9e4809a1a9c5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxY2ZmZmZmNmJiM2Y0ZmZmZmY2NmUxNzM4MTgwNTEwODQwMjBhNjdkNDVmOWZhYWM2MjM0YzY0MTFlNGMwY2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMxY2RlZGFmMDNlYmIzMGRjZDQxZWU4MGZlMmY5NDM0MDViOTFkNjBkMGFlMDdkZTY0MWRhN2JjOWE0NjY0M2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwZTRiMDY2ZWY4MmNhZTExMzU3YzE1Njk4MWYyZWM1MjgwZjY2NDQ0MzRiN2ZjYTVmMDk5MWFhNmFmOTlhZTkifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/auth-controller.svelte.ts#L28-L43",
+          "version": "repo-lines-v1:sha256:c254635150aee3a5ec1f19807c6ade015a0166161c72da84bd87f14c34dbcf24:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5NzNlYzA4OWJlMmExNGQyMzRlODhlOTE0NThkMGQyM2FjZTkwNWIxMmNlOGI3MWUzYTc4NDczZDI0YWQwMGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQxYjM3Y2UxNDUzNzVmYmVhNDhmOGMzMTUxOTM1MDg3MWI5MzYyZGExMzkxYjA4N2M0ODk0NThlZTJkZjUzZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2Y2M0NzAxMzI1OTM3MTFlYWQ5ZGEyYzJlMjdhNTY4N2VmNjQ5ZWNiZjM4ZWQ4OTMyZmU4ZjdhZGZiMmY1NTQifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/auth-controller.svelte.ts#L57-L78",
+          "version": "repo-lines-v1:sha256:0da0508763c033c563543bb9a1f70e85aa74df219ec1f43360c553bdd26e264a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExZGY4N2E0NzMxNmM3MDhjNTUwMjA5OGU5YWY2YzQ0NTM0ZWI4MGJlYWRjZjYwNjMwMjhlZmNhODU5MzdhYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM5YjI4MWNmMzcyYTk0ZjkyZGQ3YTQ2ODlmYzFkZDY4MzE5MjNlY2VmOGMwMGEzNDljODBiNGY2NjFjMjNmNzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljYWM2ZjIwODkyMWJmMDc1ZjI0NjEyOTA2YTRjMzQwMjMzOWI4NzM0MWE4MmRiNjBiNmU1NjI2MjFjNDJjYzQifQ"
+        },
+        {
+          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L44-L48",
+          "version": "repo-lines-v1:sha256:d56607f2f3c6152679a3b4db2124e0f4e8e3f7045004f5755b82fbc5ec7e36de:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmFkOWViMDYyYzIwZjBkZTkyZDlkNGRlYjZmOTM4YzQxM2U0NTcxM2RmZjdmOTVlMzA2YWJhY2ZmZWNmN2U4ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWYyMTYxYzk0NmU3ZmYzOTFkZmQ3NjA5NjJjN2Q2YTJmNzBkNTE5YjNiYmUzNzVkM2QyYTNjYmM0NjY5NDE3NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmU0Yjc5YmI2MmZkNGEwZmE2OGQwNjM0YTFjMGE3Y2QzNmYxYTE1OWM4NDI3MmZiY2QzNWUwNzE0MDhkNjcxMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzU2YjlhZDJhNGQ4OGE3MjMzMjk2ZDFjMDY1ZTI0MTExZDE0MGEyMzEwZTA4NDYxMjY4NTk5NDUwNmQ4NjdiYSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_6c3ebfd3c6604e459707539c8a4fc6d3",
+      "statement": "Successful login and logout clear the profile cache; profile cache reads are account- and optionally user-bound, and current-user refresh rejects results if credentials changed during the request to prevent persistence into a changed session.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs#L123-L128",
+          "version": "repo-lines-v1:sha256:75bd910b4f22dd7b6f85db2ef0abffce1e68d5ea7cd24702dfe16884db3aa0e7:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTA4MzQ4NTZiMzQ1ODNmZWJiNGRjYzI4ZTg2OWUwYzg4ODA5ZDUyMGVlMTI2MWVlZGNjMTNhMjA2Njg0NDYzNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDg5M2Y0MGUzNzgxZWI4OTZjODJkMDQ2YTA4MDY3YTExZTM1Y2RmMmYxZGZhZjI2ZmVhOTBiOGRiNjY3NjQxMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzdhNjAwNzk0NTVkMjYyZTY3OGFmY2RkY2Q3ZmQ3OGJkYWZlNDFmNzQyMDJkYjcwNmUzMDM1MjE5Zjg0MTUxMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmZjOTFlOWJlZjEzNGUyYjdhNWZmMmYzNzhjM2RlOGUxYjNkNDU4ZmEwNTgxMTIwOGY4OTI4MzczOGI0OTA5YyJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs#L233-L248",
+          "version": "repo-lines-v1:sha256:4e7e536c2787ad6778a407c05f34d586cc526b9b9362cdaac82be8e2e168e69d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhZWYyZjY2NWU1NWQyODNhNWZhMTcxOGIwYjZhZjcyNTlmMWZmZTk1MzVmN2RkNDE0NTU5M2Q1ZWU3N2M0N2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4MzEyMzNkMjhkOTUzNWQ3YjM3NjFkMjFhM2U5YWU0M2Q4MTYwZmQ1MTAzNWExNTM3ZDAxODJlODY4OGY4OWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEzN2U3NGE3NDZmM2U0ZmE5OGQ3Y2I5OGRiMDdkMzBiZmY2NWNlZjY3NmYxN2FiMWVhNDkzYWM0ODQ5MDY4MTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs#L75-L85",
+          "version": "repo-lines-v1:sha256:a0749b3ce3ee191e5d641d6e7df3ddbb4d63a50ad5fbd61e7bf0ce8c502dd896:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2Mjc0ZTNkYmQ2YWQ3NTFhZmYzODJiN2JlZDk3MzZjYTgyNWIzMTRhMjliZGZmMzBkNGU4OWJiMmVhY2MwNzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwNzFjNmU5MjJkNjRlM2MyZDEyZDFiNDAwODRjMzFjYzRlNzgwN2ZiNDJlN2Y3MjI5Y2M4ODYwNWU3ZmM4YjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhhZjkzMTM5NTQ4NmQ5ZDAzMWE4NjNiMjQ5ODE2MmRjYWQyY2MyYmYxZDMwMDYyYWQ3YTg4NTI2NDdmNGY2ZmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEwMDYzMzBiNzliMGMxYjFjYWM5ZjJlNTgzNmFlYWM0MTAwYmIzOWFjM2E5YTE5YWFkMmU5ODIxZmJlODIyNWYifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/commands/profile_cache.rs#L113-L130",
+          "version": "repo-lines-v1:sha256:817719203f745a4c87f45366ca08563deadbad56fccb4fd484547b388c218710:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0YWNhN2NlYTFkMzdjODM2ZjIyMjY0MjczM2Y4YmI4NjhiMmMyMDEzMWVhYTRkOTMyMjkzOWIxZGE2M2NlMGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1ZjZmNDY2ZTU5Y2ZjMzA3MDNjNDVmNzJhZjY1ZGU1NGFjMzYzZDM1NGNjMWEzMzMwMzUwYWNkNDUyNDM0YzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImExY2ZmOTFlM2JiOTk2YTFiNDE0M2FlYjY2YTQ1YmUyYTA1MTk0YTQwOTk4MTY3MGU3NzRlMjYwM2U2NDg5NGUifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/commands/profile_cache.rs#L43-L71",
+          "version": "repo-lines-v1:sha256:afa3b8736a873c31e9fe5d2369879c51a1d97fdfe24ef87a4bdc1318802fe753:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkYjdkYjMzOGYyNWVlMWQyOWMzYjJiNDRiY2JhNDYwNzY4M2VkYmZhNmUwMzMxMzUwMzdhZTg2MTU4YTY3Y2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBhMGQ2YTdlMDFkMDc1MDBiYWY5NjNlMWNiNzNjMTg4Y2UzYjJlZjI1ZDdhMDEzMTFmMWJhYmE5MTRlZTJhZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBjYWNmMDlhNGQ4MDQ2YTQxNDM1N2Y2M2JjNzc1OGM4MGQwYTQwMWFmZjcwNjRkNDdhNjZkZGM0NjE4NDQwMjEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e7a76bfc95c14c3baa51e09302a55b94",
+      "statement": "Login and logout audit records use a domain-separated SHA-256 actor identifier rather than raw credentials; failed login reasons redact submitted URL, API key, and Cloudflare values, and audit sanitization removes line breaks, collapses whitespace, and limits retained text.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/audit/event.rs#L145-L156",
+          "version": "repo-lines-v1:sha256:7e5f590675194446af7a00c55628135d4e4162a2fb6f933ee534063b2fa07dcb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzZDgxMTFmMzBiNzhmYTkyN2I2NTRkYWU2MTRkMmQwYTM3ODllNWQzMTBmOTVhNDIxZGE2YzFjYTM1YjVhOWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxYTAxZGEzYjY3NzFiMjQwNDU2MTNhMmVmNjM5MTQzYjA4NjIwNjlmNzNjZmVlNWYzNGY4OTZhZTg0MjVjZWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU3NWIwMDgzNDA4NWI3ZTA4OTg2NWVkNjYwZTA2YWIwNzUwNGE4NGRiODA3MzljZTc2YWU3ZGNjZmY2YmI5NzEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/event.rs#L84-L92",
+          "version": "repo-lines-v1:sha256:6794573a0d8b166fa6b1dda425cb541c1c0171f7bf5796a2ff43e14c4f20a335:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWJjNzI3YjUwOWNlNTVmYTJjYjFhYmU5NzRlYWI4NTEyZjViOWFhOWUyYmUwNjNhMDVmZTNmNDUzNjRkMTFjYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTllNzYzNTVjZjExOTk0ODBjM2Y5OTgzNmIxNDg2Yzg0MWQ4OTFmYWFkOTA0YzYwOGUwOTMwMjJkMzc1N2FlZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWQyYzZhYzFlNmE2MThlZmE1MjkwZjc4MjdkYzBiZWU2YzY5YjViYWE4NTc0OGExYjE4Zjc1YmI2OGNkZjFkNiJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs#L48-L62",
+          "version": "repo-lines-v1:sha256:c1e29abcb3eafda4700f4e737aca336023fa51f9c350a23dabdca4dae1611dfb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjNWNiNzgwZTA3MjEzNWRjMmM1YjAxZTI2MzZhM2FmNWZkMWNkZDJjZTBmNzYxYzIzMjExNGY4ODUxZjE1ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZTQyMDhjZDZmZmI4YzRhMzU0N2IyZjU0YWRhMTk5NzhjM2YzNjVlNzhmOTUwMmVmNTE0NWNkZDJhYTg1NDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEzZjgyZDdkNzkzMDUyMzYyZDk4ZjA2OGFmNzgwOGMwYTE5MjhiY2JlOGY3ZGE3ODE3MjdjODU3YWIxMWQxMDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjcwZTcxMzA1MTRjZDMyMzZlZTA2MTY1OGE3M2MyYmJjZTVkMTYwZmE1NDAyZGNmZDQ0ZjY3NjQ1ZDFhZTc4ZjIifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs#L88-L113",
+          "version": "repo-lines-v1:sha256:faba5c413b85a95fa4b1666a2400bca032e93f1154c695fd72d18552555225e0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVlZjIwNTg0YjIxOWQ2MDkzMDZiMWIzZDFiY2Q0YTFkMTkwMWFkNTJmYjFjMTFiZmRiMzQ4MTZiNzNhNTA5OTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlY2UxMWZmY2E4ZmJlZmViODgwZjI2MmI2MTJlZWM0Yjg5MTc5NGZkMWU4YTY2NjY2MDgxYjQyYWZhYmM2N2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDcxNTVjODk3NjU5NjE0YTIzMWM3YTM3YjFhODg1Yzk1ZTg4YzlmMDJjNGQyN2E3YWE1ZDYxODJiNGM0NTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJlYzA5YTk5MGFhODBmMjE3YWJhYjE0YWZkYTcxZjc5Yzk0OTc3ZmI3MjZjYjMzZjcwZGZkMzczNWFmNjAwODgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c747496793364d21a8c7f716c0176911",
+      "statement": "The required Immich API-key scopes are server-side assumptions: the documented workflow needs user read for login, asset read/upload for synchronization, and album read/create/asset-create for album features, while normally not requiring asset deletion or album update.",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L118-L129",
+          "version": "repo-lines-v1:sha256:aae9ff042016fd831d6aeeb6b545f66a517f93d8f431466cf30108f4b9d69b8f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM2NjlhZDI5NmNlNmZjMTc3NTg2MDg3ZDRiZjFiNjVmZjYwNjlmZTUzNDM5YzEwZDc1YTRkOWYxMmYxOGU2YWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlYmQwYTNmNWU2ODEzNmM2NTJjMmVjMmQwNjY3ZTNkNWQxMzQwM2E1YTk5MjUwZjZjNDA3NWRlM2UxYjBlMTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFkNjg5NzViYjk4MDMzMDliMmVmMTNiMTFmNDljYjg4N2Y3Y2JjMzYwNmRiZDZlMGQ0MGQ5YWVhYWE0Y2YyNjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c47555d9ec654f98be31e4ac5cdf5ac5",
+      "statement": "The default Tauri capability applies to the main window and declares core defaults plus dialog, restart, updater, and opener plugin permissions.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/capabilities/default.json#L1-L15",
+          "version": "repo-lines-v1:sha256:cb60f01402ae200d29f676efb0f8aa0e9f648a007635fa448dd7a01a2ed09515:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwNjQ4Zjc3ZmQ1YTljNjNiM2NkZDBhZjQ5ZGFhMTI5OTIyMGI3NTQxZTg4Y2ExN2VmZTFhNmExMTRiOWZmMmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-15T07:26:54.164Z"
+    "at": "2026-10-19T15:10:01.321Z"
   }
 }

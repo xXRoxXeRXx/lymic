@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:3db5ef1a37442b75d62221fae6f1fad0ee14a96e5636ee75cbcc7496813823e9",
+  "claims": [
+    {
+      "id": "claim_3b6738143db9456697bc2e88a0ce9adc",
+      "statement": "The audit subsystem serializes version-1 JSON events containing UTC timestamps, UUID event and operation identifiers, event type, outcome, severity, optional actor ID, source, bounded message, and details; only success and failure outcomes are terminal.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/audit/event.rs#L190-L200",
+          "version": "repo-lines-v1:sha256:03ba5e3f8ac02ec06b74f4a6fb57ca464730bc5c1a980dbd5992a84234e8ac17:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViMTFiYWVhNThkYjIwNDYyZWRiYWQ3NDk5OGQwMWI4OTViZDEzYjJhOTc0OGRmNjA1NzZjNzRjZDcxOGQzODkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE3YmJlNWNjYmQ2ZmQwYTgyNTZlNWM5OGIxNGEyZWZiMTZhNTE1ODA1NjhjZThjMWJkMTYzMmI0MmNkOTUzYmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiYzk4ZDZiMGRjNDkyYzUwMTZkZjEwODA1YTNhNTRlYjljMTg0YTVhNjEzN2U3ZjRiZWNmYTBjMjIwNTUwZDAifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/event.rs#L8-L76",
+          "version": "repo-lines-v1:sha256:acfcfbb5f5046bad3021240ecfab151b1f495366c8f5feae5560d5ed8e370d43:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2YzUxM2Q5MGMzNjM1ZjEwMjBiODJmMzI3MzVkZTc4NTcxN2RmM2Y4YWI4ODdmYjgxZDI0NTUwZmRhYmJiMTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdhNmE0NGYyYzc0MjM3MWNhMDhiMTY4OTE5M2U1NTQ4YjJmMWZiYzQzZDRhZGJkMmY4NzViNjgzOGRlOTA2NjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI1MzNjYmExNjYyZjNhOGYwYzQ5N2JjZjMxYzUzYTg4YTRkYjZkYzZmOTI2ZDRkNmExZjVjMGU3MWJkMmEwMmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4afafbb8be63448b8dfd1d7e4c1faf7f",
+      "statement": "Credential-associated audit actors are pseudonymous `sha256:` values derived from a versioned prefix, normalized server URL, and API key; `SyncAuditContext` shares one operation ID and actor across events produced for a sync context.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/audit/event.rs#L112-L130",
+          "version": "repo-lines-v1:sha256:7304f2e3f4f575020b5f6d16a24917daa15dfe5267ed259982a8a65fa4c27970:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyOWQxODY1ZDM3YWQ1NTIxNmU2MmM2MDdjN2U2MWQwYzZkZjVmYjAyYWY5YTc4NGMxN2Y1NTQ4YWM3YmViZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc3OTIyMjJiNmVkOTllZDU4MzE5NDMzMjYyYWQxOGZlOThhMTRjNjRkZmY3MzJmNGQ3ZmFjN2FiOGU2YThmNGUifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/event.rs#L84-L110",
+          "version": "repo-lines-v1:sha256:04983731af5ebaf35f69fd13ab3afae52583de6fa1004796fd27a0a64b9b24db:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliYzcyN2I1MDljZTU1ZmEyY2IxYWJlOTc0ZWFiODUxMmY1YjlhYTllMmJlMDYzYTA1ZmUzZjQ1MzY0ZDExY2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZiNWU0ZDA5ODYyMGNlMWM3ODQzZjBhZTUxNDcyY2MwNjI0YTA0OTg1MmVkYTgyNDUyMTdmNDg4OTIxOWFiYTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0ada32813597488cbe5335568bab01ef",
+      "statement": "Credential-aware error sanitization replaces supplied server, API-key, and optional Cloudflare credential values, normalizes whitespace, and truncates output to 512 characters; it is explicitly used by login and sync audit producers.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/audit/event.rs#L132-L156",
+          "version": "repo-lines-v1:sha256:5c863fa8ca9f36805df88adf0028cf6a0974b781ab3ae563a9c0ca336afe062d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1OWU3MTU1YmJjMzFjNGViMWU2MDFiZGUzNGU0YjZhYTdjNTUxYzA3OTZlZjI3ZWM2NDA2NWVkMjNmNGNmZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxYTAxZGEzYjY3NzFiMjQwNDU2MTNhMmVmNjM5MTQzYjA4NjIwNjlmNzNjZmVlNWYzNGY4OTZhZTg0MjVjZWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZmMGQ3NTk1MGRmMGZmOWEzZWU5NjYzOWRjYzhmZjVlYWVkYjQwZDY4MmJlYTkyNjIyYjUyMGRkODg3ZDkzZTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU3NWIwMDgzNDA4NWI3ZTA4OTg2NWVkNjYwZTA2YWIwNzUwNGE4NGRiODA3MzljZTc2YWU3ZGNjZmY2YmI5NzEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs#L88-L113",
+          "version": "repo-lines-v1:sha256:faba5c413b85a95fa4b1666a2400bca032e93f1154c695fd72d18552555225e0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVlZjIwNTg0YjIxOWQ2MDkzMDZiMWIzZDFiY2Q0YTFkMTkwMWFkNTJmYjFjMTFiZmRiMzQ4MTZiNzNhNTA5OTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlY2UxMWZmY2E4ZmJlZmViODgwZjI2MmI2MTJlZWM0Yjg5MTc5NGZkMWU4YTY2NjY2MDgxYjQyYWZhYmM2N2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDcxNTVjODk3NjU5NjE0YTIzMWM3YTM3YjFhODg1Yzk1ZTg4YzlmMDJjNGQyN2E3YWE1ZDYxODJiNGM0NTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJlYzA5YTk5MGFhODBmMjE3YWJhYjE0YWZkYTcxZjc5Yzk0OTc3ZmI3MjZjYjMzZjcwZGZkMzczNWFmNjAwODgifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L666-L697",
+          "version": "repo-lines-v1:sha256:365b79a541d3538a717fe6a6366cdb6c325dad8e74fe4356cdb783b51d7aee56:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzZWUyMDk1OWRjZDc0ZTRlMTdjMWFmZGU1ZmU1MzU0OWY4MWZlYmU2Njk3MmVmMTU4MDc5ZGVlMTkzMTUxMzMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZTQyMDhjZDZmZmI4YzRhMzU0N2IyZjU0YWRhMTk5NzhjM2YzNjVlNzhmOTUwMmVmNTE0NWNkZDJhYTg1NDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3MjE0N2VkNmQ5OWVjOTc3MzIwYTg2OWY5MDEyZTlkNGVkOTRkMmYxMTQxOGJhMjI2Zjk3MmVmYjhhZWVmYWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg0YzJiNjg2ZDVhZWU4ODY2MmZjN2I3ZjYxNWMwNzM0NDg2YmE3YWQ5ZDFlYjBjYzk5MjEzNDcxMjBlYjNlMDgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f0e7fe4c5adb4ebbae013af2767edcf8",
+      "statement": "Audit logging is initialized before the remaining startup work and registered as Tauri-managed state; initialization failure aborts startup.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/startup.rs#L22-L30",
+          "version": "repo-lines-v1:sha256:98ba1d2918ad3a1f4b4c20cc51816ed1ced59eddabc04219fd42b8b04202a746:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzhhOTU1ZDgxNTBmMDQ4MzEzMzMwNDc1NzM3MzM0NDk4ZTgzNjk1NDAwYjFiMzhlYzM1Yjg0ZGNjMTQzMmZlMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWY2Y2M4ODFhYTRkODBjYzQyNTZkYTI3YTJhYWFiNjI0YzU0ZmMyMWYwZWFiNTYyMWNjMDc0NDI0MDQ5OGYwOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTlhNTMzZDZmMzg0NDg1YWJiMjZjOGFhOWM1ZmIwYmQyMmZlYzFmNDQwODJhYWRmYzlhMDE2NmFhOGU5NTVlZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDRiN2UwMjg5MjkwOWY4MjUyZGM1ZWE4Nzg0MDdiOWFhNDFhNzk1ODE3OTE5Y2IwOWQ1YTNkY2EwM2I1ZjNmMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_132bf1b24c684c2cb356f3b6ac918e7b",
+      "statement": "The audit logger writes through a dedicated `audit-writer` thread and uses a non-blocking bounded channel plus a separate serialized-byte budget of 4,096 records and 16 MiB; saturation drops events and emits one saturation diagnostic per episode, followed by a counted recovery diagnostic after both measures fall to half capacity or below.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L13-L18",
+          "version": "repo-lines-v1:sha256:a6ba225069f4528549165aa576c8d5c00502a0f92039fb3b5cdca0d13ac88a68:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjdlMzBiNTQ1YzZhMTNmOGYxNWUyMmQ3ZjEwNmU4ZjVjNzRhOTA0ZDE3NzI5MTBmY2EzNzgwODRlMTQ4ZGNhZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWU0YmUyODZmNDBmMThhMTIzZDI3MjBiNTcyYjdmYTEwODk5NmYzMjhlYjg0Yjc0M2U5YTA5YTNlMjQ5YzJiNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTBiZTY3MjM1NTgyOTk0YjI0NmJmYTYyYTJhNGNmYzFjNzRkZTQ4MzNmZGRkNjJhOWQ1MzQ1YTRiNjJjNDkxMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzA2ZGEzODAxZTFiZTE4Nzg4NmRkNzZlNmUwZjgyMTk4OTNlNDljNzdkZWRjNjY3MzMwNjQ3MzJiZTA4M2U4NyJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L193-L223",
+          "version": "repo-lines-v1:sha256:4f5bab9f6c0ceeab680a50c263d799963ecf1d77a7b93e15e0997a113cb6e6c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiZjBkNjQwNWQxMjM5MzMyM2I2NWE0YWI2MzA0ZjNiYTA4N2I5MDBkOTJiZGU2YjQzMzdiNTcxM2ZiMzdiMjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1NGZhMzM5YzhhMWFkYTRkNDY0MTA2OGYyMzVkM2EzMmU4MTAxZmQ3ZWNlYzM3ZWY3YTFmMTgyMzNiYjQ5NzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZmNzAxYmNiYzMwOTk4YTIzZTViYjA5NTQ1MWFlMGE5ODU1YTYyZWY5NjFiMzJlMTk1Yzg4NWYzNjljN2UyNzAifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L242-L286",
+          "version": "repo-lines-v1:sha256:74151fe9fb901aeac5c75a5abcedf57ccc264200dfe2deccbf8a7ea105a1ac29:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmOGIxZjU4Y2Q1NGFlOTNhMmZhOWRlOTEzNjkxMmQzMzQ1ODAwNjYxM2JiMDJlYjljYTcwY2Q3NWE2ZWIxZWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5YjE5ODJlOGRkNzQ4MTE4MTQ2YjM5YTJkMDA2MmY0MDgxZTM0Nzc5Yjg2NzVjMjM0YzRmYjEyNGRjMzkzOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkxMzEzYTM4NTFiZThkNWIzOGNjYmZiM2I5NmE3NWY5NGE4ZmRmZDA0NGFmNjEwYjFiYjU5MWVjOTk4M2NmZDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMGU2NzlhMzg3ODEzOWUxZTUzMmQ1YjdjMWIzMGU4YTM0MjA3MmMxOWZmZGY5MWE2NGNkNmFjNjk5ZDQ4NDEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L297-L336",
+          "version": "repo-lines-v1:sha256:7342c5318cf982a566b1f56aacf799d955fff141301ae85a8ae3b028bf5d9b93:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwN2Q0OGZmZTRiYzgzNzA5ZGRiNWJmYzJiOWNiYjQ5MTNkZTM2NDJjMDhhNzE5NTgxMTU4NjUzYzQwZjYwNjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjA0NDkxNDY5NzIyZTgzNjNhOTRlNDA0NDUzOGUwMTNhMmEyMTdlMzZiMWU1NjhiYTYwYWNiN2I0YzhmMmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNlMDI3MjM5NTIzMmY0NzM5NDFlYzY1NzNhMjg1Y2FmMDJkYWFmYTM0MGVkMjc4OGU1NDc3YjFlNDMxNDgzYjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZmMjM0MDFlZGQ1OWU0N2ExOWE5N2MwYmU3ZDVmYTQxZjhhMTVlZTk5NDEwODg5Yjc5OTVhMGY0MGYyNTAyNTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ee782df3754941858d0ede4218b1cc32",
+      "statement": "Audit persistence uses five cyclic `audit-N.jsonl` slots capped at 5 MiB each; it resumes the newest non-full slot on initialization, rotates before exceeding the cap, and overwrites the next slot on wraparound. Terminal events sync file data after their write.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L118-L155",
+          "version": "repo-lines-v1:sha256:612156cffe0396f1a3da4b57689717b76745fc41d311f769be63bb2f67932012:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1YWRmOTAzOGY5OGYyOGIwN2YxNTdhZjc4ZDM4MDVkYmUwZWQ4ZDg5ZDAwNGE2ZmM3ODVkOTg3NzkxYjAyNDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwNzFjNmU5MjJkNjRlM2MyZDEyZDFiNDAwODRjMzFjYzRlNzgwN2ZiNDJlN2Y3MjI5Y2M4ODYwNWU3ZmM4YjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBhNzkwODBiNzU5YTE2OTQyN2YzOTMxOTdlMjY0MmRhZTBlNDgzZDkwNWFmNzViZWZlMmEzNDMxMzI2OTFkODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE2NGQxYjA4NjliOGE5OTM2NzlhOWQ1ZThjNjcxOGVhOTc4MjI2N2NhOGUxM2IzYTlmMjE1MmNiZmE4MmZlNWIifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L13-L18",
+          "version": "repo-lines-v1:sha256:a6ba225069f4528549165aa576c8d5c00502a0f92039fb3b5cdca0d13ac88a68:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjdlMzBiNTQ1YzZhMTNmOGYxNWUyMmQ3ZjEwNmU4ZjVjNzRhOTA0ZDE3NzI5MTBmY2EzNzgwODRlMTQ4ZGNhZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWU0YmUyODZmNDBmMThhMTIzZDI3MjBiNTcyYjdmYTEwODk5NmYzMjhlYjg0Yjc0M2U5YTA5YTNlMjQ5YzJiNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTBiZTY3MjM1NTgyOTk0YjI0NmJmYTYyYTJhNGNmYzFjNzRkZTQ4MzNmZGRkNjJhOWQ1MzQ1YTRiNjJjNDkxMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzA2ZGEzODAxZTFiZTE4Nzg4NmRkNzZlNmUwZjgyMTk4OTNlNDljNzdkZWRjNjY3MzMwNjQ3MzJiZTA4M2U4NyJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L383-L385",
+          "version": "repo-lines-v1:sha256:3c3a3e2f95a2c8261e1783fe4e712f8593fa751d4bc996303a812d12530c52a4:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWVkYWY4ZTM2YjIyYjU4NzgxNzNkNzM5YWI1MmE4NDI1NTE2MmM4YjFmNzI3MDExZGYxMmNmZTBmNDQ3MjE4YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTllNzYzNTVjZjExOTk0ODBjM2Y5OTgzNmIxNDg2Yzg0MWQ4OTFmYWFkOTA0YzYwOGUwOTMwMjJkMzc1N2FlZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2JjOThkNmIwZGM0OTJjNTAxNmRmMTA4MDVhM2E1NGViOWMxODRhNWE2MTM3ZTdmNGJlY2ZhMGMyMjA1NTBkMCJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L75-L115",
+          "version": "repo-lines-v1:sha256:439db411020711dfeac16330931f8f9f85c51ca257d3db8356ca3e099d72c5d0:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5MTc1M2UyNTkyZmQzNDE0MDc2ODE4ZTZjN2YzYzJmNzg2YmViYzY3MzUzODBlOTE4MjViM2I4ZmVjN2MyYmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkxNmQzNmRkZDI4NDYxNmRiNDhiYTUxZjMxMGJlOGMzNTMwYWQ4ZDgxZDgwZWY0MjI5NzQ0NzJmNDZhM2RkYWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwZTU0MGMwNWVlMjc3Njg1YjZhYzA4MmEwZmE1M2JiMWU5MjQxZTZiOTI1MjRjYjlhNDhiNzEwYjNkZmNhZTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cb09297f55b0433ea1a2191c8986ed9e",
+      "statement": "An explicit audit flush is enqueued as a barrier and waits at most one second; it reports queue saturation, timeout, or logger unavailability as errors.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L339-L353",
+          "version": "repo-lines-v1:sha256:880751e2f59926acc5cb4f3d96f83607d0cae544abd0b67cbe76d442ea469def:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzMjFiMjA2M2YwYmU2MGZmNjIyOTk4MTc3NDZkZWU4Yjk1ZjlhMTA3YjUwZjYxYTRlMjVkMmU3NTRiMmNlMTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMxM2NjYzBhMGE1ZTczZWIyYmJlNTk4NTM1YWE4NGM5NmFjOTY2MWU5NWRhYjdlZWUxMzdlYjFmYjZhMmQ0YTgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_40be6ec3fd794e5da1a41b266035f956",
+      "statement": "The `audit_event` gateway reports absent logger state and logger append errors through a UI error log; writer-side errors and queue overflow use the same reporter, whose UI payload has a stable `log-message` event and normalized level.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/events.rs#L99-L119",
+          "version": "repo-lines-v1:sha256:df5d396fd3e9618ea504c94d7448d2da611fd359b9277caa3bf372a2399f3e39:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkNGVhOTI3ZWM1MDAyMzEwNThjNGU3NjRkOTY3ZGU3MDY3YzZjYjI2ODI2OWI2MWRmNDNlZDE5ZmIwOGFjYTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY0MGIxZjIwN2I5ZmFkN2E5YzFiZWFlMzQ3MjE2M2I2Mzk1NTM5NjZkOGI2NDhkNTkwNmJjN2I5Yjk0NGIyYmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkNTMwYjBlNTM3NDYyMDBmMGNjNjNmNDUyNTcwYjBmYWE5MjI5ZDVjMjZiYWUwOTg2M2MyYzliMTBlYTU4MjEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/mod.rs#L15-L32",
+          "version": "repo-lines-v1:sha256:5b4cc11caf43fc8c6cf10321caeb35d39b755fb0cc53c080e7ec966aeb89d59e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyMmY3MGUxNDZjOTVkZjkyOWRjZjY0NDBlMjkzYjk2OTI4MDMzYjQ1MTc1MTk5N2Y4MmYzYTI5ZGQ2NmExZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUxMzg3NTI1MmIxNjIxNDlhMWE5ZWZmMzY2MDQzNzVmNWFmMWEwMWUzYTQzOGY4Mjc3MzU5NDc5OGIzY2UxODMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L226-L233",
+          "version": "repo-lines-v1:sha256:597a01b02ef6994412f9e6555100b7d49f0736907fb33ec5a037846bd58a90b5:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzg5NzFmNDcwNmMzMDNlY2IyNWMyMTE2ZDZiZGI0ZWI0OTRjYTZmZTU5ODRjZjNiZjAyMTZjM2M4MDc1OGYzMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDg5M2Y0MGUzNzgxZWI4OTZjODJkMDQ2YTA4MDY3YTExZTM1Y2RmMmYxZGZhZjI2ZmVhOTBiOGRiNjY3NjQxMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTllNzYzNTVjZjExOTk0ODBjM2Y5OTgzNmIxNDg2Yzg0MWQ4OTFmYWFkOTA0YzYwOGUwOTMwMjJkMzc1N2FlZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTViNGM1N2RhNDE0NDIwZWJlOTYzODIxMjcyZjE2YzNkNTI0ZDk4NTEyZGU3YmIzYjMzZjAyM2YwNDg5YmNlMyJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L377-L380",
+          "version": "repo-lines-v1:sha256:2dd0bd13e918067c7c3c02c988124e998d61b84e09fd2b449d3a0bf7b7c7d32c:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWZiNDU5NTJiMjQ3ZGU1NjJhMTRkNDdkZTVhZWNlNjE1ZTRmNDhmYTU2YWI2NTFkM2UxMGUxZDkyM2RlY2QyMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDg5M2Y0MGUzNzgxZWI4OTZjODJkMDQ2YTA4MDY3YTExZTM1Y2RmMmYxZGZhZjI2ZmVhOTBiOGRiNjY3NjQxMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTllNzYzNTVjZjExOTk0ODBjM2Y5OTgzNmIxNDg2Yzg0MWQ4OTFmYWFkOTA0YzYwOGUwOTMwMjJkMzc1N2FlZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTRkNzhmMzVlOGM0OGIwZjFjNWMyMmVkYjk0NzY3MWQ3OTY1YjEyNzU3MDkzNDdlYThlNTQ2YjdkNGU3MGY2YiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_58aafca6737f41709ae4c67bdeb77dfa",
+      "statement": "Login emits started and terminal audit records under one operation ID, while the sync queue runner emits context-correlated lifecycle records and upload processing emits started/completed file records with separate file-operation identifiers and upload metadata.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs#L48-L62",
+          "version": "repo-lines-v1:sha256:c1e29abcb3eafda4700f4e737aca336023fa51f9c350a23dabdca4dae1611dfb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjNWNiNzgwZTA3MjEzNWRjMmM1YjAxZTI2MzZhM2FmNWZkMWNkZDJjZTBmNzYxYzIzMjExNGY4ODUxZjE1ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZTQyMDhjZDZmZmI4YzRhMzU0N2IyZjU0YWRhMTk5NzhjM2YzNjVlNzhmOTUwMmVmNTE0NWNkZDJhYTg1NDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEzZjgyZDdkNzkzMDUyMzYyZDk4ZjA2OGFmNzgwOGMwYTE5MjhiY2JlOGY3ZGE3ODE3MjdjODU3YWIxMWQxMDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjcwZTcxMzA1MTRjZDMyMzZlZTA2MTY1OGE3M2MyYmJjZTVkMTYwZmE1NDAyZGNmZDQ0ZjY3NjQ1ZDFhZTc4ZjIifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/commands/auth.rs#L88-L113",
+          "version": "repo-lines-v1:sha256:faba5c413b85a95fa4b1666a2400bca032e93f1154c695fd72d18552555225e0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVlZjIwNTg0YjIxOWQ2MDkzMDZiMWIzZDFiY2Q0YTFkMTkwMWFkNTJmYjFjMTFiZmRiMzQ4MTZiNzNhNTA5OTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlY2UxMWZmY2E4ZmJlZmViODgwZjI2MmI2MTJlZWM0Yjg5MTc5NGZkMWU4YTY2NjY2MDgxYjQyYWZhYmM2N2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDcxNTVjODk3NjU5NjE0YTIzMWM3YTM3YjFhODg1Yzk1ZTg4YzlmMDJjNGQyN2E3YWE1ZDYxODJiNGM0NTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJlYzA5YTk5MGFhODBmMjE3YWJhYjE0YWZkYTcxZjc5Yzk0OTc3ZmI3MjZjYjMzZjcwZGZkMzczNWFmNjAwODgifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L553-L592",
+          "version": "repo-lines-v1:sha256:082fe639a52b83914bca94e77faed16d7003e12f3762100ddbf62fd7de8d829e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkNjEzZjZiOTM3YWI0MDc0ZGJkNGY2OTEyMjQ0OGFiNDA1OTU1ZDFmYTg4NjhjMmYxMTMwNzE0MDYzMWU0OGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZTQyMDhjZDZmZmI4YzRhMzU0N2IyZjU0YWRhMTk5NzhjM2YzNjVlNzhmOTUwMmVmNTE0NWNkZDJhYTg1NDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwNjNjNGQxYWY4Y2Q4OWJiMGJkZDc2NTdmZmNiZjY4MDZhNjEwZDc5ZDZjOGQ0YzMwN2MyNDFkZjM5MDA1MjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhiYjczZWFjNDFiYTQ0MTJkMTQ5MWE2MTczNDBlZmQyZDBiN2Y4MmU5YTMzYTJmNDg4ZmUxMDZkY2M5ZDNmZjYifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/processor.rs#L666-L697",
+          "version": "repo-lines-v1:sha256:365b79a541d3538a717fe6a6366cdb6c325dad8e74fe4356cdb783b51d7aee56:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzZWUyMDk1OWRjZDc0ZTRlMTdjMWFmZGU1ZmU1MzU0OWY4MWZlYmU2Njk3MmVmMTU4MDc5ZGVlMTkzMTUxMzMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZTQyMDhjZDZmZmI4YzRhMzU0N2IyZjU0YWRhMTk5NzhjM2YzNjVlNzhmOTUwMmVmNTE0NWNkZDJhYTg1NDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3MjE0N2VkNmQ5OWVjOTc3MzIwYTg2OWY5MDEyZTlkNGVkOTRkMmYxMTQxOGJhMjI2Zjk3MmVmYjhhZWVmYWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg0YzJiNjg2ZDVhZWU4ODY2MmZjN2I3ZjYxNWMwNzM0NDg2YmE3YWQ5ZDFlYjBjYzk5MjEzNDcxMjBlYjNlMDgifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/queue_runner.rs#L134-L166",
+          "version": "repo-lines-v1:sha256:75f2737f5c94e2b8a1de2ac40d987298c2673640515d5ac3ae6748e4253a1354:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE4Yjg2YzE1YzIwMWQ1MzkxMzgzMWY5MmViYmJjODYzYmZkYWNjNjk0MTI2NGI0NmI3NDNkZmRkMDI2ZTFmODEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExNDE3MTJmYjVmYmMxMGMwNzY1ZDllN2FiYjRlOGZkOTYyZmMxOWU0NjBiMjEyMWZlZDFkNDU3MmUyYjllMjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI1NTMxNDY5NjZkYWJkNWI4ZmViYWU0ZTIwNmFmZTU3NmIxNjM2ODQ2ZmZkNjIzYThiNTFkYjQ2Mjk5MTVkNmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBhOTIzYzgzMGJmNjRlMzQ2NWNlNDIwMjY0YjAyZTVlMDc4MmRmYWNjNGUwOGIzOTIyMWU0YzZkNWFkZTIwNWQifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/queue_runner.rs#L169-L224",
+          "version": "repo-lines-v1:sha256:be560936125bc5ef03e436eb43cc1b936d3daccab6e6ccdba9f981638e857949:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwY2YyNDUxOTRkYzdmZWQ2MDRkMTFkYjcxZjY1ZWZlNTk0MjhhMjMyYWE4MzI2MWE1NmNlZTE4MDM1YWIwYTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwNjc0NDg0MjA4MzMzNjlkZGRkNjM5NTUwNTJiYTk4Mzk5NmUzMmM2MDk5MTIxMTBkZDA2ZmE5MjkyODE4MGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE3ZmEwYjczNzYzYmY5ZmRlMTc4ZDlmOWMxOWQ2MGU1YmIwYTJmOGUwYWZiZDU4MWI4NTFiNDU3OTNhYWY1ZjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYxZDZlZGU5NTliNjFlMzNmZTkzZGI0ZDljYjU4YzFiYzMzZDI2OTVjNjk2Mjg0OGI4YmI1NDZkNTI3OTJiNDYifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/queue_runner.rs#L80-L91",
+          "version": "repo-lines-v1:sha256:d32b1e994b3f28bfe0b8ccbabc0586505b64d059c4e4d91b8048c94000aaab35:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjMzQ2MjY4ZWU3NzQyNmZkNGU2NDRmYzRkZmU1N2MwODU4Y2U2ZTU1ZTEyN2FjYThkNmI1NThmNzJmNGU2OTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZTQyMDhjZDZmZmI4YzRhMzU0N2IyZjU0YWRhMTk5NzhjM2YzNjVlNzhmOTUwMmVmNTE0NWNkZDJhYTg1NDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZjQ2YjUwN2Q5NWQ5ZGI2MWNlNDBlYzMzZDI2MDgwYTIxYTg0ZTQxMTk2MDYwYTM0NmYwOGUyMmRjNGZkZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhjNmE5YTQ1ZTAxZWM4Y2JiMWUyMzA3NTE2ZjRmOTQ0YTk3MzlkOGMzNGFlYTA2NzNhNzI4ZjExZWZlNDFjMmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_94bbe76b369441d4ba882dba48bc3daa",
+      "statement": "Upload audit details include local path and file name, file size, SHA-1 Base64 checksum, upload timestamps, and optional remote asset ID or failure reason, so audit files contain sensitive file and activity metadata.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/audit/event.rs#L159-L188",
+          "version": "repo-lines-v1:sha256:154bb4efe8bd9cb0adb8d82e842f4645176c2c95432570f7232ab02216bbf807:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ3M2U1Zjk5NmU5NjQ0N2E0YmNmZDgzODQ3ZTJkNmIxMWFkMjE3M2EyZTI4MDE4MWYwMDcwMTMzYjA5Yjk1MzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ4ODU5MjEwZWJjYjEyY2Y2OGM2MTYyMjJmYzU2MGMxZjY4ZTJmYTMxZjYzMDQ5M2RmODA5NTg4ODdkNTdhZjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiMjM3OGRhYzBiN2IxNGI5YThiN2JkMDdkY2U1YzU4OGM3M2VlMWU0MDI4NDRlNjc5NDAyY2I5YzBhMjYzZWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b74d6ff7cf0e4c8e80a68fb184f63133",
+      "statement": "Focused audit tests exercise secret-free event serialization and redaction, rotation and restart behavior, asynchronous writer error reporting, count and byte saturation with recovery, and flush failure behavior.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/audit/event.rs#L202-L248",
+          "version": "repo-lines-v1:sha256:58c4923f6573fc491165103604da1930450212237be070b9a7f1b03e359f35ab:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1Y2Y1ZmMyM2YyYTZkMjNjM2VhNTFlNzJmNWU4OTZjNzU1NWZiYWEwNWNkNWIxZWExODJiZjk2MThhOGU4MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJjNTI3YjgyMGExN2UzMWE3ZTY5ZjhiNWZkNWZhZjU2MjNiMmVlYWQ5N2NkN2E1YThjMmM1ZDgwZDc0NjBhOGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L483-L583",
+          "version": "repo-lines-v1:sha256:be9e10b53e7464cbb046c2581a72f0142c570c1095d7c1a6b7597bdc7f7159bb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5MmI1ZWRmNTk0OWNmZWE2NzgyMmNmNjkxMTMyMzYzZDY4ZDZmMWUxNjlmNWUwZDRmN2MxNGU1ZmExZTZkNGU1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0ODkzZjQwZTM3ODFlYjg5NmM4MmQwNDZhMDgwNjdhMTFlMzVjZGYyZjFkZmFmMjZmZWE5MGI4ZGI2Njc2NDEzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5OTliZGVmZWVhY2E2MzQwZTAyOTBkYzg2ZTg4OWM4OWQ1ZTE4OWFhNWJhNDRiNTg1YjNiNzA3MzRmNGE2MmQ4IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIyOWYwNjk5NWY2MWJiNTcyNmE2ZmRlNDQ4MmY1OWE3MmJiZTY3MTBjYjdiMjA2ODYxZDM4ZTA0ODAzYzZhODAwIn0"
+        },
+        {
+          "resource": "repo://src-tauri/src/audit/writer.rs#L606-L785",
+          "version": "repo-lines-v1:sha256:0cfff57556d34bbb19d5f860b794741d9e9abfb0ab3c12e63021519dec062307:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5MmI1ZWRmNTk0OWNmZWE2NzgyMmNmNjkxMTMyMzYzZDY4ZDZmMWUxNjlmNWUwZDRmN2MxNGU1ZmExZTZkNGU1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0ODkzZjQwZTM3ODFlYjg5NmM4MmQwNDZhMDgwNjdhMTFlMzVjZGYyZjFkZmFmMjZmZWE5MGI4ZGI2Njc2NDEzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIxY2FjNTZkOWVlNDdjOTgwMDhhYmUwMmEwZjJiY2FiZjZlOWU3ZmNlNmViMTFmMGRjYmEwNDVjMmQzMjQxYjE3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzNTUzM2IwODJmYWZlMzhmZGU1NjM3YWZkNWIwMGRhZjE1N2NmOTU1YTNiODczN2Y4YWRhN2FjZmU2MGI3YzRjIn0"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-19T15:10:01.321Z"
+  }
+}

@@ -1,8 +1,11 @@
 ---
 type: workflow
-title: Watched Folders and Removable Volumes
-description: How watched roots are registered, reconciled, scanned, and removed, including removable-volume acceptance, remount recovery, and platform monitoring behavior.
+title: Watched Folders and Media Discovery
+description: How Lymic validates and persists watched roots, discovers media through scans and filesystem events, and recovers folders on unavailable or removable volumes.
 tags: [folders, watcher, media, removable-volumes, synchronization]
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-10-19T15:10:01.321Z
 sources:
   - id: openwiki-source-5834cc73f881f690a60014d3
     resource: repo://src-tauri/migrations/0006_removable_watched_folders.sql
@@ -16,6 +19,8 @@ sources:
     resource: repo://src-tauri/src/db/folders.rs
   - id: openwiki-source-341e376f65355ac7aab7d324
     resource: repo://src-tauri/src/db/queue.rs
+  - id: openwiki-source-3313e249b19d757f173c2613
+    resource: repo://src-tauri/src/media/events.rs
   - id: openwiki-source-a742e6a26921d17bb568bbf5
     resource: repo://src-tauri/src/media/paths.rs
   - id: openwiki-source-5eb94a640e50f33a69637199
@@ -40,110 +45,125 @@ sources:
     resource: repo://src/lib/controllers/removable-volume-controller.svelte.ts
   - id: openwiki-source-9d08ef4075c63d08906a8b88
     resource: repo://src/lib/controllers/sync-controller.svelte.ts
-generated: { by: "openwiki/0.7.2", at: "2026-10-16T12:54:13.301Z" }
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-16T12:54:13.301Z
+generated: { by: "openwiki/0.7.2", at: "2026-10-19T15:10:01.321Z" }
 ---
 
-# Watched Folders and Removable Volumes
+# Watched Folders and Media Discovery
 
-A **watched folder** is a persisted local root with an optional Immich target album. The database configuration is the durable source of truth; `WatcherState` is only the current set of recursive `notify` registrations. Thus an unavailable root remains configured and can resume watching later.
+A watched folder is a durable local root, optionally associated with an Immich target album and exclusion patterns. The database is the source of truth for configured roots; `WatcherState` only represents active recursive `notify` registrations. Consequently, an offline path can remain configured even when it cannot be watched or scanned.
 
-## Registration and root invariants
+## Adding and configuring a root
 
-The usual dashboard flow opens a native directory picker, then an album-selection modal, and invokes `add_folder`. Empty or whitespace-only album IDs become no target album. `register_watched_folder` normalizes and validates the proposed root before it persists anything:
+The dashboard selects a directory, optionally selects an album, and calls `add_folder`. For removable-media prompts, the same album dialog ultimately calls `accept_removable_media_folder`. Blank album identifiers are treated as no target album.
+
+`register_watched_folder` normalizes the candidate and compares paths by components (case-insensitively on Windows). It rejects an equal root and either parent/child overlap, while allowing prefix siblings such as `Photos` and `Photos-Vacation`. A path that exists but is not a directory, or cannot be accessed, is rejected. `NotFound` is different: the folder row is persisted as a deferred root.
 
 ```mermaid
 flowchart TD
-    Select["Select directory"] --> Validate["Normalize path and reject root conflicts"]
-    Validate --> Conflict{"Equal, parent, or child root?"}
+    Pick["Choose directory"] --> Check["Normalize and check root conflicts"]
+    Check --> Conflict{"Duplicate or overlap"}
     Conflict -->|yes| Reject["Return error"]
-    Conflict -->|no| Available{"Directory available?"}
-    Available -->|yes| Watch["Register recursive watcher"]
-    Available -->|not found| Deferred["Persist deferred root"]
-    Available -->|file or access error| Reject
-    Watch --> Persist["Persist watched folder and optional binding"]
+    Conflict -->|no| Available{"Directory exists"}
+    Available -->|yes| Register["Register recursive watcher"]
+    Available -->|not found| Deferred["Keep deferred root"]
+    Available -->|other error| Reject
+    Register --> Persist["Persist folder and optional binding"]
     Deferred --> Persist
-    Persist --> Scan{"Registered now?"}
-    Scan -->|yes| Initial["Spawn scan and authenticated sync"]
-    Scan -->|no| Reconcile["30-second reconciler retries it"]
+    Persist --> Active{"Registered now"}
+    Active -->|yes| Scan["Scan then sync if authenticated"]
+    Active -->|no| Retry["Periodic reconciliation"]
 ```
 
-This is the registration path for both ordinary folders and accepted removable folders.
+This is the registration and deferred-recovery decision flow. Watcher registration happens before database insertion for an available root; if insertion fails, the command attempts to unwatch it. If a removable binding cannot be written after the folder row is created, it removes that row and unregisters the new watch. A persisted root enables the tray sync action even when it is unavailable.
 
-Normalization makes a root absolute, removes lexical `.` and `..` components, and canonicalizes when possible. That preserves a usable absolute path for an offline folder while resolving available-path aliases. Comparisons are component based (and case-insensitive on Windows), so duplicate roots and parent/child pairs are rejected, but `Photos` and `Photos-Vacation` are siblings rather than conflicts. Scanner-side multi-root handling repeats the overlap protection, so old or otherwise invalid configuration cannot cause duplicate discovery during bulk scans.
+### Exclusions
 
-An existing non-directory and an access error are rejected; a `NotFound` error is retained as a deferred watch. For an available root, watcher registration precedes persistence. If persistence fails, the command attempts to undo that registration. Once a folder is persisted, the tray sync action is enabled even if the path is currently offline. An immediately registered root is scanned asynchronously and handed to synchronization only when authentication permits it.
+Each folder persists a JSON list of relative patterns. The update command trims entries, drops blanks and case-insensitive duplicates, and rejects absolute paths, backslashes, `..`, `?`, character or brace classes, and negation. The supported matching language is case-insensitive relative path matching with `*` within a segment and `**` across segments. Updating patterns immediately rescans that folder and submits the result to authenticated synchronization.
 
-## Watching, scanning, and event recovery
+Exclusion is applied consistently to full scans, event-driven scans, and failed-item retry preparation. It applies to an entire live-photo upload unit: excluding either a still or its sibling video suppresses both, rather than allowing a partial upload.
 
-`WatcherState` keeps a set of registered paths and makes reconciliation idempotent: availability registers a missing path recursively, an already registered path is unchanged, and unavailability stops watching it. Unwatch treats `WatchNotFound` as success and removes the path from its state.
+## Discovery by scan
 
-At startup, persisted roots are reconciled without deleting unavailable entries. A background task checks all roots every 30 seconds; it unregisters paths that disappeared and registers paths that appeared. Only newly registered paths are logged, scanned, and passed into authenticated synchronization.
+Full scans run in a blocking worker. They recursively traverse the non-overlapping watched roots, identify supported media, and produce assets with path, size, and modification time; metadata and traversal failures are retained as individual failures rather than aborting the whole result. The scanner skips hidden path components, Synology directories `@eaDir`, `@SynoResource`, and `#recycle`, and Windows hidden files or directories. It deduplicates file paths across roots and reports overlap so callers can log stale or otherwise invalid configurations.
 
-Scans run on a blocking worker using recursive traversal. They collect supported media with path, size, and modification time; exclude hidden paths and the `@eaDir`, `@SynoResource`, and `#recycle` metadata directories (plus Windows hidden attributes); record per-entry errors as failures; and deduplicate assets across scan roots.
+A scan first applies the selected root's patterns during traversal, then removes any asset whose most-specific watched root excludes it or a live-photo sibling. This second pass makes nested-root and upload-unit policy consistent even when old overlapping rows exist.
 
-The watcher callback forwards only create and modify events to a bounded channel. The consumer debounces events for two seconds, path-scans them, and builds a deduplicated batch. Remove and access events are ignored. An ambiguous event, a watcher/backend error, or channel saturation instead requests a full scan of every persisted root after the debounce interval; incremental buffers are discarded. This is deliberately a correctness fallback for a lossy event stream.
+## Watcher events and synchronization
 
-## Removing a folder
+A callback receives `notify` events. Create and modify events enter a bounded channel; remove and access events are intentionally ignored. `Any`, `Other`, backend errors, and a failed `try_send` mark the event stream dirty and notify the consumer. The notification retains a permit, so an overflow while the consumer is idle is not lost.
 
-`remove_folder` is a two-step protocol. A request without `confirmCancellation: true` performs no deletion: it reports whether the root has active coordinator work or stored sync work. The frontend then shows either the sync-cancellation warning or the ordinary removal warning and retries with `confirmCancellation: true` only after the user confirms.
+```mermaid
+flowchart TD
+    Event["notify event"] --> Kind{"Event kind"}
+    Kind -->|create or modify| Queue{"Channel accepts event"}
+    Kind -->|remove or access| Ignore["Ignore"]
+    Kind -->|any or other| Dirty["Request full rescan"]
+    Queue -->|yes| Paths["Classify paths and scan"]
+    Queue -->|no| Dirty
+    Backend["notify backend error"] --> Dirty
+    Paths --> Buffer["Deduplicate assets and failures"]
+    Dirty --> Debounce["Wait for quiet period"]
+    Buffer --> Debounce
+    Debounce --> Full["Scan all persisted folders"]
+    Full --> Sync["Sync buffered result if authenticated"]
+    Debounce --> Sync
+```
 
-For a known folder, the confirmed operation first unregisters its watcher, then cancels in-memory work and discards queued and sync-state data scoped to that root, and finally deletes the folder row. Component-aware path predicates prevent cleanup from reaching sibling roots. If data cleanup fails, it attempts to reconcile the watcher to the path's current availability; if folder deletion fails, it likewise tries to restore watching and logs a restoration failure. Removing the row also removes any removable binding by cascade. The tray sync action is disabled only when no persisted folders remain.
+This flow shows the loss-tolerant path from filesystem events to synchronization. The consumer debounces for two seconds, resetting the timer as events arrive. Directory events scan their most-specific watched folders once; media-file events include existing live-photo siblings. Assets and failures are keyed by path in buffers. When the dirty flag is set after the quiet period, the consumer clears incremental buffers, scans every persisted folder, and replaces them with that authoritative result before calling `sync_scan_result_if_authenticated`. Thus an ambiguous or lossy event stream cannot be treated as a complete incremental update.
 
-## Removable-volume lifecycle
+At startup, a delayed startup scan processes all persisted roots. Separately, a 30-second task checks every configured path and reconciles it with `WatcherState`: unavailable paths are unwatched without deleting their rows, and newly available paths are recursively registered. Only roots newly registered by this deferred task are scanned and passed to synchronization.
 
-A removable binding stores a watched-folder ID, stable `volume_id`, and a path relative to that volume's mount point. The binding is one per watched folder and cascades on folder deletion. The standard `add_folder` command also checks the in-memory active-volume registry: when its selected path lies within a tracked removable mount, it selects the deepest matching mount and persists the corresponding volume-relative binding.
+## Removing a watched folder
 
-For the discovery prompt, the frontend first asks the user to choose a directory rooted at the volume mount, then uses the same album modal. Confirmation calls `accept_removable_media_folder(volumeId, path, targetAlbumId)`. The command rejects a disconnected volume, a volume already bound to a folder, or a selected path outside its mount; otherwise it calculates the relative path and delegates to ordinary watched-folder registration. If writing that binding fails after folder persistence, registration compensates by deleting the folder and unregistering its watcher.
+Removal is deliberately two-step. An unconfirmed `remove_folder` call only reports whether the root has active coordinator work or stored sync work. The frontend presents a sync-cancellation-specific warning when appropriate, then retries with `confirmCancellation: true` only after confirmation.
+
+The confirmed operation unregisters the root before it cancels active work and discards queue and sync-state data scoped to that component-aware path. It then deletes the folder. If cleanup fails, it reconciles the watcher with the path's current availability; if deleting the folder fails, it similarly attempts to restore watching. A removable binding is removed through the database foreign-key cascade. After removal, the tray action is enabled only if another persisted folder remains.
+
+## Removable volumes
+
+A removable binding associates a watched-folder ID with a stable `volume_id` and a volume-relative path. A standard `add_folder` automatically creates such a binding if the selected path lies under an active removable mount, choosing the deepest matching mount. Explicit acceptance additionally requires that the volume is currently connected, that no binding already exists for its ID, and that the selected path is inside its mount.
 
 ```mermaid
 sequenceDiagram
-    participant Monitor as Platform Monitor
-    participant Coordinator as Volume Coordinator
-    participant Database as SQLite
-    participant Watcher as Watcher State
-    participant Scanner as Scan and Sync
-    participant Frontend as Frontend
+    participant Monitor as Platform monitor
+    participant Coord as Volume coordinator
+    participant Store as SQLite
+    participant Watch as Watcher state
+    participant Scan as Scanner and sync
+    participant UI as Frontend
 
-    Monitor->>Coordinator: Arrival volume
-    Coordinator->>Database: Find bindings
+    Monitor->>Coord: Arrival with volume info
+    Coord->>Store: Find bindings by volume ID
     alt No binding
-        Coordinator->>Frontend: Emit detected event
+        Coord->>UI: removable-volume-detected
     else Bound volume
-        Coordinator->>Coordinator: Rebuild bound path
-        opt Path changed
-            Coordinator->>Database: Remap persisted paths
-            Coordinator->>Watcher: Unwatch old root
+        Coord->>Store: Load watched folder
+        Coord->>Coord: Rebuild mount plus relative path
+        opt Persisted path changed
+            Coord->>Store: Remap root and sync paths
+            Coord->>Watch: Unwatch old then watch new
         end
-        Coordinator->>Watcher: Reconcile current root
-        Coordinator->>Database: Reset failed items
-        Coordinator->>Scanner: Spawn reconnect scan
+        Coord->>Watch: Reconcile current root
+        Coord->>Store: Reset failed work below root
+        Coord->>Scan: Spawn reconnect scan
     end
-    Monitor->>Coordinator: Removal volume ID or mount path
-    Coordinator->>Coordinator: Clear active volume
-    Coordinator->>Frontend: Emit removed event
-    Coordinator->>Database: Find bindings
-    Coordinator->>Watcher: Reconcile bound roots unavailable
+    Monitor->>Coord: Removal by ID or mount path
+    Coord->>Coord: Remove active-volume entry
+    Coord->>UI: removable-volume-removed
+    Coord->>Store: Find bindings by volume ID
+    Coord->>Watch: Reconcile roots unavailable
 ```
 
-This shows arrival and removal handling after a platform monitor has emitted a volume event.
+This sequence shows coordinator decisions for recognized and unrecognized removable volumes.
 
-For a known arrival, the coordinator suppresses the discovery prompt. It reconstructs each bound path from the current mount path and stored relative path. If this differs from the persisted root, it atomically remaps the watched folder and path-scoped `sync_state`, `sync_queue` (including upload-unit IDs), and current job path before watcher reconciliation and the reconnect scan. For an unchanged mount it still reconciles the watcher.
+On a known arrival, the coordinator suppresses the discovery prompt, reconstructs each path from the current mount and stored relative path, and remaps changed paths transactionally. The remap updates the watched folder plus matching `sync_state.local_path`, `sync_queue.local_path`, `sync_queue.upload_unit_id`, and `sync_jobs.current_path`. It then reconciles the watcher, resets failed queue and state entries under that folder to pending, and asynchronously scans with source `removable_media_reconnect`.
 
-Before triggering that scan, reconnect resets only failed queue and sync-state entries whose local paths are the bound folder or its descendants to `PENDING` and clears their failure reasons. If one or more queue rows changed while the singleton job was idle, it changes that job to `RUNNING`. The scan is asynchronous and uses the `removable_media_reconnect` source.
+On removal, the coordinator resolves an ID from the active registry when possible, clears the active entry, emits `removable-volume-removed`, and unwatches each bound root by reconciling it as unavailable. Folder and binding rows are retained for a future arrival.
 
-On removal, the coordinator resolves the volume ID from the active registry when possible, removes it from that registry, emits `removable-volume-removed`, and reconciles each bound root as unavailable. It retains the folder and binding records so a later arrival can recover them. If watcher reconciliation fails, handling returns an error to the background consumer, which logs it.
+Windows supplies the implemented monitor: a device-message loop recognizes removable drives, derives stable volume information on arrival, and sends removals by drive mount path. The macOS and Linux monitors currently have no-op `start` implementations, so they do not independently generate volume events.
 
-### Platform and UI boundaries
+## Change and test guidance
 
-Windows has the implemented device-message monitor: it ignores fixed drives and produces arrivals/removals for removable drives with volume metadata. macOS and Linux select platform monitor implementations whose `start` methods are currently no-ops, so they do not independently generate this runtime event stream.
+Preserve the distinction between persisted configuration and live watcher state. Changes to watcher dispatch must retain the dirty-flag full-rescan fallback; changes to scanner policy must apply equally to bulk, event, and retry paths, including live-photo units. Changes to removal must retain unwatch-before-cleanup and restoration attempts.
 
-The frontend queues at most one prompt for an undismissed volume ID, removes a prompt when a removal event matches either its ID or mount path, and remembers dismissals for the controller lifetime. It optionally sends a desktop notification only while the application is in the background and permission is already granted. Destroying the controller unregisters both Tauri listeners. The prompt's Sync action enters the selection-and-acceptance flow; after successful acceptance, the dashboard removes the prompt and refreshes its folder list.
-
-## Operational and test guide
-
-Keep command-side root validation aligned with scanner-side overlap filtering. Changes to watcher event handling must retain the overflow/error-to-full-rescan path, and changes to removal must preserve unwatch-before-cancellation cleanup and best-effort watcher restoration.
-
-Focused Rust tests cover duplicate, parent, child, and prefix-sibling roots; unavailable/re-registered watches; event-channel overflow and ambiguous events; removable acceptance bounds and existing bindings; active-volume tracking; changed and unchanged remounts; path remapping; failed-work reset; and removal preserving database rows while unwatching. Frontend controller behavior covers volume prompt deduplication, notification conditions, cleanup, removable acceptance invocation, and remove-confirmation retry. For scan result synchronization, see [Synchronization Workflow](synchronization.md). Related persistence and IPC details are in [Local Persistence and Recovery](../data/local-state.md) and [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md).
+Focused tests cover root duplicate, parent, child, and prefix-sibling validation; watcher forwarding, ambiguous-event and queue-overflow recovery; recursive exclusions and event exclusions; live-photo exclusion; removable acceptance bounds and active-volume tracking; changed and unchanged remounts, remapping, failed-work reset, and removal preservation. See [Synchronization Workflow](synchronization.md) for the result-to-queue pipeline, [Local Persistence and Recovery](../data/local-state.md) for durable state, and [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md) for command wiring.

@@ -1,3 +1,3 @@
 # Files
 
-- [Local Persistent State](local-state.md) - SQLite state, migrations, and database-recovery behavior that preserve watched-folder and synchronization progress across restarts.
+- [Local State and Recovery](local-state.md) - SQLite-backed local state, schema evolution, and recovery behavior for watched folders, synchronization work, settings, and hash caching.

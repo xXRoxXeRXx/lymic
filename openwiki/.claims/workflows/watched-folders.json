@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:b7a4756bbcd766b87d7d30bfcafab3b36abbc49738c8f35bf7df5b78ed8eb6d0",
+  "pageVersion": "sha256:36dce2fab35445b6eebf14d4dedc069e07efb3c30bfef276cafd6dc09a213d26",
   "claims": [
     {
       "id": "claim_addffc2e2a704657a6384177bd1284dc",
       "statement": "The `add_folder` registration path normalizes and rejects duplicate or parent/child-overlapping roots, persists a not-found directory as a deferred watch, and asynchronously scans an immediately available root after watcher registration and persistence.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/commands/folders.rs#L108-L242",
+          "resource": "repo://src-tauri/src/commands/folders.rs#L142-L276",
           "version": "repo-lines-v1:sha256:0b7ceb8ace6e02f174048381413a7e49ff52b2caf865fbc36725509795d9a8d1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5ZWJmNmVhMGIyZGE5OTZiMjgzMjIyMTA3YWRhZDM3OTM5NGM4OGJkNjk3MTJhY2EyZGRlNmJkOTAxOWIxMTAwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0ODkzZjQwZTM3ODFlYjg5NmM4MmQwNDZhMDgwNjdhMTFlMzVjZGYyZjFkZmFmMjZmZWE5MGI4ZGI2Njc2NDEzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIzYTgyNWVlY2FjNmI5Zjk2ODkyYWZiNzk4ZDVmMzc0YWFkYjA0ZmI1Mjg3NzAyMmNmNWFhMjVmNDJlZDEzOGNlIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI5YzUwNzEzY2UzNjZmNGVkOTY4ZjgxOThkYTM4OWExNTA1MWZmOTRiMTNlYTUyMjVlNzhkYzZiOWYzYTllODdiIn0"
         },
         {
-          "resource": "repo://src-tauri/src/commands/folders.rs#L70-L105",
+          "resource": "repo://src-tauri/src/commands/folders.rs#L104-L139",
           "version": "repo-lines-v1:sha256:5df89e0e0eafc1d710ebef59f0bd2f1006bd9b85efd010b7b63e7857d8579624:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRmYWI4YzU3MGU0NDgxZTExMWEwYTdlM2IwMjMyZTVkY2E4NGM3ZWFlNjUyNjA3YmMxNjViZGE0MzkwOTc0ZTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2ZGE4MjZjNmQxZjlhZDdlM2QyOTc4YmE3ZGZkNDM4YmEyMWMwZmJiMjgxZWIzMzRkNDgyNmNhYzg4YTdjNzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwNjNjNGQxYWY4Y2Q4OWJiMGJkZDc2NTdmZmNiZjY4MDZhNjEwZDc5ZDZjOGQ0YzMwN2MyNDFkZjM5MDA1MjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJiM2ExNGMxZWEzYTZjNWY4NzEyNGQ5NDJhYjY5MDMxN2U1NzQ1YjVhYzA5MGExM2IwYzc1M2EwZTcxNzg3OTIifQ"
         },
         {
@@ -25,8 +25,8 @@
       "statement": "Persisted watched folders are reconciled independently of watcher state: startup retains unavailable roots, and a 30-second deferred-watch task registers roots that appear, then scans and synchronizes only newly registered paths.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/background.rs#L55-L167",
-          "version": "repo-lines-v1:sha256:558eca378fc5d8d4d0923290ea22c8174c4a209b73f59984c639aa4ae4b32b5c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI1ODFiYjA1MDkzM2Y5YWM1MmEwMDVjNzNkOGVkZGZlMmI1ZDFhYmNmMWYzMjIzMDEzOGE3MzI2ZDE5NmU3YmNlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkZmFiNzEwZGRmNzg1OWU1NzU3NjRhOTEzYTAwMmM3NDU4NWZmYTcwMDE1MTBjYjg4MTFkYTgzZDJjZjc0YjM0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhMzE3NWQxMzUzNTRhMWY5ZDIxZmZmNjEyZjRlNDU0NzUwYTdkMDdlMDE0MGQ5ZGFiMmUxYTJmM2I0YWRkNDEzIn0"
+          "resource": "repo://src-tauri/src/app/background.rs#L55-L188",
+          "version": "repo-lines-v1:sha256:fb99627b1ad0820d23ddcb4ea2d1ce0b40d3e28bbbe4d57b0b733fafd977281c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI1ODFiYjA1MDkzM2Y5YWM1MmEwMDVjNzNkOGVkZGZlMmI1ZDFhYmNmMWYzMjIzMDEzOGE3MzI2ZDE5NmU3YmNlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkZmFiNzEwZGRmNzg1OWU1NzU3NjRhOTEzYTAwMmM3NDU4NWZmYTcwMDE1MTBjYjg4MTFkYTgzZDJjZjc0YjM0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhMzE3NWQxMzUzNTRhMWY5ZDIxZmZmNjEyZjRlNDU0NzUwYTdkMDdlMDE0MGQ5ZGFiMmUxYTJmM2I0YWRkNDEzIn0"
         },
         {
           "resource": "repo://src-tauri/src/app/startup.rs#L159-L227",
@@ -43,8 +43,8 @@
       "statement": "Watcher processing batches create/modify events with a two-second debounce, ignores remove/access events, and converts ambiguous events, backend errors, or a full event channel into a full scan of persisted folders rather than relying on incomplete incremental events.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/background.rs#L220-L338",
-          "version": "repo-lines-v1:sha256:540261ae1ab6cd8533d4099e8bcdb5c55285afbd7005161b68c9ec59a5ccee7f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzNTRhZTk2ZjBkZmVjNDFjYjZkNTZhNGY5NGVmZmNlYzc5NGFhYWNjOGExNTIwMzhiMTA4ZTJmOTFlNTk2YjNjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkZmFiNzEwZGRmNzg1OWU1NzU3NjRhOTEzYTAwMmM3NDU4NWZmYTcwMDE1MTBjYjg4MTFkYTgzZDJjZjc0YjM0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIn0"
+          "resource": "repo://src-tauri/src/app/background.rs#L247-L356",
+          "version": "repo-lines-v1:sha256:b10c4d62d3a338909c121e49edc1bdedd725ffe59391c67aafa370fd35602e96:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzNTRhZTk2ZjBkZmVjNDFjYjZkNTZhNGY5NGVmZmNlYzc5NGFhYWNjOGExNTIwMzhiMTA4ZTJmOTFlNTk2YjNjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI1NTIyYzQyY2QxOWM2ZDAzZDgwOGM0NTI3MjA1NTI4MjViN2VhMWM1YjQ5MWIyMTg1MTFjYWM3NDE1Y2Y5ZDliIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJjZWM3ZGU4YTNiZTljMmNiM2RkNmY4MDNmM2EyZjA3OWYyYzFkODIzYzUwNGNhYzFiNGNhNGEwNGQ3M2I5ZmVkIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJiY2RkNWMxNjRiNWUxNjJhOTcyMWIyNDZkNzFhODY4ZmYyZWI1NzUyNDE4MTg4MWJjNDYyNTE4NTVlMzYzMDI4In0"
         },
         {
           "resource": "repo://src-tauri/src/watcher/callback.rs#L6-L56",
@@ -57,12 +57,12 @@
       "statement": "Folder removal uses a two-step confirmation protocol: an unconfirmed request only reports whether active coordinator work or stored sync work exists, and the frontend shows the corresponding warning before retrying with confirmation. The confirmed backend operation unwatches before cancelling and discarding path-scoped sync state, and it attempts watcher reconciliation if cleanup or folder deletion fails.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/commands/folders.rs#L410-L517",
+          "resource": "repo://src-tauri/src/commands/folders.rs#L475-L582",
           "version": "repo-lines-v1:sha256:ea89c666f0418d37bb31658b4d1e6f79b2e3827583ff478fbd35936a5c17450c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5ZTFlZTMzZWU5NWZhZWUxYzEwZTllYmYzZDNkZTQxYmIxOTI1MTVjYWQ3N2NkYTIwNWU1NDZkYTE3MDAxYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIwMGZjNmUyZTY1NDkwZDA2MWI3ZWJlODcwZmUyYmExMmZkMTZlYjg0YjczNDI1ZThhMDE0OTllOGFiZWU2NGNhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI3YmM5OGQ2YjBkYzQ5MmM1MDE2ZGYxMDgwNWEzYTU0ZWI5YzE4NGE1YTYxMzdlN2Y0YmVjZmEwYzIyMDU1MGQwIn0"
         },
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L292-L309",
-          "version": "repo-lines-v1:sha256:902fbfbad9a9c306c70ab2f84c7754cae83620004fcedd7b09e29387814bdfec:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0N2I3OGIxODE5MzZjOWVjZjk4ZTI2ZmQ0ZDZmZjY0ZThkNWEyMTE2YWEyZDhiNTI3ODFlNDZmNzhhZWQxOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhOWI2MzE0ZDYyYWIzOGM2NzZlODVhODU5ZTI4MzQwYzQxZmJjOTQ3NTAwNmFjNThlYWFkMjA1M2VjYmRjODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBmMmQ1ZjYwZDM5MWU0MDM5NGY2NDk2N2Q0MTI3NmUxZWE3YjJlYTZiMDFmMTE4OGMwM2I5MTc5MmU3MDVhZjUifQ"
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L291-L317",
+          "version": "repo-lines-v1:sha256:03c1dee240c1256546ac4dc68d261475329fdbea027a0b7d1cf4fcf81028e1af:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0N2I3OGIxODE5MzZjOWVjZjk4ZTI2ZmQ0ZDZmZjY0ZThkNWEyMTE2YWEyZDhiNTI3ODFlNDZmNzhhZWQxOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhOWI2MzE0ZDYyYWIzOGM2NzZlODVhODU5ZTI4MzQwYzQxZmJjOTQ3NTAwNmFjNThlYWFkMjA1M2VjYmRjODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBmMmQ1ZjYwZDM5MWU0MDM5NGY2NDk2N2Q0MTI3NmUxZWE3YjJlYTZiMDFmMTE4OGMwM2I5MTc5MmU3MDVhZjUifQ"
         }
       ]
     },
@@ -71,16 +71,16 @@
       "statement": "Removable watched folders persist a volume ID and volume-relative path with cascade deletion. `add_folder` automatically binds a selected path inside a tracked active removable volume, while the prompt flow invokes `accept_removable_media_folder`, which requires the connected volume, an unbound volume ID, and a path inside its mount before registering the folder and binding.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/migrations/0006_removable_watched_folders.sql#L1-L8",
-          "version": "repo-lines-v1:sha256:cdea0260b5dbae8591ec8e8f52aa80dffdbb55f820f277aaa805e934bf74745d:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDA2ODEyNWUzYTFmZDUzYzRlOWE5OTQxMGY1ODQyNjgyYmVhNDAxM2YyNmExNDAyNmQ3YzczMTI2OTY0NTJlZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmQ1N2RkMGExMzllODc3MTgyMjYzYjJkY2I0MjhlNWQ1ZGM2YjY3Y2I4NWFiNjk4MTg2MmZkMzIyNjJiYTZkNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+          "resource": "repo://src-tauri/migrations/0006_removable_watched_folders.sql",
+          "version": "repo-file-v1:sha256:cdea0260b5dbae8591ec8e8f52aa80dffdbb55f820f277aaa805e934bf74745d"
         },
         {
-          "resource": "repo://src-tauri/src/commands/folders.rs#L262-L398",
-          "version": "repo-lines-v1:sha256:2944aea7d7f96990de8ff8c6e96202f6a151a199f2e0b8eb7bf4d1042136396b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5ZTFlZTMzZWU5NWZhZWUxYzEwZTllYmYzZDNkZTQxYmIxOTI1MTVjYWQ3N2NkYTIwNWU1NDZkYTE3MDAxYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJiNTE0OGE0YmM2Mjk2MzIxMTE0ODU0NWZmY2Q2NzBmZjMwZTZiZGYzNTlkMWJmN2I0NTc0YWNlNDZkNGQ5NDA0IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiM2Q4OTYyZGE1NDI4OWM5ZjQ2ODFhOGYzOTYwYjZiMWUzYTI1NzhjMDRmZmNhZGY3YzIzNzE1ZWY4ZTAzOWM3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIyZWMwOWE5OTBhYTgwZjIxN2FiYWIxNGFmZGE3MWY3OWM5NDk3N2ZiNzI2Y2IzM2Y3MGRmZDM3MzVhZjYwMDg4In0"
+          "resource": "repo://src-tauri/src/commands/folders.rs",
+          "version": "repo-file-v1:sha256:b01e4f5f758e1323ee66c697ca039bf4a28bbc8f5a80de24a75bda8fb779699c"
         },
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L239-L283",
-          "version": "repo-lines-v1:sha256:0be2929bce6c63cdbfc85f29d29ad64e8988f2cbfe599bc35ac4703367168bf9:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0ZjMzODMzMWI2YjY4MjhiNDdmMDgxMGI3ZWVkMWJhMDBhNWI2MWZmODE2MTc2OWY5NDc2YzQwYzgwOTJkMzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUzN2U5NzU5MzE2ODNmN2ExN2I5NjAwMzZjNDFhZjI4OTNkYzcxZWY2Yzc3NGU5YmU4OGI5MTFmMTIyMjZlMjgifQ"
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts",
+          "version": "repo-file-v1:sha256:cbc65ff66804ced1eddefe85e94172ec48f9e271a6ea2e06454e0d9be2b4ea6f"
         }
       ]
     },
@@ -89,8 +89,8 @@
       "statement": "On a bound volume's arrival, the removable coordinator rebuilds each folder path from the mount path and stored relative path, remaps changed persisted paths, reconciles watching, resets failed work below the folder, and triggers a scan. On removal it clears the active-volume entry, emits a removal event, and unwatches bound folders without deleting their rows. Windows supplies removable-drive device events, while the macOS and Linux monitor implementations are no-ops.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/removable/coordinator.rs#L45-L160",
-          "version": "repo-lines-v1:sha256:b18e91ef594fd2fca29a49fa48014c45374424e87bbfff8833a0a06994e857ca:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIxZWEyNGY2ODk4NTg2YTc3ZDYxZGM0ZjU2OTllM2JkNDQ0ZTQ4YWUxNzBjZmQ4ZmEyZDFkMjE5NWFmODhjMWZiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI1NTIyYzQyY2QxOWM2ZDAzZDgwOGM0NTI3MjA1NTI4MjViN2VhMWM1YjQ5MWIyMTg1MTFjYWM3NDE1Y2Y5ZDliIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI0NmJjMDg3MDNlNmU2OTFmMzgxYzY2MTk5MmYyNmIyMzU3YWE4YmFmNWM5MDgwMWY0NDlmMzI2MDIyOTYzNGE3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJiNGEzNjVhOTBlYzExZTkwNDMyNzUyY2Y5Mzc2ZWM1ZWQzNmI4MGJhNWU4ZTY4NTRmY2Y5ODk3MGQzMDQ0NDY5In0"
+          "resource": "repo://src-tauri/src/removable/coordinator.rs",
+          "version": "repo-file-v1:sha256:ad7b7c4fe9442230ad74d6241403ef86991fd80b5ca283f664ad8ba2becbdc2c"
         },
         {
           "resource": "repo://src-tauri/src/removable/linux.rs",
@@ -101,20 +101,16 @@
           "version": "repo-file-v1:sha256:069406dfbd7a811ea348f295ebbd5a5e5fe124a0545d4935c44caf579c62060b"
         },
         {
-          "resource": "repo://src-tauri/src/removable/mod.rs#L23-L110",
-          "version": "repo-lines-v1:sha256:55c01b1bb31e3c46c5e642746a56fdc7a0249224be2b5dd88c0c4d18cd9211e4:eyJzZWxlY3RlZExpbmVDb3VudCI6ODgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjMTEzMTk2OGE4ZGU4MTIwN2YwNjViYTc0Yjk2OTEwYjNhNzQ5NTdkNWZjNzZkMzg3NzcwYjYyZDA3N2E3Y2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2OTk4MDU5MWRmMjNlODZkZDVjMjI4MjY2ZmQ2NjAyYmY4YTUxMjUzODcxZTdlYWRiYjg5N2Y0OTNkMzk2OWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+          "resource": "repo://src-tauri/src/removable/mod.rs",
+          "version": "repo-file-v1:sha256:5cd969fbaf4866b12f7f99781116d472e4647b52e8168844c3430cfc15cbe7d2"
         },
         {
-          "resource": "repo://src-tauri/src/removable/tests.rs#L306-L373",
-          "version": "repo-lines-v1:sha256:16a1ce0cab4e7af639392945125d03ff80b4f82e1b7bfed5872a5b553233a7c6:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4Y2UyNWY3NzExZDYwZWU5MTRjNzNjNWIzMWRiMzhhZTk3Y2Q4NDZlMTUxYWE2MzgyNTIzMmVmNTVmYzY3OTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3NzJlOTI3NWNiNmEyNGZmYTg5NTJjY2E3N2U2YTRhNWEyYWRlNjNjZWQ0MzUxYzZiYzU4NjBhYWZlNTIyZDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2MzkwMjM1N2ZiM2Q5ODVlMDUxNzUzMTU3ZjNkOGI1MzZhYTA4ZmIwZjk3MWVkY2Q0NDAzMDE1MzA4OGIxMDIifQ"
+          "resource": "repo://src-tauri/src/removable/tests.rs",
+          "version": "repo-file-v1:sha256:14dd7ed5fc3cac8dd6b997b11bb2b866fc57191a85e456fb2faa4a2be89af159"
         },
         {
-          "resource": "repo://src-tauri/src/removable/windows.rs#L149-L225",
-          "version": "repo-lines-v1:sha256:213b2390b2a8e1808c22c7485ecee62e386259f7b7a08c7153a7f7545396cd9c:eyJzZWxlY3RlZExpbmVDb3VudCI6NzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjNWU2NDk4M2I0YjQwN2IyZDI3YTYxNWQwM2U0MDhkNDE4NDI0ZDZhODZkMTMzYjVkMWU2MTlkMWIwMTg4ODUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhkYjMzOWMxN2Q0Y2M1NGU3MGM0ZmNmZWNiNjExYmI5ZTdkMzYzZjI1YjE4ZTA5MjNhMWQzMDZjYzk1OTI0ZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyMzQyZDYyNTY3ZGRjMDE1NWJjNGUxYWNlNWNjOGJkMWUxYWVkYTcwYWM2ZTJlMjFjZDFiZGJlNWYxNjM0ZjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZjZThkMTM3ZmE0NGFjNjY0OGIzYTRhNmY1NmY1MGJhYmE2NzczNDE0NWQwNDc0YTRlNTU1Njk3ZmQyNmJlYzgifQ"
-        },
-        {
-          "resource": "repo://src-tauri/src/removable/windows.rs#L41-L105",
-          "version": "repo-lines-v1:sha256:5c91e67358138459b9afa4f2213327499e0da7d54777b513e048e4eeb020124f:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmMGNhOWQ4YjUxYjQ3NzI0ZmMyOWU2NDkyMmM5M2Y5NWY4ODFlYTI4ZWQxMzJmZGY3ZGQ5YzAyZTNhYzg1ZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5YjE5ODJlOGRkNzQ4MTE4MTQ2YjM5YTJkMDA2MmY0MDgxZTM0Nzc5Yjg2NzVjMjM0YzRmYjEyNGRjMzkzOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJmMmY5MWFmMjQyNWVmNzEzYTlmZGI0MThmNjc1YTcxNGJjMGVhODZmZTg1MTg0OWVmZjEwMjU1NDBiZWE5YTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUifQ"
+          "resource": "repo://src-tauri/src/removable/windows.rs",
+          "version": "repo-file-v1:sha256:cd74e62cadb2ac1542531651448cf2b97709dd3e169e192f2a1e3c7a7e288f3a"
         }
       ]
     },
@@ -130,11 +126,19 @@
     },
     {
       "id": "claim_f0991e345fdd49b9a542047e19378911",
-      "statement": "Folder scans recursively collect supported non-hidden media while excluding Synology metadata directories, record entry-level failures, and deduplicate files across overlapping roots.",
+      "statement": "Folder scans recursively collect supported non-hidden media while excluding Synology metadata directories and configured relative exclusion patterns, record entry-level failures, deduplicate files across overlapping roots, and suppress an entire live-photo upload unit if either component is excluded.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/media/scanner.rs#L119-L197",
-          "version": "repo-lines-v1:sha256:b4eb4b2479150967089fb40aa1c7c6a2aee12958d1aca182ca9ab85e4b0a2ba9:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2MGZkYTQwNDA1ZDVjYWU4ZGJhMGRhYWI3MmM1ZjJmZGVlNGRkNmVhZmE1NmRhZDc4MjVjYjZhMzQwYWJkZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4M2MwZjg5NWZkZGM3NmJiMDU0N2NhMjQ3MjdmMTdjNDM3ODAwM2MwMDk4YTY0MTI5ZWQ4MzlmYmQyZjk1NzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2NmI0OWE0Mzk4ZDFhMzdmOWQ2ZjE3MmQ1N2I4N2FhYWNjZWQ5MTViN2U1YzJhYjJkOGFhMjQyZjZmN2E0ZGEifQ"
+          "resource": "repo://src-tauri/src/media/events.rs#L12-L64",
+          "version": "repo-lines-v1:sha256:5979c05d84ae0c8f005012be75865b38717ee63219a0e3994c48b831b8ef4ac3:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyZTkxMjJlNDQzZjg5NzRmNjBiYjIwNjY0OGNjNGM3YzMyMDMxOWJkMDZlNDMyMjM4MWJhZDdkNmQ5ODYxMjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4OTc3MWZlMWI2NjI4ODc1YWEyM2U3ZGJlNGFhNzE0NjFkMDBjZGZiNjZkZGYxMWI5ZDgyMGFjNTg5N2ZkZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4YTRlZTc5OTU4NDUyZjJlNjkwMTg1MzNiNmNiZjcxZTJkM2FhNTlhNzc4ZTFmZjdiNWQ0ZTEwZTVmYzA1MmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxZmM2NmU5MGVkNzkwYzAxMDNiNzc0NTVjYmM5YmM5ODk4NTdmN2VlMDk1OTNkOWVjMzE2YmQ0MDM2Y2JhMjYifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/media/scanner.rs#L144-L209",
+          "version": "repo-lines-v1:sha256:db59aa2431965e1ef7e8ec1f857fb4efdf31664d7b4b30c9b8b6e037744e9c84:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM2NzY1ZjMzOTYxMDA2M2IzZDdlNzFjYmE0YjI2Yzg0NWQ4MDBjMzUzYTQ1ZmU2M2Q1ZGQ3YzAwMTdhZmQ2OTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJkNmY1OTEzNmQ2YTEyYWYyNGExYjAzM2VhN2U3MzMxMmI5MTk2MmU3OTg4ZjIzMDIyMmI0NTFjZjc2OTQ2OWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBlNzgwMzUwMDgyN2I2MDlmMTRkNmJjYTQ3ODNkYWRlNjE5MmVlZTk5MDhkMzI0NjcxZWIxMDcxZjk5NDZjYzEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/media/scanner.rs#L211-L337",
+          "version": "repo-lines-v1:sha256:8bf6232e8e9fe6608fb12227482693ce0ac71d14aa17972a08b7b1beeca57190:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhNzgzODY1N2NlZjYxY2FjMjk5ZGNjNmRiMjBhMDdjMGM0MDAzNDYyNTA4Y2RiN2ZiZmNhZTc3YzE0OTRhZTYzIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJlNTk3YTYwMzNjOTQxYjcxZmM4MzMwYTUxMGQyNjE3ZjczNDkzNTQ1MThkYWRmNWIwYjViOWFjN2IwOWQ0ODZjIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI1ZTI5NDg2YTE3ZjkyNjkwZDYwNTExM2YwZjE2YTFhYzQ0ZDBiYmY3NzM3OWIwNGI5ODJiZWEyYWYzN2RiMTkwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIwMDVmZDg1NTI0YzI4YTVhYmE3MzkyZDFhZjhlOGM3YzRlZjNlN2Q5OGViNDYwYjdmZTBiNTkyMDMxODgyZDhjIn0"
         }
       ]
     },
@@ -143,7 +147,7 @@
       "statement": "When a removable volume remounts at a different path, path remapping is transactional and updates the watched root together with path-scoped sync state, queued asset paths and upload-unit IDs, and the current sync job path before watcher reconciliation and the reconnect scan.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/db/folders.rs#L123-L190",
+          "resource": "repo://src-tauri/src/db/folders.rs#L155-L222",
           "version": "repo-lines-v1:sha256:99ce48cfbe67c30b5f936aba5649b608e28b28f3b7668a69b295296fdc949649:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1ZTdhMGQ0NjYzMDE0MDY0ZDI5OGU5YmI1OTE3OWVmMWNkZjQ4Njk1NTNhZmYxY2U2NGE5YzU4ZGMyMDM1NWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1ZjZmNDY2ZTU5Y2ZjMzA3MDNjNDVmNzJhZjY1ZGU1NGFjMzYzZDM1NGNjMWEzMzMwMzUwYWNkNDUyNDM0YzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
@@ -161,7 +165,7 @@
       "statement": "A volume removal preserves watched-folder and removable-binding records for recovery while reconciling every bound folder as unavailable. On reconnect, only failed queue and sync-state records within that folder are reset to pending and have their failure reasons cleared; resetting queue records also changes an idle singleton job to running.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/db/queue.rs#L404-L445",
+          "resource": "repo://src-tauri/src/db/queue.rs#L429-L470",
           "version": "repo-lines-v1:sha256:69c72c888e8984dc3e59269c9295d95e4be44ed77c7018a827a00c529e6e7b37:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2NmY0ZWZlZWI5YjQ4NjY0NzI0MmM0NDI0OTcyNTRlMDkzMWQ5MzliODY4OTJjNWRhMWY2ZGU0NTUzNmFmZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwMGZkYTE0YTAyOTEwMzUzMDBhMzNmNDI1ZGIwMDkwZWJhYmIyNTA3ZTI1ODU4MWVlMTlmYzM1YmEyMzU4ODMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZkOWI5MDBkMjE3ZTI0YTlmYzNiNDcwOGM0NjFmYTkxMGU3YzJjNzdmNzk0MjczMTRiNGNmMmRlNjhhMjNjOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
         },
         {
@@ -177,10 +181,32 @@
           "version": "repo-lines-v1:sha256:373e48b85b32310527fc99b257e038c9f270a05ec70dc4675f82d7ccdf252b5a:eyJzZWxlY3RlZExpbmVDb3VudCI6ODksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjZGNmZTI4MjkwMjJiZjQ4YzJiZTM2YWE1MTU1MWVkMTZhM2U4MGM5ZDIxYjMxMjdiYTdmYzE4MDc1OGNmNmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3NzJlOTI3NWNiNmEyNGZmYTg5NTJjY2E3N2U2YTRhNWEyYWRlNjNjZWQ0MzUxYzZiYzU4NjBhYWZlNTIyZDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU3YWI0YzRhNzYzYzcwYzFmNmMzZTFmYjEwZTFhNjE2NDY3M2IwNzY1ZWE5NTNjZmJmYmRhZWZmODJlMjg1ZGUifQ"
         }
       ]
+    },
+    {
+      "id": "claim_28000e21747d49669875403c899aa21a",
+      "statement": "Folder exclusion patterns are persisted per watched folder; the command accepts deduplicated non-empty relative patterns using only names, `*`, and `**`, then rescans and synchronizes the updated folder.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/folders.rs#L444-L473",
+          "version": "repo-lines-v1:sha256:87c6bec333ae5fb8e075e7cced2e0f8f7c7366426a9aacfd06c811b8e078a9a4:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllMWVlMzNlZTk1ZmFlZTFjMTBlOWViZjNkM2RlNDFiYjE5MjUxNWNhZDc3Y2RhMjA1ZTU0NmRhMTcwMDFhNjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwZmM2ZTJlNjU0OTBkMDYxYjdlYmU4NzBmZTJiYTEyZmQxNmViODRiNzM0MjVlOGEwMTQ5OWU4YWJlZTY0Y2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRkZTIwNTI2ZTliODAwZTE0NmViYWU1NDg4N2Q0NWE3MThiY2EzNDc0ZTU5NmQ4ODY1MjUwOGRlYzYxZGE2ZGUifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/commands/folders.rs#L73-L102",
+          "version": "repo-lines-v1:sha256:2a6f2a98800c484c9614c74ba387eed74f023d1ec90da78fae96add4adf64252:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwYWNlNDczZDg3OTJiMDJmMGJkMTUzNDE0YjRmNDFmOTk3MzQ4ODc4MWM5ZDM1ZDkxMjcxNzlkOTU0YjkzOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwNjNjNGQxYWY4Y2Q4OWJiMGJkZDc2NTdmZmNiZjY4MDZhNjEwZDc5ZDZjOGQ0YzMwN2MyNDFkZjM5MDA1MjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNkMTkyODg0MDEwY2UxMDFhMGUzZTM0NmEyNWI3MThhMTI2ZTZjNzBiNGFkNDcxMjRjYjU3OWEzYTdlYmVmMTEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/db/folders.rs#L4-L11",
+          "version": "repo-lines-v1:sha256:dbbb13a73a2214b81832b5797fd65ef669b09fa274afb89ed553c7e4fdfe7d94:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDM2OTg5ZmZlMzdiNjAwZWJiZjYwZGY4OWU4OTc5ZjkwZTNhZTI3ZWIwMmYwNzcyYTQ5OTVmMDM5NzA2ZjZmZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTM4NzlhM2Y3NDNlNmEyMWRhYTNmY2EyNWY2MDVmODFlMzJlMmIyM2QwODNlMjMyNzNmNzBiYmQ1NmRmNDRiYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTFkNDVjMTM5M2VmZTMzZmE0MmRmZjZhNjY4MjdhNTFmZDI3MTQzYTM3MGMxMDEyMmUyOWIyMDM5YzUzYzZlZCJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/db/folders.rs#L65-L80",
+          "version": "repo-lines-v1:sha256:6ddee692e362a03279a96cdbc9104c0dc623d41a2c1f75a9c554bdd76f80a62d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyNjIyNzc2ZGZjNDJkNjJiODVhZDNiNWZhNTJmNzQwNTVjZGUwYjFiYzY0OTg5YTE3NGEzMDBhMDYxZjkwZWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ4ODU5MjEwZWJjYjEyY2Y2OGM2MTYyMjJmYzU2MGMxZjY4ZTJmYTMxZjYzMDQ5M2RmODA5NTg4ODdkNTdhZjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJiYTI0ODg4NTgwYzkxMDA0MjI1OGViOWQzYzAyMDJhYzg0ZDRmNmM5MDYwZjRlMTBmZTkxNTlkZDljOWQ4OWMifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-16T12:54:13.301Z"
+    "at": "2026-10-19T15:10:01.321Z"
   }
 }
