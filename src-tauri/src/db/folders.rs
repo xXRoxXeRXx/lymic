@@ -1,12 +1,13 @@
 use crate::immich::AlbumId;
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+#[derive(Debug, serde::Serialize)]
 pub struct WatchedFolder {
     pub id: i64,
     pub path: String,
     pub recursive: bool,
     pub target_album_id: Option<AlbumId>,
+    pub exclusion_patterns: Vec<String>,
 }
 
 pub async fn add_folder(
@@ -40,11 +41,42 @@ pub async fn restore_folder(
 }
 
 pub async fn get_folders(pool: &SqlitePool) -> Result<Vec<WatchedFolder>, sqlx::Error> {
-    sqlx::query_as::<_, WatchedFolder>(
-        "SELECT id, path, recursive, target_album_id FROM watched_folders",
+    let rows = sqlx::query(
+        "SELECT id, path, recursive, target_album_id, exclusion_patterns FROM watched_folders",
     )
     .fetch_all(pool)
-    .await
+    .await?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(WatchedFolder {
+                id: row.try_get("id")?,
+                path: row.try_get("path")?,
+                recursive: row.try_get("recursive")?,
+                target_album_id: row.try_get("target_album_id")?,
+                exclusion_patterns: serde_json::from_str(
+                    &row.try_get::<String, _>("exclusion_patterns")?,
+                )
+                .unwrap_or_default(),
+            })
+        })
+        .collect()
+}
+
+pub async fn update_exclusion_patterns(
+    pool: &SqlitePool,
+    id: i64,
+    exclusion_patterns: &[String],
+) -> Result<bool, sqlx::Error> {
+    let value = serde_json::to_string(exclusion_patterns).expect("exclusion patterns serialize");
+    Ok(
+        sqlx::query("UPDATE watched_folders SET exclusion_patterns = ? WHERE id = ?")
+            .bind(value)
+            .bind(id)
+            .execute(pool)
+            .await?
+            .rows_affected()
+            == 1,
+    )
 }
 
 pub async fn remove_folder(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {

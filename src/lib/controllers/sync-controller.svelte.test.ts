@@ -20,6 +20,7 @@ function createDesktopAdapter(overrides: Partial<DesktopAdapter> = {}): DesktopA
     addFolder: vi.fn().mockResolvedValue(1),
     acceptRemovableMediaFolder: vi.fn().mockResolvedValue(1),
     getFolders: vi.fn().mockResolvedValue([]),
+    updateFolderExclusionPatterns: vi.fn(),
     removeFolder: vi.fn().mockResolvedValue({ requiresSyncCancellation: false }),
     getAuthStatus: vi.fn(),
     getServerUrl: vi.fn(),

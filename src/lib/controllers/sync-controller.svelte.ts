@@ -32,6 +32,7 @@ export interface DashboardViewState {
   onRetryFailedSyncs(): Promise<void>;
   onAddFolder(): Promise<void>;
   onRemoveFolder(id: number): Promise<void>;
+  onUpdateFolderExclusionPatterns(id: number, exclusionPatterns: string[]): Promise<void>;
   onConfirmAddFolder(targetAlbumId: string | null): Promise<void>;
   onCancelAddFolder(): void;
 }
@@ -307,6 +308,15 @@ export function createSyncController(options: SyncControllerOptions) {
     }
   }
 
+  async function updateFolderExclusionPatterns(id: number, exclusionPatterns: string[]) {
+    try {
+      await adapter.updateFolderExclusionPatterns(id, exclusionPatterns);
+      await refreshFolders();
+    } catch (error) {
+      options.reportError(error);
+    }
+  }
+
   function startSubscriptions() {
     stopEvents = subscribeToSyncEvents({
       onProgress(path) {
@@ -381,6 +391,7 @@ export function createSyncController(options: SyncControllerOptions) {
         onRetryFailedSyncs: retryFailedSyncs,
         onAddFolder: addFolder,
         onRemoveFolder: removeFolder,
+        onUpdateFolderExclusionPatterns: updateFolderExclusionPatterns,
         onConfirmAddFolder: confirmAddFolder,
         onCancelAddFolder: cancelAddFolder,
       };
@@ -416,5 +427,6 @@ export function createSyncController(options: SyncControllerOptions) {
     confirmAddFolder,
     cancelAddFolder,
     removeFolder,
+    updateFolderExclusionPatterns,
   };
 }
