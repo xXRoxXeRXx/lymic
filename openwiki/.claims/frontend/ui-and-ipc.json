@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:8d8e21ee92032a276ab262b279d9e796926a25e788b7bc2994fcf11a32e368f6",
+  "pageVersion": "sha256:02775e7d4c0c5c4d4beddc0f22608e037da61fabd0874e5fd957912491e560da",
   "claims": [
     {
       "id": "claim_307a20f803294b5582675f834f48ba0a",
@@ -31,10 +31,146 @@
           "version": "repo-file-v1:sha256:3685360200f06fc82a0c6fe87ea94a9a601a94916f5cbca7a6f97ebe03638e13"
         }
       ]
+    },
+    {
+      "id": "claim_3e705413783f4cd59bdbe79072f1815b",
+      "statement": "The root Svelte route switches between LoginView and an authenticated sidebar shell, keeps the selected authenticated pane in local `currentView`, and composes controller state/callbacks into dashboard, log, settings, and info views rather than having those views own the cross-process operations.",
+      "evidence": [
+        {
+          "resource": "repo://src/routes/%2Bpage.svelte#L119-L277",
+          "version": "repo-lines-v1:sha256:06c4c7d81df2bb9819250001285a24efe2e1a92a53622c38dfe7f357a2733e83:eyJzZWxlY3RlZExpbmVDb3VudCI6MTU5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3OTNlNDJkMTNhODU0OTkyOTJlZDM2YTY2NDY2YTlmMWQwOWJhNGU1OWUxMWRlYzhjMTgyYjNkMzUyYzc2MWZmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3ODhlN2M1ZWVjNWZhMGM1NzUxZTI0NTBkOGE2MWZlM2FlZjk1MzAzYTM4MGE3OWZlNmY3YmEwNWNlMDc1MTE1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlNzhlNjgxMTYxZDU4NGI3MmJkODg1NTZiMDVmMjg3NzQzYzQ2ODZlMjdiNGViMTFhZjEwNTEwNTYyYjk4MTg0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1ZWI1MTY1OGM0ZmYwMzVmZWNkZWI0YzI2OWVmYjJkMzNhNjdhYzk5MjhhMmE2YzJkMmQ5YTE0NjMwYTBlYzM1In0"
+        },
+        {
+          "resource": "repo://src/routes/%2Bpage.svelte#L22-L73",
+          "version": "repo-lines-v1:sha256:d7c06b4fbad3946b5b28a5d3f6ffa754714e270f8ca3b836519de2393c161c32:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhMjUwM2EzZTJiMjkxYjNhYzZkY2U2NzdmZmZmM2E5NjM2NWQ2MGY3NmRiODRiY2EyYmZlNWQ2MTgxYjMyZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwMDAwODg4NGI2ODkwNTBjOTc4MTgzOTk5M2IxZjUzODUwZDliMDRjZDFiMTRlNTg5MDBlNTY2MDJiNjhmNGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxOGZlZThlYTdkNWQ3MzNhNTc1MjA0NzRiMWQ4MTk0NWJiYmQ3OWE5NjRlZWMxZmUzMWRkZmUyM2QyOWU3MDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f696e20fffea4539873ef15d3e123235",
+      "statement": "The sync controller treats backend data as the reconciliation source: it hydrates folders and a sync snapshot through commands, applies pause/resume snapshots returned by commands, and refreshes failed items and folders before resolving a completed sync to idle or error.",
+      "evidence": [
+        {
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L103-L173",
+          "version": "repo-lines-v1:sha256:be8bd7f6500de440eb70e0698ca3a9e623ce8ad1cf4d1e7f0c8c7eb7af510189:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhZjMwM2NiYzUxOTJkMjU3MTEyZGZhODNkZjk4Mzc4MGMyYjJlYTI3ZWIxZGM2OTQ0MmZiNDdmMTg3YWE1NmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUxMmJhYzNhZTIxOWFhMGVlZWJjM2IwZGZkZTJlNDE5ZWFkZTk2ZTE2MTE4MTYzMzEzZDQzMDdmNjRlNWQ0MjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM1NDkxZDA5NTA1MmVjMmZhZDk5MWQ1YmVkMWQ5ZWZhMWRhYjYxMjJmNjVlMzYzZDI4NDY0ZTI5OWE3YjNkODIifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L192-L223",
+          "version": "repo-lines-v1:sha256:4af19dedf7b2134efa0257883129a55419e6b17b1e396621d8d77e5280ed1ea2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIwY2NiNjMyNmRjNjM4Yzk2MTBiYjg1ZjU2NThjOGIzNjFkYzczMGUwNzlhMjFkMjlhODlmYThjZTU0ZDQwMjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRmZTMyNzk5ZjhiYjJmNDYyZGFlOTgwZWRmNmExYzEwMmIyZTc1Y2NhZTFjMzc0YmJiMWY1NGZhNDIwMWQ5MjYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_73c874d8e36149ca947917aac7aa6ffa",
+      "statement": "The route starts sync event subscriptions only after sync hydration and tears down controller lifecycles on unmount; the sync event helper also immediately removes a listener whose asynchronous registration resolves after disposal or inactivity.",
+      "evidence": [
+        {
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L368-L373",
+          "version": "repo-lines-v1:sha256:47eb141ad60e937eb824cd3308507f35894e70e133b0a2e2d1ecca261b40003b:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQ0NzZmNzM3YjJjNTFhM2U1Yjg2YTI5Y2Y1YWEwNmJlMGVlNmI4OWJiODgyYmI3ZDg1Mjg2YmVkYWJiN2U1MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDUwYmY2MmNkODNmNmUyYWRmOWRmYWI2NDE3ODE1YjE5ZjdkN2NiMWNiYmNiOGFhNDI2YmYzOTQyZTYxYmEwNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWU3YTE1YzBmZjFmNjI5NDc0YjFhN2Q3MDgzZDA5MTI5MTQ0ZjhjMTFiMGVjYTNiODAzNDQ5MDU3MjVjZTc0NiJ9"
+        },
+        {
+          "resource": "repo://src/lib/tauri/sync-event-subscription.ts#L16-L26",
+          "version": "repo-lines-v1:sha256:c91c2c0c508eb5e9fe4ae602fb52c4a923aced36962ff3e3c3ca14ef1f6c8fd8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4NzE4ZjJjOTU4ZGIxYWJmNmNiYzU4YzEzMGQwMjliZThhYTcyM2FjYTZjOGZiMDM0Y2QxNjRkMTBhY2FmMGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc0MmE5NTI5ZTA0MTAyZGJkZDg5Y2U2OTg5NGViYzhiZmE4NTZlZTQ5MzA1MGY2NmUwY2FmNTgwNWYyZWJiZTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzMjYxNTUwNDc3YjBkZjU5YTdiNDM4OGEwMmExOGVmZDc0NDUyYmI2Y2Q3ZjczMWVlZTAzODZhZmNjM2I0NmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUwZGMyZTExODIyMDc0OTBlYzg4NWM3OGJiMGMxYzNkMTNhYTFhOWJmM2I1MjkxYmVhY2I1ZmQxNzJkOGVkMWUifQ"
+        },
+        {
+          "resource": "repo://src/lib/tauri/sync-event-subscription.ts#L41-L44",
+          "version": "repo-lines-v1:sha256:8852445be5983de5bc5ed5a323a3d8b99ae0764bff1cbc81e12d07f2f2a8724a:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjk2ZWFmZDEzYWUyMGUyMzY0ZTkyM2NjYmQwYWQ0ZDY4M2RkOWE2M2NmMjNmOTk4YmNkZjZkZmFlMjBlMjczYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDJhMmNiMjVhMTIyYjQ0MjIxYTYyMzRlYzY2MGE3YjVmYjdmOWJkZTdiM2I5ZTJiM2M1NTlhMGQ5NmZhYzczOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTgyODUxYzY4ZWUzYmQ5NDJkYTgyNTdjYzI2MzdkN2VlMzk0ODc5YjdhYTY5MGI1YTZiZjMwY2Q5MmFkMDU2MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjEsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSJ9"
+        },
+        {
+          "resource": "repo://src/routes/%2Bpage.svelte#L52-L73",
+          "version": "repo-lines-v1:sha256:02fef224ab9de2d5e5a920f60a9beabbd738a0d28a89f2677208ba2891b87874:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZjVmYTE1OTFmN2RiOTQ2YjVhMjQ4NmYwY2NjNTY2NmY4MDM5YThlMjJhNDc2NjQ1MDUzYzY3NjNjYmFkZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVkY2Q1YzAxZGY3YWRhZTg1MmY4ODhkNGQ5NWJlNGU1ODhhNWQzZWQzMmNmZmJiNmIwOGQ0M2RiODVjNjQxN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxOGZlZThlYTdkNWQ3MzNhNTc1MjA0NzRiMWQ4MTk0NWJiYmQ3OWE5NjRlZWMxZmUzMWRkZmUyM2QyOWU3MDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8da9dc0843ee416ba68a5b035207dd01",
+      "statement": "The sync controller uses a two-stage folder removal protocol: it first invokes `remove_folder` to obtain cancellation requirements, asks for confirmation, then reinvokes `remove_folder` with `confirmCancellation: true` only when confirmed.",
+      "evidence": [
+        {
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.test.ts#L107-L161",
+          "version": "repo-lines-v1:sha256:8fe0abaa7d57f8917204f7f72537db7e88ee97e1f5d64edb8834a61037f6298f:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1YzQ3YTE3MTI4OTIyZDdiNzRjMTYyYWQyMTQ0M2I5OGUzZjZmZDE5YTUzZjY3N2NlODE4MjdiYjc5NjhmZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc2ZmY4ZTJkZTU4ZjhkNTRkODE2M2FlODAxNjQ2ZTg3NjRmNThhZGNmMGRjMjAxYzZlMDEwY2EzNTllNzI0NjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYzZjQxYzYyOTI0NDRmOWFhYjZhM2QxYmNlMjUyNWEzMmYzZGI5MWM3NDhhMDhkMTIyOTdiYzNjYzFhOWU2OTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI5MTNmZGEyZjMzMTJiMTM2Yjc5Y2E2OWMwM2ZjNmVkODM1MzRlNjY5MTFmOGM3ODU3MTAwM2E0MDQ1YzdmNmYifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L292-L310",
+          "version": "repo-lines-v1:sha256:1146cd8e4b3fcedbd361b5fb3f01829924e4a1e2219d1f71ac59022434ee9624:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0N2I3OGIxODE5MzZjOWVjZjk4ZTI2ZmQ0ZDZmZjY0ZThkNWEyMTE2YWEyZDhiNTI3ODFlNDZmNzhhZWQxOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhOWI2MzE0ZDYyYWIzOGM2NzZlODVhODU5ZTI4MzQwYzQxZmJjOTQ3NTAwNmFjNThlYWFkMjA1M2VjYmRjODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkYmJiNzUwMDg1Y2E3NDdlZTNhZjg2MGY2OTY1NTc5N2NkMDllNGJhMTRjZjdhMzM3MmRkMDQ1MjQwYjE2MWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_88a4a1f3f2f0439f88bab6e8d522ece4",
+      "statement": "Preferences persist theme and locale locally while coordinating desktop settings separately: the controller obtains the locale catalog and upload parallelism through commands, persists locale updates through `update_locale`, delegates autostart to its plugin, and reverts the UI select on failed upload-parallelism writes.",
+      "evidence": [
+        {
+          "resource": "repo://src/lib/controllers/preferences-controller.svelte.ts#L129-L148",
+          "version": "repo-lines-v1:sha256:219500eb95025ea45957fed13da83e423f1f21434ab84d22ca066d3f38240604:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiODRhYTJiOWYxODhmYjNmNjIxZmQ5MzJjYjhjYjJlNzNkZDYxZjc1ZmUzYWZlZjJlM2MxZGFiMmZkNTk0N2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA4ODQ1YWY2NTkwODQwMjU0ZDU1N2MyYTY4MGM4NmI5Y2U0NDI3MmViYWI4YzY3NGZiMjc2OWYwNjU4Y2JlYWUifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/preferences-controller.svelte.ts#L14-L42",
+          "version": "repo-lines-v1:sha256:ddf2d1813c306a174d8c3aec568d4a040c73b21601e471b54d51fbf265ff6ae7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZmQxM2E4MDA3NWVkYmM5N2MyMDhiOWZlYzAyZGZjNDkwNTUzYWI3NjM3ZTNhNDFkY2U1NTcwOTM4ODBkM2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBhOTc0MDFjZTUyYWFmZWU0OWE4ZTEyZmE2NDgyY2RlZGUxMGY5YTZkMTA2OGMzMWUwOWFkZmY0OGZhYTMyZTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwNTlhNjU2OGUyZTA4NWI5MTI5ZDQ2YmNkYzBkMjhkMzYwNGI2OWI5MTBlZDhjMGUyYzc0ODEyODBlNGExMDQifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/preferences-controller.svelte.ts#L44-L127",
+          "version": "repo-lines-v1:sha256:06f39ecbd5ccf7f8694f916846cc2506ae08db052423067467f5acf86aa7f851:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3OWEwNmZjZGE3OWJmYjJjMWViN2JmMTYyZjdmMGI3YzM0MzA1NjllMzA5OTQ4OTAzZjllMmFmZjU1Y2ZiN2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ0YzZkZDY5MzdmMDc0NzY3YjVhNTU1MjgzZmU0ZWQ1MTJjZDVkZWYxZjM3MDdmYzZlNDE3MTBkY2UwYmI5ZmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhZjBlNjQ0Yjg2MTA1YTJiY2RkMjM3MzI5ZDdmOWFlYjYwNTgyM2U4OGZhYzhiZWQyY2U1NTVkZDdlNGY3MWQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ff3688f3f9ba4954a0614bdd3ffb2524",
+      "statement": "Update installation is guarded against active synchronization; when allowed, the update controller reports download/install progress, installs through the updater plugin, and relaunches through the process plugin.",
+      "evidence": [
+        {
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L66-L83",
+          "version": "repo-lines-v1:sha256:d3fbda45c3b3f81358c5b6863800bd8293f2e7f816b2411b866f70690f264549:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxZmQzNzg2ZWUxODY1NDQ0YWU3MDY1YTYxYzdkNDdiMDRlNjY4ZWQ4N2NhMjc4MWZmYWZhYTQzMzY1YzJmZDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVlNTNhY2UyMTNkNWFkMDQwNWZkMzQ1OWRiM2Y1YTNjOTg5NmUzYjFiOWU4YmVmMGMxZDNiODU0MjM4NTYyNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2ZTE4YzJmODhiMTg5M2Q0Mjk3NGE1ZDBiMjIyYjhmNmI2NjZkNzIxN2YyZTEyODE0NmVhY2FhYjY4MWRmODAifQ"
+        },
+        {
+          "resource": "repo://src/routes/%2Bpage.svelte#L50-L50",
+          "version": "repo-lines-v1:sha256:dae850de80e87ee5ae7dac018321898bc448ea43a05f8139309ad267c9c17af2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGFlODUwZGU4MGU4N2VlNWFlN2RhYzAxODMyMTg5OGJjNDQ4ZWE0M2EwNWY4MTM5MzA5YWQyNjdjOWMxN2FmMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGFlODUwZGU4MGU4N2VlNWFlN2RhYzAxODMyMTg5OGJjNDQ4ZWE0M2EwNWY4MTM5MzA5YWQyNjdjOWMxN2FmMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGU4NjBiNTk4MjkwNjFhMzliNGFiZDVlMWEwNzBhYzEzNjFjMGY5NWVkN2YyMGM1ZWEzOTNmOGU1NmFlZDdkMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGZhOTdiYzVjNGZkMjA5ODFlZDE1Njc2YmU1MGEwNjE1MzIzNTIyM2JlM2NmZDBlNjVjOTg1MjYzN2YyMjQ5MiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_2d4c100bfb224690ad23377f728e1801",
+      "statement": "InfoView preserves normal external link attributes but intercepts clicks to open the project and issue URLs with the Tauri opener plugin, logging opener failures without altering UI state.",
+      "evidence": [
+        {
+          "resource": "repo://src/lib/components/InfoView.svelte#L13-L20",
+          "version": "repo-lines-v1:sha256:bfe6ecaa217f7cd6b58d6a6469295c14d4570d9d94054fbd4154ff21b7508150:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGVhYmIwZGUyZDU1ZGFiODQ5ZTc2YzgzY2Y4MzYzOTZkMjk2ODIzYmUwNWMxODlkNGM3OGJkNTdkZGU4NzMxMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDc4M2IxMmU1NjliNjQxMGVhMWIyMTgyZWIxMjg4ZTUxZjg1YzU5N2I1ZjAxOWIxMGZjMTk4YjNlMTg2ZGRlZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjU4NDAyMjM2ZTJkYzlmMmNhZGYyMWIxOWNmYTM4NDA1MTNhYjM0MTM1YzVjMWVkZTE4OGVhYTQzMTQ3NzI2NiJ9"
+        },
+        {
+          "resource": "repo://src/lib/components/InfoView.svelte#L65-L93",
+          "version": "repo-lines-v1:sha256:fe79b817309e08159312f0e1ff127c3db57fd35fb88917d335ce906195db03bb:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyMjkwYjRkYzNjYjI1NTVkMWNkOTFmNzdkNmU1ODJiYjRlODYxYmYyNTkzOGU4ZWJiZWYwNjA2NGE3ODAzMDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyZjNjZmQxMWRhNjE1MDE5N2FjZWVkMDg0MDZhYzY0YjA1MDM0MGRlN2JjMDQxMjRhNGNiN2VmYTY3MTM0MGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBhZTA3OTdjOWQzMzRjODJiMTBkZWRjNWVlMTk3MTk2M2ZkMGZhNDA1OWY4ZTVlM2Y1MGE4ODA1ZmNjMjQwYmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg4OWNjMzM0ZTE4ZDU3YjlhZWZkNjhjMzVkZjg2ZmE5ODBjZWYwNTE5MDE0ZTk3MDdjOTg0MjM3NzliNmY4ODIifQ"
+        },
+        {
+          "resource": "repo://src/lib/components/components.test.ts#L479-L500",
+          "version": "repo-lines-v1:sha256:3a94fc3ad56b5afc4dfc0fc9b4bc6770d68efa2c2f2e949f90366d7c23d4022d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkZTUxYTU4ZThhZDJlODAzZWZhOWU4MWU3MWFhM2NlY2E1NDcxMjI2NjAzM2M5OTM0NmNjNjhjYjgwNjc0NmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NzlkMTE4ZDZlM2NiZjQ1MDUzOTc0OGRlZTdhNDMwN2FjYmU2NDQ2Y2JhMjk3ZjI3NjBmYTVkMGJiYTFiYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_521c7eec2c6e45e0b5ddffb53bec2000",
+      "statement": "Structured backend UI logs contain normalized level, fallback message, timestamp, and optional localization key/parameters; the sync controller retains the newest 50 entries, while ActivityLog translates keyed messages and falls back to the supplied message.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/events.rs#L4-L16",
+          "version": "repo-lines-v1:sha256:33300dc28b4cdf42eaa8ab4ccc4410c76d54fe1a0fd459156186ea9734ebf9ab:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyM2Q3Yzc1MDljOWNiNWFiNTk0ZjE5MDdiOTllZjMxNzAzMjM0OWIwYjcyODc2M2E2YmJiMzIwNDYxNTFjYjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJiYTljZjY4MDQyMWFmNjQ2M2MzMDNhODdhYTcwZTYyYThmMWExNDc5MDBhNzE4ZGY4YzYzOTg5YWM2NDg2OTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRiM2Q3NmY1MDI4NTZiNzFjNmIyNDc4NjZjYTAyM2Y4MWM4ODZlNjMyMDYwNjE0M2I4NDliNmMzMTQ2NTE0MzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OWIzYWZiYTVmNzBjMzVmMDljY2NjMmVkNTY0OTFhMTdjODI2YzJjNGNmYzBlMzRiMTU3N2ViZGFiY2MwMGYifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/app/events.rs#L99-L122",
+          "version": "repo-lines-v1:sha256:2523082e0d94688e05b726318b6b0dd54421acdb528da2a6411bc1e62cf0ecc8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkNGVhOTI3ZWM1MDAyMzEwNThjNGU3NjRkOTY3ZGU3MDY3YzZjYjI2ODI2OWI2MWRmNDNlZDE5ZmIwOGFjYTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA0YzI0MmY0YWI5NmMyNTFiMDRlMzI2ODE0OWFjODFmNjVhMDNiNGQ1NmI4MzljMjY4ZmYwYzg2MWVjN2Y1N2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY0MGIxZjIwN2I5ZmFkN2E5YzFiZWFlMzQ3MjE2M2I2Mzk1NTM5NjZkOGI2NDhkNTkwNmJjN2I5Yjk0NGIyYmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://src/lib/components/ActivityLog.svelte#L6-L12",
+          "version": "repo-lines-v1:sha256:7a601c70389c3bf16beb5d547615cfdb906f0826f36a101532ea8e21c8e8aa2d:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDEyNzUyNTU2ZDA0ODM5OTliYTNlNmI3OTQwNDk3ODlkMGY4ZTk2YThmNGU2NTRmZDIwODFkZjRjZTU3M2NjNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWFmYTRkY2ZkMzIyYmEyYjk4YjhmMjZmMTM5NTRkNGMwYTQ1YjM1ODc0NWUwMDk0ZGZkYmMzNWU5ZDNmNDZhOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzZkMGIzYThjNTQxZDJhZTY3MTViZjM0NTc4ZTcwN2UyODcwYjc1YmNiN2FlM2RkYzUyZWZiOWU4NTI3YWYwZiJ9"
+        },
+        {
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L79-L101",
+          "version": "repo-lines-v1:sha256:f6b5a9621fe6fccd894c5678e5d41783382a8490f8ff64331b86eb408f8149e2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmYzFhOGMwMGY2NzBiYTkzNjlmYjc3ZTNjYjIxNzRkODVkMzRjNGNlOTAxYWYyNzJmMDU1NWYxNjI5ZTNmZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg2N2Q5MmY0MzkyYzk2MmNmN2QyNjJmZGZiYTc2NTY3NmRiM2IwNmQyYWEwMjZhMjZjNmNmZGQ2MWQzZmFiNTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMwZDJhYmQzZmQ4MTNlZjEwNmFkZjE3MWFjNzRiNjVlMjQzOWZhMTA4YmFhM2VhM2QyYTJkYjg4ZDZlMmE4OTgifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-15T07:26:54.164Z"
+    "at": "2026-10-18T12:19:44.389Z"
   }
 }
