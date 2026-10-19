@@ -8,7 +8,7 @@
     watchedFolders: WatchedFolder[];
     onAddFolder: () => void;
     onRemoveFolder: (id: number) => void;
-    onUpdateFolderExclusionPatterns: (id: number, patterns: string[]) => void;
+    onUpdateFolderExclusionPatterns: (id: number, patterns: string[]) => Promise<void>;
     catalogue: TargetAlbumCatalogue;
   }
 
@@ -20,7 +20,7 @@
 
   function isValidPattern(pattern: string) {
     return pattern.length > 0
-      && !pattern.includes("\\\\")
+      && !pattern.includes("\\")
       && !pattern.startsWith("/")
       && !pattern.includes("..")
       && !/[?\[\]{}!]/.test(pattern);
@@ -48,13 +48,18 @@
     drafts[folder.id] = patternsFor(folder).filter((candidate) => candidate !== pattern);
   }
 
-  function savePatterns(folder: WatchedFolder) {
+  function excludesAllMedia(patterns: string[]) {
+    return patterns.some((pattern) => ["*", "*.*", "**", "**/*"].includes(pattern));
+  }
+
+  async function savePatterns(folder: WatchedFolder) {
     const patterns = patternsFor(folder);
     if (patterns.some((pattern) => !isValidPattern(pattern))) {
       validationErrors[folder.id] = $t('folder_exclusions_invalid_pattern');
       return;
     }
-    onUpdateFolderExclusionPatterns(folder.id, patterns);
+    await onUpdateFolderExclusionPatterns(folder.id, patterns);
+    delete drafts[folder.id];
   }
 
   $effect(() => {
@@ -121,7 +126,7 @@
                 <li class="flex items-center justify-between gap-2 rounded bg-slate-100 px-2 py-1 text-xs dark:bg-zinc-800"><code>{pattern}</code><button type="button" aria-label={`${$t('folder_exclusions_remove')}: ${pattern}`} onclick={() => removePattern(folder, pattern)}>×</button></li>
               {/each}
             </ul>
-            {#if patternsFor(folder).some((pattern) => pattern === '**' || pattern === '**/*')}
+            {#if excludesAllMedia(patternsFor(folder))}
               <p class="text-xs text-amber-600">{$t('folder_exclusions_all_warning')}</p>
             {/if}
             <button type="button" class="rounded bg-blue-600 px-2 py-1 text-xs text-white" onclick={() => savePatterns(folder)}>{$t('folder_exclusions_save')}</button>

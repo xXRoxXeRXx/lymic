@@ -270,6 +270,42 @@ describe("FolderList and ActivityLog", () => {
     expect(onUpdateFolderExclusionPatterns).toHaveBeenCalledWith(1, ["*.mp4"]);
   });
 
+  it("rejects a single backslash inline before saving exclusion patterns", async () => {
+    const onUpdateFolderExclusionPatterns = vi.fn();
+    render(FolderList, {
+      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
+    });
+
+    await fireEvent.click(screen.getByText("Exclusions"));
+    const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
+    await fireEvent.input(input, { target: { value: "Screenshots\\**" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Use a relative pattern");
+    expect(onUpdateFolderExclusionPatterns).not.toHaveBeenCalled();
+  });
+
+  it("clears a saved exclusion draft and warns for broad patterns", async () => {
+    const onUpdateFolderExclusionPatterns = vi.fn().mockResolvedValue(undefined);
+    const props = {
+      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
+    };
+    const { rerender } = render(FolderList, props);
+
+    await fireEvent.click(screen.getByText("Exclusions"));
+    const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
+    await fireEvent.input(input, { target: { value: "*.*" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByText("This rule set excludes all media in this Watched Folder.")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Save exclusions" }));
+    await vi.waitFor(() => expect(onUpdateFolderExclusionPatterns).toHaveBeenCalledWith(1, ["*.*"]));
+    rerender({ ...props, watchedFolders: [{ ...props.watchedFolders[0], exclusion_patterns: ["**/exports/**"] }] });
+    expect(screen.getByText("**/exports/**")).toBeInTheDocument();
+    expect(screen.queryByText("*.*")).not.toBeInTheDocument();
+  });
+
   it("loads the name when a folder is assigned an album created after mount", async () => {
     tauri.invoke
       .mockResolvedValueOnce([])
