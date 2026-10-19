@@ -324,6 +324,31 @@ pub async fn has_pending_sync_queue_items(pool: &SqlitePool) -> Result<bool, sql
     .await
 }
 
+/// Removes work that was still pending when the Watched Folder's exclusions changed.
+/// Work already materialized by the processor is deliberately outside this boundary.
+pub async fn discard_pending_sync_paths(
+    pool: &SqlitePool,
+    paths: &[String],
+) -> Result<SyncSnapshot, sqlx::Error> {
+    if paths.is_empty() {
+        return get_sync_snapshot(pool).await;
+    }
+
+    let mut tx = pool.begin().await?;
+    for path_batch in paths.chunks(500) {
+        let mut query = sqlx::QueryBuilder::new(
+            "DELETE FROM sync_queue WHERE job_id = 1 AND status = 'PENDING' AND local_path IN (",
+        );
+        let mut separated = query.separated(", ");
+        for path in path_batch {
+            separated.push_bind(path);
+        }
+        separated.push_unseparated(")");
+        query.build().execute(&mut *tx).await?;
+    }
+    update_counts_and_snapshot(tx, true, None).await
+}
+
 pub async fn set_sync_status(pool: &SqlitePool, status: &str) -> Result<SyncSnapshot, sqlx::Error> {
     sqlx::query("UPDATE sync_jobs SET status = ?, current_path = CASE WHEN ? = 'IDLE' THEN NULL ELSE current_path END WHERE id = 1")
         .bind(status).bind(status).execute(pool).await?;

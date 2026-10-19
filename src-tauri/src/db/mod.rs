@@ -17,10 +17,11 @@ pub use init::{init, DatabaseStatus};
 #[allow(unused_imports)]
 pub use queue::SINGLETON_SYNC_JOB_ID;
 pub use queue::{
-    complete_sync_job_if_finished, enqueue_upload_units, finalize_queued_block, get_sync_snapshot,
-    has_pending_sync_queue_items, next_queued_upload_units, recover_sync_job,
-    reset_failed_queue_items_for_folder, set_sync_status, update_sync_queue_failure,
-    update_sync_queue_remote_id, QueueUploadAsset, QueueUploadUnit, QueuedUploadUnit, SyncSnapshot,
+    complete_sync_job_if_finished, discard_pending_sync_paths, enqueue_upload_units,
+    finalize_queued_block, get_sync_snapshot, has_pending_sync_queue_items,
+    next_queued_upload_units, recover_sync_job, reset_failed_queue_items_for_folder,
+    set_sync_status, update_sync_queue_failure, update_sync_queue_remote_id, QueueUploadAsset,
+    QueueUploadUnit, QueuedUploadUnit, SyncSnapshot,
 };
 
 /// Builds a SQL WHERE predicate condition matching a path column against a root prefix or any of its descendants.

@@ -171,6 +171,20 @@ pub(crate) fn matches_exclusion_pattern(pattern: &str, relative_path: &Path) -> 
     matches(&pattern_segments, &path_segments)
 }
 
+pub(crate) fn path_matches_watched_folder_exclusion(
+    path: &Path,
+    folders: &[crate::db::WatchedFolder],
+) -> bool {
+    folders.iter().any(|folder| {
+        path.strip_prefix(&folder.path).ok().is_some_and(|relative| {
+            folder
+                .exclusion_patterns
+                .iter()
+                .any(|pattern| matches_exclusion_pattern(pattern, relative))
+        })
+    })
+}
+
 fn scan_folder_for_media_with_patterns(path: &Path, exclusion_patterns: &[String]) -> ScanResult {
     let mut result = ScanResult::default();
     for entry in walkdir::WalkDir::new(path)
@@ -326,11 +340,18 @@ pub(crate) async fn scan_paths_for_media(paths: Vec<PathBuf>) -> Result<ScanResu
     .map_err(|e| format!("Media path scan task failed: {}", e))
 }
 
-pub(crate) async fn prepare_failed_sync_retry(paths: Vec<String>) -> Result<ScanResult, String> {
+pub(crate) async fn prepare_failed_sync_retry(
+    paths: Vec<String>,
+    folders: Vec<crate::db::WatchedFolder>,
+) -> Result<ScanResult, String> {
     tokio::task::spawn_blocking(move || {
         let mut result = ScanResult::default();
         for path in paths {
             let path_buf = PathBuf::from(&path);
+            if path_matches_watched_folder_exclusion(&path_buf, &folders) {
+                result.discarded_paths.push(path);
+                continue;
+            }
             if !is_media_file(&path_buf) {
                 result.failures.push(FileFailure {
                     path,
@@ -426,6 +447,38 @@ mod tests {
         assert_eq!(result.files.len(), 1);
         assert_eq!(result.files[0].path, media_path.to_string_lossy());
         assert!(result.failures.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn failed_retry_skips_media_matching_current_folder_exclusion_patterns() {
+        let root = temporary_directory();
+        let excluded = root.join("Screenshots").join("private.jpg");
+        let included = root.join("Trips").join("keep.jpg");
+        std::fs::create_dir_all(excluded.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(included.parent().unwrap()).unwrap();
+        std::fs::write(&excluded, b"excluded image").unwrap();
+        std::fs::write(&included, b"included image").unwrap();
+
+        let result = prepare_failed_sync_retry(
+            vec![
+                excluded.to_string_lossy().to_string(),
+                included.to_string_lossy().to_string(),
+            ],
+            vec![crate::db::WatchedFolder {
+                id: 1,
+                path: root.to_string_lossy().to_string(),
+                recursive: true,
+                target_album_id: None,
+                exclusion_patterns: vec!["screenshots/**".to_string()],
+            }],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.files.len(), 1);
+        assert_eq!(result.files[0].path, included.to_string_lossy());
+        assert_eq!(result.discarded_paths, vec![excluded.to_string_lossy()]);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -539,12 +592,15 @@ mod tests {
         std::fs::write(&media_path, b"test image").unwrap();
         std::fs::write(&unsupported_path, b"not media").unwrap();
         std::fs::create_dir_all(&directory_path).unwrap();
-        let result = prepare_failed_sync_retry(vec![
-            media_path.to_string_lossy().to_string(),
-            unsupported_path.to_string_lossy().to_string(),
-            directory_path.to_string_lossy().to_string(),
-            missing_path.to_string_lossy().to_string(),
-        ])
+        let result = prepare_failed_sync_retry(
+            vec![
+                media_path.to_string_lossy().to_string(),
+                unsupported_path.to_string_lossy().to_string(),
+                directory_path.to_string_lossy().to_string(),
+                missing_path.to_string_lossy().to_string(),
+            ],
+            vec![],
+        )
         .await
         .unwrap();
         assert_eq!(result.files.len(), 1);
