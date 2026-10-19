@@ -215,7 +215,10 @@ impl<'a> Synchronization<'a> {
                 .into_iter()
                 .map(|entry| entry.local_path)
                 .collect();
-            let scan_result = crate::sync::prepare_failed_sync_retry(failed_paths).await?;
+            let folders = db::get_folders(self.pool)
+                .await
+                .map_err(|error| error.to_string())?;
+            let scan_result = crate::sync::prepare_failed_sync_retry(failed_paths, folders).await?;
             db::discard_failed_sync_paths(self.pool, &scan_result.discarded_paths)
                 .await
                 .map_err(|error| error.to_string())?;
