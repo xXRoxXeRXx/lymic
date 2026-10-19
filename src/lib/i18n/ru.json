@@ -184,5 +184,7 @@
   "folder_exclusions_remove": "Remove exclusion",
   "folder_exclusions_invalid_pattern": "Use a relative pattern with names, * and ** only.",
   "folder_exclusions_all_warning": "This rule set excludes all media in this Watched Folder.",
-  "folder_exclusions_save": "Save exclusions"
+  "folder_exclusions_save": "Save exclusions",
+  "folder_exclusions_close": "Close exclusion settings",
+  "folder_exclusions_cancel": "Cancel"
 }

@@ -184,5 +184,7 @@
   "folder_exclusions_remove": "Ausschluss entfernen",
   "folder_exclusions_invalid_pattern": "Verwende nur ein relatives Muster mit Namen, * und **.",
   "folder_exclusions_all_warning": "Diese Regeln schließen alle Medien in diesem überwachten Ordner aus.",
-  "folder_exclusions_save": "Ausschlüsse speichern"
+  "folder_exclusions_save": "Ausschlüsse speichern",
+  "folder_exclusions_close": "Ausschluss-Einstellungen schließen",
+  "folder_exclusions_cancel": "Abbrechen"
 }

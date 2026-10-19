@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { Album, Folder, FolderPlus, Trash2 } from "lucide-svelte";
+  import { Album, Folder, FolderPlus, Settings, Trash2 } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { WatchedFolder } from "./types";
+  import ExclusionPatternsModal from "./ExclusionPatternsModal.svelte";
 
   interface Props {
     watchedFolders: WatchedFolder[];
@@ -14,53 +15,7 @@
 
   let { watchedFolders, onAddFolder, onRemoveFolder, onUpdateFolderExclusionPatterns, catalogue }: Props = $props();
   let targetAlbumIds = new Set<string>();
-  let drafts = $state<Record<number, string[]>>({});
-  let newPatterns = $state<Record<number, string>>({});
-  let validationErrors = $state<Record<number, string>>({});
-
-  function isValidPattern(pattern: string) {
-    return pattern.length > 0
-      && !pattern.includes("\\")
-      && !pattern.startsWith("/")
-      && !pattern.includes("..")
-      && !/[?\[\]{}!]/.test(pattern);
-  }
-
-  function patternsFor(folder: WatchedFolder) {
-    return drafts[folder.id] ?? folder.exclusion_patterns ?? [];
-  }
-
-  function addPattern(folder: WatchedFolder) {
-    const pattern = (newPatterns[folder.id] ?? "").trim();
-    if (!isValidPattern(pattern)) {
-      validationErrors[folder.id] = $t('folder_exclusions_invalid_pattern');
-      return;
-    }
-    const patterns = patternsFor(folder);
-    if (!patterns.some((existing) => existing.toLowerCase() === pattern.toLowerCase())) {
-      drafts[folder.id] = [...patterns, pattern];
-    }
-    newPatterns[folder.id] = "";
-    validationErrors[folder.id] = "";
-  }
-
-  function removePattern(folder: WatchedFolder, pattern: string) {
-    drafts[folder.id] = patternsFor(folder).filter((candidate) => candidate !== pattern);
-  }
-
-  function excludesAllMedia(patterns: string[]) {
-    return patterns.some((pattern) => ["*", "*.*", "**", "**/*"].includes(pattern));
-  }
-
-  async function savePatterns(folder: WatchedFolder) {
-    const patterns = patternsFor(folder);
-    if (patterns.some((pattern) => !isValidPattern(pattern))) {
-      validationErrors[folder.id] = $t('folder_exclusions_invalid_pattern');
-      return;
-    }
-    await onUpdateFolderExclusionPatterns(folder.id, patterns);
-    delete drafts[folder.id];
-  }
+  let selectedFolder = $state<WatchedFolder | null>(null);
 
   $effect(() => {
     const nextTargetAlbumIds = new Set(
@@ -110,28 +65,7 @@
             {/if}
           </div>
         </div>
-        <details class="shrink-0">
-          <summary class="cursor-pointer text-xs text-blue-600 dark:text-sky-400">{$t('folder_exclusions')}</summary>
-          <div class="mt-2 w-64 space-y-2">
-            <label class="block text-xs text-slate-500" for={`exclusion-${folder.id}`}>{$t('folder_exclusions_help')}</label>
-            <div class="flex gap-1">
-              <input id={`exclusion-${folder.id}`} class="min-w-0 flex-1 rounded border p-2 text-xs" placeholder={$t('folder_exclusions_example')} value={newPatterns[folder.id] ?? ""} oninput={(event) => { newPatterns[folder.id] = event.currentTarget.value; validationErrors[folder.id] = ""; }} />
-              <button type="button" class="rounded border px-2 text-xs" onclick={() => addPattern(folder)}>{$t('folder_exclusions_add')}</button>
-            </div>
-            {#if validationErrors[folder.id]}
-              <p class="text-xs text-red-600" role="alert">{validationErrors[folder.id]}</p>
-            {/if}
-            <ul class="space-y-1">
-              {#each patternsFor(folder) as pattern}
-                <li class="flex items-center justify-between gap-2 rounded bg-slate-100 px-2 py-1 text-xs dark:bg-zinc-800"><code>{pattern}</code><button type="button" aria-label={`${$t('folder_exclusions_remove')}: ${pattern}`} onclick={() => removePattern(folder, pattern)}>×</button></li>
-              {/each}
-            </ul>
-            {#if excludesAllMedia(patternsFor(folder))}
-              <p class="text-xs text-amber-600">{$t('folder_exclusions_all_warning')}</p>
-            {/if}
-            <button type="button" class="rounded bg-blue-600 px-2 py-1 text-xs text-white" onclick={() => savePatterns(folder)}>{$t('folder_exclusions_save')}</button>
-          </div>
-        </details>
+        <button class="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 shrink-0 cursor-pointer" aria-label={`${$t('folder_exclusions')}: ${folder.path}`} onclick={() => selectedFolder = folder}><Settings class="w-4 h-4" /></button>
         <button
           class="rounded-lg border border-red-200 bg-red-50 p-2 text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/60 shrink-0 cursor-pointer"
           aria-label={`${$t('remove_folder')}: ${folder.path}`}
@@ -148,3 +82,5 @@
     {/if}
   </div>
 </div>
+
+<ExclusionPatternsModal folder={selectedFolder} onSave={onUpdateFolderExclusionPatterns} onClose={() => selectedFolder = null} />

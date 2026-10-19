@@ -257,7 +257,7 @@ describe("FolderList and ActivityLog", () => {
       onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
     });
 
-    await fireEvent.click(screen.getByText("Exclusions"));
+    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
     const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
     await fireEvent.input(input, { target: { value: "*.{jpg,png}" } });
     await fireEvent.click(screen.getByRole("button", { name: "Add" }));
@@ -277,7 +277,7 @@ describe("FolderList and ActivityLog", () => {
       onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
     });
 
-    await fireEvent.click(screen.getByText("Exclusions"));
+    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
     const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
     await fireEvent.input(input, { target: { value: "Screenshots\\**" } });
     await fireEvent.click(screen.getByRole("button", { name: "Add" }));
@@ -294,7 +294,7 @@ describe("FolderList and ActivityLog", () => {
     };
     const { rerender } = render(FolderList, props);
 
-    await fireEvent.click(screen.getByText("Exclusions"));
+    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
     const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
     await fireEvent.input(input, { target: { value: "*.*" } });
     await fireEvent.click(screen.getByRole("button", { name: "Add" }));
