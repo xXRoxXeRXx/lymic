@@ -3,9 +3,11 @@
   import { toBcp47Locale } from "../i18n";
   import FailedSyncsModal from "./FailedSyncsModal.svelte";
   import FolderList from "./FolderList.svelte";
+  import ExclusionPatternsModal from "./ExclusionPatternsModal.svelte";
   import TargetAlbumModal from "./TargetAlbumModal.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { DashboardViewState } from "../controllers/sync-controller.svelte";
+  import type { WatchedFolder } from "./types";
 
   interface Props {
     dashboard: DashboardViewState;
@@ -14,6 +16,7 @@
   }
 
   let { dashboard, catalogue }: Props = $props();
+  let exclusionSettingsFolder = $state<WatchedFolder | null>(null);
 
   const transferredBytes = $derived(dashboard.transferredBytes);
   const transferRateBytesPerSecond = $derived(dashboard.transferRateBytesPerSecond);
@@ -91,7 +94,7 @@
   </section>
 
   <!-- Bottom: Folder List -->
-  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} onUpdateFolderExclusionPatterns={dashboard.onUpdateFolderExclusionPatterns} {catalogue} />
+  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} onUpdateFolderExclusionPatterns={dashboard.onUpdateFolderExclusionPatterns} onOpenExclusionSettings={(folder) => exclusionSettingsFolder = folder} {catalogue} />
 </div>
 
 <TargetAlbumModal
@@ -101,3 +104,5 @@
   onCancel={dashboard.onCancelAddFolder}
   {catalogue}
 />
+
+<ExclusionPatternsModal folder={exclusionSettingsFolder} onSave={dashboard.onUpdateFolderExclusionPatterns} onClose={() => exclusionSettingsFolder = null} />

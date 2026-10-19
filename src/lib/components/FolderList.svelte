@@ -3,19 +3,18 @@
   import { t } from "svelte-i18n";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { WatchedFolder } from "./types";
-  import ExclusionPatternsModal from "./ExclusionPatternsModal.svelte";
 
   interface Props {
     watchedFolders: WatchedFolder[];
     onAddFolder: () => void;
     onRemoveFolder: (id: number) => void;
     onUpdateFolderExclusionPatterns: (id: number, patterns: string[]) => Promise<void>;
+    onOpenExclusionSettings?: (folder: WatchedFolder) => void;
     catalogue: TargetAlbumCatalogue;
   }
 
-  let { watchedFolders, onAddFolder, onRemoveFolder, onUpdateFolderExclusionPatterns, catalogue }: Props = $props();
+  let { watchedFolders, onAddFolder, onRemoveFolder, onOpenExclusionSettings = () => {}, catalogue }: Props = $props();
   let targetAlbumIds = new Set<string>();
-  let selectedFolder = $state<WatchedFolder | null>(null);
 
   $effect(() => {
     const nextTargetAlbumIds = new Set(
@@ -65,14 +64,16 @@
             {/if}
           </div>
         </div>
-        <button class="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 shrink-0 cursor-pointer" aria-label={`${$t('folder_exclusions')}: ${folder.path}`} onclick={() => selectedFolder = folder}><Settings class="w-4 h-4" /></button>
-        <button
-          class="rounded-lg border border-red-200 bg-red-50 p-2 text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/60 shrink-0 cursor-pointer"
-          aria-label={`${$t('remove_folder')}: ${folder.path}`}
-          onclick={() => onRemoveFolder(folder.id)}
-        >
-          <Trash2 class="w-4 h-4" />
-        </button>
+        <div class="flex items-center gap-2 shrink-0">
+          <button class="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 cursor-pointer" aria-label={`${$t('folder_exclusions')}: ${folder.path}`} onclick={() => onOpenExclusionSettings(folder)}><Settings class="w-4 h-4" /></button>
+          <button
+            class="rounded-lg border border-red-200 bg-red-50 p-2 text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/60 cursor-pointer"
+            aria-label={`${$t('remove_folder')}: ${folder.path}`}
+            onclick={() => onRemoveFolder(folder.id)}
+          >
+            <Trash2 class="w-4 h-4" />
+          </button>
+        </div>
       </div>
     {/each}
     {#if watchedFolders.length === 0}
@@ -82,5 +83,3 @@
     {/if}
   </div>
 </div>
-
-<ExclusionPatternsModal folder={selectedFolder} onSave={onUpdateFolderExclusionPatterns} onClose={() => selectedFolder = null} />
