@@ -14,11 +14,47 @@
 
   let { watchedFolders, onAddFolder, onRemoveFolder, onUpdateFolderExclusionPatterns, catalogue }: Props = $props();
   let targetAlbumIds = new Set<string>();
+  let drafts = $state<Record<number, string[]>>({});
+  let newPatterns = $state<Record<number, string>>({});
+  let validationErrors = $state<Record<number, string>>({});
 
-  function savePatterns(folderId: number, event: MouseEvent) {
-    const target = event.currentTarget as HTMLButtonElement;
-    const value = target.parentElement?.querySelector("textarea")?.value ?? "";
-    onUpdateFolderExclusionPatterns(folderId, value.split("\n"));
+  function isValidPattern(pattern: string) {
+    return pattern.length > 0
+      && !pattern.includes("\\\\")
+      && !pattern.startsWith("/")
+      && !pattern.includes("..")
+      && !/[?\[\]{}!]/.test(pattern);
+  }
+
+  function patternsFor(folder: WatchedFolder) {
+    return drafts[folder.id] ?? folder.exclusion_patterns ?? [];
+  }
+
+  function addPattern(folder: WatchedFolder) {
+    const pattern = (newPatterns[folder.id] ?? "").trim();
+    if (!isValidPattern(pattern)) {
+      validationErrors[folder.id] = $t('folder_exclusions_invalid_pattern');
+      return;
+    }
+    const patterns = patternsFor(folder);
+    if (!patterns.some((existing) => existing.toLowerCase() === pattern.toLowerCase())) {
+      drafts[folder.id] = [...patterns, pattern];
+    }
+    newPatterns[folder.id] = "";
+    validationErrors[folder.id] = "";
+  }
+
+  function removePattern(folder: WatchedFolder, pattern: string) {
+    drafts[folder.id] = patternsFor(folder).filter((candidate) => candidate !== pattern);
+  }
+
+  function savePatterns(folder: WatchedFolder) {
+    const patterns = patternsFor(folder);
+    if (patterns.some((pattern) => !isValidPattern(pattern))) {
+      validationErrors[folder.id] = $t('folder_exclusions_invalid_pattern');
+      return;
+    }
+    onUpdateFolderExclusionPatterns(folder.id, patterns);
   }
 
   $effect(() => {
@@ -70,12 +106,25 @@
           </div>
         </div>
         <details class="shrink-0">
-          <summary class="cursor-pointer text-xs text-blue-600 dark:text-sky-400">Exclusions</summary>
+          <summary class="cursor-pointer text-xs text-blue-600 dark:text-sky-400">{$t('folder_exclusions')}</summary>
           <div class="mt-2 w-64 space-y-2">
-            <label class="block text-xs text-slate-500" for={`exclusions-${folder.id}`}>One relative glob per line. Use * within a folder and ** across folders.</label>
-            <textarea id={`exclusions-${folder.id}`} class="w-full rounded border p-2 text-xs" value={(folder.exclusion_patterns ?? []).join("\n")}></textarea>
-            <p class="text-xs text-amber-600">A pattern like ** excludes all media in this Watched Folder.</p>
-            <button type="button" class="rounded bg-blue-600 px-2 py-1 text-xs text-white" onclick={(event) => savePatterns(folder.id, event)}>Save exclusions</button>
+            <label class="block text-xs text-slate-500" for={`exclusion-${folder.id}`}>{$t('folder_exclusions_help')}</label>
+            <div class="flex gap-1">
+              <input id={`exclusion-${folder.id}`} class="min-w-0 flex-1 rounded border p-2 text-xs" placeholder={$t('folder_exclusions_example')} value={newPatterns[folder.id] ?? ""} oninput={(event) => { newPatterns[folder.id] = event.currentTarget.value; validationErrors[folder.id] = ""; }} />
+              <button type="button" class="rounded border px-2 text-xs" onclick={() => addPattern(folder)}>{$t('folder_exclusions_add')}</button>
+            </div>
+            {#if validationErrors[folder.id]}
+              <p class="text-xs text-red-600" role="alert">{validationErrors[folder.id]}</p>
+            {/if}
+            <ul class="space-y-1">
+              {#each patternsFor(folder) as pattern}
+                <li class="flex items-center justify-between gap-2 rounded bg-slate-100 px-2 py-1 text-xs dark:bg-zinc-800"><code>{pattern}</code><button type="button" aria-label={`${$t('folder_exclusions_remove')}: ${pattern}`} onclick={() => removePattern(folder, pattern)}>×</button></li>
+              {/each}
+            </ul>
+            {#if patternsFor(folder).some((pattern) => pattern === '**' || pattern === '**/*')}
+              <p class="text-xs text-amber-600">{$t('folder_exclusions_all_warning')}</p>
+            {/if}
+            <button type="button" class="rounded bg-blue-600 px-2 py-1 text-xs text-white" onclick={() => savePatterns(folder)}>{$t('folder_exclusions_save')}</button>
           </div>
         </details>
         <button

@@ -1,45 +1,18 @@
 use super::extensions::{is_media_file, live_photo_sibling_paths};
 use super::model::{Asset, FileFailure, ScanResult};
 use super::scanner::{
-    matches_exclusion_pattern, scan_paths_for_media, scan_watched_folders_for_media,
+    scan_paths_for_media, scan_watched_folders_for_media,
+    upload_unit_matches_watched_folder_exclusion, watched_folder_for_path,
 };
 use crate::app::events::log_to_ui_keyed;
 use crate::db::WatchedFolder;
 use std::collections::HashMap;
 use std::path::Path;
 
-fn watched_folder_for_path<'a>(
-    folders: &'a [WatchedFolder],
-    path: &Path,
-) -> Option<&'a WatchedFolder> {
-    folders
-        .iter()
-        .filter(|folder| path.strip_prefix(&folder.path).is_ok())
-        .max_by_key(|folder| Path::new(&folder.path).components().count())
-}
-
-fn is_excluded_by_watched_folder(folders: &[WatchedFolder], path: &Path) -> bool {
-    watched_folder_for_path(folders, path).is_some_and(|folder| {
-        path.strip_prefix(&folder.path).is_ok_and(|relative_path| {
-            folder
-                .exclusion_patterns
-                .iter()
-                .any(|pattern| matches_exclusion_pattern(pattern, relative_path))
-        })
-    })
-}
-
-fn belongs_to_excluded_live_photo_unit(folders: &[WatchedFolder], path: &Path) -> bool {
-    is_excluded_by_watched_folder(folders, path)
-        || live_photo_sibling_paths(path)
-            .into_iter()
-            .any(|sibling| is_excluded_by_watched_folder(folders, &sibling))
-}
-
 fn remove_excluded_assets(scan_result: &mut ScanResult, folders: &[WatchedFolder]) {
-    scan_result
-        .files
-        .retain(|asset| !belongs_to_excluded_live_photo_unit(folders, Path::new(&asset.path)));
+    scan_result.files.retain(|asset| {
+        !upload_unit_matches_watched_folder_exclusion(Path::new(&asset.path), folders)
+    });
 }
 
 pub(crate) async fn add_event_paths(

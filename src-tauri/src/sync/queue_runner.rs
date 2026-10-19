@@ -31,7 +31,7 @@ fn excluded_paths_at_queue_boundary(
             std::iter::once(&unit.image)
                 .chain(unit.live_photo_video.iter())
                 .any(|asset| {
-                    crate::media::scanner::path_matches_watched_folder_exclusion(
+                    crate::media::scanner::upload_unit_matches_watched_folder_exclusion(
                         Path::new(&asset.local_path),
                         folders,
                     )

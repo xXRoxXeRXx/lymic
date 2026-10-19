@@ -176,5 +176,13 @@
   "removable_card_detected_title": "Обнаружена SD-карта",
   "removable_card_detected_body": "Карта {name} ({path}) готова к синхронизации.",
   "removable_prompt_sync": "Синхронизировать карту",
-  "removable_prompt_dismiss": "Отклонить"
+  "removable_prompt_dismiss": "Отклонить",
+  "folder_exclusions": "Exclusions",
+  "folder_exclusions_help": "Add a relative pattern. Use * within a segment and ** across folders.",
+  "folder_exclusions_example": "e.g. **/exports/** or *.mp4",
+  "folder_exclusions_add": "Add",
+  "folder_exclusions_remove": "Remove exclusion",
+  "folder_exclusions_invalid_pattern": "Use a relative pattern with names, * and ** only.",
+  "folder_exclusions_all_warning": "This rule set excludes all media in this Watched Folder.",
+  "folder_exclusions_save": "Save exclusions"
 }

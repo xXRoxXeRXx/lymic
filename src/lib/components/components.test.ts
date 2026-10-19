@@ -250,6 +250,26 @@ describe("FolderList and ActivityLog", () => {
     expect(onRemoveFolder).toHaveBeenCalledWith(1);
   });
 
+  it("edits exclusion patterns as a validated list", async () => {
+    const onUpdateFolderExclusionPatterns = vi.fn();
+    render(FolderList, {
+      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
+    });
+
+    await fireEvent.click(screen.getByText("Exclusions"));
+    const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
+    await fireEvent.input(input, { target: { value: "*.{jpg,png}" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Use a relative pattern");
+
+    await fireEvent.input(input, { target: { value: "*.mp4" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByText("*.mp4")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Save exclusions" }));
+    expect(onUpdateFolderExclusionPatterns).toHaveBeenCalledWith(1, ["*.mp4"]);
+  });
+
   it("loads the name when a folder is assigned an album created after mount", async () => {
     tauri.invoke
       .mockResolvedValueOnce([])

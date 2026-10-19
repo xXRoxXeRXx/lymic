@@ -1,7 +1,7 @@
 use crate::immich::AlbumId;
 use sqlx::{Row, SqlitePool};
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct WatchedFolder {
     pub id: i64,
     pub path: String,
