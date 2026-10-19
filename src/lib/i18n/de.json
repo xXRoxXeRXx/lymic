@@ -176,5 +176,15 @@
   "removable_card_detected_title": "SD-Karte erkannt",
   "removable_card_detected_body": "Karte {name} ({path}) ist bereit zur Synchronisierung.",
   "removable_prompt_sync": "Karte synchronisieren",
-  "removable_prompt_dismiss": "Verwerfen"
+  "removable_prompt_dismiss": "Verwerfen",
+  "folder_exclusions": "Ausschlüsse",
+  "folder_exclusions_help": "Füge ein relatives Muster hinzu. Verwende * innerhalb eines Segments und ** über Ordner hinweg.",
+  "folder_exclusions_example": "z. B. **/exports/** oder *.mp4",
+  "folder_exclusions_add": "Hinzufügen",
+  "folder_exclusions_remove": "Ausschluss entfernen",
+  "folder_exclusions_invalid_pattern": "Verwende nur ein relatives Muster mit Namen, * und **.",
+  "folder_exclusions_all_warning": "Diese Regeln schließen alle Medien in diesem überwachten Ordner aus.",
+  "folder_exclusions_save": "Ausschlüsse speichern",
+  "folder_exclusions_close": "Ausschluss-Einstellungen schließen",
+  "folder_exclusions_cancel": "Abbrechen"
 }

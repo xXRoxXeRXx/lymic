@@ -26,6 +26,7 @@ describe("tauriDesktopAdapter", () => {
     await adapter.addFolder("C:/Photos", "album-1");
     await adapter.acceptRemovableMediaFolder("volume-1", "E:/DCIM", null);
     await adapter.getFolders();
+    await adapter.updateFolderExclusionPatterns(7, ["Screenshots/**"]);
     await adapter.removeFolder(7);
     await adapter.removeFolder(7, true);
     await adapter.getAuthStatus();
@@ -58,6 +59,7 @@ describe("tauriDesktopAdapter", () => {
       ["add_folder", { path: "C:/Photos", targetAlbumId: "album-1" }],
       ["accept_removable_media_folder", { volumeId: "volume-1", path: "E:/DCIM", targetAlbumId: null }],
       ["get_folders"],
+      ["update_folder_exclusion_patterns", { id: 7, exclusionPatterns: ["Screenshots/**"] }],
       ["remove_folder", { id: 7 }],
       ["remove_folder", { id: 7, confirmCancellation: true }],
       ["get_auth_status"],

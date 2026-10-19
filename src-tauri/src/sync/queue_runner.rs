@@ -15,10 +15,35 @@ use crate::{
     },
 };
 use serde_json::json;
+use std::path::Path;
 use std::sync::{atomic::Ordering, Arc};
 use tauri::{Emitter, Manager};
 
 const SYNC_QUEUE_BLOCK_SIZE: i64 = 50;
+
+fn excluded_paths_at_queue_boundary(
+    queued: &[db::QueuedUploadUnit],
+    folders: &[db::WatchedFolder],
+) -> Vec<String> {
+    queued
+        .iter()
+        .filter(|unit| {
+            std::iter::once(&unit.image)
+                .chain(unit.live_photo_video.iter())
+                .any(|asset| {
+                    crate::media::scanner::upload_unit_matches_watched_folder_exclusion(
+                        Path::new(&asset.local_path),
+                        folders,
+                    )
+                })
+        })
+        .flat_map(|unit| {
+            std::iter::once(&unit.image.local_path)
+                .chain(unit.live_photo_video.iter().map(|asset| &asset.local_path))
+        })
+        .cloned()
+        .collect()
+}
 
 pub(crate) async fn run_sync_pipeline(
     app: tauri::AppHandle,
@@ -198,6 +223,23 @@ pub(crate) async fn run_sync_pipeline(
             audit_event(&app, audit_context.event("sync.completed", if totals.failed == 0 { audit::Outcome::Success } else { audit::Outcome::Failure }, if totals.failed == 0 { audit::Severity::Info } else { audit::Severity::Warn }, "Synchronization completed", json!({ "processed": totals.processed, "uploaded": totals.uploaded, "failed": totals.failed })));
             return Ok(totals);
         }
+        let folders = db::get_folders(&pool)
+            .await
+            .map_err(|error| format!("Could not load watched folders: {error}"))?;
+        let excluded_paths = excluded_paths_at_queue_boundary(&queued, &folders);
+        if !excluded_paths.is_empty() {
+            let snapshot = db::discard_pending_sync_paths(&pool, &excluded_paths)
+                .await
+                .map_err(|error| format!("Could not discard excluded queue entries: {error}"))?;
+            crate::app::tray::update_sync_action(&app, &snapshot);
+            progress.sync_from_snapshot(
+                snapshot.total_bytes.max(0) as u64,
+                snapshot.completed_bytes.max(0) as u64,
+            );
+            emit_transfer_stats(&app, &transfer_stats);
+            let _ = app.emit("sync-progress-snapshot", &snapshot);
+            continue;
+        }
         let block = queued
             .into_iter()
             .map(db::QueuedUploadUnit::into_upload_unit)
@@ -373,5 +415,52 @@ mod tests {
             .unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].image.local_path, "third.jpg");
+    }
+
+    #[tokio::test]
+    async fn queue_boundary_discards_pending_upload_units_matching_current_exclusions() {
+        let pool = test_pool().await;
+        let root = std::env::temp_dir().join(format!("lymic-queue-test-{}", uuid::Uuid::new_v4()));
+        let excluded = root.join("Screenshots/private.jpg");
+        let included = root.join("Trips/keep.jpg");
+        let folders = vec![db::WatchedFolder {
+            id: 1,
+            path: root.to_string_lossy().to_string(),
+            recursive: true,
+            target_album_id: None,
+            exclusion_patterns: vec!["screenshots/**".to_string()],
+        }];
+        let units = [excluded, included]
+            .into_iter()
+            .map(|path| db::QueueUploadUnit {
+                image: db::QueueUploadAsset {
+                    path: path.to_string_lossy().to_string(),
+                    size: 1,
+                    mtime: 1,
+                    target_album_id: None,
+                },
+                live_photo_video: None,
+            })
+            .collect::<Vec<_>>();
+        db::enqueue_upload_units(&pool, &units, &[]).await.unwrap();
+
+        let queued = db::next_queued_upload_units(&pool, SYNC_QUEUE_BLOCK_SIZE)
+            .await
+            .unwrap();
+        let excluded_paths = excluded_paths_at_queue_boundary(&queued, &folders);
+        db::discard_pending_sync_paths(&pool, &excluded_paths)
+            .await
+            .unwrap();
+
+        let remaining = db::next_queued_upload_units(&pool, SYNC_QUEUE_BLOCK_SIZE)
+            .await
+            .unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert!(remaining[0].image.local_path.ends_with("Trips/keep.jpg"));
+        let snapshot = db::get_sync_snapshot(&pool).await.unwrap();
+        assert_eq!(
+            (snapshot.total, snapshot.succeeded, snapshot.failed),
+            (1, 0, 0)
+        );
     }
 }

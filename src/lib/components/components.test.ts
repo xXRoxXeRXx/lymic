@@ -177,7 +177,7 @@ describe("DashboardView", () => {
       transferredBytes: 0, transferRateBytesPerSecond: null, estimatedSecondsRemaining: null,
       watchedFolders: [], failedSyncs: [], logs: [], isSyncActionPending: false,
       isTargetAlbumModalOpen: false, pendingFolderPath: null,
-      onSyncAction: vi.fn(), onRetryFailedSyncs: vi.fn(), onAddFolder: vi.fn(), onRemoveFolder: vi.fn(),
+      onSyncAction: vi.fn(), onRetryFailedSyncs: vi.fn(), onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns: vi.fn(),
       onConfirmAddFolder: vi.fn(), onCancelAddFolder: vi.fn(),
     },
   };
@@ -242,12 +242,68 @@ describe("FolderList and ActivityLog", () => {
     const onAddFolder = vi.fn();
     const onRemoveFolder = vi.fn();
     tauri.invoke.mockResolvedValue([{ id: "album-1", albumName: "Summer holidays" }]);
-    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder, catalogue: createCatalogue() });
+    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder, onUpdateFolderExclusionPatterns: vi.fn(), catalogue: createCatalogue() });
     expect(await screen.findByText("Target Album: Summer holidays")).toBeInTheDocument();
     await fireEvent.click(screen.getAllByRole("button")[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Remove folder: C:/photos" }));
     expect(onAddFolder).toHaveBeenCalledOnce();
     expect(onRemoveFolder).toHaveBeenCalledWith(1);
+  });
+
+  it("edits exclusion patterns as a validated list", async () => {
+    const onUpdateFolderExclusionPatterns = vi.fn();
+    render(FolderList, {
+      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
+    const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
+    await fireEvent.input(input, { target: { value: "*.{jpg,png}" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Use a relative pattern");
+
+    await fireEvent.input(input, { target: { value: "*.mp4" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByText("*.mp4")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Save exclusions" }));
+    expect(onUpdateFolderExclusionPatterns).toHaveBeenCalledWith(1, ["*.mp4"]);
+  });
+
+  it("rejects a single backslash inline before saving exclusion patterns", async () => {
+    const onUpdateFolderExclusionPatterns = vi.fn();
+    render(FolderList, {
+      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
+    const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
+    await fireEvent.input(input, { target: { value: "Screenshots\\**" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Use a relative pattern");
+    expect(onUpdateFolderExclusionPatterns).not.toHaveBeenCalled();
+  });
+
+  it("clears a saved exclusion draft and warns for broad patterns", async () => {
+    const onUpdateFolderExclusionPatterns = vi.fn().mockResolvedValue(undefined);
+    const props = {
+      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
+    };
+    const { rerender } = render(FolderList, props);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
+    const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
+    await fireEvent.input(input, { target: { value: "*.*" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByText("This rule set excludes all media in this Watched Folder.")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Save exclusions" }));
+    await vi.waitFor(() => expect(onUpdateFolderExclusionPatterns).toHaveBeenCalledWith(1, ["*.*"]));
+    rerender({ ...props, watchedFolders: [{ ...props.watchedFolders[0], exclusion_patterns: ["**/exports/**"] }] });
+    expect(screen.getByText("**/exports/**")).toBeInTheDocument();
+    expect(screen.queryByText("*.*")).not.toBeInTheDocument();
   });
 
   it("loads the name when a folder is assigned an album created after mount", async () => {
@@ -258,6 +314,7 @@ describe("FolderList and ActivityLog", () => {
       watchedFolders: [],
       onAddFolder: vi.fn(),
       onRemoveFolder: vi.fn(),
+      onUpdateFolderExclusionPatterns: vi.fn(),
       catalogue: createCatalogue(),
     });
 
@@ -272,7 +329,7 @@ describe("FolderList and ActivityLog", () => {
   });
 
   it("renders the empty folder state", () => {
-    render(FolderList, { watchedFolders: [], onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), catalogue: createCatalogue() });
+    render(FolderList, { watchedFolders: [], onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns: vi.fn(), catalogue: createCatalogue() });
     expect(screen.getByText("No folders added yet.")).toBeInTheDocument();
   });
 

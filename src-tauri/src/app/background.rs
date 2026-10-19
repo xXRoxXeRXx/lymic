@@ -6,7 +6,7 @@ use crate::{
     audit::{self, audit_event},
     db,
     sync::{
-        add_event_paths, log_overlapping_folders, scan_folders_for_media,
+        add_event_paths, log_overlapping_folders, scan_watched_folders_for_media,
         sync_scan_result_if_authenticated, Asset, FileFailure, ScanResult,
     },
 };
@@ -148,7 +148,28 @@ fn spawn_deferred_watches(handle: tauri::AppHandle) {
                     ),
                 );
             }
-            let scan_result = match scan_folders_for_media(registered_paths).await {
+            let registered_paths = registered_paths;
+            let scan_folders = match db::get_folders(&pool).await {
+                Ok(folders) => folders
+                    .into_iter()
+                    .filter(|folder| {
+                        registered_paths
+                            .iter()
+                            .any(|path| path == &std::path::PathBuf::from(&folder.path))
+                    })
+                    .collect(),
+                Err(error) => {
+                    log_to_ui_error(
+                        &handle,
+                        "ERROR",
+                        &format!("Could not load watched folders for scan: {error}"),
+                        "log_scan_folders_failed",
+                        &error.to_string(),
+                    );
+                    continue;
+                }
+            };
+            let scan_result = match scan_watched_folders_for_media(scan_folders).await {
                 Ok(scan_result) => scan_result,
                 Err(error) => {
                     log_to_ui_error(
@@ -193,14 +214,7 @@ fn spawn_startup_sync(handle: tauri::AppHandle) {
                 &folder.path,
             );
         }
-        let scan_result = match scan_folders_for_media(
-            folders
-                .into_iter()
-                .map(|folder| std::path::PathBuf::from(folder.path))
-                .collect(),
-        )
-        .await
-        {
+        let scan_result = match scan_watched_folders_for_media(folders).await {
             Ok(result) => result,
             Err(error) => {
                 log_to_ui_error(
@@ -217,6 +231,19 @@ fn spawn_startup_sync(handle: tauri::AppHandle) {
     });
 }
 
+async fn add_watcher_event_paths(
+    handle: &tauri::AppHandle,
+    files_buffer: &mut std::collections::HashMap<String, Asset>,
+    failures_buffer: &mut std::collections::HashMap<String, FileFailure>,
+    event: notify::Event,
+) -> Result<(), String> {
+    let pool = handle.state::<sqlx::SqlitePool>();
+    let folders = db::get_folders(pool.inner())
+        .await
+        .map_err(|error| format!("Could not load watched folders for watcher event: {error}"))?;
+    add_event_paths(files_buffer, failures_buffer, &folders, event).await
+}
+
 fn spawn_watcher_consumer(
     handle: tauri::AppHandle,
     mut watch_events: tokio::sync::mpsc::Receiver<notify::Event>,
@@ -228,7 +255,7 @@ fn spawn_watcher_consumer(
         let mut failures_buffer = std::collections::HashMap::<String, FileFailure>::new();
         loop {
             tokio::select! {
-                Some(event) = watch_events.recv() => if let Err(error) = add_event_paths(&mut files_buffer, &mut failures_buffer, event).await {
+                Some(event) = watch_events.recv() => if let Err(error) = add_watcher_event_paths(&handle, &mut files_buffer, &mut failures_buffer, event).await {
                     log_to_ui_error(
                         &handle,
                         "ERROR",
@@ -244,7 +271,7 @@ fn spawn_watcher_consumer(
             loop {
                 tokio::select! {
                     Some(event) = watch_events.recv() => {
-                        if let Err(error) = add_event_paths(&mut files_buffer, &mut failures_buffer, event).await {
+                        if let Err(error) = add_watcher_event_paths(&handle, &mut files_buffer, &mut failures_buffer, event).await {
                             log_to_ui_error(
                                 &handle,
                                 "ERROR",
@@ -283,14 +310,7 @@ fn spawn_watcher_consumer(
                 failures_buffer.clear();
                 let pool = handle.state::<sqlx::SqlitePool>();
                 match db::get_folders(pool.inner()).await {
-                    Ok(folders) => match scan_folders_for_media(
-                        folders
-                            .into_iter()
-                            .map(|folder| std::path::PathBuf::from(folder.path))
-                            .collect(),
-                    )
-                    .await
-                    {
+                    Ok(folders) => match scan_watched_folders_for_media(folders).await {
                         Ok(scan_result) => {
                             log_overlapping_folders(&handle, &scan_result);
                             for asset in scan_result.files {

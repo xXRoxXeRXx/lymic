@@ -176,5 +176,15 @@
   "removable_card_detected_title": "检测到 SD 卡",
   "removable_card_detected_body": "卡 {name}（{path}）已准备好同步。",
   "removable_prompt_sync": "同步此卡",
-  "removable_prompt_dismiss": "忽略"
+  "removable_prompt_dismiss": "忽略",
+  "folder_exclusions": "Exclusions",
+  "folder_exclusions_help": "Add a relative pattern. Use * within a segment and ** across folders.",
+  "folder_exclusions_example": "e.g. **/exports/** or *.mp4",
+  "folder_exclusions_add": "Add",
+  "folder_exclusions_remove": "Remove exclusion",
+  "folder_exclusions_invalid_pattern": "Use a relative pattern with names, * and ** only.",
+  "folder_exclusions_all_warning": "This rule set excludes all media in this Watched Folder.",
+  "folder_exclusions_save": "Save exclusions",
+  "folder_exclusions_close": "Close exclusion settings",
+  "folder_exclusions_cancel": "Cancel"
 }
