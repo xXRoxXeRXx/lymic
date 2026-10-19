@@ -231,6 +231,19 @@ fn spawn_startup_sync(handle: tauri::AppHandle) {
     });
 }
 
+async fn add_watcher_event_paths(
+    handle: &tauri::AppHandle,
+    files_buffer: &mut std::collections::HashMap<String, Asset>,
+    failures_buffer: &mut std::collections::HashMap<String, FileFailure>,
+    event: notify::Event,
+) -> Result<(), String> {
+    let pool = handle.state::<sqlx::SqlitePool>();
+    let folders = db::get_folders(pool.inner())
+        .await
+        .map_err(|error| format!("Could not load watched folders for watcher event: {error}"))?;
+    add_event_paths(files_buffer, failures_buffer, &folders, event).await
+}
+
 fn spawn_watcher_consumer(
     handle: tauri::AppHandle,
     mut watch_events: tokio::sync::mpsc::Receiver<notify::Event>,
@@ -242,7 +255,7 @@ fn spawn_watcher_consumer(
         let mut failures_buffer = std::collections::HashMap::<String, FileFailure>::new();
         loop {
             tokio::select! {
-                Some(event) = watch_events.recv() => if let Err(error) = add_event_paths(&mut files_buffer, &mut failures_buffer, event).await {
+                Some(event) = watch_events.recv() => if let Err(error) = add_watcher_event_paths(&handle, &mut files_buffer, &mut failures_buffer, event).await {
                     log_to_ui_error(
                         &handle,
                         "ERROR",
@@ -258,7 +271,7 @@ fn spawn_watcher_consumer(
             loop {
                 tokio::select! {
                     Some(event) = watch_events.recv() => {
-                        if let Err(error) = add_event_paths(&mut files_buffer, &mut failures_buffer, event).await {
+                        if let Err(error) = add_watcher_event_paths(&handle, &mut files_buffer, &mut failures_buffer, event).await {
                             log_to_ui_error(
                                 &handle,
                                 "ERROR",
