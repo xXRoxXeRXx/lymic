@@ -177,7 +177,7 @@ describe("DashboardView", () => {
       transferredBytes: 0, transferRateBytesPerSecond: null, estimatedSecondsRemaining: null,
       watchedFolders: [], failedSyncs: [], logs: [], isSyncActionPending: false,
       isTargetAlbumModalOpen: false, pendingFolderPath: null,
-      onSyncAction: vi.fn(), onRetryFailedSyncs: vi.fn(), onAddFolder: vi.fn(), onRemoveFolder: vi.fn(),
+      onSyncAction: vi.fn(), onRetryFailedSyncs: vi.fn(), onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns: vi.fn(),
       onConfirmAddFolder: vi.fn(), onCancelAddFolder: vi.fn(),
     },
   };
@@ -242,7 +242,7 @@ describe("FolderList and ActivityLog", () => {
     const onAddFolder = vi.fn();
     const onRemoveFolder = vi.fn();
     tauri.invoke.mockResolvedValue([{ id: "album-1", albumName: "Summer holidays" }]);
-    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder, catalogue: createCatalogue() });
+    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder, onUpdateFolderExclusionPatterns: vi.fn(), catalogue: createCatalogue() });
     expect(await screen.findByText("Target Album: Summer holidays")).toBeInTheDocument();
     await fireEvent.click(screen.getAllByRole("button")[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Remove folder: C:/photos" }));
@@ -258,6 +258,7 @@ describe("FolderList and ActivityLog", () => {
       watchedFolders: [],
       onAddFolder: vi.fn(),
       onRemoveFolder: vi.fn(),
+      onUpdateFolderExclusionPatterns: vi.fn(),
       catalogue: createCatalogue(),
     });
 
@@ -272,7 +273,7 @@ describe("FolderList and ActivityLog", () => {
   });
 
   it("renders the empty folder state", () => {
-    render(FolderList, { watchedFolders: [], onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), catalogue: createCatalogue() });
+    render(FolderList, { watchedFolders: [], onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns: vi.fn(), catalogue: createCatalogue() });
     expect(screen.getByText("No folders added yet.")).toBeInTheDocument();
   });
 

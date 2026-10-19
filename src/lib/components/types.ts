@@ -12,6 +12,7 @@ export interface WatchedFolder {
   path: string;
   recursive: boolean;
   target_album_id: string | null;
+  exclusion_patterns?: string[];
 }
 
 export interface FailedSyncEntry {

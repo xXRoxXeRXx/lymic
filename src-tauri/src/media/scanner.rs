@@ -117,6 +117,61 @@ pub(crate) fn calculate_stable_checksums(path: &str) -> std::io::Result<(Checksu
 }
 
 fn scan_folder_for_media(path: &Path) -> ScanResult {
+    scan_folder_for_media_with_patterns(path, &[])
+}
+
+fn matches_segment(pattern: &[u8], value: &[u8]) -> bool {
+    let (mut p, mut v, mut star, mut retry) = (0, 0, None, 0);
+    while v < value.len() {
+        if p < pattern.len() && pattern[p] == b'*' {
+            star = Some(p);
+            p += 1;
+            retry = v;
+        } else if p < pattern.len() && pattern[p] == value[v] {
+            p += 1;
+            v += 1;
+        } else if let Some(star_index) = star {
+            p = star_index + 1;
+            retry += 1;
+            v = retry;
+        } else {
+            return false;
+        }
+    }
+    pattern[p..].iter().all(|character| *character == b'*')
+}
+
+pub(crate) fn matches_exclusion_pattern(pattern: &str, relative_path: &Path) -> bool {
+    let path = relative_path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let pattern = pattern.to_ascii_lowercase();
+    let pattern_segments = pattern
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    let path_segments = path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    fn matches(pattern: &[&str], path: &[&str]) -> bool {
+        match pattern.split_first() {
+            None => path.is_empty(),
+            Some((&"**", rest)) => {
+                matches(rest, path) || (!path.is_empty() && matches(pattern, &path[1..]))
+            }
+            Some((segment, rest)) => {
+                path.first()
+                    .is_some_and(|value| matches_segment(segment.as_bytes(), value.as_bytes()))
+                    && matches(rest, &path[1..])
+            }
+        }
+    }
+    matches(&pattern_segments, &path_segments)
+}
+
+fn scan_folder_for_media_with_patterns(path: &Path, exclusion_patterns: &[String]) -> ScanResult {
     let mut result = ScanResult::default();
     for entry in walkdir::WalkDir::new(path)
         .into_iter()
@@ -144,6 +199,18 @@ fn scan_folder_for_media(path: &Path) -> ScanResult {
     {
         match entry {
             Ok(entry) if entry.file_type().is_file() && is_media_file(entry.path()) => {
+                if entry
+                    .path()
+                    .strip_prefix(path)
+                    .ok()
+                    .is_some_and(|relative| {
+                        exclusion_patterns
+                            .iter()
+                            .any(|pattern| matches_exclusion_pattern(pattern, relative))
+                    })
+                {
+                    continue;
+                }
                 let file_path = entry.path().to_string_lossy().to_string();
                 match entry.metadata() {
                     Ok(metadata) => {
@@ -194,6 +261,40 @@ pub(crate) async fn scan_folders_for_media(paths: Vec<PathBuf>) -> Result<ScanRe
     })
     .await
     .map_err(|e| format!("Media scan task failed: {}", e))
+}
+
+pub(crate) async fn scan_watched_folders_for_media(
+    folders: Vec<crate::db::WatchedFolder>,
+) -> Result<ScanResult, String> {
+    tokio::task::spawn_blocking(move || {
+        let paths = folders
+            .iter()
+            .map(|folder| PathBuf::from(&folder.path))
+            .collect();
+        let (paths, overlapping_folders) = overlapping_folder_paths(paths);
+        let mut result = ScanResult {
+            overlapping_folders,
+            ..Default::default()
+        };
+        let mut seen_files = HashSet::new();
+        for path in paths {
+            let patterns = folders
+                .iter()
+                .find(|folder| PathBuf::from(&folder.path) == path)
+                .map(|folder| folder.exclusion_patterns.as_slice())
+                .unwrap_or(&[]);
+            let scan_result = scan_folder_for_media_with_patterns(&path, patterns);
+            for asset in scan_result.files {
+                if seen_files.insert(PathBuf::from(&asset.path)) {
+                    result.files.push(asset);
+                }
+            }
+            result.failures.extend(scan_result.failures);
+        }
+        result
+    })
+    .await
+    .map_err(|error| format!("Media scan task failed: {}", error))
 }
 
 pub(crate) async fn scan_paths_for_media(paths: Vec<PathBuf>) -> Result<ScanResult, String> {
@@ -326,6 +427,22 @@ mod tests {
         assert_eq!(result.files[0].path, media_path.to_string_lossy());
         assert!(result.failures.is_empty());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn exclusion_patterns_match_relative_paths_case_insensitively() {
+        assert!(matches_exclusion_pattern(
+            "screenshots/**",
+            Path::new("Screenshots/ONE.JPG")
+        ));
+        assert!(matches_exclusion_pattern(
+            "**/*.jpg",
+            Path::new("Trips/photo.JPG")
+        ));
+        assert!(!matches_exclusion_pattern(
+            "screenshots/**",
+            Path::new("Trips/photo.jpg")
+        ));
     }
 
     #[tokio::test]

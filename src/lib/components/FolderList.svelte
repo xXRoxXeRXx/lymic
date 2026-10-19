@@ -8,11 +8,18 @@
     watchedFolders: WatchedFolder[];
     onAddFolder: () => void;
     onRemoveFolder: (id: number) => void;
+    onUpdateFolderExclusionPatterns: (id: number, patterns: string[]) => void;
     catalogue: TargetAlbumCatalogue;
   }
 
-  let { watchedFolders, onAddFolder, onRemoveFolder, catalogue }: Props = $props();
+  let { watchedFolders, onAddFolder, onRemoveFolder, onUpdateFolderExclusionPatterns, catalogue }: Props = $props();
   let targetAlbumIds = new Set<string>();
+
+  function savePatterns(folderId: number, event: MouseEvent) {
+    const target = event.currentTarget as HTMLButtonElement;
+    const value = target.parentElement?.querySelector("textarea")?.value ?? "";
+    onUpdateFolderExclusionPatterns(folderId, value.split("\n"));
+  }
 
   $effect(() => {
     const nextTargetAlbumIds = new Set(
@@ -62,6 +69,15 @@
             {/if}
           </div>
         </div>
+        <details class="shrink-0">
+          <summary class="cursor-pointer text-xs text-blue-600 dark:text-sky-400">Exclusions</summary>
+          <div class="mt-2 w-64 space-y-2">
+            <label class="block text-xs text-slate-500" for={`exclusions-${folder.id}`}>One relative glob per line. Use * within a folder and ** across folders.</label>
+            <textarea id={`exclusions-${folder.id}`} class="w-full rounded border p-2 text-xs" value={(folder.exclusion_patterns ?? []).join("\n")}></textarea>
+            <p class="text-xs text-amber-600">A pattern like ** excludes all media in this Watched Folder.</p>
+            <button type="button" class="rounded bg-blue-600 px-2 py-1 text-xs text-white" onclick={(event) => savePatterns(folder.id, event)}>Save exclusions</button>
+          </div>
+        </details>
         <button
           class="rounded-lg border border-red-200 bg-red-50 p-2 text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/60 shrink-0 cursor-pointer"
           aria-label={`${$t('remove_folder')}: ${folder.path}`}

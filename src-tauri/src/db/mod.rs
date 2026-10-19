@@ -6,7 +6,7 @@ mod sync_state;
 
 pub use folders::{
     add_folder, bind_removable_folder, get_folders, remap_watched_folder_path, remove_folder,
-    WatchedFolder,
+    update_exclusion_patterns, WatchedFolder,
 };
 #[allow(unused_imports)]
 pub use folders::{

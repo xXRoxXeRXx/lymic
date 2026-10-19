@@ -4,7 +4,10 @@ use crate::audit::audit_event;
 use crate::media::paths::{normalize_folder_path, path_is_within};
 use crate::{
     db,
-    sync::{scan_folders_for_media, sync_scan_result_if_authenticated, SyncCoordinator},
+    sync::{
+        scan_folders_for_media, scan_watched_folders_for_media, sync_scan_result_if_authenticated,
+        SyncCoordinator,
+    },
     watcher,
 };
 use serde_json::json;
@@ -65,6 +68,36 @@ pub(crate) fn sanitize_target_album_id(target_album_id: Option<String>) -> Optio
             Some(trimmed)
         }
     })
+}
+
+pub(crate) fn normalize_exclusion_patterns(patterns: Vec<String>) -> Result<Vec<String>, String> {
+    let mut normalized = Vec::new();
+    for pattern in patterns {
+        let pattern = pattern
+            .trim()
+            .replace('\\', "/")
+            .trim_start_matches('/')
+            .to_string();
+        if pattern.is_empty() {
+            continue;
+        }
+        if pattern.contains("..")
+            || pattern.contains('?')
+            || pattern.contains('[')
+            || pattern.contains(']')
+        {
+            return Err(format!(
+                "Invalid exclusion pattern '{pattern}'. Use relative paths with * or **."
+            ));
+        }
+        if !normalized
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(&pattern))
+        {
+            normalized.push(pattern);
+        }
+    }
+    Ok(normalized)
 }
 
 pub(crate) fn check_folder_conflict(
@@ -408,6 +441,37 @@ pub(crate) async fn get_folders(
 }
 
 #[tauri::command]
+pub(crate) async fn update_folder_exclusion_patterns(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    id: i64,
+    exclusion_patterns: Vec<String>,
+) -> Result<(), String> {
+    let exclusion_patterns = normalize_exclusion_patterns(exclusion_patterns)?;
+    if !db::update_exclusion_patterns(pool.inner(), id, &exclusion_patterns)
+        .await
+        .map_err(|error| error.to_string())?
+    {
+        return Err("Watched folder was not found.".to_string());
+    }
+    let folder = db::get_folders(pool.inner())
+        .await
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|folder| folder.id == id)
+        .ok_or("Watched folder was not found.")?;
+    let scan_result = scan_watched_folders_for_media(vec![folder]).await?;
+    sync_scan_result_if_authenticated(
+        app,
+        pool.inner().clone(),
+        scan_result,
+        "exclusion_patterns_changed",
+    )
+    .await;
+    Ok(())
+}
+
+#[tauri::command]
 pub(crate) async fn remove_folder(
     app: tauri::AppHandle,
     pool: tauri::State<'_, sqlx::SqlitePool>,
@@ -571,6 +635,20 @@ mod tests {
             super::sanitize_target_album_id(Some("  album-uuid  ".to_string())),
             Some("album-uuid".to_string())
         );
+    }
+
+    #[test]
+    fn exclusion_patterns_are_normalized_deduplicated_and_validated() {
+        assert_eq!(
+            super::normalize_exclusion_patterns(vec![
+                " Screenshots\\** ".into(),
+                "screenshots/**".into(),
+                "".into()
+            ])
+            .unwrap(),
+            vec!["Screenshots/**"]
+        );
+        assert!(super::normalize_exclusion_patterns(vec!["../private/**".into()]).is_err());
     }
 
     #[test]

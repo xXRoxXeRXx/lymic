@@ -38,6 +38,7 @@ export interface DesktopAdapter {
   addFolder(path: string, targetAlbumId: string | null): Promise<number>;
   acceptRemovableMediaFolder(volumeId: string, path: string, targetAlbumId: string | null): Promise<number>;
   getFolders(): Promise<WatchedFolder[]>;
+  updateFolderExclusionPatterns(id: number, exclusionPatterns: string[]): Promise<void>;
   removeFolder(id: number, confirmCancellation?: boolean): Promise<RemoveFolderResult>;
 
   getAuthStatus(): Promise<boolean>;
@@ -68,6 +69,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   addFolder: (path, targetAlbumId) => invoke<number>("add_folder", { path, targetAlbumId }),
   acceptRemovableMediaFolder: (volumeId, path, targetAlbumId) => invoke<number>("accept_removable_media_folder", { volumeId, path, targetAlbumId }),
   getFolders: () => invoke<WatchedFolder[]>("get_folders"),
+  updateFolderExclusionPatterns: (id, exclusionPatterns) => invoke<void>("update_folder_exclusion_patterns", { id, exclusionPatterns }),
   removeFolder: (id, confirmCancellation) => invoke<RemoveFolderResult>(
     "remove_folder",
     confirmCancellation === undefined ? { id } : { id, confirmCancellation },

@@ -162,11 +162,7 @@ impl<'a> Synchronization<'a> {
                     &folder.path,
                 );
             }
-            let paths = folders
-                .into_iter()
-                .map(|folder| std::path::PathBuf::from(folder.path))
-                .collect();
-            let scan_result = scan_folders_for_media(paths).await?;
+            let scan_result = scan_watched_folders_for_media(folders).await?;
             log_overlapping_folders(self.app, &scan_result);
             crate::sync::queue_runner::run_sync_pipeline(
                 self.app.clone(),
@@ -344,7 +340,7 @@ impl<'a> Synchronization<'a> {
 
 pub(crate) use crate::media::events::{add_event_paths, log_overlapping_folders};
 pub(crate) use crate::media::model::{Asset, FileFailure, ScanResult};
-pub(crate) use crate::media::scanner::scan_folders_for_media;
+pub(crate) use crate::media::scanner::{scan_folders_for_media, scan_watched_folders_for_media};
 
 pub(crate) fn ensure_sync_has_folders(folders: &[db::WatchedFolder]) -> Result<(), String> {
     if folders.is_empty() {
@@ -610,6 +606,7 @@ mod tests {
             path: "C:/photos".to_string(),
             recursive: true,
             target_album_id: Some(original_album),
+            exclusion_patterns: vec![],
         }];
         let (units, failures) = prepare_scan_for_queue(&scan, &folders);
         db::enqueue_upload_units(&pool, &units, &failures)

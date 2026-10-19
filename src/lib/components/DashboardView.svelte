@@ -91,7 +91,7 @@
   </section>
 
   <!-- Bottom: Folder List -->
-  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} {catalogue} />
+  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} onUpdateFolderExclusionPatterns={dashboard.onUpdateFolderExclusionPatterns} {catalogue} />
 </div>
 
 <TargetAlbumModal

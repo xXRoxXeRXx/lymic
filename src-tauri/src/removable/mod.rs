@@ -58,13 +58,29 @@ impl VolumeEventEmitter for tauri::AppHandle {
     }
 
     async fn trigger_remount_scan(&self, folder_path: &str) -> Result<(), String> {
-        let path = std::path::PathBuf::from(folder_path);
         let app = self.clone();
         let pool = self.state::<sqlx::SqlitePool>().inner().clone();
         let path_str = folder_path.to_string();
 
         tauri::async_runtime::spawn(async move {
-            let scan_result = match crate::sync::scan_folders_for_media(vec![path]).await {
+            let folder = match crate::db::get_folders(&pool).await {
+                Ok(folders) => folders.into_iter().find(|folder| folder.path == path_str),
+                Err(error) => {
+                    return crate::app::events::log_to_ui_folder_error(
+                        &app,
+                        "ERROR",
+                        &format!("Could not load folder for remount scan: {error}"),
+                        "log_folder_scan_failed",
+                        &path_str,
+                        &error.to_string(),
+                    )
+                }
+            };
+            let Some(folder) = folder else {
+                return;
+            };
+            let scan_result = match crate::sync::scan_watched_folders_for_media(vec![folder]).await
+            {
                 Ok(result) => result,
                 Err(error) => {
                     crate::app::events::log_to_ui_folder_error(
