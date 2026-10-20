@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:052c2775e01bd717404734e00a38e002b8dc330a481753d72db5e0bf2e8abb46",
+  "pageVersion": "sha256:67586d12288725b77975c25499d35bea4290dc046c1491f44429dffa1c8cbdb7",
   "claims": [
     {
       "id": "claim_cfbbe8313c3d41da8e6f2258cee78de1",
@@ -42,7 +42,7 @@
         },
         {
           "resource": "repo://src-tauri/Cargo.toml#L1-L16",
-          "version": "repo-lines-v1:sha256:2acbe151a7a6511b67ec111a8a489aaf4d9b0b5c85f41e8cfcc41a0be4693bea:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhM2NkNWE4MWIzZjlhNjIxYWE0OTNkOTBjNDVmNDJhYjU3MWQ0ZTQyYjhhZTVhZmYzNTFjYjBhMDJkMDZkODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjYjNlNzVkNzJjZDYzNjBkYTVmOWQ3Njc4ZTU3ZDZhODdhNmY5N2I3OWM3MjA5MTJhODI4ZWQ1NDhhZGI0NjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjNDUwYjhhZWIxMTM4YmYxNzVmZGMxZDk4Zjk1YWZjZDY3YzMyNzQ4MzY2YzE2ODA4NTVkOGRhYzE0NWFmZTYifQ"
+          "version": "repo-lines-v1:sha256:cd7a190bf28388b7d7ed31874ef6d87dee382c939a3b56802ceff7206d451816:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhM2NkNWE4MWIzZjlhNjIxYWE0OTNkOTBjNDVmNDJhYjU3MWQ0ZTQyYjhhZTVhZmYzNTFjYjBhMDJkMDZkODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjYjNlNzVkNzJjZDYzNjBkYTVmOWQ3Njc4ZTU3ZDZhODdhNmY5N2I3OWM3MjA5MTJhODI4ZWQ1NDhhZGI0NjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjNDUwYjhhZWIxMTM4YmYxNzVmZGMxZDk4Zjk1YWZjZDY3YzMyNzQ4MzY2YzE2ODA4NTVkOGRhYzE0NWFmZTYifQ"
         }
       ]
     },
@@ -83,7 +83,7 @@
       "statement": "Audit logs are JSON Lines files in the application data `logs` directory; the writer uses five 5-MiB rotating slots, reports queue saturation and recovery through its reporter, and the runtime attempts to append and flush a shutdown event on process exit.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L129-L145",
+          "resource": "repo://src-tauri/src/app/mod.rs#L130-L146",
           "version": "repo-lines-v1:sha256:49cb99e87d0883d62a1f21d3ccc30d8c947492f7cc2461a63bdd5b7177183757:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2ZWM4ZDYwOGFhNjc5MmY4ZDk0ZjdkOWRlOTg0YmI4ZTg4MmYyYzg2MTIyM2MzMWQyOGFiM2MyNGVlNGFiZDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjNjQ3OWNjMjMwNDQwZmQ0MWU4MjI0MjE4Njc5Njk4NTU5ZDI4OTNiZDY3YjQzODBhZmFiODExYjM4YTU1YWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNmNDIyYTE2NDQ3ZGQ4NTEwMWM0YzgzODFkM2FhYjc4MzI0ZmUzNGNiM2VkMzg5OTIwODg3YWNlMjNmNDFhMDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY0MzU2M2NlNmY1NDMyOTFkNWNlNzZlNjZhNTk3ZGE1NTRjZTIyNjNlMWU5OGM2YjZjM2U3NzFmMTE0OTMxYmMifQ"
         },
         {
@@ -103,10 +103,88 @@
           "version": "repo-lines-v1:sha256:d5c9aee6186122a4c09efb4cd2ed967b06df493ea8cbaff465c367b5ef6ffbf0:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA0YmZmZDEwMDc3NDFkMTJmODM0ZmFhNDEzNWQyOTA5NGU4NmFjMjhmMGFhYWRhMGQ2MDVmMjU4ODAwYmFkZTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5YjE5ODJlOGRkNzQ4MTE4MTQ2YjM5YTJkMDA2MmY0MDgxZTM0Nzc5Yjg2NzVjMjM0YzRmYjEyNGRjMzkzOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZjY2Q4YWM4YmY2MWNlMWNmYjYzMWEzZDU0ZDIxZjI0YmNkMmZhMjFlNGI5YWYwZjAzMjVmZWQ2NTc5MDJjZWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBhNzkwODBiNzU5YTE2OTQyN2YzOTMxOTdlMjY0MmRhZTBlNDgzZDkwNWFmNzViZWZlMmEzNDMxMzI2OTFkODkifQ"
         }
       ]
+    },
+    {
+      "id": "claim_4ee3af3c097e49f49053b0b6af9cff9d",
+      "statement": "The integrated local desktop entrypoint is `npm run tauri dev`: Tauri runs `npm run dev`, expects `http://localhost:1420`, and Vite uses that fixed strict port, optionally taking its bind/HMR settings from `TAURI_DEV_HOST` while excluding `src-tauri` from its watch set.",
+      "evidence": [
+        {
+          "resource": "repo://package.json#L23-L30",
+          "version": "repo-lines-v1:sha256:219588f4a2ec1e6f7b7e007aa70c48590c55b1ff9580f4daa5d78617fbc059cf:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzQ4MzNkNTk0OWMwM2E0MGNhOTUyNDkxNjEwYTY2NTk2NDRiM2FhNDY2MzYyZjc5OTAyMGRiZjE5ODE1NDdkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWI3ZDE5ZWZkNzkxYTQxZGU0MTk5MThiMDFlYjMzYzMwOGU1YjU2YTBmMjNmZGFlODk1ZDRhZmE4NTliOWUzOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTMwZDZlYmEzYjU3NWZiYmQxZDBmZjdhZWIzMzI2MzdiZTc2ZGNjMWRhZjg3OGU4NDRlNDg3NDIwOGMzY2IzNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTAzZjEyMjY3MTExZDRiZjZiMzQzNTY2NzU0YzBhZTY2NDk4MWEyZWQ0MjFlYTdlNDcwYWNiNDg4ODhhYjViYyJ9"
+        },
+        {
+          "resource": "repo://src-tauri/tauri.conf.json#L6-L11",
+          "version": "repo-lines-v1:sha256:1c8abcd3f2a09861bf21948a443518adf5ea6b7a78cccb13b9953973e67460b6:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2IwNzIwMWJkYjZiYzA1OTIwODQ5NjM2ODE4NjFhNGZhMTRhZmRhNTkxYjZkNTY2MWI3NDU4ZDkyMWQ1ZDBlYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNhYjFlYjFkM2JlZjE4Y2Y1NTAwOTlkNzRiOGI4ZmE0ZDFjNWQ3Zjg5NGQ5NDVkZjIwY2ExM2M0NDFmZGYwYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzMwZWM2MGVlOWU5MDU5NDg3M2M3ZThmZDdlN2M2MWFlNmZhNTNlNDkzOTFkY2U1YThlZjAyZWJhMjYxY2JmYiJ9"
+        },
+        {
+          "resource": "repo://vite.config.js#L12-L47",
+          "version": "repo-lines-v1:sha256:00e58100cac9c68f162e9679ea05182c8c122cf022d6af1a8c794f6740090b67:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxN2M5MTA0Y2UxNjQ3ZDFlOGIxM2MyZGM1NDJhMTdkMzQ4N2ViMDA4MGU2Zjc3ZDNlMGQzMTUwZjkwYmQ2MzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkNWNkMmZiNGYzZGY4ODQ1MTUyNTViMzk1MjNmMmY4YjU0NzJiZWVhOWY1NjZmZmNhMjA0ZGI4MDI1NjEwNDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxZDNlNzZlNzBmMWMyN2UyZmU2MmRkNGYyZTQ1ZGE2MDE3YWQ4YmJhYmZlZDE4YzZjNTc1MTQwZmIyOTIzZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1MjdjZDkxNWY5OTMyZjYzMDNjNzQ0NjFhMzdjMTE1ZDk2ZDk4YzM2OTE1MmRkZDY2MWRkNzJhYTRkOWZjMWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7e7ceb13ddc24848bf780fb1afed4851",
+      "statement": "Frontend tests run once through Vitest in a jsdom environment and can verify controller behavior and frontend-to-IPC serialization with mocked Tauri APIs, but the tests do not execute the native Rust command implementation.",
+      "evidence": [
+        {
+          "resource": "repo://package.json#L23-L30",
+          "version": "repo-lines-v1:sha256:219588f4a2ec1e6f7b7e007aa70c48590c55b1ff9580f4daa5d78617fbc059cf:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzQ4MzNkNTk0OWMwM2E0MGNhOTUyNDkxNjEwYTY2NTk2NDRiM2FhNDY2MzYyZjc5OTAyMGRiZjE5ODE1NDdkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWI3ZDE5ZWZkNzkxYTQxZGU0MTk5MThiMDFlYjMzYzMwOGU1YjU2YTBmMjNmZGFlODk1ZDRhZmE4NTliOWUzOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTMwZDZlYmEzYjU3NWZiYmQxZDBmZjdhZWIzMzI2MzdiZTc2ZGNjMWRhZjg3OGU4NDRlNDg3NDIwOGMzY2IzNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTAzZjEyMjY3MTExZDRiZjZiMzQzNTY2NzU0YzBhZTY2NDk4MWEyZWQ0MjFlYTdlNDcwYWNiNDg4ODhhYjViYyJ9"
+        },
+        {
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.test.ts#L1-L47",
+          "version": "repo-lines-v1:sha256:6a6b8f26d8550863e9aa870a654de9c35a29385a9229aea9b9da087f7dce206e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhOTFiYmE1ZTg0NTc1OGMyYjdjMDAxMjU4MzU2ZTA4YTg4MzYwMDNlMGY1MjM0NWVlOTEwZjMzNTFjY2FlMjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQwYTJkN2JlOWRlYjFmNmQ0ZTAyYzQ0ZDczNWM3MTZlZDZiMTdkMGUxZjg0YWFlMDdiMDhjZjE3Mzg4M2VhNmQifQ"
+        },
+        {
+          "resource": "repo://src/lib/tauri/desktop-adapter.test.ts#L1-L82",
+          "version": "repo-lines-v1:sha256:40a427ecba17ac5e00bc28bfd8550a8f91bfa626ac4c438e822ea0199e940aca:eyJzZWxlY3RlZExpbmVDb3VudCI6ODIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlOGJlNjQ0NjA2NWQ1NzJhYjA3YzAwNjEwNGIzNjNkODUxYjEzNjJkMzFmNTgzNWE4Njc2MWRhMGQzM2Q5ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwOTNlMTI5MDZhNjFmZDVjMDg5ZmVlOGZjYWZkOTUyZTU3YTU5MDlhMjQ5ZGQxMjUwOTQ5OGQyNzFhNzFjOTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4MTdmYmI3M2M5MmIzNmQ1ZTQ4OTZmZjUxYzFiNThlZWMzMzBiYmU5NjFiYTA1ZmM2MjA1Zjg2N2VhMWJjZjYifQ"
+        },
+        {
+          "resource": "repo://vite.config.js#L48-L50",
+          "version": "repo-lines-v1:sha256:5527cd915f9932f6303c74461a37c115d96d98c369152ddd661dd72aa4d9fc1a:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkzNmRmN2E1YTNhYWYxODBjZmZkMWQ2NWM2NDZlZjZhZWEzNTJjYzI3Nzc0Njg2MTk5Y2Q4ZmIzZTg5OWM3YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmRkOTcxMWUxZWZjNDE1NjM2NDllZGE5YmEwMjRkOWQ4ZDUxODg3MjAyZGZjZTU3M2FjYmRhNjJiMzg4NmM0ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjEsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWI3NDFkMmMwOGU2ZjUxMGI3ZTlhMjY0ZjM3OGY5Y2UwMDQ5YTUwNGUwZTdlZjVkNjdjZDNlYTgxM2Y4NTQ3NCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_be99c16c3d294e0fac8cec4b7ff97326",
+      "statement": "The default Tauri capability applies to the `main` window and grants core defaults plus open/confirm dialog, process restart, updater, and opener permissions, making it the permission configuration that must be reviewed when adding a native-plugin feature.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/capabilities/default.json#L1-L16",
+          "version": "repo-lines-v1:sha256:7afe3a4aeb717213b008be7026d0322953c60d9c34a8e4e0edbf60f235fafed5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f6705bf56d66446c8a6065e02be3ee4a",
+      "statement": "Pushing a `v*` tag runs the cross-platform publish workflow, which installs Node 22 dependencies and stable Rust tooling, executes frontend and Rust verification gates, then invokes the Tauri action with locked dependency resolution to draft a release and publish updater artifacts using signing secrets.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L1-L68",
+          "version": "repo-lines-v1:sha256:6ce65e9fb26e78ea1f31a8c17e500106e0b63a3c967b92ea6e12e022ed98ce60:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU0MThkMzEzNjU1MWEwZWQ5ZDcwYjkwNDgzZjU2MjUwYzNkNTdkMWZkYTdkYzJmOGQ1ZDBkODA5NWVlNDRiMzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNGJhNWRhNDU4MDUxMzIyZGY1OThkYmI3M2ZmNDc3M2ViMTBhOGM1MGQzZDFlZmI5YzJkMDM5ZDMyNWM0NWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a2eeb7b8f35943878424654578123227",
+      "statement": "The packaged updater uses a configured public key and GitHub latest-release manifest endpoint; in the frontend, available updates open a dialog and installation is refused during active synchronization, otherwise download progress is tracked before installation and relaunch.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/tauri.conf.json#L28-L56",
+          "version": "repo-lines-v1:sha256:bb46caf90d877d767a7b951df53738668878e5c685a979ded9d045190fa4901d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjMDcyNDlhZjgzOGY5NDg0OTM5YjM3ZGE3OGQ3MTIxZGM0ZTVkNGFjNTI2N2JkNzIzMDkwMGU3NGE4NjMzZDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3YzY2Zjg2YjMwYjk1YTAxMzMzMzk0NmI2ODNhOTZiNmJiMmUyNGNmNDQ2YmE5Y2JkNzQ0NTFmZDIxZDU0NDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRmNzM5YTA2YzFjYmIxMjQ0ZTMzNjNkMzhiY2Y5ZmE1MGNlODRmZWQzOTljMjE5M2EzYzdmMDhkNTk5MThiMmEifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L25-L42",
+          "version": "repo-lines-v1:sha256:5c1264b2df37117d76227c58cb6b0956dac874fb6f579503717d04c7af1482c3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkZmQ3OWQ4Zjc3Mjg4M2VkOGI5YTAwZTZkMDE5NGI1NTI5NGM4NjQzNDJkNDcyOGZmYTQzZTk5ZGNlMzVmNzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUyNjZiNjIxYzI2ZGE4YzM2MTA2MTI0YTRlNWFjMWFmZmNmMzU1MWNhYzhiMTM2M2I5Nzk4Zjg1MWE5ZTJiOGEifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L66-L82",
+          "version": "repo-lines-v1:sha256:8ce89ed144f6aab36f87c55a41a041dad9f3227900cbc10700d408541bfe7580:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxZmQzNzg2ZWUxODY1NDQ0YWU3MDY1YTYxYzdkNDdiMDRlNjY4ZWQ4N2NhMjc4MWZmYWZhYTQzMzY1YzJmZDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVlNTNhY2UyMTNkNWFkMDQwNWZkMzQ1OWRiM2Y1YTNjOTg5NmUzYjFiOWU4YmVmMGMxZDNiODU0MjM4NTYyNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZGFhZDk0YWJlNGViOWM1NzU5MGZlOThkOGZmZjQ3NjQ3Yzk5MjQxOGM0ZDVlOTIyZTlhMDcyMjBkYTJmMTEifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-16T12:54:13.301Z"
+    "at": "2026-10-19T15:10:01.321Z"
   }
 }

@@ -1,3 +1,3 @@
 # Files
 
-- [Frontend State and Tauri IPC](ui-and-ipc.md) - How the Svelte route composes authenticated views and controllers, and how those controllers reconcile UI state with Tauri commands and backend events.
+- [Frontend Controllers and IPC Boundary](ui-and-ipc.md) - The Svelte composition root, its stateful controllers, and the typed adapter that carries commands and native events across the Tauri boundary. Includes lifecycle, reconciliation, and safe command-evolution rules.

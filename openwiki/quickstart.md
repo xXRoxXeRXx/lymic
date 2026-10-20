@@ -1,11 +1,11 @@
 ---
-type: guide
-title: Lymic Architecture Guide
-description: Contributor entry point for routing Lymic changes to the owning runtime, frontend, synchronization, persistence, integration, security, and operations documentation. It defines the upload-only product boundary and the Rust/Svelte entrypoints to inspect first.
+type: contributor guide
+title: Lymic Codebase Guide
+description: Contributor routing guide from Lymic's Tauri and Svelte entry points to the runtime, UI/IPC boundary, synchronization, folders, persistence, Immich, security, diagnostics, and development guidance.
 tags: [guide, architecture, contributors]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-16T12:54:13.301Z
+    at: 2026-10-19T15:10:01.321Z
 sources:
   - id: openwiki-source-ab40d61d1bfa656ad091dbd7
     resource: repo://docs/agents/application-map.md
@@ -15,47 +15,60 @@ sources:
     resource: repo://README.md
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
-generated: { by: "openwiki/0.7.2", at: "2026-10-16T12:54:13.301Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-10-19T15:10:01.321Z" }
 ---
 
-# Lymic Architecture Guide
+# Lymic Codebase Guide
 
-Lymic is an upload-oriented desktop client that brings media from local **Watched Folders** into an Immich library. It is not a two-way filesystem mirror: it does not download remote assets or apply remote deletions or renames to local files. Preserve that boundary unless a product decision explicitly changes it.
+Lymic is a cross-platform, upload-oriented desktop client: it watches selected local folders, avoids uploading assets already present in Immich, and streams missing media from disk. It is **not** a two-way filesystem mirror: normal synchronization neither downloads remote assets nor applies remote deletions or renames locally. Preserve that product boundary unless an explicit product decision changes it.
 
-## Orient yourself
+## Start at the composition boundaries
 
-The desktop application has two composition entrypoints:
+There are two application entry points to trace before changing behavior:
 
-- `src-tauri/src/app/mod.rs` is the Rust/Tauri composition root. It initializes host services, starts background work, sets up desktop integration, and registers the commands exposed to the webview.
-- `src/routes/+page.svelte` is the Svelte UI composition entrypoint. It creates the UI controllers, hydrates their durable state and subscriptions on mount, and chooses the login or authenticated views.
+- `src-tauri/src/app/mod.rs` is the Rust/Tauri composition root. It registers commands, starts background work, creates desktop integration, and owns the host-side lifecycle.
+- `src/routes/+page.svelte` composes the Svelte application. It creates the concern-specific controllers and renders the login view when unauthenticated or the authenticated dashboard, activity log, settings, and information views.
 
-The layers meet only through named Tauri commands and serialized events. A frontend change that invokes a command or consumes an event is therefore also an IPC-contract change; trace the controller and the corresponding Rust command or event producer rather than changing one side alone.
+The UI reaches the Rust host through named Tauri commands and receives native events through subscriptions. Treat a command name, serialized response, event name, or event payload as an IPC contract: trace both the owning Svelte controller and the Rust implementation or producer when changing either side.
 
-For product setup, see the repository [README](../README.md). Use the vocabulary in [GLOSSARY.md](../GLOSSARY.md), particularly **Watched Folder**, **Target Album**, **Upload Unit**, and **Album Assignment**.
+On mount, the root starts the sync, update, and preferences lifecycles and removable-volume subscriptions. It then hydrates authentication, sync, and preferences independently; sync event subscriptions start only after sync hydration succeeds. Its cleanup destroys sync, update, and removable-volume controllers and stops the preferences lifecycle.
 
-## Route the change
+For product setup, start with the repository [README](../README.md). Use the terminology in [GLOSSARY.md](../GLOSSARY.md), especially *Watched Folder*, *Target Album*, *Upload Unit*, and *Album Assignment*.
 
-| If you need to change… | Read first | Also inspect |
+## Task-routing map
+
+Use this map to choose the owning documentation before editing. Each linked page explains the relevant state, contracts, failure behavior, and focused tests.
+
+| Change or question | Read first | Trace with it |
 | --- | --- | --- |
-| Startup, managed host services, background consumers, tray, window visibility, or command registration | [Desktop Runtime and Lifecycle](architecture/runtime.md) | `src-tauri/src/app/mod.rs` |
-| A screen, controller state, command caller, or event subscription | [Frontend State and Tauri IPC](frontend/ui-and-ipc.md) | `src/routes/+page.svelte` and the owning controller |
-| Discovery, checksums, queueing, pause/resume, retries, progress, or upload outcomes | [Synchronization Workflow](workflows/synchronization.md) | The sync controller and matching Rust sync command |
-| Folder validation, filesystem watchers, removable media, or pairing | [Watched Folders and Removable Volumes](workflows/watched-folders.md) | Folder UI and command boundary |
-| SQLite schema, migrations, durable queue/recovery state, or database repair | [Local Persistent State](data/local-state.md) | Migration plus its data accessor and recovery path |
-| Immich requests, duplicate checks, streaming uploads, or target-album calls | [Immich API Integration](integrations/immich-api.md) | The affected synchronization completion path |
-| Login, server URL policy, keyring credentials, or Cloudflare Access | [Authentication and Credential Security](security/authentication.md) | Authentication command and error/audit handling |
-| Local setup, checks, focused tests, smoke tests, or diagnostics | [Development, Testing, and Operations](operations/development-and-testing.md) | The system page for the changed behavior |
+| Tauri startup/recovery, managed services, background tasks, tray, window visibility, native events, or command registration | [Desktop Runtime Architecture](architecture/runtime.md) | `src-tauri/src/app/mod.rs` and the owning app service |
+| A view, controller, frontend state, Tauri command caller, native event subscriber, or localized UI behavior | [Frontend Controllers and IPC Boundary](frontend/ui-and-ipc.md) | `src/routes/+page.svelte`, the owning controller, component, and Rust command/event |
+| Manual, recovered, or retry synchronization; scanning, checksums, duplicate checks, queueing, transfer progress, pause/resume, uploads, or completion | [Synchronization Pipeline](workflows/synchronization.md) | Sync controller, `src-tauri/src/sync/`, command layer, and queue persistence |
+| Adding or validating folders; recursive discovery, media pairs or sidecars, watcher debounce/overflow, unavailable paths, or removable volumes | [Watched Folders and Media Discovery](workflows/watched-folders.md) | Folder UI and commands, `src-tauri/src/media/`, `src-tauri/src/watcher/`, and persistence |
+| SQLite schema, migrations, folders, cached checksums, queue/job recovery state, settings, cache locations, or retention | [Local State and Recovery](data/local-state.md) | `src-tauri/migrations/`, `src-tauri/src/db/`, and the recovery path |
+| Immich authentication requests, profile retrieval, bulk existence checks, multipart uploads, checksums, albums, Cloudflare headers, or API failures | [Immich API Integration](integrations/immich-api.md) | `src-tauri/src/immich/`, affected sync completion, and credential policy |
+| Login validation, server URL/loopback HTTP policy, API-key or Cloudflare credentials, keyring storage, logout, profile cache, or secret handling | [Authentication and Credential Safety](security/authentication.md) | Auth controller and command, `src-tauri/src/auth.rs`, audit/error paths |
+| Audit event structure, log redaction, asynchronous writer behavior, rotation, diagnostic UI, or logging failure | [Audit Logging and Operational Diagnostics](operations/audit-logging.md) | `src-tauri/src/audit/`, error reporting, and the affected service |
+| Toolchain setup, checks, unit tests, smoke tests, capability/configuration changes, builds, or release/update behavior | [Development, Testing, and Release Operations](operations/development-and-testing.md) | The system page for the behavior changed |
 
-## Cross-cutting guardrails
+## Change-safety checkpoints
 
-- Keep synchronization upload-only. The durable queue is the recovery boundary; do not turn a retry or recovery change into an implicit full rescan.
-- Preserve local-data and transfer safety: credentials belong in the native keyring, not SQLite, logs, errors, or UI events; hashing and uploads must stream rather than buffer full files.
-- Treat a Target Album as part of the queued outcome. Do not silently fall back to the root library when album assignment fails, and retain the remote asset identity so an assignment retry does not upload it again.
-- Preserve folder lifecycle semantics: normalize paths and reject duplicate or overlapping Watched Folders; keep an unavailable folder configured for later reconciliation rather than removing it.
-- Keep Tauri command names and event payloads synchronized with their Svelte callers. Add schema changes as new forward-only migrations; do not edit an applied migration.
+- Keep synchronization upload-only. The durable queue is the recovery boundary: recovered work resumes from queue state rather than forcing a folder rescan.
+- Retain transfer and album safety. Hashing and uploads stream files rather than buffering whole files. A Target Album is captured on the queue entry; on assignment failure do not silently fall back to the root library, and retain the remote asset identity so a retry does not upload it again.
+- Retain folder lifecycle rules. Normalize paths, reject duplicate or parent/child-overlapping Watched Folders, and leave an unavailable folder configured for watcher reconciliation rather than removing it.
+- Keep credentials in the native keyring and out of SQLite, logs, errors, and UI events. Follow the HTTPS-by-default and loopback-only opt-in policy when touching login or HTTP clients.
+- Keep frontend and backend IPC in lockstep. Add persistence changes as new forward-only migrations; do not edit an applied migration.
 
-## Verify at the right boundary
+## Verify at the affected boundary
 
-Use the focused tests described by the owning page while iterating. Before handoff, run the applicable frontend and Rust checks from the [operations guide](operations/development-and-testing.md). The package scripts provide `npm run check`, `npm test`, and the Tauri CLI through `npm run tauri`; start an end-to-end desktop smoke test with `npm run tauri dev`.
+Run the focused tests named by the owning page while iterating, then use the applicable repository checks:
 
-For high-risk changes, verify behavior—not only compilation—across the boundary involved: migration/recovery, pause and retry, duplicate detection, credential handling, target-album failures, or watcher overflow/remount behavior.
+```powershell
+npm run check
+npm test
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+cargo test --manifest-path src-tauri/Cargo.toml --locked
+```
+
+`npm run tauri dev` starts an end-to-end desktop smoke-test session; `npm run tauri build` produces a production build. For high-risk work, test observable behavior across the boundary—not merely compilation—including migration/recovery, pause and retry, duplicate detection, credential handling, Target Album failures, and watcher overflow or removable-volume reconciliation.

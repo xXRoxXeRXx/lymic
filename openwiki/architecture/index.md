@@ -1,3 +1,3 @@
 # Files
 
-- [Desktop Runtime and Lifecycle](runtime.md) - Tauri composition, startup recovery, managed Rust services, background consumers, native window and tray behavior, and the Svelte webview handoff. Use this page when changing initialization order or the Rust-to-webview command and event boundary.
+- [Desktop Runtime Architecture](runtime.md) - Tauri process composition, recovery-first startup, managed Rust services, background consumers, shell behavior, and the Svelte webview boundary. Use this page when changing initialization order, native controls, or Rust-to-webview commands and events.

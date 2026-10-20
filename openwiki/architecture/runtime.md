@@ -1,11 +1,11 @@
 ---
 type: architecture
-title: Desktop Runtime and Lifecycle
-description: Tauri composition, startup recovery, managed Rust services, background consumers, native window and tray behavior, and the Svelte webview handoff. Use this page when changing initialization order or the Rust-to-webview command and event boundary.
+title: Desktop Runtime Architecture
+description: Tauri process composition, recovery-first startup, managed Rust services, background consumers, shell behavior, and the Svelte webview boundary. Use this page when changing initialization order, native controls, or Rust-to-webview commands and events.
 tags: [architecture, tauri, svelte, runtime]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-16T12:54:13.301Z
+    at: 2026-10-19T15:10:01.321Z
 sources:
   - id: openwiki-source-3638749eb6f61a23896edb4d
     resource: repo://src-tauri/src/app/background.rs
@@ -25,125 +25,134 @@ sources:
     resource: repo://src/lib/tauri/sync-event-subscription.ts
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
-generated: { by: "openwiki/0.7.2", at: "2026-10-16T12:54:13.301Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-10-19T15:10:01.321Z" }
 ---
 
-# Desktop Runtime and Lifecycle
+# Desktop Runtime Architecture
 
-Lymic is a Tauri desktop application. The Svelte 5 webview owns presentation and interaction state; the Rust host owns operating-system integration, credentials, persistence, filesystem watching, synchronization, and Immich communication. They communicate through named Tauri commands and serialized events rather than a shared in-process state model.
+Lymic is a Tauri desktop application. The Svelte 5 webview owns presentation and interaction state; the Rust host owns operating-system integration, credentials, persistence, filesystem watching, synchronization, and Immich communication. The boundary is named Tauri commands for request/response operations and serialized events for asynchronous changes, not shared in-process state.
 
-## Composition root and ordering
+## Composition root and startup order
 
-`src-tauri/src/lib.rs` exposes `run`, which delegates to `app::run`. The Tauri builder installs opener, notification, autostart, dialog, process, and updater plugins. Its `setup` callback is the composition root: it computes whether an autostart launch may remain hidden, initializes host state, starts consumers, builds the tray, and queues main-window display when appropriate. The invoke handler is the authoritative command registry for authentication, albums, folders and removable-media acceptance, sync control and status, settings, and the database-recovery notice.
+`src-tauri/src/main.rs` enters `lib::run`, which delegates to `app::run`. The Tauri builder installs opener, notification, autostart, dialog, process, and updater plugins. Its `setup` callback is the composition root: it decides whether an autostart launch remains hidden, initializes host state, spawns background consumers, creates the tray, and, when needed, queues showing the main window on the native main thread. The invoke handler is the authoritative command registry for authentication, albums, folders and removable-media acceptance, synchronization, settings, webview startup probes, and the database-recovery notice.
 
-The ordering is intentional. `startup::initialize` performs all required setup and manages shared state before `background::spawn` is given its receivers. Only then does the app initialize the tray. Initialization or tray construction errors propagate out of `setup`; the builder consequently does not enter a healthy event-loop runtime. Startup phase audit events mark the individual readiness, failure, tray, queued/displayed-window, and event-loop-ready milestones.
+The ordering is an invariant: `startup::initialize` completes and manages shared state before `background::spawn` starts tasks that retrieve that state from `AppHandle`. Tray setup follows background spawning. Initialization and tray-build errors propagate from `setup`; the runtime does not reach a healthy event loop. Audited startup phases record readiness and failure milestones, tray setup, main-window display, and event-loop readiness.
 
 ```mermaid
 sequenceDiagram
     participant Host as Tauri host
     participant Init as startup initialize
-    participant Store as database and managed state
-    participant Worker as background consumers
+    participant State as database and managed state
+    participant Workers as background consumers
     participant Tray as native tray
     participant Web as Svelte webview
 
     Host->>Init: setup callback
-    Init->>Store: initialize audit watcher database and recovery
-    Init->>Store: manage shared services and monitor state
+    Init->>State: initialize audit watcher database and recovery
+    Init->>State: manage shared services and monitor state
     Init-->>Host: StartupContext
-    Host->>Worker: spawn receiver consumers and scans
-    Host->>Tray: setup menu and icon
-    Host->>Host: queue main window display when not hidden autostart
+    Host->>Workers: spawn scans and receiver consumers
+    Host->>Tray: build menu and icon
+    Host->>Host: queue main window display when required
     Web->>Host: invoke hydration commands
-    Web->>Host: subscribe after sync hydration
-    Worker-->>Web: emit sync and log events
+    Web->>Host: register live listeners after sync hydration
+    Workers-->>Web: emit sync and log events
 ```
 
-The diagram shows the host-to-webview handoff: managed state exists before consumers use it, while the webview first hydrates durable state by command and then follows later changes by event.
+This sequence shows the startup and background handoff: the host state exists before workers use it, while the webview hydrates durable state before following later event updates.
 
 ### Required startup and recovery
 
-`startup::initialize` proceeds as follows:
+`startup::initialize` performs the following work:
 
-1. Create and manage the `AuditLogger`; subsequent startup phase records use it.
-2. Create the bounded watcher event channel (capacity 4,096), overflow-rescan flag and notification, then create the filesystem watcher.
-3. Initialize SQLite and recover the persisted sync snapshot. Failure of audit, watcher, database, sync recovery, or loading configured folders aborts setup. Database corruption can instead be repaired by `db::init`.
-4. When repair occurred, create a one-time `DatabaseRecoveryNotice` containing the reason, backup path, and salvaged folder count; emit a native notification and audit event. The notice is available to the webview through `get_database_recovery_notice`.
-5. Register stored folders with the watcher. An unavailable folder is deferred, and an individual registration failure is logged and audited rather than being fatal.
-6. Manage the pool, watcher mutex, sync-running flag, `SyncCoordinator`, locale, recovery notice, and active-removable-volume state. The coordinator begins paused when the recovered snapshot is `PAUSED`.
-7. Start the platform removable-volume monitor with a channel. Its startup failure is logged to the UI but does **not** abort application startup; the app continues without those monitor events.
+1. It creates and manages the `AuditLogger`, then records subsequent startup phases through it.
+2. It creates the bounded watcher-event channel with capacity 4,096, an overflow flag and notification, then creates the filesystem watcher.
+3. It initializes SQLite and recovers the persisted synchronization snapshot. Audit, watcher, database, sync-recovery, and watched-folder-load failures abort setup. `db::init` may repair database corruption instead.
+4. After a repair, it constructs a one-time `DatabaseRecoveryNotice` with the reason, backup path, and salvaged folder count, sends a localized native notification, and records an audit event. `get_database_recovery_notice` exposes the managed notice to the webview.
+5. It registers persisted folders with the watcher. Unavailable paths are deferred, and individual watch-registration errors are logged and audited rather than making the whole startup fail.
+6. It manages the pool, watcher mutex, `SyncState`, `SyncCoordinator`, locale, recovery notice, and active removable-volume state. The coordinator begins paused when the recovered status is `PAUSED`.
+7. It starts the platform removable-volume monitor. Failure to start that monitor is logged to the UI but is deliberately nonfatal, so the application continues without monitor events.
 
 For persistence and repair semantics, see [Local Persistence and Recovery](../data/local-state.md).
 
-### Visibility and process lifetime
+### Visibility and lifetime
 
-The autostart plugin launches Lymic with `--autostart`. The main window remains hidden only if that argument is present **and** reading credentials succeeds with stored credentials. A manual launch, absent credentials, or keyring-read failure queues showing and focusing the `main` window on the native main thread. Scheduling this call avoids blocking the Windows event loop during setup.
+The autostart plugin supplies `--autostart`. The main window stays hidden only when that argument is present **and** credentials can be read and are stored. A manual launch, absent credentials, or a credential-read error queues showing and focusing the `main` window on the native main thread. Scheduling avoids blocking the Windows event loop during setup.
 
-A close request hides the window and prevents closure, preserving background services and tray controls. The tray Show action—and a left-click on non-macOS—shows and focuses that window; explicit Quit calls `app.exit(0)`. On `RunEvent::Exit`, the runtime appends the `app.shutdown` audit event and attempts an audit-log flush.
+A close request hides the window and prevents it from closing, leaving background tasks and tray controls available. The tray Show action—and a non-macOS left-click—shows and focuses the window; Quit calls `app.exit(0)`. When Tauri emits `RunEvent::Exit`, the host appends `app.shutdown` to the audit log and attempts to flush it.
 
-## Managed host state and consumers
+## Managed state and background consumers
 
 Tauri-managed state is the host-side sharing boundary for commands, tray actions, and asynchronous tasks:
 
 - `Arc<AuditLogger>` records startup, recovery, watcher, and shutdown operations.
-- `SqlitePool` accesses durable state.
-- `Mutex<WatcherState>` serializes filesystem-watch registration and reconciliation.
+- `SqlitePool` accesses durable state, while `Mutex<WatcherState>` serializes watcher registration and reconciliation.
 - `SyncState` and `SyncCoordinator` serialize activity and retain the recovered pause decision.
-- `LocaleState` and `DatabaseRecoveryNotice` serve localization and one-time recovery reporting.
-- `ActiveRemovableVolumes` tracks removable-volume handling; tray setup additionally manages the menu plus cached sync and transfer state.
+- `LocaleState` and `DatabaseRecoveryNotice` serve backend localization and one-time recovery reporting.
+- `ActiveRemovableVolumes` tracks removable-media handling. Tray setup additionally manages the menu, cached sync status, and transfer statistics.
 
-`background::spawn` creates four independent loops after managed state is available:
+`background::spawn` starts four independent tasks after that state is available: a startup scan delayed by two seconds, a debounced watcher-event consumer, deferred-watch reconciliation every 30 seconds, and a removable-volume event consumer. Deferred reconciliation checks persisted paths, reconciles registrations under the watcher mutex, and scans paths that have just become registered. A removable-event handling error is reported to the UI and does not terminate the event loop.
 
-- a startup scan after two seconds;
-- a watcher-event consumer which debounces changes for two seconds;
-- deferred-watch reconciliation every 30 seconds for paths unavailable at startup; and
-- a removable-volume event consumer.
+All scan producers call `sync_scan_result_if_authenticated`. It converts scan output into upload units and failures, persists them to the SQLite queue, updates the tray and emits a snapshot **before** it considers starting work. A restored pause returns after enqueueing. Otherwise the durable lifecycle gate admits at most one runner; it is aborted when credentials or an authenticated client are unavailable. Thus scanning can continue to make durable progress while a run is active, paused, or cannot yet authenticate. See [Synchronization Workflow](../workflows/synchronization.md).
 
-The deferred-watch loop checks configured paths, reconciles registrations while holding the watcher mutex, then scans newly registered paths. The removable consumer builds a `RemovableVolumeCoordinator` from the managed database and active-volume state. Errors in either consumer are reported to the UI; they do not take down the event loop.
+The watcher channel is bounded by design. On overflow, the watcher requests a rescan; after the debounce interval, the consumer discards incremental buffers, scans every watched folder, then queues the reconciled result. This prefers reconciliation to silently losing filesystem changes. See [Watched Folders](../workflows/watched-folders.md).
 
-All scan sources pass results to `sync_scan_result_if_authenticated`. It persists upload units and failures to the SQLite queue and publishes an updated snapshot before considering a runner. A recovered pause returns after enqueueing; otherwise a runner starts only when stored credentials and valid client configuration are available. This preserves the durable queue as the scan-to-upload handoff even when a runner is already active. See [Synchronization Workflow](../workflows/synchronization.md).
+## Webview bootstrapping and IPC
 
-The watcher channel is bounded by design. On overflow, the watcher sets a rescan request; after debounce, the consumer clears its incremental buffers and scans all configured folders before queueing work. This favors reconciliation over silently missing changes. See [Watched Folders](../workflows/watched-folders.md).
+The root route creates feedback, target-album, removable-volume, synchronization, authentication, preferences, and update controllers once. On mount it starts the sync, updater, and preference lifecycles, begins removable-volume subscriptions, then independently hydrates authentication, synchronization, and preferences. Synchronization event subscriptions are installed only after `sync.hydrate()` resolves; authentication hydration refreshes failed uploads only for an authenticated user. Updater startup also records webview update and version phase probes through a command.
 
-## Webview lifecycle and IPC boundary
+The route renders login when unauthenticated and dashboard or settings when authenticated. It passes controller state and callbacks to views, keeping direct Rust invocation out of leaf presentation components. On teardown it destroys sync, updater, preferences, and removable-volume lifecycles. Sync destruction clears its timer, marks itself unmounted, and invokes the event disposer; the subscription helper also unregisters a listener that resolves after disposal or after the lifecycle becomes inactive.
 
-The root route creates feedback, removable-volume, sync, authentication, preferences, and update controllers once. On mount it marks the sync controller mounted, starts updater and preference lifecycles, starts removable-volume subscriptions, and independently hydrates authentication, sync state, and preferences. It installs sync event listeners only after `sync.hydrate()` completes; after authentication hydration it refreshes failed uploads only for an authenticated user. Updater startup also records webview update/version phase probes through a command.
+### Hydrate with commands, then follow events
 
-The root route renders login when unauthenticated and dashboard or settings when authenticated. It passes controller state and callbacks to views, keeping direct Rust invocation out of leaf presentation components. On teardown, it destroys sync, updater, preferences, and removable-volume lifecycles. Sync destruction clears its timer, marks it unmounted, and calls the subscription disposer. Because event listeners are registered asynchronously, the subscription helper immediately unregisters a listener if disposal or inactivity wins the race.
+The frontend is not the durable-state authority. Sync hydration requests folders and sync status, maps host `RUNNING` and `PAUSED` snapshots to UI state, and only then subscribes to changes. User actions invoke commands such as `start_sync`, `pause_sync`, `resume_sync`, folder management, retry, and settings updates; controllers send actionable failures to feedback.
 
-### Hydrate with commands, follow with events
+```mermaid
+sequenceDiagram
+    participant User as user
+    participant Web as Svelte controller
+    participant Host as Rust command handler
+    participant Store as SQLite and sync state
+    participant Shell as tray and window
 
-The frontend is not the durable-state authority. For example, sync hydration reads `get_folders` and `get_sync_status`, mapping host `RUNNING` and `PAUSED` snapshots to UI state. It then combines that initial result with live events. Actions invoke `start_sync`, `pause_sync`, `resume_sync`, folder management, retry, and settings commands; controllers route actionable errors through feedback.
+    User->>Web: choose a sync action
+    Web->>Host: invoke command
+    Host->>Store: read or change durable state
+    Host-->>Web: command result
+    Host->>Shell: refresh tray action or transfer label
+    Host-->>Web: emit snapshot progress log or error
+    User->>Shell: click Sync Show or Quit
+    Shell->>Host: dispatch native action
+    Host->>Store: pause resume or start synchronization
+    Shell->>Web: show and focus main window when requested
+```
 
-Commands are request/response operations such as login, status reads, setting changes, and explicit sync actions. Events carry asynchronous changes that may occur without a webview button click:
+This shell and event flow distinguishes commands used to hydrate or request work from best-effort host events used to update an already-hydrated webview.
 
-- `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, and `sync-idle` update synchronization presentation;
-- `trigger-sync` lets the native tray request the same frontend start path;
-- `log-message` carries a normalized `UiLogMessage` for the in-webview log.
-
-Events are best-effort live updates: host helpers deliberately ignore event-emission and native-notification errors. Command hydration is therefore the recovery mechanism after reload or missed notifications. Event names and payload shapes are a compatibility boundary; changing one requires coordinated Rust emitter, TypeScript subscription/controller, and test changes. See [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md).
+Events include `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `sync-idle`, and `log-message`. The frontend subscription also retains a `trigger-sync` listener, but the current Rust tray implementation starts synchronization directly rather than emitting that event. Event emission and native-notification failures are deliberately ignored by the helpers, so command hydration is the recovery path after reload or a missed update. Event names and payload shapes are a compatibility boundary: change the Rust producer, TypeScript subscription and controller, payload types, and tests together. See [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md).
 
 ## Native tray control surface
 
-Tray setup creates a disabled transfer-status item, Sync, Show, and Quit. Sync is initially enabled only when startup found folders. The action derives from the persisted snapshot: `RUNNING` pauses directly through the internal sync logic, `PAUSED` resumes through that logic, and every other state emits `trigger-sync` for the webview. Failures produce both a UI log and `sync-error`; the tray then refreshes its cached action from the database.
+Tray setup creates a disabled transfer-status item plus Sync, Show, and Quit. Sync is initially enabled only if startup found folders. The Sync handler reads the persisted snapshot: `RUNNING` pauses through the internal sync service, `PAUSED` resumes through it, and every other status directly creates `Synchronization` and calls `start`. It does not depend on the webview being present. If that action fails, the host emits a UI log and `sync-error`, then refreshes its cached action from the database.
 
-The tray keeps managed copies of sync status and the latest transfer statistics. Snapshots choose the localized Sync action; active `RUNNING` or `PAUSED` transfers show percentage and optional ETA, while other states show localized idle text. Locale changes can refresh these native labels even while the webview remains hidden.
+The tray keeps managed sync-status and transfer-statistics copies. Status selects localized Sync, Pause Sync, or Resume Sync text. While a transfer is `RUNNING` or `PAUSED`, its disabled label shows percentage and, if available, ETA; other statuses use localized idle text. Locale updates can therefore refresh native labels while the main window is hidden.
 
 ## Safe change guidance
 
-- Initialize and manage every resource shared by commands or tasks before spawning a consumer that retrieves it from `AppHandle` state.
-- Preserve the distinction between fatal initialization and explicit degradation. In particular, removable-monitor startup is nonfatal, while audit, watcher, database, and recovery failures are not.
-- Add a host command to the invoke registry and expose it through a controller rather than calling `invoke` from a leaf component. Retain command hydration paths for event-loss recovery.
+- Initialize and manage every resource shared by commands or tasks before spawning a task that retrieves it from `AppHandle` state.
+- Preserve the fatal/nonfatal boundary: audit, watcher, database, recovery, and folder-load failures abort startup, whereas removable-monitor startup failure degrades only that feature.
+- Add a host command to the invoke registry and expose it through a controller instead of calling `invoke` from a leaf component. Retain command hydration for event-loss recovery.
 - When changing an event, update its Rust producer, `sync-event-subscription.ts`, controller cleanup, payload types, and tests together.
-- Do not schedule upload work before scan output is queued, and do not bypass the restored pause gate.
-- Keep tray behavior coherent with sync status changes: it remains the usable native control surface when the main window is hidden.
+- Preserve queue-before-runner ordering and the restored-pause gate for automatic scan results.
+- Keep tray behavior coherent with persisted sync state. It is a direct native control surface when the main window is hidden, not a proxy that requires a live webview.
 
-Focused Rust tests cover autostart visibility in `app/mod.rs` and tray action/label behavior in `app/tray.rs`; TypeScript controller tests cover IPC and lifecycle behavior. Run the checks described in [Development and Testing](../operations/development-and-testing.md) after cross-runtime changes.
+Focused Rust tests cover Tauri command registration and autostart visibility in `app/mod.rs`, synchronization lifecycle behavior in `sync/service.rs`, and tray actions and labels in `app/tray.rs`. TypeScript controller tests cover IPC and lifecycle behavior. Run the checks described in [Development and Testing](../operations/development-and-testing.md) after cross-runtime changes.
 
 ## Related pages
 
 - [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md)
 - [Local Persistence and Recovery](../data/local-state.md)
+- [Audit Logging](../operations/audit-logging.md)
 - [Synchronization Workflow](../workflows/synchronization.md)
 - [Watched Folders](../workflows/watched-folders.md)
 - [Development and Testing](../operations/development-and-testing.md)

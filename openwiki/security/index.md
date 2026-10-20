@@ -1,3 +1,3 @@
 # Files
 
-- [Authentication and Credential Security](authentication.md) - How Lymic validates Immich servers, protects credentials in the native keyring, and keeps secrets out of diagnostics.
+- [Authentication and Credential Safety](authentication.md) - How Lymic validates Immich login details, constrains server URLs, stores credentials in the native keyring, and prevents credential values from entering audit diagnostics.

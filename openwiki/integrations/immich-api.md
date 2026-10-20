@@ -24,10 +24,10 @@ sources:
     resource: repo://src-tauri/src/sync/completion.rs
   - id: openwiki-source-bcad6545247450f4a447e642
     resource: repo://src-tauri/src/sync/processor.rs
+generated: { by: "openwiki/0.7.2", at: "2026-10-19T15:10:01.321Z" }
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-15T14:38:41.442Z
-generated: { by: "openwiki/0.7.2", at: "2026-10-15T14:38:41.442Z" }
+    at: 2026-10-19T15:10:01.321Z
 ---
 
 # Immich API Integration
@@ -40,7 +40,13 @@ Credentials contain the server URL, Immich API key, an opt-in local-HTTP setting
 
 The client normalizes a server URL to an `/api/` base while retaining a configured path prefix. It accepts HTTPS, or HTTP only when `allow_local_http` is enabled **and** the host is `localhost` or a loopback IPv4/IPv6 address. URLs without a host, with embedded credentials, query parameters, or fragments are rejected. Redirects are disabled so an API-key request cannot be redirected from HTTPS to HTTP. Cloudflare Access is all-or-nothing: both configured values become default request headers, with the secret marked sensitive.
 
-Every Immich request uses `x-api-key`. Successful bodies that need parsing are capped at 1 MiB; diagnostic error bodies are capped at 8 KiB, normalized to one line, and annotated when truncated. This protects the desktop process from unexpectedly large server responses while retaining useful status/error detail.
+Every Immich request uses `x-api-key`. The bulk-check, upload, and album methods use a 1 MiB bounded reader for successful response bodies; current-user JSON is decoded directly, so this is not a universal success-body cap. Error diagnostics are capped at 8 KiB, normalized to one line, and annotated when truncated. Profile-image retrieval is separately limited to 10 MiB by declared and received byte length, and retains a content type only when it begins with `image/`.
+
+### Current-user profile retrieval
+
+The `get_current_user` Tauri command loads the stored credentials and constructs an `ImmichClient`. It calls `GET users/me` for the user ID, display name, and whether `profileImagePath` is nonblank. When an image is advertised, it then calls `GET users/{userId}/profile-image`; an image-fetch failure still leaves the fetched ID and display name available to the profile-cache resolver. Client construction or current-user refresh failures are likewise passed to that resolver rather than returned as a profile-fetch error.
+
+Before resolving or persisting the result, the command rereads credentials and compares the derived account ID. A logout or account switch during the asynchronous refresh returns `Session changed during profile refresh`, preventing data fetched for one account from being written under another account's cache.
 
 ## External API contract
 
@@ -110,11 +116,11 @@ This is local queue and completion control flow; grouping and failure marking ar
 
 ## Failure behavior and change boundaries
 
-The processor honors pause and per-path cancellation before starting further hashes, checks, uploads, or album assignment; cancellation of an in-flight upload produces no terminal queue result. New uploads are executed with configured upload parallelism, while the batch check remains bounded at 100 units. Remote upload failure marks every asset in the upload unit failed locally. For a successful remote upload whose local persistence fails, reconciliation rechecks the hashes remotely before retrying persistence, avoiding another upload when all unit assets can be found.
+The processor honors pause and per-path cancellation before starting further hashes, checks, uploads, or album assignment; cancellation of an in-flight upload produces no terminal queue result. New uploads are executed with configured upload parallelism, while the batch check remains bounded at 100 units. Remote upload failure marks every asset in the upload unit failed locally. If a successful upload cannot be durably completed in local state, the production processor reports the completion failure and marks the unit failed; it does not recheck the remote hashes or retry persistence in that path. A `persist_with_reconciliation` helper exists only under `#[cfg(test)]`, so it is not a production duplicate-upload safeguard.
 
 When extending this integration, keep the split explicit:
 
-- Add or change an Immich endpoint in `src-tauri/src/immich/`, including bounded response parsing and endpoint-specific validation.
+- Add or change an Immich endpoint in `src-tauri/src/immich/`, with endpoint-specific validation and an explicit response-size policy.
 - Keep scheduling, duplicate-to-queue decisions, target-album grouping, audit/UI reporting, and terminal state changes in `src-tauri/src/sync/`.
 - Preserve the invariant that a target-album unit is not `SYNCED` until both a remote ID is durable locally and its album assignment has succeeded.
 - Exercise mock-server tests for request shape and error responses, parser tests for strict contracts, and completion/processor tests for local state transitions.
