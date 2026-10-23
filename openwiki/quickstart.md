@@ -5,7 +5,7 @@ description: Contributor routing guide from Lymic's Tauri and Svelte entry point
 tags: [guide, architecture, contributors]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-19T15:10:01.321Z
+    at: 2026-10-23T12:59:10.542Z
 sources:
   - id: openwiki-source-ab40d61d1bfa656ad091dbd7
     resource: repo://docs/agents/application-map.md
