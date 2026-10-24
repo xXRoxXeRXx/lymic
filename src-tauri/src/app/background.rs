@@ -6,8 +6,8 @@ use crate::{
     audit::{self, audit_event},
     db,
     sync::{
-        add_event_paths, log_overlapping_folders, scan_watched_folders_for_media,
-        sync_scan_result_if_authenticated, Asset, FileFailure, ScanResult,
+        add_event_paths, admit_and_run, log_overlapping_folders, scan_watched_folders_for_media,
+        Asset, FileFailure, ScanResult, SyncSource,
     },
 };
 use serde_json::json;
@@ -148,7 +148,6 @@ fn spawn_deferred_watches(handle: tauri::AppHandle) {
                     ),
                 );
             }
-            let registered_paths = registered_paths;
             let scan_folders = match db::get_folders(&pool).await {
                 Ok(folders) => folders
                     .into_iter()
@@ -182,8 +181,13 @@ fn spawn_deferred_watches(handle: tauri::AppHandle) {
                     continue;
                 }
             };
-            sync_scan_result_if_authenticated(handle.clone(), pool, scan_result, "deferred_folder")
-                .await;
+            admit_and_run(
+                handle.clone(),
+                pool,
+                scan_result,
+                SyncSource::DeferredFolder,
+            )
+            .await;
         }
     });
 }
@@ -227,7 +231,7 @@ fn spawn_startup_sync(handle: tauri::AppHandle) {
                 return;
             }
         };
-        sync_scan_result_if_authenticated(handle.clone(), pool, scan_result, "startup_sync").await;
+        admit_and_run(handle.clone(), pool, scan_result, SyncSource::Startup).await;
     });
 }
 
@@ -346,13 +350,7 @@ fn spawn_watcher_consumer(
                     .failures
                     .extend(failures_buffer.drain().map(|(_, failure)| failure));
                 let pool = handle.state::<sqlx::SqlitePool>().inner().clone();
-                sync_scan_result_if_authenticated(
-                    handle.clone(),
-                    pool,
-                    scan_result,
-                    "watcher_sync",
-                )
-                .await;
+                admit_and_run(handle.clone(), pool, scan_result, SyncSource::Watcher).await;
             }
         }
     });
