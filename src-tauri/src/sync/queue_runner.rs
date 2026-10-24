@@ -8,10 +8,9 @@ use crate::{
     audit::{self, audit_event, SyncAuditContext},
     db,
     immich::{ImmichClient, SidecarDirectoryCache},
-    media::model::ScanResult,
     sync::{
         processor::{RunProcessor, SyncSummary},
-        JobByteProgress, SyncCoordinatorInner,
+        JobByteProgress, SyncCoordinatorInner, SyncSource,
     },
 };
 use serde_json::json;
@@ -48,24 +47,21 @@ pub(crate) async fn run_sync_pipeline(
     app: tauri::AppHandle,
     pool: sqlx::SqlitePool,
     client: Arc<ImmichClient>,
-    scan_result: ScanResult,
-    is_auto: bool,
+    source: SyncSource,
     coordinator: Arc<SyncCoordinatorInner>,
+    running: Arc<std::sync::atomic::AtomicBool>,
     audit_context: SyncAuditContext,
 ) -> Result<SyncSummary, String> {
-    // Scans are merely producers. The durable queue is the sole source used by the
-    // runner, including after recovery, so no completed item is re-scanned to resume.
-    let folders = db::get_folders(&pool).await.unwrap_or_default();
-    let (queue_units, queue_failures) =
-        crate::sync::service::prepare_scan_for_queue(&scan_result, &folders);
-    let snapshot = db::enqueue_upload_units(&pool, &queue_units, &queue_failures)
+    // Admission persists producer work before this runner starts. The durable
+    // queue is therefore the sole source used here, including after recovery.
+    let is_automatic = !source.is_manual();
+    let snapshot = db::get_sync_snapshot(&pool)
         .await
-        .map_err(|error| format!("Could not persist sync queue: {}", error))?;
-    crate::app::tray::update_sync_action(&app, &snapshot);
+        .map_err(|error| format!("Could not load sync queue: {error}"))?;
     let _sync_guard = match coordinator.lock.try_lock() {
         Ok(guard) => guard,
         Err(_) => {
-            if !is_auto {
+            if source.is_manual() {
                 crate::app::events::log_to_ui_key(
                     &app,
                     "INFO",
@@ -85,7 +81,7 @@ pub(crate) async fn run_sync_pipeline(
             audit::Outcome::Started,
             audit::Severity::Info,
             "Synchronization started",
-            json!({ "automatic": is_auto }),
+            json!({ "source": source.audit_label() }),
         ),
     );
     let mut totals = SyncSummary {
@@ -169,6 +165,10 @@ pub(crate) async fn run_sync_pipeline(
             .await
             .map_err(|error| format!("Could not load sync queue: {}", error))?;
         if queued.is_empty() {
+            // Release runner ownership before the terminal database transition.
+            // A producer admitted in this window can claim a successor runner;
+            // its pending work then makes the conditional completion a no-op.
+            running.store(false, Ordering::SeqCst);
             let snapshot = db::complete_sync_job_if_finished(&pool)
                 .await
                 .map_err(|error| format!("Could not complete sync job: {}", error))?
@@ -185,10 +185,10 @@ pub(crate) async fn run_sync_pipeline(
             );
             transfer_stats.set_active(false);
             emit_transfer_stats(&app, &transfer_stats);
-            if is_auto {
+            if is_automatic {
                 let _ = app.emit("sync-idle", ());
             }
-            if !is_auto || totals.uploaded > 0 || totals.failed > 0 {
+            if !is_automatic || totals.uploaded > 0 || totals.failed > 0 {
                 let locale = app
                     .state::<LocaleState>()
                     .0
@@ -198,7 +198,7 @@ pub(crate) async fn run_sync_pipeline(
                 let translations = backend_translations(&locale);
                 let title = translations.notification_complete_title.replacen(
                     "{}",
-                    if is_auto { "Auto-sync" } else { "Sync" },
+                    if is_automatic { "Auto-sync" } else { "Sync" },
                     1,
                 );
                 let body = translations

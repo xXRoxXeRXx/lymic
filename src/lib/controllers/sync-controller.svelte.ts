@@ -106,7 +106,9 @@ export function createSyncController(options: SyncControllerOptions) {
   function applySyncSnapshot(snapshot: SyncSnapshot | null | undefined) {
     if (!snapshot || !mounted) return;
 
-    syncStatus = snapshot.status === "PAUSED"
+    syncStatus = snapshot.status === "FAILED"
+      ? "error"
+      : snapshot.status === "PAUSED"
       ? "paused"
       : snapshot.status === "RUNNING"
         ? "syncing"

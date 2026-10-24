@@ -10,6 +10,50 @@ use crate::{
 use std::sync::{atomic::Ordering, Arc};
 use tauri::{Emitter, Manager};
 
+/// Identifies the producer submitting Synchronization work.
+///
+/// This keeps audit/UI behaviour explicit at the admission boundary instead of
+/// allowing producers to pass behaviour-changing string literals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SyncSource {
+    Manual,
+    RetryFailed,
+    Watcher,
+    Startup,
+    DeferredFolder,
+    FolderAdded,
+    ExclusionPatternsChanged,
+    RemovableMediaReconnect,
+    Recovery,
+}
+
+impl SyncSource {
+    pub(crate) const fn audit_label(self) -> &'static str {
+        match self {
+            Self::Manual => "manual_sync",
+            Self::RetryFailed => "retry_failed_syncs",
+            Self::Watcher => "watcher_sync",
+            Self::Startup => "startup_sync",
+            Self::DeferredFolder => "deferred_folder",
+            Self::FolderAdded => "folder_add",
+            Self::ExclusionPatternsChanged => "exclusion_patterns_changed",
+            Self::RemovableMediaReconnect => "removable_media_reconnect",
+            Self::Recovery => "resume_sync",
+        }
+    }
+
+    pub(crate) const fn is_manual(self) -> bool {
+        matches!(self, Self::Manual | Self::RetryFailed)
+    }
+}
+
+#[derive(Debug, Clone)]
+enum LifecycleClaim {
+    Started(db::SyncSnapshot),
+    Joined,
+    Paused,
+}
+
 /// Durable synchronization state transitions, independent of the desktop shell.
 ///
 /// `Synchronization` owns the surrounding desktop orchestration; this smaller
@@ -34,17 +78,21 @@ impl<'a> SynchronizationLifecycle<'a> {
         }
     }
 
-    pub(crate) async fn start(&self) -> Result<db::SyncSnapshot, String> {
+    async fn start_or_join(&self) -> Result<LifecycleClaim, String> {
+        let current = self.status().await?;
+        if current.status == "PAUSED" {
+            return Ok(LifecycleClaim::Paused);
+        }
         if self
             .running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
-            return Err("Sync already in progress".to_string());
+            return Ok(LifecycleClaim::Joined);
         }
 
         match db::set_sync_status(self.pool, "RUNNING").await {
-            Ok(snapshot) => Ok(snapshot),
+            Ok(snapshot) => Ok(LifecycleClaim::Started(snapshot)),
             Err(error) => {
                 self.running.store(false, Ordering::SeqCst);
                 Err(error.to_string())
@@ -56,9 +104,9 @@ impl<'a> SynchronizationLifecycle<'a> {
         self.running.store(false, Ordering::SeqCst);
     }
 
-    pub(crate) async fn abort(&self) -> Result<db::SyncSnapshot, String> {
+    pub(crate) async fn fail(&self) -> Result<db::SyncSnapshot, String> {
         self.finish();
-        db::set_sync_status(self.pool, "IDLE")
+        db::set_sync_status(self.pool, "FAILED")
             .await
             .map_err(|error| error.to_string())
     }
@@ -121,26 +169,22 @@ impl<'a> Synchronization<'a> {
         SynchronizationLifecycle::new(self.pool, self.running, self.coordinator.clone())
     }
 
+    /// Admit producer output into the durable queue before any runner observes it.
+    /// This is the shared boundary for manual scans, watcher batches, remounts,
+    /// and recovery; producers do not choose queue ordering or runner ownership.
+    pub(crate) async fn admit(&self, scan_result: ScanResult) -> Result<db::SyncSnapshot, String> {
+        log_overlapping_folders(self.app, &scan_result);
+        let snapshot = admit_scan_result(self.pool, &scan_result).await?;
+        crate::app::tray::update_sync_action(self.app, &snapshot);
+        let _ = self.app.emit("sync-progress-snapshot", &snapshot);
+        Ok(snapshot)
+    }
+
     pub(crate) async fn start(&self) -> Result<crate::sync::SyncSummary, String> {
         let folders = db::get_folders(self.pool)
             .await
             .map_err(|error| error.to_string())?;
         ensure_sync_has_folders(&folders)?;
-        let operation_id = crate::audit::AuditEvent::operation_id();
-        let running_snapshot = match self.lifecycle().start().await {
-            Ok(snapshot) => snapshot,
-            Err(error) if error == "Sync already in progress" => {
-                crate::app::events::log_to_ui_key(
-                    self.app,
-                    "WARN",
-                    "Manual sync already in progress. Ignoring request.",
-                    "log_sync_already_in_progress",
-                );
-                return Err(error);
-            }
-            Err(error) => return Err(error),
-        };
-        crate::app::tray::update_sync_action(self.app, &running_snapshot);
         crate::app::events::log_to_ui_key(
             self.app,
             "INFO",
@@ -148,112 +192,138 @@ impl<'a> Synchronization<'a> {
             "log_starting_sync",
         );
 
-        let result = async {
-            let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-            let audit_context = SyncAuditContext::from_credentials(&credentials, "manual_sync");
-            let client = create_authenticated_client(self.app, credentials)
-                .ok_or("Invalid server configuration")?;
-            for folder in &folders {
-                crate::app::events::log_to_ui_folder(
-                    self.app,
-                    "INFO",
-                    &format!("Scanning folder: {}", folder.path),
-                    "log_scanning_folder",
-                    &folder.path,
-                );
-            }
-            let scan_result = scan_watched_folders_for_media(folders).await?;
-            log_overlapping_folders(self.app, &scan_result);
-            crate::sync::queue_runner::run_sync_pipeline(
-                self.app.clone(),
-                self.pool.clone(),
-                client,
-                scan_result,
-                false,
-                self.coordinator.clone(),
-                audit_context,
-            )
-            .await
-        }
-        .await;
-
-        self.lifecycle().finish();
-        if let Err(error) = &result {
-            if let Ok(snapshot) = self.lifecycle().abort().await {
-                crate::app::tray::update_sync_action(self.app, &snapshot);
-            }
-            crate::audit::audit_event(
+        for folder in &folders {
+            crate::app::events::log_to_ui_folder(
                 self.app,
-                crate::audit::AuditEvent::new(
-                    &operation_id,
-                    "sync.aborted",
-                    crate::audit::Outcome::Failure,
-                    crate::audit::Severity::Error,
-                    None,
-                    "manual_sync",
-                    "Manual synchronization aborted",
-                    serde_json::json!({ "failure_reason": crate::audit::audit_safe_error(error, &[]) }),
-                ),
+                "INFO",
+                &format!("Scanning folder: {}", folder.path),
+                "log_scanning_folder",
+                &folder.path,
             );
         }
-        result
+        let scan_result = scan_watched_folders_for_media(folders).await?;
+        Ok(self
+            .admit_and_run(scan_result, SyncSource::Manual)
+            .await?
+            .unwrap_or_default())
     }
 
     pub(crate) async fn retry(&self) -> Result<crate::sync::SyncSummary, String> {
-        let operation_id = crate::audit::AuditEvent::operation_id();
-        let running_snapshot = self.lifecycle().start().await?;
-        crate::app::tray::update_sync_action(self.app, &running_snapshot);
-        let result = async {
-            let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-            let audit_context =
-                SyncAuditContext::from_credentials(&credentials, "retry_failed_syncs");
-            let client = create_authenticated_client(self.app, credentials)
-                .ok_or("Invalid server configuration")?;
-            let failed_paths = db::get_failed_syncs(self.pool)
-                .await
-                .map_err(|error| error.to_string())?
-                .into_iter()
-                .map(|entry| entry.local_path)
-                .collect();
-            let folders = db::get_folders(self.pool)
-                .await
-                .map_err(|error| error.to_string())?;
-            let scan_result = crate::sync::prepare_failed_sync_retry(failed_paths, folders).await?;
-            db::discard_failed_sync_paths(self.pool, &scan_result.discarded_paths)
-                .await
-                .map_err(|error| error.to_string())?;
-            crate::sync::queue_runner::run_sync_pipeline(
+        let failed_paths = db::get_failed_syncs(self.pool)
+            .await
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .map(|entry| entry.local_path)
+            .collect();
+        let folders = db::get_folders(self.pool)
+            .await
+            .map_err(|error| error.to_string())?;
+        let scan_result = crate::sync::prepare_failed_sync_retry(failed_paths, folders).await?;
+        db::discard_failed_sync_paths(self.pool, &scan_result.discarded_paths)
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(self
+            .admit_and_run(scan_result, SyncSource::RetryFailed)
+            .await?
+            .unwrap_or_default())
+    }
+
+    /// The sole producer boundary: persist work, claim or join the lifecycle,
+    /// construct authenticated execution, and retain a durable failure state.
+    /// Automatic producers return once their work is admitted; manual producers
+    /// await the runner they successfully claimed.
+    pub(crate) async fn admit_and_run(
+        &self,
+        scan_result: ScanResult,
+        source: SyncSource,
+    ) -> Result<Option<crate::sync::SyncSummary>, String> {
+        if scan_result.files.is_empty() && scan_result.failures.is_empty() {
+            return Ok(None);
+        }
+        self.admit(scan_result).await?;
+
+        let lifecycle = self.lifecycle();
+        let claim = lifecycle.start_or_join().await?;
+        let LifecycleClaim::Started(started) = claim else {
+            return Ok(None);
+        };
+        crate::app::tray::update_sync_action(self.app, &started);
+
+        let credentials = match auth::get_credentials() {
+            Ok(Some(credentials)) => credentials,
+            Ok(None) => return self.fail_run(source, "Not logged in").await,
+            Err(error) => return self.fail_run(source, &error.to_string()).await,
+        };
+        let audit_context = SyncAuditContext::from_credentials(&credentials, source.audit_label());
+        let Some(client) = create_authenticated_client(self.app, credentials) else {
+            return self.fail_run(source, "Invalid server configuration").await;
+        };
+
+        if source.is_manual() {
+            let result = run_sync_pipeline(
                 self.app.clone(),
                 self.pool.clone(),
                 client,
-                scan_result,
-                false,
+                source,
                 self.coordinator.clone(),
+                self.app.state::<crate::sync::SyncState>().0.clone(),
                 audit_context,
             )
-            .await
-        }
-        .await;
-        self.lifecycle().finish();
-        if let Err(error) = &result {
-            if let Ok(snapshot) = self.lifecycle().abort().await {
-                crate::app::tray::update_sync_action(self.app, &snapshot);
+            .await;
+            lifecycle.finish();
+            match result {
+                Ok(summary) => Ok(Some(summary)),
+                Err(error) => self.fail_run(source, &error).await,
             }
-            crate::audit::audit_event(
-                self.app,
-                crate::audit::AuditEvent::new(
-                    &operation_id,
-                    "sync.retry_aborted",
-                    crate::audit::Outcome::Failure,
-                    crate::audit::Severity::Error,
-                    None,
-                    "retry_failed_syncs",
-                    "Failed synchronization retry aborted",
-                    serde_json::json!({ "failure_reason": crate::audit::audit_safe_error(error, &[]) }),
-                ),
-            );
+        } else {
+            let app = self.app.clone();
+            let pool = self.pool.clone();
+            let coordinator = self.coordinator.clone();
+            let running = self.app.state::<crate::sync::SyncState>().0.clone();
+            tauri::async_runtime::spawn(async move {
+                let result = run_sync_pipeline(
+                    app.clone(),
+                    pool.clone(),
+                    client,
+                    source,
+                    coordinator,
+                    running,
+                    audit_context,
+                )
+                .await;
+                app.state::<crate::sync::SyncState>()
+                    .0
+                    .store(false, Ordering::SeqCst);
+                if let Err(error) = result {
+                    emit_sync_error(&app, &error);
+                    if let Ok(snapshot) = db::set_sync_status(&pool, "FAILED").await {
+                        crate::app::tray::update_sync_action(&app, &snapshot);
+                    }
+                }
+            });
+            Ok(None)
         }
-        result
+    }
+
+    async fn fail_run<T>(&self, source: SyncSource, error: &str) -> Result<T, String> {
+        if let Ok(snapshot) = self.lifecycle().fail().await {
+            crate::app::tray::update_sync_action(self.app, &snapshot);
+            let _ = self.app.emit("sync-progress-snapshot", &snapshot);
+        }
+        crate::audit::audit_event(
+            self.app,
+            crate::audit::AuditEvent::new(
+                crate::audit::AuditEvent::operation_id(),
+                "sync.aborted",
+                crate::audit::Outcome::Failure,
+                crate::audit::Severity::Error,
+                None,
+                source.audit_label(),
+                "Synchronization aborted",
+                serde_json::json!({ "failure_reason": crate::audit::audit_safe_error(error, &[]) }),
+            ),
+        );
+        Err(error.to_string())
     }
 
     pub(crate) async fn pause(&self) -> Result<db::SyncSnapshot, String> {
@@ -293,10 +363,22 @@ impl<'a> Synchronization<'a> {
             let _ = self.app.emit("sync-progress-snapshot", &completed);
             return Ok(completed);
         }
-        let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
-        let audit_context = SyncAuditContext::from_credentials(&credentials, "resume_sync");
-        let client = create_authenticated_client(self.app, credentials)
-            .ok_or("Invalid server configuration")?;
+        let credentials = match auth::get_credentials() {
+            Ok(Some(credentials)) => credentials,
+            Ok(None) => return self.fail_run(SyncSource::Recovery, "Not logged in").await,
+            Err(error) => {
+                return self
+                    .fail_run(SyncSource::Recovery, &error.to_string())
+                    .await
+            }
+        };
+        let audit_context =
+            SyncAuditContext::from_credentials(&credentials, SyncSource::Recovery.audit_label());
+        let Some(client) = create_authenticated_client(self.app, credentials) else {
+            return self
+                .fail_run(SyncSource::Recovery, "Invalid server configuration")
+                .await;
+        };
         crate::audit::audit_event(
             self.app,
             audit_context.event(
@@ -311,15 +393,16 @@ impl<'a> Synchronization<'a> {
         let pool = self.pool.clone();
         let cleanup_pool = self.pool.clone();
         let coordinator = self.coordinator.clone();
+        let running = self.app.state::<crate::sync::SyncState>().0.clone();
         self.running.store(true, Ordering::SeqCst);
         tauri::async_runtime::spawn(async move {
             let result = crate::sync::queue_runner::run_sync_pipeline(
                 app.clone(),
                 pool,
                 client,
-                ScanResult::default(),
-                true,
+                SyncSource::Recovery,
                 coordinator,
+                running,
                 audit_context,
             )
             .await;
@@ -328,7 +411,7 @@ impl<'a> Synchronization<'a> {
                 .store(false, Ordering::SeqCst);
             if let Err(error) = result {
                 emit_sync_error(&app, &error);
-                if let Ok(snapshot) = db::set_sync_status(&cleanup_pool, "IDLE").await {
+                if let Ok(snapshot) = db::set_sync_status(&cleanup_pool, "FAILED").await {
                     crate::app::tray::update_sync_action(&app, &snapshot);
                 }
             }
@@ -339,6 +422,22 @@ impl<'a> Synchronization<'a> {
     pub(crate) async fn status(&self) -> Result<db::SyncSnapshot, String> {
         self.lifecycle().status().await
     }
+}
+
+/// Queue a producer result while copying its Watched Folder's current Target
+/// Album into each Upload Unit. Kept free of Tauri so the durable admission
+/// contract is directly testable.
+pub(crate) async fn admit_scan_result(
+    pool: &sqlx::SqlitePool,
+    scan_result: &ScanResult,
+) -> Result<db::SyncSnapshot, String> {
+    let folders = db::get_folders(pool)
+        .await
+        .map_err(|error| error.to_string())?;
+    let (units, failures) = prepare_scan_for_queue(scan_result, &folders);
+    db::enqueue_upload_units(pool, &units, &failures)
+        .await
+        .map_err(|error| format!("Could not persist sync queue: {error}"))
 }
 
 pub(crate) use crate::media::events::{add_event_paths, log_overlapping_folders};
@@ -430,84 +529,23 @@ fn queue_upload_asset(asset: crate::media::model::Asset) -> db::QueueUploadAsset
     }
 }
 
-pub(crate) async fn sync_scan_result_if_authenticated(
+/// Producer-facing Synchronization admission-and-run seam.
+pub(crate) async fn admit_and_run(
     app: tauri::AppHandle,
     pool: sqlx::SqlitePool,
     scan_result: ScanResult,
-    source: &'static str,
+    source: SyncSource,
 ) {
-    log_overlapping_folders(&app, &scan_result);
-    if scan_result.files.is_empty() && scan_result.failures.is_empty() {
-        return;
-    }
-
-    // Persist before scheduling the runner. This keeps the watcher receiver free to
-    // keep draining events while another run is active or the queue is paused.
-    let folders = db::get_folders(&pool).await.unwrap_or_default();
-    let (units, failures) = prepare_scan_for_queue(&scan_result, &folders);
-    match db::enqueue_upload_units(&pool, &units, &failures).await {
-        Ok(snapshot) => {
-            crate::app::tray::update_sync_action(&app, &snapshot);
-            let _ = app.emit("sync-progress-snapshot", &snapshot);
-        }
-        Err(error) => {
-            emit_sync_error(
-                &app,
-                &format!("Could not persist automatic sync queue: {}", error),
-            );
-            return;
-        }
-    }
-
     let coordinator = app.state::<SyncCoordinator>().0.clone();
-    // A restored pause permits scans to add work but must never start the runner.
-    if coordinator.paused.load(Ordering::SeqCst) {
-        return;
-    }
-
-    // Automatic producers use the same durable lifecycle gate as manual work.
-    // When another run owns it, the queued work remains durable and that run will
-    // pick it up instead of starting a competing pipeline.
     let running = app.state::<crate::sync::SyncState>().0.clone();
-    let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator.clone());
-    let started = match lifecycle.start().await {
-        Ok(snapshot) => snapshot,
-        Err(_) => return,
-    };
-    crate::app::tray::update_sync_action(&app, &started);
-
-    if let Ok(Some(credentials)) = auth::get_credentials() {
-        let audit_context = SyncAuditContext::from_credentials(&credentials, source);
-        if let Some(client) = create_authenticated_client(&app, credentials) {
-            let app_for_runner = app.clone();
-            let cleanup_pool = pool.clone();
-            tauri::async_runtime::spawn(async move {
-                let result = run_sync_pipeline(
-                    app_for_runner.clone(),
-                    pool,
-                    client,
-                    ScanResult::default(),
-                    true,
-                    coordinator,
-                    audit_context,
-                )
-                .await;
-                app_for_runner
-                    .state::<crate::sync::SyncState>()
-                    .0
-                    .store(false, Ordering::SeqCst);
-                if let Err(error) = result {
-                    emit_sync_error(&app_for_runner, &error);
-                    if let Ok(snapshot) = db::set_sync_status(&cleanup_pool, "IDLE").await {
-                        crate::app::tray::update_sync_action(&app_for_runner, &snapshot);
-                    }
-                }
-            });
-        } else {
-            let _ = lifecycle.abort().await;
+    let synchronization = Synchronization::new(&app, &pool, &running, &coordinator);
+    match synchronization.admit_and_run(scan_result, source).await {
+        Ok(_) => {}
+        Err(error) => {
+            if source.is_manual() {
+                emit_sync_error(&app, &format!("Synchronization admission failed: {error}"));
+            }
         }
-    } else {
-        let _ = lifecycle.abort().await;
     }
 }
 
@@ -530,12 +568,104 @@ mod tests {
         let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
         let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator.clone());
 
-        assert_eq!(lifecycle.start().await.unwrap().status, "RUNNING");
+        assert!(matches!(
+            lifecycle.start_or_join().await.unwrap(),
+            LifecycleClaim::Started(snapshot) if snapshot.status == "RUNNING"
+        ));
         assert_eq!(lifecycle.pause().await.unwrap().status, "PAUSED");
         assert!(coordinator.paused.load(std::sync::atomic::Ordering::SeqCst));
         assert_eq!(lifecycle.resume().await.unwrap().status, "RUNNING");
         assert!(!coordinator.paused.load(std::sync::atomic::Ordering::SeqCst));
         assert_eq!(lifecycle.status().await.unwrap().status, "RUNNING");
+    }
+
+    #[tokio::test]
+    async fn concurrent_manual_admissions_join_one_lifecycle_without_losing_either_result() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        db::add_folder(&pool, "C:/photos", None).await.unwrap();
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+
+        let result_for = |path: &str| ScanResult {
+            files: vec![Asset {
+                path: path.to_string(),
+                size: 100,
+                mtime: 10,
+                target_album_id: None,
+                remote_id: None,
+            }],
+            ..Default::default()
+        };
+        admit_scan_result(&pool, &result_for("C:/photos/first.jpg"))
+            .await
+            .unwrap();
+        assert!(matches!(
+            lifecycle.start_or_join().await.unwrap(),
+            LifecycleClaim::Started(_)
+        ));
+
+        admit_scan_result(&pool, &result_for("C:/photos/second.jpg"))
+            .await
+            .unwrap();
+        assert!(matches!(
+            lifecycle.start_or_join().await.unwrap(),
+            LifecycleClaim::Joined
+        ));
+        let queued = db::next_queued_upload_units(&pool, 10).await.unwrap();
+        assert_eq!(queued.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_failure_is_durable_without_discarding_queued_work() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        db::enqueue_sync_assets(
+            &pool,
+            &[db::QueueAsset {
+                path: "C:/photos/photo.jpg",
+                size: 100,
+                mtime: 10,
+                target_album_id: None,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        let running = std::sync::atomic::AtomicBool::new(true);
+        let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+
+        assert_eq!(lifecycle.fail().await.unwrap().status, "FAILED");
+        assert!(db::has_pending_sync_queue_items(&pool).await.unwrap());
+    }
+
+    #[test]
+    fn producer_sources_keep_audit_labels_and_manual_execution_rules_explicit() {
+        assert_eq!(SyncSource::Manual.audit_label(), "manual_sync");
+        assert!(SyncSource::Manual.is_manual());
+        assert_eq!(SyncSource::Watcher.audit_label(), "watcher_sync");
+        assert!(!SyncSource::Watcher.is_manual());
+        assert_eq!(
+            SyncSource::RemovableMediaReconnect.audit_label(),
+            "removable_media_reconnect"
+        );
+        assert_eq!(SyncSource::Recovery.audit_label(), "resume_sync");
     }
 
     #[tokio::test]
@@ -603,27 +733,20 @@ mod tests {
             ..Default::default()
         };
         let original_album = crate::immich::AlbumId::new("album-original");
-        let changed_album = crate::immich::AlbumId::new("album-changed");
-        let folders = [db::WatchedFolder {
-            id: 1,
-            path: "C:/photos".to_string(),
-            recursive: true,
-            target_album_id: Some(original_album),
-            exclusion_patterns: vec![],
-        }];
-        let (units, failures) = prepare_scan_for_queue(&scan, &folders);
-        db::enqueue_upload_units(&pool, &units, &failures)
+        db::add_folder(&pool, "C:/photos", Some(&original_album))
             .await
             .unwrap();
+        admit_scan_result(&pool, &scan).await.unwrap();
 
-        let changed_folders = [db::WatchedFolder {
-            target_album_id: Some(changed_album),
-            ..folders.into_iter().next().unwrap()
-        }];
-        let (units, failures) = prepare_scan_for_queue(&scan, &changed_folders);
-        db::enqueue_upload_units(&pool, &units, &failures)
-            .await
-            .unwrap();
+        // A later Watched Folder change must not redirect an Upload Unit already
+        // admitted to the durable queue.
+        sqlx::query(
+            "UPDATE watched_folders SET target_album_id = 'album-changed' WHERE path = 'C:/photos'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        admit_scan_result(&pool, &scan).await.unwrap();
 
         let recovered = db::next_queued_upload_units(&pool, 10).await.unwrap();
         assert_eq!(

@@ -17,7 +17,6 @@ pub(crate) use processor::{load_upload_parallelism, SyncSummary};
 pub(crate) use progress::JobByteProgress;
 pub(crate) use retry::prepare_failed_sync_retry;
 pub(crate) use service::{
-    add_event_paths, log_overlapping_folders, scan_folders_for_media,
-    scan_watched_folders_for_media, sync_scan_result_if_authenticated, Asset, FileFailure,
-    ScanResult, Synchronization,
+    add_event_paths, admit_and_run, log_overlapping_folders, scan_folders_for_media,
+    scan_watched_folders_for_media, Asset, FileFailure, ScanResult, SyncSource, Synchronization,
 };
