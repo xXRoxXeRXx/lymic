@@ -129,8 +129,18 @@ impl WatcherIngestion {
                 return Err(error);
             }
         };
-        if let Some(scan_result) = self.scan(&folders, batch).await? {
-            handoff(scan_result).await?;
+        let scan_result = match self.scan(&folders, &batch).await {
+            Ok(scan_result) => scan_result,
+            Err(error) => {
+                self.pending_batch = Some(batch);
+                return Err(error);
+            }
+        };
+        if let Some(scan_result) = scan_result {
+            if let Err(error) = handoff(scan_result).await {
+                self.pending_batch = Some(batch);
+                return Err(error);
+            }
         }
         Ok(Some(requires_full_rescan))
     }
@@ -149,7 +159,7 @@ impl WatcherIngestion {
     pub(crate) async fn scan(
         &mut self,
         folders: &[WatchedFolder],
-        batch: WatcherBatch,
+        batch: &WatcherBatch,
     ) -> Result<Option<ScanResult>, String> {
         if batch.requires_full_rescan {
             self.files.clear();
@@ -158,8 +168,8 @@ impl WatcherIngestion {
                 .await
                 .map(Some);
         }
-        for event in batch.events {
-            add_event_paths(&mut self.files, &mut self.failures, folders, event).await?;
+        for event in &batch.events {
+            add_event_paths(&mut self.files, &mut self.failures, folders, event.clone()).await?;
         }
         if self.files.is_empty() && self.failures.is_empty() {
             return Ok(None);
@@ -405,6 +415,99 @@ mod tests {
             Some(false)
         );
         assert_eq!(handoffs.load(Ordering::SeqCst), 1);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn admission_failure_retains_the_consolidated_batch_for_retry() {
+        let root = test_folder_with_media("photo.jpg");
+        let (tx, mut rx) = mpsc::channel(1);
+        tx.send(WatcherInput::Event(
+            notify::Event::new(notify::EventKind::Create(CreateKind::File))
+                .add_path(root.join("photo.jpg")),
+        ))
+        .await
+        .unwrap();
+        let mut ingestion = WatcherIngestion::new(Duration::ZERO);
+        let rescan_requested = AtomicBool::new(false);
+        let rescan_notify = Notify::new();
+        let folder_root = root.clone();
+
+        assert_eq!(
+            ingestion
+                .ingest_next(
+                    &mut rx,
+                    &rescan_requested,
+                    &rescan_notify,
+                    || async move { Ok(folders_for(&folder_root)) },
+                    |_| async { Err("temporary admission failure".to_string()) },
+                )
+                .await
+                .unwrap_err(),
+            "temporary admission failure"
+        );
+
+        let folder_root = root.clone();
+        let retry = tokio::time::timeout(
+            Duration::from_millis(50),
+            ingestion.ingest_next(
+                &mut rx,
+                &rescan_requested,
+                &rescan_notify,
+                || async move { Ok(folders_for(&folder_root)) },
+                |result| async move {
+                    assert_eq!(result.files.len(), 1);
+                    Ok(())
+                },
+            ),
+        )
+        .await;
+
+        assert!(matches!(retry, Ok(Ok(Some(false)))));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn admission_failure_retains_the_full_rescan_requirement_for_retry() {
+        let root = test_folder_with_media("photo.jpg");
+        let (tx, mut rx) = mpsc::channel(1);
+        tx.send(WatcherInput::Overflow).await.unwrap();
+        let mut ingestion = WatcherIngestion::new(Duration::ZERO);
+        let rescan_requested = AtomicBool::new(false);
+        let rescan_notify = Notify::new();
+        let folder_root = root.clone();
+
+        assert_eq!(
+            ingestion
+                .ingest_next(
+                    &mut rx,
+                    &rescan_requested,
+                    &rescan_notify,
+                    || async move { Ok(folders_for(&folder_root)) },
+                    |_| async { Err("temporary admission failure".to_string()) },
+                )
+                .await
+                .unwrap_err(),
+            "temporary admission failure"
+        );
+
+        let folder_root = root.clone();
+        let retry = tokio::time::timeout(
+            Duration::from_millis(50),
+            ingestion.ingest_next(
+                &mut rx,
+                &rescan_requested,
+                &rescan_notify,
+                || async move { Ok(folders_for(&folder_root)) },
+                |result| async move {
+                    assert_eq!(result.files.len(), 1);
+                    Ok(())
+                },
+            ),
+        )
+        .await;
+
+        assert!(matches!(retry, Ok(Ok(Some(true)))));
         std::fs::remove_dir_all(root).unwrap();
     }
 
