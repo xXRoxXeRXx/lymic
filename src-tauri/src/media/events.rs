@@ -1,18 +1,13 @@
 use super::extensions::{is_media_file, live_photo_sibling_paths};
 use super::model::{Asset, FileFailure, ScanResult};
-use super::scanner::{
-    scan_paths_for_media, scan_watched_folders_for_media,
-    upload_unit_matches_watched_folder_exclusion, watched_folder_for_path,
-};
+use super::scanner::{scan_paths_for_media, scan_watched_folders_for_media};
 use crate::app::events::log_to_ui_keyed;
 use crate::db::WatchedFolder;
 use std::collections::HashMap;
-use std::path::Path;
 
 fn remove_excluded_assets(scan_result: &mut ScanResult, folders: &[WatchedFolder]) {
-    scan_result.files.retain(|asset| {
-        !upload_unit_matches_watched_folder_exclusion(Path::new(&asset.path), folders)
-    });
+    scan_result.files =
+        crate::media::admission::admitted_assets(std::mem::take(&mut scan_result.files), folders);
 }
 
 pub(crate) async fn add_event_paths(
@@ -43,7 +38,7 @@ pub(crate) async fn add_event_paths(
     let mut folder_ids = std::collections::HashSet::new();
     let scanned_folders = directories
         .iter()
-        .filter_map(|path| watched_folder_for_path(folders, path))
+        .filter_map(|path| crate::media::admission::watched_folder_for_path(folders, path))
         .filter(|folder| folder_ids.insert(folder.id))
         .cloned()
         .collect();

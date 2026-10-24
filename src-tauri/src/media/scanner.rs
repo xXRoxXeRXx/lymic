@@ -1,5 +1,8 @@
 use super::extensions::{is_media_file, live_photo_sibling_paths};
-use super::model::{calculate_checksums, Asset, Checksums, FileFailure, ScanResult};
+use super::model::{
+    calculate_checksums, upload_units_from_assets, Asset, Checksums, FileFailure, ScanResult,
+    UploadUnit,
+};
 use super::paths::overlapping_folder_paths;
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
@@ -117,98 +120,6 @@ pub(crate) fn calculate_stable_checksums(path: &str) -> std::io::Result<(Checksu
 }
 
 fn scan_folder_for_media(path: &Path) -> ScanResult {
-    scan_folder_for_media_with_patterns(path, &[])
-}
-
-fn matches_segment(pattern: &[u8], value: &[u8]) -> bool {
-    let (mut p, mut v, mut star, mut retry) = (0, 0, None, 0);
-    while v < value.len() {
-        if p < pattern.len() && pattern[p] == b'*' {
-            star = Some(p);
-            p += 1;
-            retry = v;
-        } else if p < pattern.len() && pattern[p] == value[v] {
-            p += 1;
-            v += 1;
-        } else if let Some(star_index) = star {
-            p = star_index + 1;
-            retry += 1;
-            v = retry;
-        } else {
-            return false;
-        }
-    }
-    pattern[p..].iter().all(|character| *character == b'*')
-}
-
-pub(crate) fn matches_exclusion_pattern(pattern: &str, relative_path: &Path) -> bool {
-    let path = relative_path
-        .to_string_lossy()
-        .replace('\\', "/")
-        .to_ascii_lowercase();
-    let pattern = pattern.to_ascii_lowercase();
-    let pattern_segments = pattern
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>();
-    let path_segments = path
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>();
-    fn matches(pattern: &[&str], path: &[&str]) -> bool {
-        match pattern.split_first() {
-            None => path.is_empty(),
-            Some((&"**", rest)) => {
-                matches(rest, path) || (!path.is_empty() && matches(pattern, &path[1..]))
-            }
-            Some((segment, rest)) => {
-                path.first()
-                    .is_some_and(|value| matches_segment(segment.as_bytes(), value.as_bytes()))
-                    && matches(rest, &path[1..])
-            }
-        }
-    }
-    matches(&pattern_segments, &path_segments)
-}
-
-pub(crate) fn watched_folder_for_path<'a>(
-    folders: &'a [crate::db::WatchedFolder],
-    path: &Path,
-) -> Option<&'a crate::db::WatchedFolder> {
-    folders
-        .iter()
-        .filter(|folder| path.strip_prefix(&folder.path).is_ok())
-        .max_by_key(|folder| Path::new(&folder.path).components().count())
-}
-
-pub(crate) fn path_matches_watched_folder_exclusion(
-    path: &Path,
-    folders: &[crate::db::WatchedFolder],
-) -> bool {
-    watched_folder_for_path(folders, path).is_some_and(|folder| {
-        path.strip_prefix(&folder.path)
-            .ok()
-            .is_some_and(|relative| {
-                folder
-                    .exclusion_patterns
-                    .iter()
-                    .any(|pattern| matches_exclusion_pattern(pattern, relative))
-            })
-    })
-}
-
-/// An exclusion applies to the complete Upload Unit, never just one component.
-pub(crate) fn upload_unit_matches_watched_folder_exclusion(
-    path: &Path,
-    folders: &[crate::db::WatchedFolder],
-) -> bool {
-    path_matches_watched_folder_exclusion(path, folders)
-        || live_photo_sibling_paths(path)
-            .into_iter()
-            .any(|sibling| path_matches_watched_folder_exclusion(&sibling, folders))
-}
-
-fn scan_folder_for_media_with_patterns(path: &Path, exclusion_patterns: &[String]) -> ScanResult {
     let mut result = ScanResult::default();
     for entry in walkdir::WalkDir::new(path)
         .into_iter()
@@ -236,18 +147,6 @@ fn scan_folder_for_media_with_patterns(path: &Path, exclusion_patterns: &[String
     {
         match entry {
             Ok(entry) if entry.file_type().is_file() && is_media_file(entry.path()) => {
-                if entry
-                    .path()
-                    .strip_prefix(path)
-                    .ok()
-                    .is_some_and(|relative| {
-                        exclusion_patterns
-                            .iter()
-                            .any(|pattern| matches_exclusion_pattern(pattern, relative))
-                    })
-                {
-                    continue;
-                }
                 let file_path = entry.path().to_string_lossy().to_string();
                 match entry.metadata() {
                     Ok(metadata) => {
@@ -315,12 +214,7 @@ pub(crate) async fn scan_watched_folders_for_media(
         };
         let mut seen_files = HashSet::new();
         for path in paths {
-            let patterns = folders
-                .iter()
-                .find(|folder| PathBuf::from(&folder.path) == path)
-                .map(|folder| folder.exclusion_patterns.as_slice())
-                .unwrap_or(&[]);
-            let scan_result = scan_folder_for_media_with_patterns(&path, patterns);
+            let scan_result = scan_folder_for_media(&path);
             for asset in scan_result.files {
                 if seen_files.insert(PathBuf::from(&asset.path)) {
                     result.files.push(asset);
@@ -328,9 +222,7 @@ pub(crate) async fn scan_watched_folders_for_media(
             }
             result.failures.extend(scan_result.failures);
         }
-        result.files.retain(|asset| {
-            !upload_unit_matches_watched_folder_exclusion(Path::new(&asset.path), &folders)
-        });
+        result.files = crate::media::admission::admitted_assets(result.files, &folders);
         result
     })
     .await
@@ -366,6 +258,34 @@ pub(crate) async fn scan_paths_for_media(paths: Vec<PathBuf>) -> Result<ScanResu
     .map_err(|e| format!("Media path scan task failed: {}", e))
 }
 
+fn uninspected_asset(path: &Path) -> Asset {
+    Asset {
+        path: path.to_string_lossy().to_string(),
+        size: 0,
+        mtime: 0,
+        target_album_id: None,
+        remote_id: None,
+    }
+}
+
+fn retry_upload_unit(path: &Path) -> UploadUnit {
+    let primary = uninspected_asset(path);
+    let assets = std::iter::once(primary.clone())
+        .chain(
+            live_photo_sibling_paths(path)
+                .into_iter()
+                .map(|sibling| uninspected_asset(&sibling)),
+        )
+        .collect();
+    upload_units_from_assets(assets)
+        .into_iter()
+        .find(|unit| unit.assets().any(|asset| asset.path == primary.path))
+        .unwrap_or(UploadUnit {
+            image: primary,
+            live_photo_video: None,
+        })
+}
+
 pub(crate) async fn prepare_failed_sync_retry(
     paths: Vec<String>,
     folders: Vec<crate::db::WatchedFolder>,
@@ -374,15 +294,30 @@ pub(crate) async fn prepare_failed_sync_retry(
         let mut result = ScanResult::default();
         for path in paths {
             let path_buf = PathBuf::from(&path);
-            if upload_unit_matches_watched_folder_exclusion(&path_buf, &folders) {
-                result.discarded_paths.push(path);
-                continue;
-            }
             if !is_media_file(&path_buf) {
                 result.failures.push(FileFailure {
                     path,
                     error: "Path is no longer a supported media file.".to_string(),
                 });
+                continue;
+            }
+            // Check the primary first so a newly excluded retry is discarded without probing
+            // possible Live Photo siblings on unavailable storage.
+            let primary = UploadUnit {
+                image: uninspected_asset(&path_buf),
+                live_photo_video: None,
+            };
+            if crate::media::admission::decide(&primary, &folders)
+                == crate::media::admission::Admission::Excluded
+            {
+                result.discarded_paths.push(path);
+                continue;
+            }
+            let unit = retry_upload_unit(&path_buf);
+            if crate::media::admission::decide(&unit, &folders)
+                == crate::media::admission::Admission::Excluded
+            {
+                result.discarded_paths.push(path);
                 continue;
             }
             match std::fs::metadata(&path_buf) {
@@ -509,6 +444,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn failed_retry_discards_an_excluded_path_before_reporting_its_invalid_file_state() {
+        let root = temporary_directory();
+        let excluded = root.join("private.jpg");
+        std::fs::create_dir_all(&excluded).unwrap();
+
+        let result = prepare_failed_sync_retry(
+            vec![excluded.to_string_lossy().to_string()],
+            vec![crate::db::WatchedFolder {
+                id: 1,
+                path: root.to_string_lossy().to_string(),
+                recursive: true,
+                target_album_id: None,
+                exclusion_patterns: vec!["private.jpg".to_string()],
+            }],
+        )
+        .await
+        .unwrap();
+
+        assert!(result.files.is_empty());
+        assert!(result.failures.is_empty());
+        assert_eq!(result.discarded_paths, vec![excluded.to_string_lossy()]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
     async fn watched_folder_scan_excluding_one_live_photo_component_discards_the_upload_unit() {
         let root = temporary_directory();
         let image = root.join("IMG_1.HEIC");
@@ -561,20 +521,22 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(not(windows))]
     #[test]
-    fn exclusion_patterns_match_relative_paths_case_insensitively() {
-        assert!(matches_exclusion_pattern(
-            "screenshots/**",
-            Path::new("Screenshots/ONE.JPG")
-        ));
-        assert!(matches_exclusion_pattern(
-            "**/*.jpg",
-            Path::new("Trips/photo.JPG")
-        ));
-        assert!(!matches_exclusion_pattern(
-            "screenshots/**",
-            Path::new("Trips/photo.jpg")
-        ));
+    fn retry_constructs_a_live_photo_unit_only_for_an_unambiguous_canonical_pair() {
+        let root = temporary_directory();
+        let image = root.join("IMG_3.HEIC");
+        let first_video = root.join("IMG_3.MOV");
+        let second_video = root.join("IMG_3.mov");
+        std::fs::create_dir_all(&root).unwrap();
+        for path in [&image, &first_video, &second_video] {
+            std::fs::write(path, b"media").unwrap();
+        }
+
+        let unit = retry_upload_unit(&image);
+
+        assert!(unit.live_photo_video.is_none());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[tokio::test]

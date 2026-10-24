@@ -70,37 +70,6 @@ pub(crate) fn sanitize_target_album_id(target_album_id: Option<String>) -> Optio
     })
 }
 
-pub(crate) fn normalize_exclusion_patterns(patterns: Vec<String>) -> Result<Vec<String>, String> {
-    let mut normalized = Vec::new();
-    for pattern in patterns {
-        let pattern = pattern.trim().to_string();
-        if pattern.is_empty() {
-            continue;
-        }
-        if pattern.contains('\\')
-            || pattern.starts_with('/')
-            || pattern.contains("..")
-            || pattern.contains('?')
-            || pattern.contains('[')
-            || pattern.contains(']')
-            || pattern.contains('{')
-            || pattern.contains('}')
-            || pattern.contains('!')
-        {
-            return Err(format!(
-                "Invalid exclusion pattern '{pattern}'. Use relative paths with names, * and ** only."
-            ));
-        }
-        if !normalized
-            .iter()
-            .any(|existing: &String| existing.eq_ignore_ascii_case(&pattern))
-        {
-            normalized.push(pattern);
-        }
-    }
-    Ok(normalized)
-}
-
 pub(crate) fn check_folder_conflict(
     candidate_path: &Path,
     existing_paths: &[PathBuf],
@@ -448,7 +417,7 @@ pub(crate) async fn update_folder_exclusion_patterns(
     id: i64,
     exclusion_patterns: Vec<String>,
 ) -> Result<(), String> {
-    let exclusion_patterns = normalize_exclusion_patterns(exclusion_patterns)?;
+    let exclusion_patterns = crate::media::admission::normalize_patterns(exclusion_patterns)?;
     if !db::update_exclusion_patterns(pool.inner(), id, &exclusion_patterns)
         .await
         .map_err(|error| error.to_string())?
@@ -641,7 +610,7 @@ mod tests {
     #[test]
     fn exclusion_patterns_are_normalized_deduplicated_and_validated() {
         assert_eq!(
-            super::normalize_exclusion_patterns(vec![
+            crate::media::admission::normalize_patterns(vec![
                 " Screenshots/** ".into(),
                 "screenshots/**".into(),
                 "".into()
@@ -649,9 +618,9 @@ mod tests {
             .unwrap(),
             vec!["Screenshots/**"]
         );
-        assert!(super::normalize_exclusion_patterns(vec!["../private/**".into()]).is_err());
+        assert!(crate::media::admission::normalize_patterns(vec!["../private/**".into()]).is_err());
         for invalid in ["Screenshots\\**", "/private/**", "!keep.jpg", "*.{jpg,png}"] {
-            assert!(super::normalize_exclusion_patterns(vec![invalid.into()]).is_err());
+            assert!(crate::media::admission::normalize_patterns(vec![invalid.into()]).is_err());
         }
     }
 
