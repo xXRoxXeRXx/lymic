@@ -1,11 +1,12 @@
+use super::WatcherInput;
 use notify::{Config, Event, EventKind, RecommendedWatcher, Watcher};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Notify};
 
-pub(crate) fn send_or_request_rescan<T>(
-    tx: &mpsc::Sender<T>,
-    message: T,
+pub(crate) fn send_or_request_rescan(
+    tx: &mpsc::Sender<WatcherInput>,
+    message: WatcherInput,
     rescan_requested: &AtomicBool,
     rescan_notify: &Notify,
 ) {
@@ -23,7 +24,7 @@ pub(crate) fn request_rescan(rescan_requested: &AtomicBool, rescan_notify: &Noti
 
 pub(crate) fn dispatch_event(
     event: Event,
-    tx: &mpsc::Sender<Event>,
+    tx: &mpsc::Sender<WatcherInput>,
     rescan_requested: &AtomicBool,
     rescan_notify: &Notify,
 ) {
@@ -31,15 +32,24 @@ pub(crate) fn dispatch_event(
         EventKind::Create(_) | EventKind::Modify(_) => {
             // A full queue means individual paths are no longer trustworthy. The
             // receiver will reconcile every watched folder after draining its batch.
-            send_or_request_rescan(tx, event, rescan_requested, rescan_notify);
+            send_or_request_rescan(
+                tx,
+                WatcherInput::Event(event),
+                rescan_requested,
+                rescan_notify,
+            );
         }
-        EventKind::Any | EventKind::Other => request_rescan(rescan_requested, rescan_notify),
+        EventKind::Any | EventKind::Other => {
+            if tx.try_send(WatcherInput::Overflow).is_err() {
+                request_rescan(rescan_requested, rescan_notify);
+            }
+        }
         EventKind::Remove(_) | EventKind::Access(_) => {}
     }
 }
 
 pub fn create_watcher(
-    tx: mpsc::Sender<Event>,
+    tx: mpsc::Sender<WatcherInput>,
     rescan_requested: Arc<AtomicBool>,
     rescan_notify: Arc<Notify>,
 ) -> notify::Result<RecommendedWatcher> {
@@ -49,7 +59,9 @@ pub fn create_watcher(
             Err(_) => {
                 // notify itself can report an overflow or backend error. Reconcile rather
                 // than silently accepting a potentially incomplete event stream.
-                request_rescan(&rescan_requested, &rescan_notify);
+                if tx.try_send(WatcherInput::Overflow).is_err() {
+                    request_rescan(&rescan_requested, &rescan_notify);
+                }
             }
         },
         Config::default(),
@@ -82,8 +94,8 @@ mod tests {
         dispatch_event(create.clone(), &tx, &dirty, &notify);
         dispatch_event(rename.clone(), &tx, &dirty, &notify);
 
-        assert_eq!(rx.recv().await, Some(create));
-        assert_eq!(rx.recv().await, Some(rename));
+        assert!(matches!(rx.recv().await, Some(WatcherInput::Event(event)) if event == create));
+        assert!(matches!(rx.recv().await, Some(WatcherInput::Event(event)) if event == rename));
         assert!(!dirty.load(Ordering::Acquire));
     }
 
@@ -96,9 +108,9 @@ mod tests {
 
             dispatch_event(Event::new(kind), &tx, &dirty, &notify);
 
-            assert!(dirty.load(Ordering::Acquire));
-            assert!(was_notified(&notify).await);
-            assert!(rx.try_recv().is_err());
+            assert!(matches!(rx.recv().await, Some(WatcherInput::Overflow)));
+            assert!(!dirty.load(Ordering::Acquire));
+            assert!(!was_notified(&notify).await);
         }
     }
 
@@ -126,8 +138,8 @@ mod tests {
         let dirty = AtomicBool::new(false);
         let notify = Notify::new();
 
-        tx.try_send(1).unwrap();
-        send_or_request_rescan(&tx, 2, &dirty, &notify);
+        tx.try_send(WatcherInput::Overflow).unwrap();
+        send_or_request_rescan(&tx, WatcherInput::Overflow, &dirty, &notify);
 
         assert!(dirty.load(Ordering::Acquire));
         assert!(was_notified(&notify).await);
