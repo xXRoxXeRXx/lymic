@@ -93,16 +93,17 @@ impl RunProcessor {
             if !can_start_work(coordinator) {
                 break;
             }
-            let cancellation = active_work
-                .cancellation_for_path(&unit.image.path)
-                .unwrap_or_default();
+            let unit_work = active_work.for_upload_unit(&unit);
+            if unit_work.is_cancelled() {
+                continue;
+            }
             hashing.push(hash_unit_or_cancellation(
                 unit,
                 pool.clone(),
                 app.clone(),
                 progress.clone(),
                 audit_context.clone(),
-                cancellation,
+                unit_work.cancellation(),
             ));
             if hashing.len() == 4 {
                 if let Some(outcome) = hashing.next().await {
@@ -130,10 +131,8 @@ impl RunProcessor {
             let mut units_to_check: Vec<HashedUploadUnit> = Vec::new();
 
             for unit in chunk {
-                if let Some(asset) = unit.assets().next() {
-                    if active_work.is_path_cancelled(&asset.path) {
-                        continue;
-                    }
+                if active_work.for_hashed_upload_unit(unit).is_cancelled() {
+                    continue;
                 }
 
                 if let Some(remote_id) = &unit.image.remote_id {
@@ -177,11 +176,7 @@ impl RunProcessor {
                     .collect();
                 let mut cancellations = Vec::new();
                 for unit in &units_to_check {
-                    if let Some(asset) = unit.assets().next() {
-                        if let Some(cancellation) = active_work.cancellation_for_path(&asset.path) {
-                            cancellations.push(cancellation);
-                        }
-                    }
+                    cancellations.push(active_work.for_hashed_upload_unit(unit).cancellation());
                 }
                 let bulk_check =
                     check_assets_exist_with_backoff(client, hashes, app, audit_context);
@@ -203,10 +198,8 @@ impl RunProcessor {
 
             let mut upload_units = Vec::new();
             for unit in units_to_check {
-                if let Some(asset) = unit.assets().next() {
-                    if active_work.is_path_cancelled(&asset.path) {
-                        continue;
-                    }
+                if active_work.for_hashed_upload_unit(&unit).is_cancelled() {
+                    continue;
                 }
 
                 let image_hash = &unit.image.checksums.as_ref().unwrap().sha1_base64;
@@ -277,11 +270,10 @@ impl RunProcessor {
                 let Some(unit) = pending.next() else {
                     break;
                 };
-                let path = unit.image.path.clone();
-                if active_work.is_path_cancelled(&path) {
+                let unit_work = active_work.for_hashed_upload_unit(&unit);
+                if unit_work.is_cancelled() {
                     continue;
                 }
-                let cancellation = active_work.cancellation_for_path(&path).unwrap_or_default();
                 uploads.push(upload_unit(
                     unit,
                     client.clone(),
@@ -289,7 +281,7 @@ impl RunProcessor {
                     app.clone(),
                     progress.clone(),
                     audit_context.clone(),
-                    cancellation,
+                    unit_work.cancellation(),
                     sidecar_cache.clone(),
                 ));
             }
@@ -302,12 +294,10 @@ impl RunProcessor {
                 }
                 if can_start_work(coordinator) {
                     if let Some(unit) = pending.next() {
-                        let path = unit.image.path.clone();
-                        if active_work.is_path_cancelled(&path) {
+                        let unit_work = active_work.for_hashed_upload_unit(&unit);
+                        if unit_work.is_cancelled() {
                             continue;
                         }
-                        let cancellation =
-                            active_work.cancellation_for_path(&path).unwrap_or_default();
                         uploads.push(upload_unit(
                             unit,
                             client.clone(),
@@ -315,7 +305,7 @@ impl RunProcessor {
                             app.clone(),
                             progress.clone(),
                             audit_context.clone(),
-                            cancellation,
+                            unit_work.cancellation(),
                             sidecar_cache.clone(),
                         ));
                     }
@@ -1022,6 +1012,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cancellation_before_hashing_leaves_no_terminal_queue_result() {
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+
+        let outcome = await_or_cancellation(cancellation, async {
+            HashOutcome {
+                unit: None,
+                queue_results: vec![("photo.jpg".into(), "FAILED".into())],
+            }
+        })
+        .await;
+
+        assert!(outcome.is_none());
+    }
+
+    #[tokio::test]
+    async fn cancellation_during_hashing_leaves_no_terminal_queue_result() {
+        let cancellation = CancellationToken::new();
+        let entered = std::sync::Arc::new(tokio::sync::Notify::new());
+        let entered_by_hash = entered.clone();
+        let hashing = tokio::spawn(await_or_cancellation(cancellation.clone(), async move {
+            entered_by_hash.notify_one();
+            std::future::pending::<HashOutcome>().await
+        }));
+
+        entered.notified().await;
+        cancellation.cancel();
+
+        assert!(hashing.await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn cancellation_during_bulk_check_leaves_no_terminal_queue_result() {
+        let cancellation = CancellationToken::new();
+        let bulk_check = tokio::spawn(wait_for_any_cancellation(vec![cancellation.clone()]));
+
+        cancellation.cancel();
+        bulk_check.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn cancelling_one_upload_does_not_stop_another_folder() {
         let cancelled = CancellationToken::new();
         cancelled.cancel();
@@ -1041,15 +1072,31 @@ mod tests {
     #[tokio::test]
     async fn cancelled_folder_paths_are_skipped_before_follow_up_uploads() {
         let work = std::sync::Arc::new(crate::sync::ActiveWork::new());
-        let lease = work.acquire([
-            "C:/removed/first.jpg".to_string(),
-            "C:/removed/second.jpg".to_string(),
-            "C:/kept/third.jpg".to_string(),
-        ]);
+        let removed = crate::media::model::UploadUnit {
+            image: crate::media::model::Asset {
+                path: "C:/removed/second.jpg".into(),
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+                remote_id: None,
+            },
+            live_photo_video: None,
+        };
+        let kept = crate::media::model::UploadUnit {
+            image: crate::media::model::Asset {
+                path: "C:/kept/third.jpg".into(),
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+                remote_id: None,
+            },
+            live_photo_video: None,
+        };
+        let lease = work.acquire(&[removed.clone(), kept.clone()]);
         work.cancel_work_in("C:/removed");
 
-        assert!(lease.context().is_path_cancelled("C:/removed/second.jpg"));
-        assert!(!lease.context().is_path_cancelled("C:/kept/third.jpg"));
+        assert!(lease.context().for_upload_unit(&removed).is_cancelled());
+        assert!(!lease.context().for_upload_unit(&kept).is_cancelled());
     }
 
     #[test]

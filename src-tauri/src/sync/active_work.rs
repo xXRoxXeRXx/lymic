@@ -1,4 +1,7 @@
-use crate::media::paths::{normalize_folder_path, path_is_within};
+use crate::media::{
+    model::{HashedUploadUnit, UploadUnit},
+    paths::{normalize_folder_path, path_is_within},
+};
 use std::{
     path::PathBuf,
     sync::{
@@ -40,6 +43,11 @@ struct ContextEntry {
     cancellation: CancellationToken,
 }
 
+#[derive(Clone)]
+pub(crate) struct UnitProcessingContext {
+    cancellation: CancellationToken,
+}
+
 impl ActiveWork {
     pub(crate) fn new() -> Self {
         Self {
@@ -48,14 +56,15 @@ impl ActiveWork {
         }
     }
 
-    pub(crate) fn acquire(
-        self: &Arc<Self>,
-        paths: impl IntoIterator<Item = String>,
-    ) -> ActiveWorkLease {
+    pub(crate) fn acquire(self: &Arc<Self>, units: &[UploadUnit]) -> ActiveWorkLease {
         let mut entries = self.entries.lock().expect("active work lock poisoned");
         let mut ids = Vec::new();
         let mut context_entries = Vec::new();
-        for path in paths {
+        for path in units
+            .iter()
+            .flat_map(UploadUnit::assets)
+            .map(|asset| asset.path.clone())
+        {
             let id = self.next_id.fetch_add(1, Ordering::Relaxed);
             let cancellation = CancellationToken::new();
             let path = normalize_folder_path(&PathBuf::from(path));
@@ -117,41 +126,82 @@ impl Drop for ActiveWorkLease {
 }
 
 impl ProcessingContext {
-    pub(crate) fn cancellation_for_path(&self, path: &str) -> Option<CancellationToken> {
-        let path = normalize_folder_path(&PathBuf::from(path));
-        self.entries.iter().find_map(|entry| {
-            (path_is_within(&entry.path, &path) && path_is_within(&path, &entry.path))
-                .then(|| entry.cancellation.clone())
-        })
+    pub(crate) fn for_upload_unit(&self, unit: &UploadUnit) -> UnitProcessingContext {
+        self.for_path(&unit.image.path)
     }
 
-    pub(crate) fn is_path_cancelled(&self, path: &str) -> bool {
-        self.cancellation_for_path(path)
-            .is_some_and(|cancellation| cancellation.is_cancelled())
+    pub(crate) fn for_hashed_upload_unit(&self, unit: &HashedUploadUnit) -> UnitProcessingContext {
+        self.for_path(&unit.image.path)
+    }
+
+    fn for_path(&self, path: &str) -> UnitProcessingContext {
+        let path = normalize_folder_path(&PathBuf::from(path));
+        let cancellation = self.entries.iter().find_map(|entry| {
+            (path_is_within(&entry.path, &path) && path_is_within(&path, &entry.path))
+                .then(|| entry.cancellation.clone())
+        });
+        UnitProcessingContext {
+            cancellation: cancellation
+                .expect("lease context must contain every queued Upload Unit"),
+        }
+    }
+}
+
+impl UnitProcessingContext {
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.cancellation.is_cancelled()
+    }
+
+    pub(crate) fn cancellation(&self) -> CancellationToken {
+        self.cancellation.clone()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::ActiveWork;
+    use crate::media::model::{Asset, UploadUnit};
     use std::sync::Arc;
+
+    #[test]
+    fn unit(path: &str) -> UploadUnit {
+        UploadUnit {
+            image: Asset {
+                path: path.to_string(),
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+                remote_id: None,
+            },
+            live_photo_video: None,
+        }
+    }
 
     #[test]
     fn cancelling_one_folder_does_not_cancel_another() {
         let work = Arc::new(ActiveWork::new());
-        let photos = work.acquire(["C:/Photos/active.jpg".to_string()]);
-        let videos = work.acquire(["C:/Videos/active.jpg".to_string()]);
+        let photos_unit = unit("C:/Photos/active.jpg");
+        let videos_unit = unit("C:/Videos/active.jpg");
+        let photos = work.acquire(&[photos_unit.clone()]);
+        let videos = work.acquire(&[videos_unit.clone()]);
 
         work.cancel_work_in("C:/Photos");
 
-        assert!(photos.context().is_path_cancelled("C:/Photos/active.jpg"));
-        assert!(!videos.context().is_path_cancelled("C:/Videos/active.jpg"));
+        assert!(photos
+            .context()
+            .for_upload_unit(&photos_unit)
+            .is_cancelled());
+        assert!(!videos
+            .context()
+            .for_upload_unit(&videos_unit)
+            .is_cancelled());
     }
 
     #[test]
     fn ending_a_lease_removes_its_registration() {
         let work = Arc::new(ActiveWork::new());
-        let lease = work.acquire(["C:/Photos/active.jpg".to_string()]);
+        let unit = unit("C:/Photos/active.jpg");
+        let lease = work.acquire(&[unit]);
         assert!(work.has_work_in("C:/Photos"));
 
         drop(lease);

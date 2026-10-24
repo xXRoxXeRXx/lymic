@@ -243,12 +243,7 @@ pub(crate) async fn run_sync_pipeline(
             .into_iter()
             .map(db::QueuedUploadUnit::into_upload_unit)
             .collect::<Vec<_>>();
-        let lease = coordinator.active_work.acquire(
-            block
-                .iter()
-                .flat_map(|unit| unit.assets())
-                .map(|asset| asset.path.clone()),
-        );
+        let lease = coordinator.active_work.acquire(&block);
         let result = processor.process(block, lease.context()).await;
         drop(lease);
         let result = result?;
