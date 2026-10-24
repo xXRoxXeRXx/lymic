@@ -1,3 +1,4 @@
+pub(crate) mod admission;
 pub(crate) mod events;
 pub(crate) mod extensions;
 pub(crate) mod model;

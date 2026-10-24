@@ -15,7 +15,6 @@ use crate::{
     },
 };
 use serde_json::json;
-use std::path::Path;
 use std::sync::{atomic::Ordering, Arc};
 use tauri::{Emitter, Manager};
 
@@ -28,14 +27,8 @@ fn excluded_paths_at_queue_boundary(
     queued
         .iter()
         .filter(|unit| {
-            std::iter::once(&unit.image)
-                .chain(unit.live_photo_video.iter())
-                .any(|asset| {
-                    crate::media::scanner::upload_unit_matches_watched_folder_exclusion(
-                        Path::new(&asset.local_path),
-                        folders,
-                    )
-                })
+            crate::media::admission::decide(&(*unit).clone().into_upload_unit(), folders)
+                == crate::media::admission::Admission::Excluded
         })
         .flat_map(|unit| {
             std::iter::once(&unit.image.local_path)

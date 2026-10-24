@@ -71,34 +71,7 @@ pub(crate) fn sanitize_target_album_id(target_album_id: Option<String>) -> Optio
 }
 
 pub(crate) fn normalize_exclusion_patterns(patterns: Vec<String>) -> Result<Vec<String>, String> {
-    let mut normalized = Vec::new();
-    for pattern in patterns {
-        let pattern = pattern.trim().to_string();
-        if pattern.is_empty() {
-            continue;
-        }
-        if pattern.contains('\\')
-            || pattern.starts_with('/')
-            || pattern.contains("..")
-            || pattern.contains('?')
-            || pattern.contains('[')
-            || pattern.contains(']')
-            || pattern.contains('{')
-            || pattern.contains('}')
-            || pattern.contains('!')
-        {
-            return Err(format!(
-                "Invalid exclusion pattern '{pattern}'. Use relative paths with names, * and ** only."
-            ));
-        }
-        if !normalized
-            .iter()
-            .any(|existing: &String| existing.eq_ignore_ascii_case(&pattern))
-        {
-            normalized.push(pattern);
-        }
-    }
-    Ok(normalized)
+    crate::media::admission::normalize_patterns(patterns)
 }
 
 pub(crate) fn check_folder_conflict(
