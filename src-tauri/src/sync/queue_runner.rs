@@ -27,8 +27,14 @@ fn excluded_paths_at_queue_boundary(
     queued
         .iter()
         .filter(|unit| {
-            crate::media::admission::decide(&(*unit).clone().into_upload_unit(), folders)
-                == crate::media::admission::Admission::Excluded
+            crate::media::admission::decide_paths(
+                std::iter::once(unit.image.local_path.as_str()).chain(
+                    unit.live_photo_video
+                        .as_ref()
+                        .map(|asset| asset.local_path.as_str()),
+                ),
+                folders,
+            ) == crate::media::admission::Admission::Excluded
         })
         .flat_map(|unit| {
             std::iter::once(&unit.image.local_path)

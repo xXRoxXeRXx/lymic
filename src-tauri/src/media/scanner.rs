@@ -301,6 +301,8 @@ pub(crate) async fn prepare_failed_sync_retry(
                 });
                 continue;
             }
+            // Check the primary first so a newly excluded retry is discarded without probing
+            // possible Live Photo siblings on unavailable storage.
             let primary = UploadUnit {
                 image: uninspected_asset(&path_buf),
                 live_photo_video: None,
@@ -320,16 +322,13 @@ pub(crate) async fn prepare_failed_sync_retry(
             }
             match std::fs::metadata(&path_buf) {
                 Ok(metadata) if metadata.is_file() => match std::fs::File::open(&path_buf) {
-                    Ok(_) => {
-                        let asset = Asset {
-                            path,
-                            size: metadata.len(),
-                            mtime: metadata_mtime(&metadata),
-                            target_album_id: None,
-                            remote_id: None,
-                        };
-                        result.files.push(asset);
-                    }
+                    Ok(_) => result.files.push(Asset {
+                        path,
+                        size: metadata.len(),
+                        mtime: metadata_mtime(&metadata),
+                        target_album_id: None,
+                        remote_id: None,
+                    }),
                     Err(error) => result.failures.push(FileFailure {
                         path,
                         error: format!("Could not open file for retry: {}", error),

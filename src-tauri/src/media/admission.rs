@@ -1,6 +1,6 @@
 use crate::db::WatchedFolder;
 use crate::media::model::{upload_units_from_assets, Asset, UploadUnit};
-use std::path::Path;
+use std::{collections::HashSet, path::Path};
 
 fn normalized_path(path: &str) -> String {
     path.replace('\\', "/")
@@ -98,9 +98,16 @@ pub(crate) enum Admission {
 }
 
 pub(crate) fn decide(unit: &UploadUnit, folders: &[WatchedFolder]) -> Admission {
-    if unit
-        .assets()
-        .any(|asset| path_is_excluded(&asset.path, folders))
+    decide_paths(unit.assets().map(|asset| asset.path.as_str()), folders)
+}
+
+pub(crate) fn decide_paths<'a>(
+    paths: impl IntoIterator<Item = &'a str>,
+    folders: &[WatchedFolder],
+) -> Admission {
+    if paths
+        .into_iter()
+        .any(|path| path_is_excluded(path, folders))
     {
         Admission::Excluded
     } else {
@@ -109,10 +116,18 @@ pub(crate) fn decide(unit: &UploadUnit, folders: &[WatchedFolder]) -> Admission 
 }
 
 pub(crate) fn admitted_assets(assets: Vec<Asset>, folders: &[WatchedFolder]) -> Vec<Asset> {
-    upload_units_from_assets(assets)
+    let admitted_paths = upload_units_from_assets(assets.clone())
         .into_iter()
         .filter(|unit| decide(unit, folders) == Admission::Admitted)
-        .flat_map(|unit| unit.assets().cloned().collect::<Vec<_>>())
+        .flat_map(|unit| {
+            unit.assets()
+                .map(|asset| asset.path.clone())
+                .collect::<Vec<_>>()
+        })
+        .collect::<HashSet<_>>();
+    assets
+        .into_iter()
+        .filter(|asset| admitted_paths.contains(&asset.path))
         .collect()
 }
 
@@ -235,5 +250,19 @@ mod tests {
             Some(2)
         );
         assert!(watched_folder_for_path(&folders, Path::new("C:/Elsewhere/keep.jpg")).is_none());
+    }
+
+    #[test]
+    fn admitted_assets_preserves_discovery_order() {
+        let paths = ["C:/Photos/z.jpg", "C:/Photos/a.jpg", "C:/Photos/m.jpg"];
+        let admitted = admitted_assets(paths.iter().map(|path| asset(path)).collect(), &[]);
+
+        assert_eq!(
+            admitted
+                .iter()
+                .map(|asset| asset.path.as_str())
+                .collect::<Vec<_>>(),
+            paths
+        );
     }
 }
