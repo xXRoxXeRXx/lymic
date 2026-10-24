@@ -2,8 +2,13 @@ use crate::{
     db::WatchedFolder,
     sync::{add_event_paths, scan_watched_folders_for_media, Asset, FileFailure, ScanResult},
 };
-use std::{collections::HashMap, future::Future, time::Duration};
-use tokio::sync::mpsc;
+use std::{
+    collections::HashMap,
+    future::Future,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
+};
+use tokio::sync::{mpsc, Notify};
 
 pub(crate) const WATCHER_DEBOUNCE: Duration = Duration::from_secs(2);
 
@@ -44,11 +49,25 @@ impl WatcherIngestion {
     pub(crate) async fn next_batch(
         &mut self,
         receiver: &mut mpsc::Receiver<WatcherInput>,
+        rescan_requested: &AtomicBool,
+        rescan_notify: &Notify,
     ) -> Option<WatcherBatch> {
-        let first = receiver.recv().await?;
         let mut events = Vec::new();
-        let mut requires_full_rescan = false;
-        Self::record(first, &mut events, &mut requires_full_rescan);
+        let mut requires_full_rescan = rescan_requested.swap(false, Ordering::AcqRel);
+        while !requires_full_rescan && events.is_empty() {
+            tokio::select! {
+                input = receiver.recv() => Self::record(input?, &mut events, &mut requires_full_rescan),
+                _ = rescan_notify.notified() => {
+                    requires_full_rescan = rescan_requested.swap(false, Ordering::AcqRel);
+                }
+            }
+        }
+        if requires_full_rescan {
+            return Some(WatcherBatch {
+                events,
+                requires_full_rescan,
+            });
+        }
         let debounce = tokio::time::sleep(self.debounce);
         tokio::pin!(debounce);
         loop {
@@ -59,6 +78,12 @@ impl WatcherIngestion {
                         debounce.as_mut().reset(tokio::time::Instant::now() + self.debounce);
                     }
                     None => break,
+                },
+                _ = rescan_notify.notified() => {
+                    if rescan_requested.swap(false, Ordering::AcqRel) {
+                        requires_full_rescan = true;
+                        break;
+                    }
                 },
                 _ = &mut debounce => break,
             }
@@ -75,7 +100,8 @@ impl WatcherIngestion {
     pub(crate) async fn ingest_next<Resolve, ResolveFuture, Handoff, HandoffFuture>(
         &mut self,
         receiver: &mut mpsc::Receiver<WatcherInput>,
-        force_full_rescan: bool,
+        rescan_requested: &AtomicBool,
+        rescan_notify: &Notify,
         resolve_folders: Resolve,
         handoff: Handoff,
     ) -> Result<Option<bool>, String>
@@ -85,14 +111,16 @@ impl WatcherIngestion {
         Handoff: FnOnce(ScanResult) -> HandoffFuture,
         HandoffFuture: Future<Output = Result<(), String>>,
     {
-        let mut batch = match self.pending_batch.take() {
+        let batch = match self.pending_batch.take() {
             Some(batch) => batch,
-            None => match self.next_batch(receiver).await {
+            None => match self
+                .next_batch(receiver, rescan_requested, rescan_notify)
+                .await
+            {
                 Some(batch) => batch,
                 None => return Ok(None),
             },
         };
-        batch.requires_full_rescan |= force_full_rescan;
         let requires_full_rescan = batch.requires_full_rescan;
         let folders = match resolve_folders().await {
             Ok(folders) => folders,
@@ -154,7 +182,7 @@ mod tests {
     use std::{
         path::PathBuf,
         sync::{
-            atomic::{AtomicUsize, Ordering},
+            atomic::{AtomicBool, AtomicUsize, Ordering},
             Arc,
         },
     };
@@ -173,15 +201,20 @@ mod tests {
         tx.send(WatcherInput::Event(second)).await.unwrap();
 
         let mut ingestion = WatcherIngestion::new(WATCHER_DEBOUNCE);
+        let rescan_requested = Arc::new(AtomicBool::new(false));
+        let rescan_notify = Arc::new(Notify::new());
         let handoffs = Arc::new(AtomicUsize::new(0));
         let observed_files = Arc::new(AtomicUsize::new(0));
         let handoffs_for_task = handoffs.clone();
         let observed_for_task = observed_files.clone();
+        let rescan_requested_for_task = rescan_requested.clone();
+        let rescan_notify_for_task = rescan_notify.clone();
         let batch = tokio::spawn(async move {
             ingestion
                 .ingest_next(
                     &mut rx,
-                    false,
+                    &rescan_requested_for_task,
+                    &rescan_notify_for_task,
                     || async move { Ok(folders) },
                     move |result| async move {
                         observed_for_task.store(result.files.len(), Ordering::SeqCst);
@@ -203,6 +236,50 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn queue_full_fallback_during_debounce_discards_partial_batch_without_another_event() {
+        let root = test_folder_with_media("complete.jpg");
+        let complete = root.join("complete.jpg").to_string_lossy().to_string();
+        let folders = folders_for(&root);
+        let (tx, mut rx) = mpsc::channel(1);
+        tx.send(WatcherInput::Event(
+            notify::Event::new(notify::EventKind::Create(CreateKind::File))
+                .add_path(root.join("partial.jpg")),
+        ))
+        .await
+        .unwrap();
+        let mut ingestion = WatcherIngestion::new(WATCHER_DEBOUNCE);
+        let rescan_requested = Arc::new(AtomicBool::new(false));
+        let rescan_notify = Arc::new(Notify::new());
+        let requested_for_task = rescan_requested.clone();
+        let notify_for_task = rescan_notify.clone();
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let observed_for_task = observed.clone();
+        let task = tokio::spawn(async move {
+            ingestion
+                .ingest_next(
+                    &mut rx,
+                    &requested_for_task,
+                    &notify_for_task,
+                    || async move { Ok(folders) },
+                    move |result| async move {
+                        *observed_for_task.lock().unwrap() =
+                            result.files.into_iter().map(|file| file.path).collect();
+                        Ok(())
+                    },
+                )
+                .await
+                .unwrap()
+        });
+
+        tokio::task::yield_now().await;
+        assert!(!task.is_finished());
+        super::super::callback::request_rescan(&rescan_requested, &rescan_notify);
+        assert_eq!(task.await.unwrap(), Some(true));
+        assert_eq!(*observed.lock().unwrap(), vec![complete]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[tokio::test]
     async fn overflow_discards_partial_events_and_hands_off_a_full_rescan() {
         let root = test_folder_with_media("complete.jpg");
@@ -217,13 +294,16 @@ mod tests {
         .unwrap();
         tx.send(WatcherInput::Overflow).await.unwrap();
         let mut ingestion = WatcherIngestion::new(Duration::ZERO);
+        let rescan_requested = AtomicBool::new(false);
+        let rescan_notify = Notify::new();
         let scanned_paths = Arc::new(std::sync::Mutex::new(Vec::new()));
         let observed = scanned_paths.clone();
         assert_eq!(
             ingestion
                 .ingest_next(
                     &mut rx,
-                    false,
+                    &rescan_requested,
+                    &rescan_notify,
                     || async move { Ok(folders) },
                     move |result| async move {
                         *observed.lock().unwrap() =
@@ -253,6 +333,8 @@ mod tests {
         .await
         .unwrap();
         let mut ingestion = WatcherIngestion::new(Duration::ZERO);
+        let rescan_requested = AtomicBool::new(false);
+        let rescan_notify = Notify::new();
         let handoffs = Arc::new(AtomicUsize::new(0));
         let observed = handoffs.clone();
         let folder_root = root.clone();
@@ -260,7 +342,8 @@ mod tests {
             ingestion
                 .ingest_next(
                     &mut rx,
-                    false,
+                    &rescan_requested,
+                    &rescan_notify,
                     || async move { Ok(folders_for(&folder_root)) },
                     move |_| async move {
                         observed.fetch_add(1, Ordering::SeqCst);
@@ -286,11 +369,14 @@ mod tests {
         .await
         .unwrap();
         let mut ingestion = WatcherIngestion::new(Duration::ZERO);
+        let rescan_requested = AtomicBool::new(false);
+        let rescan_notify = Notify::new();
         assert_eq!(
             ingestion
                 .ingest_next(
                     &mut rx,
-                    false,
+                    &rescan_requested,
+                    &rescan_notify,
                     || async { Err("temporary database failure".to_string()) },
                     |_| async { Ok(()) }
                 )
@@ -305,7 +391,8 @@ mod tests {
             ingestion
                 .ingest_next(
                     &mut rx,
-                    false,
+                    &rescan_requested,
+                    &rescan_notify,
                     || async move { Ok(folders_for(&folder_root)) },
                     move |result| async move {
                         assert_eq!(result.files.len(), 1);
