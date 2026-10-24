@@ -13,7 +13,7 @@ pub(crate) const WATCH_EVENT_QUEUE_CAPACITY: usize = 4_096;
 pub(crate) struct StartupContext {
     pub(crate) has_folders: bool,
     pub(crate) recovered_sync: db::SyncSnapshot,
-    pub(crate) watch_events: tokio::sync::mpsc::Receiver<notify::Event>,
+    pub(crate) watch_events: tokio::sync::mpsc::Receiver<watcher::WatcherInput>,
     pub(crate) rescan_requested: std::sync::Arc<AtomicBool>,
     pub(crate) rescan_notify: std::sync::Arc<tokio::sync::Notify>,
     pub(crate) volume_events: tokio::sync::mpsc::Receiver<crate::removable::VolumeEvent>,

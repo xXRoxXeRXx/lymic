@@ -5,10 +5,8 @@ use crate::app::startup::StartupContext;
 use crate::{
     audit::{self, audit_event},
     db,
-    sync::{
-        add_event_paths, admit_and_run, log_overlapping_folders, scan_watched_folders_for_media,
-        Asset, FileFailure, ScanResult, SyncSource,
-    },
+    sync::{admit_and_run, log_overlapping_folders, scan_watched_folders_for_media, SyncSource},
+    watcher::{WatcherIngestion, WATCHER_DEBOUNCE},
 };
 use serde_json::json;
 use std::sync::atomic::Ordering;
@@ -235,62 +233,24 @@ fn spawn_startup_sync(handle: tauri::AppHandle) {
     });
 }
 
-async fn add_watcher_event_paths(
-    handle: &tauri::AppHandle,
-    files_buffer: &mut std::collections::HashMap<String, Asset>,
-    failures_buffer: &mut std::collections::HashMap<String, FileFailure>,
-    event: notify::Event,
-) -> Result<(), String> {
-    let pool = handle.state::<sqlx::SqlitePool>();
-    let folders = db::get_folders(pool.inner())
-        .await
-        .map_err(|error| format!("Could not load watched folders for watcher event: {error}"))?;
-    add_event_paths(files_buffer, failures_buffer, &folders, event).await
-}
-
 fn spawn_watcher_consumer(
     handle: tauri::AppHandle,
-    mut watch_events: tokio::sync::mpsc::Receiver<notify::Event>,
+    mut watch_events: tokio::sync::mpsc::Receiver<crate::watcher::WatcherInput>,
     rescan_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    rescan_notify: std::sync::Arc<tokio::sync::Notify>,
+    _rescan_notify: std::sync::Arc<tokio::sync::Notify>,
 ) {
     tauri::async_runtime::spawn(async move {
-        let mut files_buffer = std::collections::HashMap::<String, Asset>::new();
-        let mut failures_buffer = std::collections::HashMap::<String, FileFailure>::new();
+        let mut ingestion = WatcherIngestion::new(WATCHER_DEBOUNCE);
         loop {
-            tokio::select! {
-                Some(event) = watch_events.recv() => if let Err(error) = add_watcher_event_paths(&handle, &mut files_buffer, &mut failures_buffer, event).await {
-                    log_to_ui_error(
-                        &handle,
-                        "ERROR",
-                        &format!("Watcher event processing failed: {error}"),
-                        "log_watcher_processing_failed",
-                        &error,
-                    );
-                },
-                _ = rescan_notify.notified() => {}
-            }
-            let debounce = tokio::time::sleep(tokio::time::Duration::from_secs(2));
-            tokio::pin!(debounce);
-            loop {
-                tokio::select! {
-                    Some(event) = watch_events.recv() => {
-                        if let Err(error) = add_watcher_event_paths(&handle, &mut files_buffer, &mut failures_buffer, event).await {
-                            log_to_ui_error(
-                                &handle,
-                                "ERROR",
-                                &format!("Watcher event processing failed: {error}"),
-                                "log_watcher_processing_failed",
-                                &error,
-                            );
-                        }
-                        debounce.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_secs(2));
-                    }
-                    _ = rescan_notify.notified() => {}
-                    _ = &mut debounce => break,
-                }
-            }
+            let Some(mut batch) = ingestion.next_batch(&mut watch_events).await else {
+                return;
+            };
+            // A full native queue cannot carry an explicit Overflow input. The callback
+            // records that fact atomically; the ingestion boundary consumes it here.
             if rescan_requested.swap(false, Ordering::AcqRel) {
+                batch.requires_full_rescan = true;
+            }
+            if batch.requires_full_rescan {
                 log_to_ui_key(
                     &handle,
                     "WARN",
@@ -310,47 +270,34 @@ fn spawn_watcher_consumer(
                         json!({}),
                     ),
                 );
-                files_buffer.clear();
-                failures_buffer.clear();
-                let pool = handle.state::<sqlx::SqlitePool>();
-                match db::get_folders(pool.inner()).await {
-                    Ok(folders) => match scan_watched_folders_for_media(folders).await {
-                        Ok(scan_result) => {
-                            log_overlapping_folders(&handle, &scan_result);
-                            for asset in scan_result.files {
-                                files_buffer.insert(asset.path.clone(), asset);
-                            }
-                            for failure in scan_result.failures {
-                                failures_buffer.insert(failure.path.clone(), failure);
-                            }
-                        }
-                        Err(error) => log_to_ui_error(
-                            &handle,
-                            "ERROR",
-                            &format!("Folder scanning failed: {error}"),
-                            "log_scan_folders_failed",
-                            &error,
-                        ),
-                    },
-                    Err(error) => log_to_ui_error(
+            }
+            let pool = handle.state::<sqlx::SqlitePool>().inner().clone();
+            let folders = match db::get_folders(&pool).await {
+                Ok(folders) => folders,
+                Err(error) => {
+                    log_to_ui_error(
                         &handle,
                         "ERROR",
-                        &format!("Could not reconcile watched folders after event loss: {error}"),
-                        "log_reconcile_after_event_loss_failed",
+                        &format!("Could not load watched folders for watcher event: {error}"),
+                        "log_watcher_processing_failed",
                         &error.to_string(),
-                    ),
+                    );
+                    continue;
                 }
-            }
-            if !files_buffer.is_empty() || !failures_buffer.is_empty() {
-                let mut scan_result = ScanResult::default();
-                scan_result
-                    .files
-                    .extend(files_buffer.drain().map(|(_, asset)| asset));
-                scan_result
-                    .failures
-                    .extend(failures_buffer.drain().map(|(_, failure)| failure));
-                let pool = handle.state::<sqlx::SqlitePool>().inner().clone();
-                admit_and_run(handle.clone(), pool, scan_result, SyncSource::Watcher).await;
+            };
+            match ingestion.scan(&folders, batch).await {
+                Ok(Some(scan_result)) => {
+                    log_overlapping_folders(&handle, &scan_result);
+                    admit_and_run(handle.clone(), pool, scan_result, SyncSource::Watcher).await;
+                }
+                Ok(None) => {}
+                Err(error) => log_to_ui_error(
+                    &handle,
+                    "ERROR",
+                    &format!("Watcher event processing failed: {error}"),
+                    "log_watcher_processing_failed",
+                    &error,
+                ),
             }
         }
     });
