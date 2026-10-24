@@ -242,55 +242,57 @@ fn spawn_watcher_consumer(
     tauri::async_runtime::spawn(async move {
         let mut ingestion = WatcherIngestion::new(WATCHER_DEBOUNCE);
         loop {
-            let Some(mut batch) = ingestion.next_batch(&mut watch_events).await else {
-                return;
-            };
             // A full native queue cannot carry an explicit Overflow input. The callback
-            // records that fact atomically; the ingestion boundary consumes it here.
-            if rescan_requested.swap(false, Ordering::AcqRel) {
-                batch.requires_full_rescan = true;
-            }
-            if batch.requires_full_rescan {
-                log_to_ui_key(
-                    &handle,
-                    "WARN",
-                    "File watcher event queue overflowed; reconciling all watched folders.",
-                    "log_watcher_queue_overflow",
-                );
-                audit_event(
-                    &handle,
-                    audit::AuditEvent::new(
-                        audit::AuditEvent::operation_id(),
-                        "watcher.rescan",
-                        audit::Outcome::Started,
-                        audit::Severity::Warn,
-                        None,
-                        "watcher",
-                        "Watcher queue overflow triggered rescan",
-                        json!({}),
-                    ),
-                );
-            }
+            // records that fact atomically; pass it to ingestion with the next batch.
+            let force_full_rescan = rescan_requested.swap(false, Ordering::AcqRel);
             let pool = handle.state::<sqlx::SqlitePool>().inner().clone();
-            let folders = match db::get_folders(&pool).await {
-                Ok(folders) => folders,
-                Err(error) => {
-                    log_to_ui_error(
+            let handoff_handle = handle.clone();
+            match ingestion
+                .ingest_next(
+                    &mut watch_events,
+                    force_full_rescan,
+                    || async move {
+                        db::get_folders(&pool)
+                            .await
+                            .map_err(|error| error.to_string())
+                    },
+                    move |scan_result| async move {
+                        log_overlapping_folders(&handoff_handle, &scan_result);
+                        admit_and_run(
+                            handoff_handle.clone(),
+                            handoff_handle.state::<sqlx::SqlitePool>().inner().clone(),
+                            scan_result,
+                            SyncSource::Watcher,
+                        )
+                        .await;
+                        Ok(())
+                    },
+                )
+                .await
+            {
+                Ok(None) => return,
+                Ok(Some(true)) => {
+                    log_to_ui_key(
                         &handle,
-                        "ERROR",
-                        &format!("Could not load watched folders for watcher event: {error}"),
-                        "log_watcher_processing_failed",
-                        &error.to_string(),
+                        "WARN",
+                        "File watcher event queue overflowed; reconciling all watched folders.",
+                        "log_watcher_queue_overflow",
                     );
-                    continue;
+                    audit_event(
+                        &handle,
+                        audit::AuditEvent::new(
+                            audit::AuditEvent::operation_id(),
+                            "watcher.rescan",
+                            audit::Outcome::Started,
+                            audit::Severity::Warn,
+                            None,
+                            "watcher",
+                            "Watcher queue overflow triggered rescan",
+                            json!({}),
+                        ),
+                    );
                 }
-            };
-            match ingestion.scan(&folders, batch).await {
-                Ok(Some(scan_result)) => {
-                    log_overlapping_folders(&handle, &scan_result);
-                    admit_and_run(handle.clone(), pool, scan_result, SyncSource::Watcher).await;
-                }
-                Ok(None) => {}
+                Ok(Some(false)) => {}
                 Err(error) => log_to_ui_error(
                     &handle,
                     "ERROR",
@@ -298,6 +300,11 @@ fn spawn_watcher_consumer(
                     "log_watcher_processing_failed",
                     &error,
                 ),
+            }
+            // Retained batches are retried by ingestion. Avoid a busy loop while
+            // a transient database failure is still preventing folder resolution.
+            if ingestion.has_pending_batch() {
+                tokio::time::sleep(WATCHER_DEBOUNCE).await;
             }
         }
     });
