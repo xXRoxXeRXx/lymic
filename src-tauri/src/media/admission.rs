@@ -1,5 +1,6 @@
 use crate::db::WatchedFolder;
-use crate::media::model::UploadUnit;
+use crate::media::model::{upload_units_from_assets, Asset, UploadUnit};
+use std::path::Path;
 
 fn normalized_path(path: &str) -> String {
     path.replace('\\', "/")
@@ -74,6 +75,13 @@ fn folder_for_path<'a>(
         .max_by_key(|(folder, _)| normalized_path(&folder.path).len())
 }
 
+pub(crate) fn watched_folder_for_path<'a>(
+    folders: &'a [WatchedFolder],
+    path: &Path,
+) -> Option<&'a WatchedFolder> {
+    folder_for_path(&path.to_string_lossy(), folders).map(|(folder, _)| folder)
+}
+
 fn path_is_excluded(path: &str, folders: &[WatchedFolder]) -> bool {
     folder_for_path(path, folders).is_some_and(|(folder, relative)| {
         folder
@@ -90,10 +98,22 @@ pub(crate) enum Admission {
 }
 
 pub(crate) fn decide(unit: &UploadUnit, folders: &[WatchedFolder]) -> Admission {
-    unit.assets()
+    if unit
+        .assets()
         .any(|asset| path_is_excluded(&asset.path, folders))
-        .then_some(Admission::Excluded)
-        .unwrap_or(Admission::Admitted)
+    {
+        Admission::Excluded
+    } else {
+        Admission::Admitted
+    }
+}
+
+pub(crate) fn admitted_assets(assets: Vec<Asset>, folders: &[WatchedFolder]) -> Vec<Asset> {
+    upload_units_from_assets(assets)
+        .into_iter()
+        .filter(|unit| decide(unit, folders) == Admission::Admitted)
+        .flat_map(|unit| unit.assets().cloned().collect::<Vec<_>>())
+        .collect()
 }
 
 pub(crate) fn normalize_patterns(patterns: Vec<String>) -> Result<Vec<String>, String> {
@@ -131,6 +151,7 @@ pub(crate) fn normalize_patterns(patterns: Vec<String>) -> Result<Vec<String>, S
 mod tests {
     use super::*;
     use crate::media::model::Asset;
+    use std::path::Path;
 
     fn asset(path: &str) -> Asset {
         Asset {
@@ -199,5 +220,20 @@ mod tests {
             vec!["Screenshots/**"]
         );
         assert!(normalize_patterns(vec!["../private/**".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn resolves_the_most_specific_watched_folder_case_insensitively() {
+        let root = folder("C:/Photos", &["**/*.mov"]);
+        let mut private = folder("C:/Photos/Private", &["**/*.jpg"]);
+        private.id = 2;
+        let folders = [root, private];
+
+        assert_eq!(
+            watched_folder_for_path(&folders, Path::new("c:/PHOTOS/private/nested/keep.JPG"))
+                .map(|folder| folder.id),
+            Some(2)
+        );
+        assert!(watched_folder_for_path(&folders, Path::new("C:/Elsewhere/keep.jpg")).is_none());
     }
 }

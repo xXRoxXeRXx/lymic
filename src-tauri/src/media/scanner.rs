@@ -178,16 +178,6 @@ fn scan_folder_for_media(path: &Path) -> ScanResult {
     result
 }
 
-pub(crate) fn watched_folder_for_path<'a>(
-    folders: &'a [crate::db::WatchedFolder],
-    path: &Path,
-) -> Option<&'a crate::db::WatchedFolder> {
-    folders
-        .iter()
-        .filter(|folder| path.strip_prefix(&folder.path).is_ok())
-        .max_by_key(|folder| Path::new(&folder.path).components().count())
-}
-
 pub(crate) async fn scan_folders_for_media(paths: Vec<PathBuf>) -> Result<ScanResult, String> {
     tokio::task::spawn_blocking(move || {
         let mut result = ScanResult::default();
@@ -232,14 +222,7 @@ pub(crate) async fn scan_watched_folders_for_media(
             }
             result.failures.extend(scan_result.failures);
         }
-        result.files = upload_units_from_assets(result.files)
-            .into_iter()
-            .filter(|unit| {
-                crate::media::admission::decide(unit, &folders)
-                    == crate::media::admission::Admission::Admitted
-            })
-            .flat_map(|unit| unit.assets().cloned().collect::<Vec<_>>())
-            .collect();
+        result.files = crate::media::admission::admitted_assets(result.files, &folders);
         result
     })
     .await
@@ -275,6 +258,34 @@ pub(crate) async fn scan_paths_for_media(paths: Vec<PathBuf>) -> Result<ScanResu
     .map_err(|e| format!("Media path scan task failed: {}", e))
 }
 
+fn uninspected_asset(path: &Path) -> Asset {
+    Asset {
+        path: path.to_string_lossy().to_string(),
+        size: 0,
+        mtime: 0,
+        target_album_id: None,
+        remote_id: None,
+    }
+}
+
+fn retry_upload_unit(path: &Path) -> UploadUnit {
+    let primary = uninspected_asset(path);
+    let assets = std::iter::once(primary.clone())
+        .chain(
+            live_photo_sibling_paths(path)
+                .into_iter()
+                .map(|sibling| uninspected_asset(&sibling)),
+        )
+        .collect();
+    upload_units_from_assets(assets)
+        .into_iter()
+        .find(|unit| unit.assets().any(|asset| asset.path == primary.path))
+        .unwrap_or(UploadUnit {
+            image: primary,
+            live_photo_video: None,
+        })
+}
+
 pub(crate) async fn prepare_failed_sync_retry(
     paths: Vec<String>,
     folders: Vec<crate::db::WatchedFolder>,
@@ -290,6 +301,23 @@ pub(crate) async fn prepare_failed_sync_retry(
                 });
                 continue;
             }
+            let primary = UploadUnit {
+                image: uninspected_asset(&path_buf),
+                live_photo_video: None,
+            };
+            if crate::media::admission::decide(&primary, &folders)
+                == crate::media::admission::Admission::Excluded
+            {
+                result.discarded_paths.push(path);
+                continue;
+            }
+            let unit = retry_upload_unit(&path_buf);
+            if crate::media::admission::decide(&unit, &folders)
+                == crate::media::admission::Admission::Excluded
+            {
+                result.discarded_paths.push(path);
+                continue;
+            }
             match std::fs::metadata(&path_buf) {
                 Ok(metadata) if metadata.is_file() => match std::fs::File::open(&path_buf) {
                     Ok(_) => {
@@ -300,26 +328,7 @@ pub(crate) async fn prepare_failed_sync_retry(
                             target_album_id: None,
                             remote_id: None,
                         };
-                        let unit = UploadUnit {
-                            image: asset.clone(),
-                            live_photo_video: live_photo_sibling_paths(&path_buf)
-                                .into_iter()
-                                .next()
-                                .map(|sibling| Asset {
-                                    path: sibling.to_string_lossy().to_string(),
-                                    size: 0,
-                                    mtime: 0,
-                                    target_album_id: None,
-                                    remote_id: None,
-                                }),
-                        };
-                        if crate::media::admission::decide(&unit, &folders)
-                            == crate::media::admission::Admission::Excluded
-                        {
-                            result.discarded_paths.push(asset.path);
-                        } else {
-                            result.files.push(asset);
-                        }
+                        result.files.push(asset);
                     }
                     Err(error) => result.failures.push(FileFailure {
                         path,
@@ -436,6 +445,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn failed_retry_discards_an_excluded_path_before_reporting_its_invalid_file_state() {
+        let root = temporary_directory();
+        let excluded = root.join("private.jpg");
+        std::fs::create_dir_all(&excluded).unwrap();
+
+        let result = prepare_failed_sync_retry(
+            vec![excluded.to_string_lossy().to_string()],
+            vec![crate::db::WatchedFolder {
+                id: 1,
+                path: root.to_string_lossy().to_string(),
+                recursive: true,
+                target_album_id: None,
+                exclusion_patterns: vec!["private.jpg".to_string()],
+            }],
+        )
+        .await
+        .unwrap();
+
+        assert!(result.files.is_empty());
+        assert!(result.failures.is_empty());
+        assert_eq!(result.discarded_paths, vec![excluded.to_string_lossy()]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
     async fn watched_folder_scan_excluding_one_live_photo_component_discards_the_upload_unit() {
         let root = temporary_directory();
         let image = root.join("IMG_1.HEIC");
@@ -485,6 +519,24 @@ mod tests {
             result.discarded_paths,
             vec![image.to_string_lossy().to_string()]
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn retry_constructs_a_live_photo_unit_only_for_an_unambiguous_canonical_pair() {
+        let root = temporary_directory();
+        let image = root.join("IMG_3.HEIC");
+        let first_video = root.join("IMG_3.MOV");
+        let second_video = root.join("IMG_3.mov");
+        std::fs::create_dir_all(&root).unwrap();
+        for path in [&image, &first_video, &second_video] {
+            std::fs::write(path, b"media").unwrap();
+        }
+
+        let unit = retry_upload_unit(&image);
+
+        assert!(unit.live_photo_video.is_none());
         std::fs::remove_dir_all(root).unwrap();
     }
 
