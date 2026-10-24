@@ -46,6 +46,46 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn admitting_work_after_a_failed_run_starts_a_fresh_job() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let failed = [QueueAsset {
+            path: "failed.jpg",
+            size: 10,
+            mtime: 1,
+            target_album_id: None,
+        }];
+        enqueue_sync_assets(&pool, &failed, &[]).await.unwrap();
+        finalize_queued_block(&pool, &[("failed.jpg".to_string(), "FAILED".to_string())])
+            .await
+            .unwrap();
+        set_sync_status(&pool, "FAILED").await.unwrap();
+
+        let fresh = [QueueAsset {
+            path: "fresh.jpg",
+            size: 20,
+            mtime: 2,
+            target_album_id: None,
+        }];
+        let snapshot = enqueue_sync_assets(&pool, &fresh, &[]).await.unwrap();
+
+        assert_eq!(snapshot.status, "RUNNING");
+        assert_eq!(snapshot.total, 1);
+        assert_eq!(snapshot.succeeded, 0);
+        assert_eq!(snapshot.failed, 0);
+        assert_eq!(
+            next_sync_queue_block(&pool, 10)
+                .await
+                .unwrap()
+                .iter()
+                .map(|asset| asset.local_path.as_str())
+                .collect::<Vec<_>>(),
+            ["fresh.jpg"]
+        );
+    }
+
+    #[tokio::test]
     async fn queue_deduplicates_paths_and_preserves_order() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();

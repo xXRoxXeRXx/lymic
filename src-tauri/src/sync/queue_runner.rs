@@ -49,6 +49,7 @@ pub(crate) async fn run_sync_pipeline(
     client: Arc<ImmichClient>,
     source: SyncSource,
     coordinator: Arc<SyncCoordinatorInner>,
+    running: Arc<std::sync::atomic::AtomicBool>,
     audit_context: SyncAuditContext,
 ) -> Result<SyncSummary, String> {
     // Admission persists producer work before this runner starts. The durable
@@ -60,7 +61,7 @@ pub(crate) async fn run_sync_pipeline(
     let _sync_guard = match coordinator.lock.try_lock() {
         Ok(guard) => guard,
         Err(_) => {
-            if source == SyncSource::Manual {
+            if source.is_manual() {
                 crate::app::events::log_to_ui_key(
                     &app,
                     "INFO",
@@ -164,6 +165,10 @@ pub(crate) async fn run_sync_pipeline(
             .await
             .map_err(|error| format!("Could not load sync queue: {}", error))?;
         if queued.is_empty() {
+            // Release runner ownership before the terminal database transition.
+            // A producer admitted in this window can claim a successor runner;
+            // its pending work then makes the conditional completion a no-op.
+            running.store(false, Ordering::SeqCst);
             let snapshot = db::complete_sync_job_if_finished(&pool)
                 .await
                 .map_err(|error| format!("Could not complete sync job: {}", error))?

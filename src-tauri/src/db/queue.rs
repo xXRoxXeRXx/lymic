@@ -127,8 +127,9 @@ pub async fn enqueue_upload_units(
     )
     .fetch_one(&mut *tx)
     .await?;
-    let should_reset = (status == "IDLE" || (status == "RUNNING" && !has_pending))
-        && (!units.is_empty() || !failures.is_empty());
+    let should_reset =
+        (status == "IDLE" || status == "FAILED" || (status == "RUNNING" && !has_pending))
+            && (!units.is_empty() || !failures.is_empty());
     if should_reset {
         sqlx::query("UPDATE sync_jobs SET status = 'RUNNING', next_sequence = 1, total_count = 0, success_count = 0, failure_count = 0, current_path = NULL WHERE id = 1")
             .execute(&mut *tx).await?;
@@ -420,10 +421,23 @@ async fn update_counts_and_snapshot(
 pub async fn complete_sync_job_if_finished(
     pool: &SqlitePool,
 ) -> Result<Option<SyncSnapshot>, sqlx::Error> {
-    if has_pending_sync_queue_items(pool).await? {
+    let mut tx = pool.begin().await?;
+    let result = sqlx::query(
+        "UPDATE sync_jobs SET status = 'IDLE', current_path = NULL \
+         WHERE id = 1 AND status = 'RUNNING' \
+           AND NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING')",
+    )
+    .execute(&mut *tx)
+    .await?;
+    if result.rows_affected() == 0 {
+        tx.commit().await?;
         return Ok(None);
     }
-    Some(set_sync_status(pool, "IDLE").await).transpose()
+    let snapshot = sqlx::query_as::<_, SyncSnapshot>(SNAPSHOT_SELECT)
+        .fetch_one(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(Some(snapshot))
 }
 
 pub async fn reset_failed_queue_items_for_folder(

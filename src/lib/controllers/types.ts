@@ -13,7 +13,7 @@ export interface SyncSummary {
 }
 
 export interface SyncSnapshot {
-  status: "RUNNING" | "PAUSED" | "IDLE";
+  status: "RUNNING" | "PAUSED" | "IDLE" | "FAILED";
   total: number;
   succeeded: number;
   failed: number;
@@ -26,7 +26,7 @@ export interface TransferStatsEvent {
   transferredBytes: number;
   transferRateBytesPerSecond: number;
   estimatedSecondsRemaining: number | null;
-  status: "RUNNING" | "PAUSED" | "IDLE";
+  status: "RUNNING" | "PAUSED" | "IDLE" | "FAILED";
 }
 
 export interface RemoveFolderResult {
@@ -38,4 +38,3 @@ export interface DetectedVolume {
   mountPath: string;
   displayName: string;
 }
-

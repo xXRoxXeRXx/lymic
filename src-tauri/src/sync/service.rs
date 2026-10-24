@@ -249,9 +249,10 @@ impl<'a> Synchronization<'a> {
         };
         crate::app::tray::update_sync_action(self.app, &started);
 
-        let credentials = match auth::get_credentials()?.ok_or("Not logged in") {
-            Ok(credentials) => credentials,
-            Err(error) => return self.fail_run(source, error).await,
+        let credentials = match auth::get_credentials() {
+            Ok(Some(credentials)) => credentials,
+            Ok(None) => return self.fail_run(source, "Not logged in").await,
+            Err(error) => return self.fail_run(source, &error.to_string()).await,
         };
         let audit_context = SyncAuditContext::from_credentials(&credentials, source.audit_label());
         let Some(client) = create_authenticated_client(self.app, credentials) else {
@@ -265,6 +266,7 @@ impl<'a> Synchronization<'a> {
                 client,
                 source,
                 self.coordinator.clone(),
+                self.app.state::<crate::sync::SyncState>().0.clone(),
                 audit_context,
             )
             .await;
@@ -277,6 +279,7 @@ impl<'a> Synchronization<'a> {
             let app = self.app.clone();
             let pool = self.pool.clone();
             let coordinator = self.coordinator.clone();
+            let running = self.app.state::<crate::sync::SyncState>().0.clone();
             tauri::async_runtime::spawn(async move {
                 let result = run_sync_pipeline(
                     app.clone(),
@@ -284,6 +287,7 @@ impl<'a> Synchronization<'a> {
                     client,
                     source,
                     coordinator,
+                    running,
                     audit_context,
                 )
                 .await;
@@ -304,6 +308,7 @@ impl<'a> Synchronization<'a> {
     async fn fail_run<T>(&self, source: SyncSource, error: &str) -> Result<T, String> {
         if let Ok(snapshot) = self.lifecycle().fail().await {
             crate::app::tray::update_sync_action(self.app, &snapshot);
+            let _ = self.app.emit("sync-progress-snapshot", &snapshot);
         }
         crate::audit::audit_event(
             self.app,
@@ -358,11 +363,22 @@ impl<'a> Synchronization<'a> {
             let _ = self.app.emit("sync-progress-snapshot", &completed);
             return Ok(completed);
         }
-        let credentials = auth::get_credentials()?.ok_or("Not logged in")?;
+        let credentials = match auth::get_credentials() {
+            Ok(Some(credentials)) => credentials,
+            Ok(None) => return self.fail_run(SyncSource::Recovery, "Not logged in").await,
+            Err(error) => {
+                return self
+                    .fail_run(SyncSource::Recovery, &error.to_string())
+                    .await
+            }
+        };
         let audit_context =
             SyncAuditContext::from_credentials(&credentials, SyncSource::Recovery.audit_label());
-        let client = create_authenticated_client(self.app, credentials)
-            .ok_or("Invalid server configuration")?;
+        let Some(client) = create_authenticated_client(self.app, credentials) else {
+            return self
+                .fail_run(SyncSource::Recovery, "Invalid server configuration")
+                .await;
+        };
         crate::audit::audit_event(
             self.app,
             audit_context.event(
@@ -377,6 +393,7 @@ impl<'a> Synchronization<'a> {
         let pool = self.pool.clone();
         let cleanup_pool = self.pool.clone();
         let coordinator = self.coordinator.clone();
+        let running = self.app.state::<crate::sync::SyncState>().0.clone();
         self.running.store(true, Ordering::SeqCst);
         tauri::async_runtime::spawn(async move {
             let result = crate::sync::queue_runner::run_sync_pipeline(
@@ -385,6 +402,7 @@ impl<'a> Synchronization<'a> {
                 client,
                 SyncSource::Recovery,
                 coordinator,
+                running,
                 audit_context,
             )
             .await;
@@ -524,7 +542,9 @@ pub(crate) async fn admit_and_run(
     match synchronization.admit_and_run(scan_result, source).await {
         Ok(_) => {}
         Err(error) => {
-            emit_sync_error(&app, &format!("Synchronization admission failed: {error}"));
+            if source.is_manual() {
+                emit_sync_error(&app, &format!("Synchronization admission failed: {error}"));
+            }
         }
     }
 }

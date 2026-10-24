@@ -82,6 +82,18 @@ describe("sync controller", () => {
     expect(controller.dashboard).toMatchObject({ syncStatus: "paused", processed: 1, syncTotal: 4, currentFile: "two.jpg", watchedFolders: [{ id: 1, path: "C:/photos" }] });
   });
 
+  it("shows a durable failed synchronization even without failed queue entries", async () => {
+    const adapter = createDesktopAdapter({
+      getSyncStatus: vi.fn().mockResolvedValue({ status: "FAILED", total: 0, succeeded: 0, failed: 0, currentPath: null }),
+    });
+    const controller = createController(adapter);
+    controller.startLifecycle();
+
+    await controller.hydrate();
+
+    expect(controller.syncStatus).toBe("error");
+  });
+
   it("pauses and resumes synchronization through the adapter", async () => {
     const adapter = createDesktopAdapter({
       getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos" }]),
