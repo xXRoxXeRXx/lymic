@@ -461,7 +461,7 @@ pub(crate) async fn remove_folder(
 
     if let Some(folder) = folders.iter().find(|f| f.id == id) {
         let path = folder.path.clone();
-        let has_active_work = sync_coordinator.0.has_active_work_in(&path).await
+        let has_active_work = sync_coordinator.0.active_work.has_work_in(&path)
             || db::has_sync_work_in_folder(pool.inner(), &path)
                 .await
                 .map_err(|error| error.to_string())?;
@@ -487,7 +487,7 @@ pub(crate) async fn remove_folder(
 
         // The watcher is gone before cancellation so no new work can be produced for this root.
         // The queue cleanup is path-component based and leaves sibling roots untouched.
-        sync_coordinator.0.cancel_work_in(&path).await;
+        sync_coordinator.0.active_work.cancel_work_in(&path);
         if let Err(error) = db::discard_sync_data_in_folder(pool.inner(), &path).await {
             let path_for_check = PathBuf::from(&path);
             let is_available = tokio::task::spawn_blocking(move || path_for_check.is_dir())
