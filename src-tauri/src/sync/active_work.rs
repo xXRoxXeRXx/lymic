@@ -57,25 +57,32 @@ impl ActiveWork {
     }
 
     pub(crate) fn acquire(self: &Arc<Self>, units: &[UploadUnit]) -> ActiveWorkLease {
-        let mut entries = self.entries.lock().expect("active work lock poisoned");
         let mut ids = Vec::new();
         let mut context_entries = Vec::new();
-        for path in units
-            .iter()
-            .flat_map(UploadUnit::assets)
-            .map(|asset| asset.path.clone())
-        {
-            let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        for unit in units {
             let cancellation = CancellationToken::new();
-            let path = normalize_folder_path(&PathBuf::from(path));
-            entries.push(ActiveEntry {
-                id,
-                path: path.clone(),
-                cancellation: cancellation.clone(),
-            });
-            ids.push(id);
-            context_entries.push(ContextEntry { path, cancellation });
+            for path in unit
+                .assets()
+                .map(|asset| normalize_folder_path(&PathBuf::from(&asset.path)))
+            {
+                let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+                ids.push(id);
+                context_entries.push(ContextEntry {
+                    path: path.clone(),
+                    cancellation: cancellation.clone(),
+                });
+            }
         }
+        let mut entries = self.entries.lock().expect("active work lock poisoned");
+        entries.extend(
+            ids.iter()
+                .zip(&context_entries)
+                .map(|(id, entry)| ActiveEntry {
+                    id: *id,
+                    path: entry.path.clone(),
+                    cancellation: entry.cancellation.clone(),
+                }),
+        );
         ActiveWorkLease {
             work: self.clone(),
             ids,
@@ -136,15 +143,18 @@ impl ProcessingContext {
 
     fn for_path(&self, path: &str) -> UnitProcessingContext {
         let path = normalize_folder_path(&PathBuf::from(path));
-        let cancellation = self.entries.iter().find_map(|entry| {
-            (path_is_within(&entry.path, &path) && path_is_within(&path, &entry.path))
-                .then(|| entry.cancellation.clone())
-        });
+        let cancellation = self
+            .entries
+            .iter()
+            .find_map(|entry| same_path(&entry.path, &path).then(|| entry.cancellation.clone()));
         UnitProcessingContext {
-            cancellation: cancellation
-                .expect("lease context must contain every queued Upload Unit"),
+            cancellation: cancellation.unwrap_or_default(),
         }
     }
+}
+
+fn same_path(left: &std::path::Path, right: &std::path::Path) -> bool {
+    path_is_within(left, right) && path_is_within(right, left)
 }
 
 impl UnitProcessingContext {
@@ -163,7 +173,6 @@ mod tests {
     use crate::media::model::{Asset, UploadUnit};
     use std::sync::Arc;
 
-    #[test]
     fn unit(path: &str) -> UploadUnit {
         UploadUnit {
             image: Asset {
@@ -207,5 +216,38 @@ mod tests {
         drop(lease);
 
         assert!(!work.has_work_in("C:/Photos"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalized_windows_paths_share_a_unit_context() {
+        let work = Arc::new(ActiveWork::new());
+        let photo = unit(r"C:\Photos\active.jpg");
+        let lease = work.acquire(&[photo.clone()]);
+
+        work.cancel_work_in(r"c:\photos");
+
+        assert!(lease
+            .context()
+            .for_upload_unit(&unit(r"c:\PHOTOS\ACTIVE.jpg"))
+            .is_cancelled());
+    }
+
+    #[test]
+    fn cancelling_a_live_photo_video_cancels_its_upload_unit() {
+        let work = Arc::new(ActiveWork::new());
+        let mut live_photo = unit("C:/Photos/live.jpg");
+        live_photo.live_photo_video = Some(Asset {
+            path: "C:/Removed/live.mov".to_string(),
+            size: 1,
+            mtime: 1,
+            target_album_id: None,
+            remote_id: None,
+        });
+        let lease = work.acquire(&[live_photo.clone()]);
+
+        work.cancel_work_in("C:/Removed");
+
+        assert!(lease.context().for_upload_unit(&live_photo).is_cancelled());
     }
 }
