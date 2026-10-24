@@ -121,6 +121,17 @@ impl<'a> Synchronization<'a> {
         SynchronizationLifecycle::new(self.pool, self.running, self.coordinator.clone())
     }
 
+    /// Admit producer output into the durable queue before any runner observes it.
+    /// This is the shared boundary for manual scans, watcher batches, remounts,
+    /// and recovery; producers do not choose queue ordering or runner ownership.
+    pub(crate) async fn admit(&self, scan_result: ScanResult) -> Result<db::SyncSnapshot, String> {
+        log_overlapping_folders(self.app, &scan_result);
+        let snapshot = admit_scan_result(self.pool, &scan_result).await?;
+        crate::app::tray::update_sync_action(self.app, &snapshot);
+        let _ = self.app.emit("sync-progress-snapshot", &snapshot);
+        Ok(snapshot)
+    }
+
     pub(crate) async fn start(&self) -> Result<crate::sync::SyncSummary, String> {
         let folders = db::get_folders(self.pool)
             .await
@@ -163,13 +174,12 @@ impl<'a> Synchronization<'a> {
                 );
             }
             let scan_result = scan_watched_folders_for_media(folders).await?;
-            log_overlapping_folders(self.app, &scan_result);
+            self.admit(scan_result).await?;
             crate::sync::queue_runner::run_sync_pipeline(
                 self.app.clone(),
                 self.pool.clone(),
                 client,
-                scan_result,
-                false,
+                "manual_sync",
                 self.coordinator.clone(),
                 audit_context,
             )
@@ -222,12 +232,12 @@ impl<'a> Synchronization<'a> {
             db::discard_failed_sync_paths(self.pool, &scan_result.discarded_paths)
                 .await
                 .map_err(|error| error.to_string())?;
+            self.admit(scan_result).await?;
             crate::sync::queue_runner::run_sync_pipeline(
                 self.app.clone(),
                 self.pool.clone(),
                 client,
-                scan_result,
-                false,
+                "retry_failed_syncs",
                 self.coordinator.clone(),
                 audit_context,
             )
@@ -317,8 +327,7 @@ impl<'a> Synchronization<'a> {
                 app.clone(),
                 pool,
                 client,
-                ScanResult::default(),
-                true,
+                "resume_sync",
                 coordinator,
                 audit_context,
             )
@@ -339,6 +348,22 @@ impl<'a> Synchronization<'a> {
     pub(crate) async fn status(&self) -> Result<db::SyncSnapshot, String> {
         self.lifecycle().status().await
     }
+}
+
+/// Queue a producer result while copying its Watched Folder's current Target
+/// Album into each Upload Unit. Kept free of Tauri so the durable admission
+/// contract is directly testable.
+pub(crate) async fn admit_scan_result(
+    pool: &sqlx::SqlitePool,
+    scan_result: &ScanResult,
+) -> Result<db::SyncSnapshot, String> {
+    let folders = db::get_folders(pool)
+        .await
+        .map_err(|error| error.to_string())?;
+    let (units, failures) = prepare_scan_for_queue(scan_result, &folders);
+    db::enqueue_upload_units(pool, &units, &failures)
+        .await
+        .map_err(|error| format!("Could not persist sync queue: {error}"))
 }
 
 pub(crate) use crate::media::events::{add_event_paths, log_overlapping_folders};
@@ -436,30 +461,26 @@ pub(crate) async fn sync_scan_result_if_authenticated(
     scan_result: ScanResult,
     source: &'static str,
 ) {
-    log_overlapping_folders(&app, &scan_result);
     if scan_result.files.is_empty() && scan_result.failures.is_empty() {
         return;
     }
 
-    // Persist before scheduling the runner. This keeps the watcher receiver free to
+    // Persist before scheduling the runner. This keeps automatic producers free to
     // keep draining events while another run is active or the queue is paused.
-    let folders = db::get_folders(&pool).await.unwrap_or_default();
-    let (units, failures) = prepare_scan_for_queue(&scan_result, &folders);
-    match db::enqueue_upload_units(&pool, &units, &failures).await {
-        Ok(snapshot) => {
-            crate::app::tray::update_sync_action(&app, &snapshot);
-            let _ = app.emit("sync-progress-snapshot", &snapshot);
-        }
+    let coordinator = app.state::<SyncCoordinator>().0.clone();
+    let running = app.state::<crate::sync::SyncState>().0.clone();
+    let synchronization = Synchronization::new(&app, &pool, &running, &coordinator);
+    match synchronization.admit(scan_result).await {
+        Ok(_) => {}
         Err(error) => {
             emit_sync_error(
                 &app,
-                &format!("Could not persist automatic sync queue: {}", error),
+                &format!("Could not persist automatic sync queue: {error}"),
             );
             return;
         }
     }
 
-    let coordinator = app.state::<SyncCoordinator>().0.clone();
     // A restored pause permits scans to add work but must never start the runner.
     if coordinator.paused.load(Ordering::SeqCst) {
         return;
@@ -468,7 +489,6 @@ pub(crate) async fn sync_scan_result_if_authenticated(
     // Automatic producers use the same durable lifecycle gate as manual work.
     // When another run owns it, the queued work remains durable and that run will
     // pick it up instead of starting a competing pipeline.
-    let running = app.state::<crate::sync::SyncState>().0.clone();
     let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator.clone());
     let started = match lifecycle.start().await {
         Ok(snapshot) => snapshot,
@@ -486,8 +506,7 @@ pub(crate) async fn sync_scan_result_if_authenticated(
                     app_for_runner.clone(),
                     pool,
                     client,
-                    ScanResult::default(),
-                    true,
+                    source,
                     coordinator,
                     audit_context,
                 )
@@ -603,27 +622,20 @@ mod tests {
             ..Default::default()
         };
         let original_album = crate::immich::AlbumId::new("album-original");
-        let changed_album = crate::immich::AlbumId::new("album-changed");
-        let folders = [db::WatchedFolder {
-            id: 1,
-            path: "C:/photos".to_string(),
-            recursive: true,
-            target_album_id: Some(original_album),
-            exclusion_patterns: vec![],
-        }];
-        let (units, failures) = prepare_scan_for_queue(&scan, &folders);
-        db::enqueue_upload_units(&pool, &units, &failures)
+        db::add_folder(&pool, "C:/photos", Some(&original_album))
             .await
             .unwrap();
+        admit_scan_result(&pool, &scan).await.unwrap();
 
-        let changed_folders = [db::WatchedFolder {
-            target_album_id: Some(changed_album),
-            ..folders.into_iter().next().unwrap()
-        }];
-        let (units, failures) = prepare_scan_for_queue(&scan, &changed_folders);
-        db::enqueue_upload_units(&pool, &units, &failures)
-            .await
-            .unwrap();
+        // A later Watched Folder change must not redirect an Upload Unit already
+        // admitted to the durable queue.
+        sqlx::query(
+            "UPDATE watched_folders SET target_album_id = 'album-changed' WHERE path = 'C:/photos'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        admit_scan_result(&pool, &scan).await.unwrap();
 
         let recovered = db::next_queued_upload_units(&pool, 10).await.unwrap();
         assert_eq!(
