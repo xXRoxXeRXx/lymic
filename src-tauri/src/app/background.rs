@@ -9,7 +9,6 @@ use crate::{
     watcher::{WatcherIngestion, WATCHER_DEBOUNCE},
 };
 use serde_json::json;
-use std::sync::atomic::Ordering;
 use tauri::Manager;
 
 pub(crate) fn spawn(handle: tauri::AppHandle, startup: StartupContext) {
@@ -237,33 +236,34 @@ fn spawn_watcher_consumer(
     handle: tauri::AppHandle,
     mut watch_events: tokio::sync::mpsc::Receiver<crate::watcher::WatcherInput>,
     rescan_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    _rescan_notify: std::sync::Arc<tokio::sync::Notify>,
+    rescan_notify: std::sync::Arc<tokio::sync::Notify>,
 ) {
     tauri::async_runtime::spawn(async move {
         let mut ingestion = WatcherIngestion::new(WATCHER_DEBOUNCE);
         loop {
-            // A full native queue cannot carry an explicit Overflow input. The callback
-            // records that fact atomically; pass it to ingestion with the next batch.
-            let force_full_rescan = rescan_requested.swap(false, Ordering::AcqRel);
             let pool = handle.state::<sqlx::SqlitePool>().inner().clone();
             let handoff_handle = handle.clone();
             match ingestion
                 .ingest_next(
                     &mut watch_events,
-                    force_full_rescan,
+                    rescan_requested.as_ref(),
+                    rescan_notify.as_ref(),
                     || async move {
                         db::get_folders(&pool)
                             .await
                             .map_err(|error| error.to_string())
                     },
                     move |scan_result| async move {
-                        log_overlapping_folders(&handoff_handle, &scan_result);
-                        admit_and_run(
-                            handoff_handle.clone(),
-                            handoff_handle.state::<sqlx::SqlitePool>().inner().clone(),
-                            scan_result,
-                            SyncSource::Watcher,
-                        )
+                        handoff_watcher_scan(scan_result, move |scan_result, source| async move {
+                            log_overlapping_folders(&handoff_handle, &scan_result);
+                            admit_and_run(
+                                handoff_handle.clone(),
+                                handoff_handle.state::<sqlx::SqlitePool>().inner().clone(),
+                                scan_result,
+                                source,
+                            )
+                            .await;
+                        })
                         .await;
                         Ok(())
                     },
@@ -308,4 +308,78 @@ fn spawn_watcher_consumer(
             }
         }
     });
+}
+
+async fn handoff_watcher_scan<H, HandoffFuture>(scan_result: crate::sync::ScanResult, handoff: H)
+where
+    H: FnOnce(crate::sync::ScanResult, SyncSource) -> HandoffFuture,
+    HandoffFuture: std::future::Future<Output = ()>,
+{
+    handoff(scan_result, SyncSource::Watcher).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        db::WatchedFolder,
+        watcher::{WatcherIngestion, WatcherInput},
+    };
+    use notify::event::CreateKind;
+    use std::sync::{atomic::AtomicBool, Arc};
+    use tokio::sync::{mpsc, Notify};
+
+    #[tokio::test]
+    async fn consolidated_watcher_result_reaches_synchronization_admission() {
+        let root =
+            std::env::temp_dir().join(format!("lymic-watcher-admission-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let photo = root.join("photo.jpg");
+        std::fs::write(&photo, b"media").unwrap();
+        let (tx, mut rx) = mpsc::channel(1);
+        tx.send(WatcherInput::Event(
+            notify::Event::new(notify::EventKind::Create(CreateKind::File)).add_path(photo.clone()),
+        ))
+        .await
+        .unwrap();
+        let requested = AtomicBool::new(false);
+        let notify = Notify::new();
+        let mut ingestion = WatcherIngestion::new(std::time::Duration::ZERO);
+        let root_for_resolution = root.clone();
+        let admitted = Arc::new(std::sync::Mutex::new(None));
+        let admitted_for_handoff = admitted.clone();
+
+        assert_eq!(
+            ingestion
+                .ingest_next(
+                    &mut rx,
+                    &requested,
+                    &notify,
+                    || async move {
+                        Ok(vec![WatchedFolder {
+                            id: 1,
+                            path: root_for_resolution.to_string_lossy().to_string(),
+                            recursive: true,
+                            target_album_id: None,
+                            exclusion_patterns: vec![],
+                        }])
+                    },
+                    move |scan_result| async move {
+                        handoff_watcher_scan(scan_result, move |scan_result, source| async move {
+                            *admitted_for_handoff.lock().unwrap() = Some((scan_result, source));
+                        })
+                        .await;
+                        Ok(())
+                    },
+                )
+                .await
+                .unwrap(),
+            Some(false)
+        );
+        let (scan_result, source) = admitted.lock().unwrap().take().unwrap();
+        assert_eq!(source, SyncSource::Watcher);
+        assert_eq!(scan_result.files.len(), 1);
+        assert_eq!(scan_result.files[0].path, photo.to_string_lossy());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
