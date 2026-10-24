@@ -94,11 +94,11 @@ impl VolumeEventEmitter for tauri::AppHandle {
                     return;
                 }
             };
-            crate::sync::sync_scan_result_if_authenticated(
+            crate::sync::admit_and_run(
                 app,
                 pool,
                 scan_result,
-                "removable_media_reconnect",
+                crate::sync::SyncSource::RemovableMediaReconnect,
             )
             .await;
         });

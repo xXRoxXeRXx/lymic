@@ -10,7 +10,7 @@ use crate::{
     immich::{ImmichClient, SidecarDirectoryCache},
     sync::{
         processor::{RunProcessor, SyncSummary},
-        JobByteProgress, SyncCoordinatorInner,
+        JobByteProgress, SyncCoordinatorInner, SyncSource,
     },
 };
 use serde_json::json;
@@ -47,20 +47,20 @@ pub(crate) async fn run_sync_pipeline(
     app: tauri::AppHandle,
     pool: sqlx::SqlitePool,
     client: Arc<ImmichClient>,
-    source: &'static str,
+    source: SyncSource,
     coordinator: Arc<SyncCoordinatorInner>,
     audit_context: SyncAuditContext,
 ) -> Result<SyncSummary, String> {
     // Admission persists producer work before this runner starts. The durable
     // queue is therefore the sole source used here, including after recovery.
-    let is_automatic = !matches!(source, "manual_sync" | "retry_failed_syncs");
+    let is_automatic = !source.is_manual();
     let snapshot = db::get_sync_snapshot(&pool)
         .await
         .map_err(|error| format!("Could not load sync queue: {error}"))?;
     let _sync_guard = match coordinator.lock.try_lock() {
         Ok(guard) => guard,
         Err(_) => {
-            if source == "manual_sync" {
+            if source == SyncSource::Manual {
                 crate::app::events::log_to_ui_key(
                     &app,
                     "INFO",
@@ -80,7 +80,7 @@ pub(crate) async fn run_sync_pipeline(
             audit::Outcome::Started,
             audit::Severity::Info,
             "Synchronization started",
-            json!({ "source": source }),
+            json!({ "source": source.audit_label() }),
         ),
     );
     let mut totals = SyncSummary {

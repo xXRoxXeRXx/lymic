@@ -5,8 +5,8 @@ use crate::media::paths::{normalize_folder_path, path_is_within};
 use crate::{
     db,
     sync::{
-        scan_folders_for_media, scan_watched_folders_for_media, sync_scan_result_if_authenticated,
-        SyncCoordinator,
+        admit_and_run, scan_folders_for_media, scan_watched_folders_for_media, SyncCoordinator,
+        SyncSource,
     },
     watcher,
 };
@@ -239,8 +239,13 @@ pub(crate) async fn register_watched_folder(
                         return;
                     }
                 };
-            sync_scan_result_if_authenticated(app_for_scan, pool_inner, scan_result, "folder_add")
-                .await;
+            admit_and_run(
+                app_for_scan,
+                pool_inner,
+                scan_result,
+                SyncSource::FolderAdded,
+            )
+            .await;
         });
     }
 
@@ -431,11 +436,11 @@ pub(crate) async fn update_folder_exclusion_patterns(
         .find(|folder| folder.id == id)
         .ok_or("Watched folder was not found.")?;
     let scan_result = scan_watched_folders_for_media(vec![folder]).await?;
-    sync_scan_result_if_authenticated(
+    admit_and_run(
         app,
         pool.inner().clone(),
         scan_result,
-        "exclusion_patterns_changed",
+        SyncSource::ExclusionPatternsChanged,
     )
     .await;
     Ok(())
