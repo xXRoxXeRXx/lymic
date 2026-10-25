@@ -85,5 +85,19 @@ describe("public privacy and support pages", () => {
     expect(flightDoc).toMatch(/PASSED/i);
     expect(flightDoc).toMatch(/Issue #77/i);
   });
+
+  it("records public Microsoft Store release linking Flight evidence and ADR", () => {
+    const releaseDocPath = resolve(root, "docs/store/release-record.md");
+    expect(existsSync(releaseDocPath)).toBe(true);
+    const releaseDoc = readFileSync(releaseDocPath, "utf-8");
+
+    // Public release record verification
+    expect(releaseDoc).toMatch(/xXRoxXeRXx\.Lymic/);
+    expect(releaseDoc).toMatch(/Photo & video/i);
+    expect(releaseDoc).toMatch(/Worldwide/i);
+    expect(releaseDoc).toMatch(/ADR-0004/i);
+    expect(releaseDoc).toMatch(/flight-validation\.md/);
+    expect(releaseDoc).toMatch(/justification\.md/);
+  });
 });
 
