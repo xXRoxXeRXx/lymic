@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:67586d12288725b77975c25499d35bea4290dc046c1491f44429dffa1c8cbdb7",
+  "pageVersion": "sha256:32cf9db5c763cd36a2a73b2c5a0c4792ab84319bbb36b7ea9f562f296add33df",
   "claims": [
     {
       "id": "claim_cfbbe8313c3d41da8e6f2258cee78de1",
@@ -42,7 +42,7 @@
         },
         {
           "resource": "repo://src-tauri/Cargo.toml#L1-L16",
-          "version": "repo-lines-v1:sha256:cd7a190bf28388b7d7ed31874ef6d87dee382c939a3b56802ceff7206d451816:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhM2NkNWE4MWIzZjlhNjIxYWE0OTNkOTBjNDVmNDJhYjU3MWQ0ZTQyYjhhZTVhZmYzNTFjYjBhMDJkMDZkODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjYjNlNzVkNzJjZDYzNjBkYTVmOWQ3Njc4ZTU3ZDZhODdhNmY5N2I3OWM3MjA5MTJhODI4ZWQ1NDhhZGI0NjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjNDUwYjhhZWIxMTM4YmYxNzVmZGMxZDk4Zjk1YWZjZDY3YzMyNzQ4MzY2YzE2ODA4NTVkOGRhYzE0NWFmZTYifQ"
+          "version": "repo-lines-v1:sha256:d9c2422172c9e3b5200caa2b2db25d07175ed2873fb51ca5f7357bfa89ce1012:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhM2NkNWE4MWIzZjlhNjIxYWE0OTNkOTBjNDVmNDJhYjU3MWQ0ZTQyYjhhZTVhZmYzNTFjYjBhMDJkMDZkODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjYjNlNzVkNzJjZDYzNjBkYTVmOWQ3Njc4ZTU3ZDZhODdhNmY5N2I3OWM3MjA5MTJhODI4ZWQ1NDhhZGI0NjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjNDUwYjhhZWIxMTM4YmYxNzVmZGMxZDk4Zjk1YWZjZDY3YzMyNzQ4MzY2YzE2ODA4NTVkOGRhYzE0NWFmZTYifQ"
         }
       ]
     },
@@ -55,11 +55,11 @@
           "version": "repo-lines-v1:sha256:15c19c6cc875a7d7647cca22654b600ffe82cd7e4b71e4492036e51b962277d2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxYWE1ZjVhYjcwNTcyMTkyZDdkMjhhZGNjOTQ4NzVhOTdhYjdmZTdiOWE4MTA2MjJkZWFlZTE0NTA5MjFmZWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiM2YyZTExYjg1MzU5OGVmZjZhMWVhYmE0M2Y4MTQ5YjljNGY5OGFhODVlMjJjNDYwNjI5Zjg2OGI2ZmQ0ZWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJmNzQxMDllYWIxMWI3N2E2OTllNjA2NWY2NDM3MzVmNjhkYWFiMTdlMWEzZTYxMTQ3ODgwODFhNjk3NTczZWMifQ"
         },
         {
-          "resource": "repo://src-tauri/src/db/tests.rs#L48-L85",
+          "resource": "repo://src-tauri/src/db/tests.rs#L88-L125",
           "version": "repo-lines-v1:sha256:96cdf1d559a7fe596c2abb83048ff07b1c160f7d382242d1bf9697651c066eb0:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxY2M0MDY4N2QyNDRlOWRhZjkxY2VkNDY1MjMyNjU2OWE0ZmI2ZGZjODFkMDNmYmU3MjNhNWVhM2NjYmU5ZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMwYmUwZjhmMTQ4NWMxYjg3YzE4N2QyODA1MTNmYmQ0Yjg1MTE3ZDE4NGE5MDkxODczYzJhMzNjZjNjYjQ1MzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0MjU5MzE1ZjBjZWJhYjQyYzVkZjc3ZTUzMDFlZGJkNTM3MmJmOTE1NDlhZDEzOTY3NGQ4YzAxYzc1ZWIxMzkifQ"
         },
         {
-          "resource": "repo://src-tauri/src/db/tests.rs#L734-L770",
+          "resource": "repo://src-tauri/src/db/tests.rs#L774-L810",
           "version": "repo-lines-v1:sha256:43f228f191ed569e21bd42f4dce945c46607186a4c9055ee979826164cc843fc:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxY2M0MDY4N2QyNDRlOWRhZjkxY2VkNDY1MjMyNjU2OWE0ZmI2ZGZjODFkMDNmYmU3MjNhNWVhM2NjYmU5ZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhZGYxNTM5NjJmMzJlM2RmNmFlNmZmZDNkMGY0YzFmMDhkNWI3MDIyNmY3Yzg0NjQ2Mzg0OTU5NWRlYzJhMGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc1MDZiY2ZkZmMwNjJhNjg5M2ZkNzhmM2Y0MWU2M2JjMDNlOWIzMjQxY2FkYTFkYmU5NGUxNWZmMjFiZjFkMTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE3YTU4MDA3MGY1NTVjNGE5NWI4M2E2ZTA0NTk1NzVkODg1NGQ1YzEzODQ1MGJkNDMwZjE5NmM2NzcwNTcyYTkifQ"
         }
       ]
@@ -83,7 +83,7 @@
       "statement": "Audit logs are JSON Lines files in the application data `logs` directory; the writer uses five 5-MiB rotating slots, reports queue saturation and recovery through its reporter, and the runtime attempts to append and flush a shutdown event on process exit.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L130-L146",
+          "resource": "repo://src-tauri/src/app/mod.rs#L131-L147",
           "version": "repo-lines-v1:sha256:49cb99e87d0883d62a1f21d3ccc30d8c947492f7cc2461a63bdd5b7177183757:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2ZWM4ZDYwOGFhNjc5MmY4ZDk0ZjdkOWRlOTg0YmI4ZTg4MmYyYzg2MTIyM2MzMWQyOGFiM2MyNGVlNGFiZDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjNjQ3OWNjMjMwNDQwZmQ0MWU4MjI0MjE4Njc5Njk4NTU5ZDI4OTNiZDY3YjQzODBhZmFiODExYjM4YTU1YWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNmNDIyYTE2NDQ3ZGQ4NTEwMWM0YzgzODFkM2FhYjc4MzI0ZmUzNGNiM2VkMzg5OTIwODg3YWNlMjNmNDFhMDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY0MzU2M2NlNmY1NDMyOTFkNWNlNzZlNjZhNTk3ZGE1NTRjZTIyNjNlMWU5OGM2YjZjM2U3NzFmMTE0OTMxYmMifQ"
         },
         {
@@ -117,8 +117,8 @@
           "version": "repo-lines-v1:sha256:1c8abcd3f2a09861bf21948a443518adf5ea6b7a78cccb13b9953973e67460b6:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2IwNzIwMWJkYjZiYzA1OTIwODQ5NjM2ODE4NjFhNGZhMTRhZmRhNTkxYjZkNTY2MWI3NDU4ZDkyMWQ1ZDBlYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNhYjFlYjFkM2JlZjE4Y2Y1NTAwOTlkNzRiOGI4ZmE0ZDFjNWQ3Zjg5NGQ5NDVkZjIwY2ExM2M0NDFmZGYwYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzMwZWM2MGVlOWU5MDU5NDg3M2M3ZThmZDdlN2M2MWFlNmZhNTNlNDkzOTFkY2U1YThlZjAyZWJhMjYxY2JmYiJ9"
         },
         {
-          "resource": "repo://vite.config.js#L12-L47",
-          "version": "repo-lines-v1:sha256:00e58100cac9c68f162e9679ea05182c8c122cf022d6af1a8c794f6740090b67:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxN2M5MTA0Y2UxNjQ3ZDFlOGIxM2MyZGM1NDJhMTdkMzQ4N2ViMDA4MGU2Zjc3ZDNlMGQzMTUwZjkwYmQ2MzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkNWNkMmZiNGYzZGY4ODQ1MTUyNTViMzk1MjNmMmY4YjU0NzJiZWVhOWY1NjZmZmNhMjA0ZGI4MDI1NjEwNDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxZDNlNzZlNzBmMWMyN2UyZmU2MmRkNGYyZTQ1ZGE2MDE3YWQ4YmJhYmZlZDE4YzZjNTc1MTQwZmIyOTIzZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1MjdjZDkxNWY5OTMyZjYzMDNjNzQ0NjFhMzdjMTE1ZDk2ZDk4YzM2OTE1MmRkZDY2MWRkNzJhYTRkOWZjMWEifQ"
+          "resource": "repo://vite.config.js#L12-L48",
+          "version": "repo-lines-v1:sha256:578d0957451b60db7a72913ba8fded367479f4a5a1e37166a8baa028ec54df71:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxN2M5MTA0Y2UxNjQ3ZDFlOGIxM2MyZGM1NDJhMTdkMzQ4N2ViMDA4MGU2Zjc3ZDNlMGQzMTUwZjkwYmQ2MzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkNWNkMmZiNGYzZGY4ODQ1MTUyNTViMzk1MjNmMmY4YjU0NzJiZWVhOWY1NjZmZmNhMjA0ZGI4MDI1NjEwNDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxZDNlNzZlNzBmMWMyN2UyZmU2MmRkNGYyZTQ1ZGE2MDE3YWQ4YmJhYmZlZDE4YzZjNTc1MTQwZmIyOTIzZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1MjdjZDkxNWY5OTMyZjYzMDNjNzQ0NjFhMzdjMTE1ZDk2ZDk4YzM2OTE1MmRkZDY2MWRkNzJhYTRkOWZjMWEifQ"
         }
       ]
     },
@@ -131,15 +131,15 @@
           "version": "repo-lines-v1:sha256:219588f4a2ec1e6f7b7e007aa70c48590c55b1ff9580f4daa5d78617fbc059cf:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzQ4MzNkNTk0OWMwM2E0MGNhOTUyNDkxNjEwYTY2NTk2NDRiM2FhNDY2MzYyZjc5OTAyMGRiZjE5ODE1NDdkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWI3ZDE5ZWZkNzkxYTQxZGU0MTk5MThiMDFlYjMzYzMwOGU1YjU2YTBmMjNmZGFlODk1ZDRhZmE4NTliOWUzOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTMwZDZlYmEzYjU3NWZiYmQxZDBmZjdhZWIzMzI2MzdiZTc2ZGNjMWRhZjg3OGU4NDRlNDg3NDIwOGMzY2IzNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTAzZjEyMjY3MTExZDRiZjZiMzQzNTY2NzU0YzBhZTY2NDk4MWEyZWQ0MjFlYTdlNDcwYWNiNDg4ODhhYjViYyJ9"
         },
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.test.ts#L1-L47",
-          "version": "repo-lines-v1:sha256:6a6b8f26d8550863e9aa870a654de9c35a29385a9229aea9b9da087f7dce206e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhOTFiYmE1ZTg0NTc1OGMyYjdjMDAxMjU4MzU2ZTA4YTg4MzYwMDNlMGY1MjM0NWVlOTEwZjMzNTFjY2FlMjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQwYTJkN2JlOWRlYjFmNmQ0ZTAyYzQ0ZDczNWM3MTZlZDZiMTdkMGUxZjg0YWFlMDdiMDhjZjE3Mzg4M2VhNmQifQ"
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.test.ts#L1-L48",
+          "version": "repo-lines-v1:sha256:486a8511cd4cefd7d257a49742663c61cb7b4e9b82023174a6682857b06289d7:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhOTFiYmE1ZTg0NTc1OGMyYjdjMDAxMjU4MzU2ZTA4YTg4MzYwMDNlMGY1MjM0NWVlOTEwZjMzNTFjY2FlMjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQwYTJkN2JlOWRlYjFmNmQ0ZTAyYzQ0ZDczNWM3MTZlZDZiMTdkMGUxZjg0YWFlMDdiMDhjZjE3Mzg4M2VhNmQifQ"
         },
         {
-          "resource": "repo://src/lib/tauri/desktop-adapter.test.ts#L1-L82",
-          "version": "repo-lines-v1:sha256:40a427ecba17ac5e00bc28bfd8550a8f91bfa626ac4c438e822ea0199e940aca:eyJzZWxlY3RlZExpbmVDb3VudCI6ODIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlOGJlNjQ0NjA2NWQ1NzJhYjA3YzAwNjEwNGIzNjNkODUxYjEzNjJkMzFmNTgzNWE4Njc2MWRhMGQzM2Q5ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwOTNlMTI5MDZhNjFmZDVjMDg5ZmVlOGZjYWZkOTUyZTU3YTU5MDlhMjQ5ZGQxMjUwOTQ5OGQyNzFhNzFjOTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4MTdmYmI3M2M5MmIzNmQ1ZTQ4OTZmZjUxYzFiNThlZWMzMzBiYmU5NjFiYTA1ZmM2MjA1Zjg2N2VhMWJjZjYifQ"
+          "resource": "repo://src/lib/tauri/desktop-adapter.test.ts#L1-L84",
+          "version": "repo-lines-v1:sha256:f9ca09372feef4061e049f01816bc53fb309ea93a62a7e47ed761b8959bf1b41:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlOGJlNjQ0NjA2NWQ1NzJhYjA3YzAwNjEwNGIzNjNkODUxYjEzNjJkMzFmNTgzNWE4Njc2MWRhMGQzM2Q5ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwOTNlMTI5MDZhNjFmZDVjMDg5ZmVlOGZjYWZkOTUyZTU3YTU5MDlhMjQ5ZGQxMjUwOTQ5OGQyNzFhNzFjOTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4MTdmYmI3M2M5MmIzNmQ1ZTQ4OTZmZjUxYzFiNThlZWMzMzBiYmU5NjFiYTA1ZmM2MjA1Zjg2N2VhMWJjZjYifQ"
         },
         {
-          "resource": "repo://vite.config.js#L48-L50",
+          "resource": "repo://vite.config.js#L49-L51",
           "version": "repo-lines-v1:sha256:5527cd915f9932f6303c74461a37c115d96d98c369152ddd661dd72aa4d9fc1a:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkzNmRmN2E1YTNhYWYxODBjZmZkMWQ2NWM2NDZlZjZhZWEzNTJjYzI3Nzc0Njg2MTk5Y2Q4ZmIzZTg5OWM3YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmRkOTcxMWUxZWZjNDE1NjM2NDllZGE5YmEwMjRkOWQ4ZDUxODg3MjAyZGZjZTU3M2FjYmRhNjJiMzg4NmM0ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjEsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWI3NDFkMmMwOGU2ZjUxMGI3ZTlhMjY0ZjM3OGY5Y2UwMDQ5YTUwNGUwZTdlZjVkNjdjZDNlYTgxM2Y4NTQ3NCJ9"
         }
       ]
@@ -159,32 +159,88 @@
       "statement": "Pushing a `v*` tag runs the cross-platform publish workflow, which installs Node 22 dependencies and stable Rust tooling, executes frontend and Rust verification gates, then invokes the Tauri action with locked dependency resolution to draft a release and publish updater artifacts using signing secrets.",
       "evidence": [
         {
-          "resource": "repo://.github/workflows/release.yml#L1-L68",
-          "version": "repo-lines-v1:sha256:6ce65e9fb26e78ea1f31a8c17e500106e0b63a3c967b92ea6e12e022ed98ce60:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU0MThkMzEzNjU1MWEwZWQ5ZDcwYjkwNDgzZjU2MjUwYzNkNTdkMWZkYTdkYzJmOGQ1ZDBkODA5NWVlNDRiMzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNGJhNWRhNDU4MDUxMzIyZGY1OThkYmI3M2ZmNDc3M2ViMTBhOGM1MGQzZDFlZmI5YzJkMDM5ZDMyNWM0NWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://.github/workflows/release.yml#L1-L104",
+          "version": "repo-lines-v1:sha256:edcbea42d3e6b1fa36137093e339bd31e1d7a3c9c3e39edfc78630a5f51b68ba:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3MDI2OTBmZTkyYWY2MjVmOThiM2I5NTMyMTAyYzJjM2NkMTFkNGI3NWQ5YzBmZjJhMTMxODEzNTcxZDJkNTZjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
         }
       ]
     },
     {
       "id": "claim_a2eeb7b8f35943878424654578123227",
-      "statement": "The packaged updater uses a configured public key and GitHub latest-release manifest endpoint; in the frontend, available updates open a dialog and installation is refused during active synchronization, otherwise download progress is tracked before installation and relaunch.",
+      "statement": "The packaged updater uses a configured public key and GitHub latest-release manifest endpoint; the frontend skips update checks and installation on the Store release channel, while supported-channel updates open a dialog and refuse installation during synchronization or another installation, otherwise track download progress, install, and relaunch.",
       "evidence": [
         {
           "resource": "repo://src-tauri/tauri.conf.json#L28-L56",
           "version": "repo-lines-v1:sha256:bb46caf90d877d767a7b951df53738668878e5c685a979ded9d045190fa4901d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjMDcyNDlhZjgzOGY5NDg0OTM5YjM3ZGE3OGQ3MTIxZGM0ZTVkNGFjNTI2N2JkNzIzMDkwMGU3NGE4NjMzZDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3YzY2Zjg2YjMwYjk1YTAxMzMzMzk0NmI2ODNhOTZiNmJiMmUyNGNmNDQ2YmE5Y2JkNzQ0NTFmZDIxZDU0NDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRmNzM5YTA2YzFjYmIxMjQ0ZTMzNjNkMzhiY2Y5ZmE1MGNlODRmZWQzOTljMjE5M2EzYzdmMDhkNTk5MThiMmEifQ"
         },
         {
-          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L25-L42",
-          "version": "repo-lines-v1:sha256:5c1264b2df37117d76227c58cb6b0956dac874fb6f579503717d04c7af1482c3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkZmQ3OWQ4Zjc3Mjg4M2VkOGI5YTAwZTZkMDE5NGI1NTI5NGM4NjQzNDJkNDcyOGZmYTQzZTk5ZGNlMzVmNzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUyNjZiNjIxYzI2ZGE4YzM2MTA2MTI0YTRlNWFjMWFmZmNmMzU1MWNhYzhiMTM2M2I5Nzk4Zjg1MWE5ZTJiOGEifQ"
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L31-L48",
+          "version": "repo-lines-v1:sha256:0b2428216d67eeba331eb217c7c62b51472d7901556f603a6d8068ff001a411f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkZmQ3OWQ4Zjc3Mjg4M2VkOGI5YTAwZTZkMDE5NGI1NTI5NGM4NjQzNDJkNDcyOGZmYTQzZTk5ZGNlMzVmNzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE3ZDM5OTRlMDYwYTJhOGM1NjdhYzgzNTU1ZDI4NzU3ZWE3Nzg0Y2VhZTNlZWVmMWE3NTk5ZmU1YjA4YzAzNDMifQ"
         },
         {
-          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L66-L82",
-          "version": "repo-lines-v1:sha256:8ce89ed144f6aab36f87c55a41a041dad9f3227900cbc10700d408541bfe7580:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxZmQzNzg2ZWUxODY1NDQ0YWU3MDY1YTYxYzdkNDdiMDRlNjY4ZWQ4N2NhMjc4MWZmYWZhYTQzMzY1YzJmZDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVlNTNhY2UyMTNkNWFkMDQwNWZkMzQ1OWRiM2Y1YTNjOTg5NmUzYjFiOWU4YmVmMGMxZDNiODU0MjM4NTYyNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZGFhZDk0YWJlNGViOWM1NzU5MGZlOThkOGZmZjQ3NjQ3Yzk5MjQxOGM0ZDVlOTIyZTlhMDcyMjBkYTJmMTEifQ"
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L55-L97",
+          "version": "repo-lines-v1:sha256:6d98f95eaccd8f8ef67c42256bb5abcaa9a57b6d587b2ce5099f7221391dbbe2:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2MDYxMTIyMDg1ZTM4ZDk1Y2Q4NzM5YmU3Y2M0NWI2ZmJiNWJkMTY4MDEzMjhiMDdlZTQwNDZjNjkyMTc4ZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdjZjQ1OGFkZGU3NjZmZjM1NjVlNTE1ZmZlOGNkYjAzZGE0NGRlNzgxZGVkOWI0ZGFkOTdkZjJkZDQ0Y2RjMTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZGFhZDk0YWJlNGViOWM1NzU5MGZlOThkOGZmZjQ3NjQ3Yzk5MjQxOGM0ZDVlOTIyZTlhMDcyMjBkYTJmMTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_027073ecafdf45889d8c9fc67b97be72",
+      "statement": "The desktop-adapter Vitest suite mocks Tauri `invoke` to assert command names and serialized payloads, while a Rust test verifies every adapter command string has a corresponding `generate_handler!` registration; together these tests detect adapter/registration drift without executing native command behavior.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/mod.rs#L152-L196",
+          "version": "repo-lines-v1:sha256:c4d4854c6661abdc0899c1c507c0992118a460b49da851212ce50e98942fe531:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1Y2Y1ZmMyM2YyYTZkMjNjM2VhNTFlNzJmNWU4OTZjNzU1NWZiYWEwNWNkNWIxZWExODJiZjk2MThhOGU4MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0NjFkNDcxZTE1ZDg2MDVjN2Y5MjI1MjJlNWE2ZjFkNjgyNDZjMDMzODhmYWQwYmY3NmZiZDY4OWU3Yzg2MWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkOTAzNTEyOTg2OWUzNDVjYWExNDliYjNlMWE3N2E0NTBiN2E2MDMwNjIyNWEzNWQ4MDE0Y2RjMThmYmJhOTgifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/app/mod.rs#L92-L118",
+          "version": "repo-lines-v1:sha256:4f3df4c26c856ad3d1ba07b776fb323d16848caa020e4b93830491813b19ae6f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhM2I5NWFlMzgyMWJjZmZjNDQzYjQzOWUxZjY5Nzc1MmUxNjA1ZDdkNTVmZjA2OGY4ZDk4NzE2MzFhMjRkZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyNzZjMWQxZjk3ODVlNTU2MGQwYmI1Zjc5YzJlOTc5OTk3YjcwY2RlZDFmM2I2OGVlYjBjZDE5MTBhZTIyN2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiMDE2ZjE2M2NhYWFjM2YxMGVjNjg4ZjE4YTFjMjcyOTUyOTg1MDY3OGRhZmM0YjAwNzg4MWIyNjE2NjdlNDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwZTQ4ZGU2NjVlNGE1YTNmMTZkZTkwYjQ5MjI5YTU4ZTcyNWQwNTkwZjA2ZTljYzYzMjdhOWZkMGQ5Nzg3N2YifQ"
+        },
+        {
+          "resource": "repo://src/lib/tauri/desktop-adapter.test.ts#L1-L85",
+          "version": "repo-lines-v1:sha256:22efed2ac7cc0f5415b1e0a2a5008eb57d43468179d7f433bba92c8d72ccfb89:eyJzZWxlY3RlZExpbmVDb3VudCI6ODUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlOGJlNjQ0NjA2NWQ1NzJhYjA3YzAwNjEwNGIzNjNkODUxYjEzNjJkMzFmNTgzNWE4Njc2MWRhMGQzM2Q5ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c5cfb2e720d74c34bc4321386675e7c0",
+      "statement": "Synchronization admits scan results into SQLite before claiming a lifecycle; the lifecycle returns paused or joined when appropriate and uses an atomic running flag so only one caller persists and starts a runner, while manual sources await the pipeline and automatic sources spawn it after admission.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L172-L180",
+          "version": "repo-lines-v1:sha256:433fb87b0d3aca9914a6e9a02b68c30dec9b63f789d1d73bf81d25f7d755333a:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGU0ZDhlNjdiOWQwYTVmNjBiYTdjODE5NWJkYWUwMzIzNTNlMGE1OTQ5YjlmYThmNzA2MDE0YTJjMTU4ZWNiNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWE3NzYwMDZjYTBhYzQzZjBiMDkwZmQ5YzFjZTI4MGUxOWYwNTdmYTc4YmJlYjgwMTg5NGM3OTRlYWVlNzUwOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTFhNDU5NDE4Y2FjNWYzNWVlOTlkMjlhNjE3Zjk1ZjBlNjc0ZDZjMDQwZTUwOTM3NDY0NjI1NjIyYzAxODRiOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjAyY2Q5ZjlhMTFkZWMyODczZGVkN2I4YzAzODMyZWQ2MzA4NWExY2VmOWJlOTkzMTlkODU4MGY4OGVlMzU1MCJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L231-L305",
+          "version": "repo-lines-v1:sha256:74bc07a9861347950d1014c2a3ae70fd3163e5444b0c39a8aa4ad615798cdcc0:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZjFjZGEyZWE4ODU2YjgyNGM5ZWEwODUxOTI2YmZmNTMwZDg3YjBhOTE0N2ZhOGJlNTI4YjBjYzZkM2MzM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjA0NDkxNDY5NzIyZTgzNjNhOTRlNDA0NDUzOGUwMTNhMmEyMTdlMzZiMWU1NjhiYTYwYWNiN2I0YzhmMmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY1ZTFjZGZmNDYyMjc0NzczOWYxOTkyYjY5NWZmNGIwZDE0ODNmNTk3NjVkNDAzNmU3MDk1MWIxNTFhYmI2YjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA2MDc4NTdlYjhhN2Q3Y2E4MmRkZTM1YjJmZTcwYTkxMzg2MWU4MWNhMmY3YzdiN2I3NTIzNWRlNTgzNmU4YzgifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L81-L105",
+          "version": "repo-lines-v1:sha256:3562bcd461bfeb27f9b7ffa7537f35bc2faa6f299d8b27eef3e9172f80d2bed0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjljNzMwM2M3NWVhMGMwZWJjYjQxYTE0ODUzODMwZWIwM2JjYTY2YTJlZTcxYWZjODJkNmU5N2M1ODE2OTgyMTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1MDQyODYwNDc5OGY2ZTM5OGUxNzExM2YxYTQ1YmRhNGVmM2VkYjI0ZDM0NjRjNjkwZWY2NzE4M2U3MTgzZTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_59a5d270943f4cdfa1e826a2548485af",
+      "statement": "After the shared cross-platform verification and Tauri release action, the Windows publish job builds with `LYMIC_RELEASE_CHANNEL=store`, packages and validates a versioned x64 MSIX, uploads it as an artifact, and attaches it to the GitHub release when the file exists.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L70-L103",
+          "version": "repo-lines-v1:sha256:038a9aa8dc122a98223759948a1aa3e34986dbe2d6b62ea6463528a1cfa7ae11:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0ZTBmZDlhNzdhM2QzYzg1YTBjMGRiMmNhZTZhYTBiYmFiODIwYTcwOTExMzZlYzg2ODFiYjg0OTIwNjc5ZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4MDA1ZDU3MTA2YTM2MmViMDAwZGFmM2RhNDY3NGM4MmI1MThmZjVhMmUyZjY3ZWU4ZTc1N2EzMzNjMmFmNjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjliODI3NGFiNWM3ZjEwNjRiODhiYzE1Mjc2YTViYWU1ODZhOWQwMDhiNTQ4YmEwMjk0ZDg3NTc3Y2IzZjk1NzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_09248a3657f9419395081e5cc9247316",
+      "statement": "The frontend suite checks required privacy/support-page content and Microsoft Store listing, Flight-validation, and release-record collateral by reading repository files; these are content-presence tests rather than browser or Store-submission integration tests.",
+      "evidence": [
+        {
+          "resource": "repo://src/site.test.ts#L1-L102",
+          "version": "repo-lines-v1:sha256:e58d92985577b2f5cb0af62bbb160acc32ea68951b2d2c314adbb82a5458485c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhYjk1MDZiMjFmNDgzZGM5NWRmMmYyYjM1ZjcwYzBhNDQzYjA1M2E3Yjk2NDlmNzc0NjdlNjg4YTMzMjAwNDA0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJmNmY1YjQwYjE1ODQ1N2QxNzg2NGYyMTc5MDc4NmRkNWEyZWNkYjY0YjY2YTY1MWY3ODhkNGUyNWNkMzMwM2QyIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIn0"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-19T15:10:01.321Z"
+    "at": "2026-10-25T12:52:45.890Z"
   }
 }

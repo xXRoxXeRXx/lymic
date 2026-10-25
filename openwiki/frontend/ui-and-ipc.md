@@ -1,7 +1,7 @@
 ---
 type: integration
-title: Frontend Controllers and IPC Boundary
-description: The Svelte composition root, its stateful controllers, and the typed adapter that carries commands and native events across the Tauri boundary. Includes lifecycle, reconciliation, and safe command-evolution rules.
+title: Frontend, Controllers, and Desktop IPC
+description: The Svelte composition root, stateful controllers, and typed adapter that carry commands and native events across the Tauri boundary. Covers lifecycle, reconciliation, update guards, and safe command evolution.
 tags: [frontend, svelte, tauri, ipc]
 sources:
   - id: openwiki-source-11d0a4fc3a0d3b69fb50a64d
@@ -30,13 +30,13 @@ sources:
     resource: repo://src/lib/tauri/sync-event-subscription.ts
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
+generated: { by: "openwiki/0.7.2", at: "2026-10-25T12:52:45.890Z" }
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-19T15:10:01.321Z
-generated: { by: "openwiki/0.7.2", at: "2026-10-19T15:10:01.321Z" }
+    at: 2026-10-25T12:52:45.890Z
 ---
 
-# Frontend Controllers and IPC Boundary
+# Frontend, Controllers, and Desktop IPC
 
 The webview is a stateful client of the desktop backend, not the owner of synchronization, credentials, folders, or settings persisted by Rust. The root route composes view components around controllers; controllers hold presentation and interaction state, call a typed desktop adapter for request/response work, and reconcile important state with command results and native events.
 
@@ -114,7 +114,7 @@ sequenceDiagram
 
 *Representative manual synchronization: provisional UI feedback is reconciled with the command result, native events, and backend refreshes.*
 
-The backend service requires at least one folder, rejects a concurrent run, persists the running lifecycle state, updates the tray, obtains credentials, scans watched folders, and runs the pipeline. It clears its in-memory run guard on completion. On an error it attempts to abort back to an idle snapshot, updates the tray, audits the failure, and returns the error. The UI must therefore handle rejected starts rather than assuming its provisional status was accepted. Pause returns and emits the persisted paused snapshot. Resume returns the existing snapshot when it was not paused; otherwise it persists/emits a running snapshot and may resume recovered queued work.
+The backend service requires at least one folder, scans it, persists admitted work, and atomically claims the running lifecycle before constructing authenticated pipeline execution. If a run is already claimed, a second producer joins it and receives no independent summary; a paused lifecycle similarly is not started again. Manual producers await the runner they claimed, then clear the in-memory guard. A failed run clears that guard, persists a `FAILED` snapshot when possible, updates the tray, emits that snapshot, audits the abort, and returns the error. The UI must therefore reconcile its provisional status with the command result and events rather than assuming its request claimed a run. Pause returns and emits the persisted paused snapshot. Resume returns the existing snapshot when it was not paused; otherwise it persists/emits a running snapshot and may resume recovered queued work.
 
 ## Folder, removable-media, and preference operations
 
@@ -126,7 +126,7 @@ Preferences separate local presentation preference from desktop settings. Theme 
 
 ## Updates, external integration, and focused tests
 
-The update controller starts a check and version lookup during startup and records best-effort webview startup phases through the adapter. It ignores failed phase recording, ignores results after destruction, and avoids duplicate checks. Installation returns immediately if no update is available, sync is active, or download/install is already in progress; otherwise it tracks updater started/progress/finished events, calls `downloadAndInstall`, and then asks the process plugin to relaunch. Errors move a mounted controller to the `error` install state.
+The update controller obtains the release channel from the adapter at startup, then loads the app version and, for the `github` channel, performs an updater check while recording best-effort webview startup phases through the adapter. The `store` channel disables update checks, installation, and update UI (`isUpdatesSupported` is false); an adapter failure leaves the initially configured channel in effect. The controller ignores failed phase recording, ignores check/version results after destruction, and avoids duplicate checks. For a supported channel, installation returns immediately if no update is available, synchronization is active, or download/install is already in progress; otherwise it tracks updater started/progress/finished events, calls `downloadAndInstall`, and then asks the process plugin to relaunch. Errors move a mounted controller to the `error` install state.
 
 Focused controller tests should cover the behavior at this boundary: adapter request arguments/results, snapshot mapping, terminal reconciliation, pause/resume, two-stage removal, removable-media acceptance, and timer/listener cleanup. Adapter tests should assert the `invoke` mapping and argument casing; the Rust registration test should remain aligned with the adapter. Component tests are best limited to callback wiring and observable presentation. Run the frontend and backend commands described in [Development and Testing](../operations/development-and-testing.md) after changing a boundary contract.
 

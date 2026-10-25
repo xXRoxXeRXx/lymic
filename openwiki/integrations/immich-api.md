@@ -3,6 +3,9 @@ type: integration
 title: Immich API Integration
 description: The authenticated, typed boundary between Lymic and Immich, covering URL and credential safeguards, duplicate detection, streamed uploads, album API calls, and the handoff to local synchronization state.
 tags: [immich, api, authentication, uploads, albums, synchronization]
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-10-25T12:52:45.890Z
 sources:
   - id: openwiki-source-d0aa70773e481ea79113c4ad
     resource: repo://src-tauri/src/auth.rs
@@ -14,6 +17,8 @@ sources:
     resource: repo://src-tauri/src/immich/bulk_check.rs
   - id: openwiki-source-302fefd6d827abadc8b2086e
     resource: repo://src-tauri/src/immich/client.rs
+  - id: openwiki-source-a03898b4eb42efbd3eab6010
+    resource: repo://src-tauri/src/immich/ids.rs
   - id: openwiki-source-653657bd24d2f782b8341396
     resource: repo://src-tauri/src/immich/response.rs
   - id: openwiki-source-d21a18714fae9df82df58bf5
@@ -24,10 +29,7 @@ sources:
     resource: repo://src-tauri/src/sync/completion.rs
   - id: openwiki-source-bcad6545247450f4a447e642
     resource: repo://src-tauri/src/sync/processor.rs
-generated: { by: "openwiki/0.7.2", at: "2026-10-19T15:10:01.321Z" }
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-19T15:10:01.321Z
+generated: { by: "openwiki/0.7.2", at: "2026-10-25T12:52:45.890Z" }
 ---
 
 # Immich API Integration
@@ -90,9 +92,11 @@ sequenceDiagram
     Processor->>Queue: persist remote ID and await or complete assignment
 ```
 
-This shows the external calls and the point where the API boundary hands a resolved remote ID back to local completion.
+This sequence shows the source-defined external calls and the point where the API boundary hands a resolved remote ID back to local completion.
 
 ## Album API versus local orchestration
+
+`AlbumId` and `RemoteAssetId` are separate transparent string newtypes, including in serialization and SQLite bindings. Keep the distinction at integration boundaries: album API methods consume `AlbumId`, whereas queue completion and membership batching carry `RemoteAssetId`, avoiding accidental interchange of the two remote identifiers.
 
 Album methods are API primitives: fetch, create, add IDs, and checksum search. They do not know about watched folders, queues, retries, or synchronization state. Conversely, the sync pipeline carries the target album selected for an asset into the queued work and invokes the client only after it has a remote asset ID.
 

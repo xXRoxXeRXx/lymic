@@ -3,9 +3,6 @@ type: contributor guide
 title: Lymic Codebase Guide
 description: Contributor routing guide from Lymic's Tauri and Svelte entry points to the runtime, UI/IPC boundary, synchronization, folders, persistence, Immich, security, diagnostics, and development guidance.
 tags: [guide, architecture, contributors]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-23T12:59:10.542Z
 sources:
   - id: openwiki-source-ab40d61d1bfa656ad091dbd7
     resource: repo://docs/agents/application-map.md

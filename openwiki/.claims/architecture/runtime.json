@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:e1275fca8df38ba505a058382d0c1a91385506526fb1b29cb90c8f9297d136e9",
+  "pageVersion": "sha256:8a38ad400c71a06cd53a16f68759bc04446958c6ade433807519c9a34e6aebf1",
   "claims": [
     {
       "id": "claim_99287093a01f4ccfb333967e8eab9e3d",
       "statement": "The Tauri composition root installs desktop plugins, initializes startup state, spawns background work, sets up the tray, registers IPC commands, and hides the main window on close.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L21-L148",
-          "version": "repo-lines-v1:sha256:11dfcd8ebcb531e57e01816e3a013653d110f5f6f8f176941f74d5cf858bc050:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhM2E1MTc5ODU4ZTI2NDVmZTJlNGEyNzNlNzUzM2ZkYzRjYWE2NzAyN2VkOGY3MmRmNzYyMTU5YmE4YTFmYzFmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI1OWMxMzU5MDY2NTYzMjNkMWM1ZWE0MTY1NGVlNjZhZmI1ODVhY2RjZmFlYWNhMTIxZDVlMzBiZjE5M2VlZGQ3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyMmZhM2FjYzgwMjA0MTY2ZWE4ZDRkN2E2OTk0NjczYjFkMjA0NTc2Y2JmMTI1YWNhNzU0OWY3YTIxNDBjYTEzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNTIxNjA0YjM1ZmM0MGFmMDBjYmE0ZWVhMmZkNWUyYzNhZjE4NjNiMzkxMTg1ZDdiZjRiYjA5ZTcyZDBjOGIzIn0"
+          "resource": "repo://src-tauri/src/app/mod.rs#L21-L149",
+          "version": "repo-lines-v1:sha256:a7fbaf8e7884fd1887ea4b98d1abf9302d04966d1fffbd26f0daeda8ce742698:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhM2E1MTc5ODU4ZTI2NDVmZTJlNGEyNzNlNzUzM2ZkYzRjYWE2NzAyN2VkOGY3MmRmNzYyMTU5YmE4YTFmYzFmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI1OWMxMzU5MDY2NTYzMjNkMWM1ZWE0MTY1NGVlNjZhZmI1ODVhY2RjZmFlYWNhMTIxZDVlMzBiZjE5M2VlZGQ3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyMmZhM2FjYzgwMjA0MTY2ZWE4ZDRkN2E2OTk0NjczYjFkMjA0NTc2Y2JmMTI1YWNhNzU0OWY3YTIxNDBjYTEzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNTIxNjA0YjM1ZmM0MGFmMDBjYmE0ZWVhMmZkNWUyYzNhZjE4NjNiMzkxMTg1ZDdiZjRiYjA5ZTcyZDBjOGIzIn0"
         },
         {
           "resource": "repo://src-tauri/src/app/tray.rs#L269-L280",
@@ -31,8 +31,12 @@
       "statement": "Automatic scan results are persisted to the queue before a runner is scheduled, and a restored pause prevents the runner from starting.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/sync/service.rs#L433-L511",
-          "version": "repo-lines-v1:sha256:261fc4de4eaaddbd3123115d5142889db3bc8d67ce15dd037660ea59c2104ceb:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyN2VhODE5MGI2ZDViZjBlZDhhZWI3ZTM1Yzk1ZDBhZTZhOTBlMjNiN2Q0NGM2MzQyNTMwYTVhODliZjhiODciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+          "resource": "repo://src-tauri/src/sync/service.rs#L172-L180",
+          "version": "repo-lines-v1:sha256:433fb87b0d3aca9914a6e9a02b68c30dec9b63f789d1d73bf81d25f7d755333a:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGU0ZDhlNjdiOWQwYTVmNjBiYTdjODE5NWJkYWUwMzIzNTNlMGE1OTQ5YjlmYThmNzA2MDE0YTJjMTU4ZWNiNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWE3NzYwMDZjYTBhYzQzZjBiMDkwZmQ5YzFjZTI4MGUxOWYwNTdmYTc4YmJlYjgwMTg5NGM3OTRlYWVlNzUwOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTFhNDU5NDE4Y2FjNWYzNWVlOTlkMjlhNjE3Zjk1ZjBlNjc0ZDZjMDQwZTUwOTM3NDY0NjI1NjIyYzAxODRiOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjAyY2Q5ZjlhMTFkZWMyODczZGVkN2I4YzAzODMyZWQ2MzA4NWExY2VmOWJlOTkzMTlkODU4MGY4OGVlMzU1MCJ9"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L231-L305",
+          "version": "repo-lines-v1:sha256:74bc07a9861347950d1014c2a3ae70fd3163e5444b0c39a8aa4ad615798cdcc0:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZjFjZGEyZWE4ODU2YjgyNGM5ZWEwODUxOTI2YmZmNTMwZDg3YjBhOTE0N2ZhOGJlNTI4YjBjYzZkM2MzM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjA0NDkxNDY5NzIyZTgzNjNhOTRlNDA0NDUzOGUwMTNhMmEyMTdlMzZiMWU1NjhiYTYwYWNiN2I0YzhmMmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY1ZTFjZGZmNDYyMjc0NzczOWYxOTkyYjY5NWZmNGIwZDE0ODNmNTk3NjVkNDAzNmU3MDk1MWIxNTFhYmI2YjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA2MDc4NTdlYjhhN2Q3Y2E4MmRkZTM1YjJmZTcwYTkxMzg2MWU4MWNhMmY3YzdiN2I3NTIzNWRlNTgzNmU4YzgifQ"
         }
       ]
     },
@@ -41,8 +45,8 @@
       "statement": "`app::run` installs desktop plugins, runs startup initialization before spawning background services and setting up the tray, registers the Tauri command surface, hides windows on close, and flushes an audit shutdown event on process exit.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L21-L148",
-          "version": "repo-lines-v1:sha256:11dfcd8ebcb531e57e01816e3a013653d110f5f6f8f176941f74d5cf858bc050:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhM2E1MTc5ODU4ZTI2NDVmZTJlNGEyNzNlNzUzM2ZkYzRjYWE2NzAyN2VkOGY3MmRmNzYyMTU5YmE4YTFmYzFmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI1OWMxMzU5MDY2NTYzMjNkMWM1ZWE0MTY1NGVlNjZhZmI1ODVhY2RjZmFlYWNhMTIxZDVlMzBiZjE5M2VlZGQ3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyMmZhM2FjYzgwMjA0MTY2ZWE4ZDRkN2E2OTk0NjczYjFkMjA0NTc2Y2JmMTI1YWNhNzU0OWY3YTIxNDBjYTEzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNTIxNjA0YjM1ZmM0MGFmMDBjYmE0ZWVhMmZkNWUyYzNhZjE4NjNiMzkxMTg1ZDdiZjRiYjA5ZTcyZDBjOGIzIn0"
+          "resource": "repo://src-tauri/src/app/mod.rs#L21-L149",
+          "version": "repo-lines-v1:sha256:a7fbaf8e7884fd1887ea4b98d1abf9302d04966d1fffbd26f0daeda8ce742698:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhM2E1MTc5ODU4ZTI2NDVmZTJlNGEyNzNlNzUzM2ZkYzRjYWE2NzAyN2VkOGY3MmRmNzYyMTU5YmE4YTFmYzFmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI1OWMxMzU5MDY2NTYzMjNkMWM1ZWE0MTY1NGVlNjZhZmI1ODVhY2RjZmFlYWNhMTIxZDVlMzBiZjE5M2VlZGQ3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyMmZhM2FjYzgwMjA0MTY2ZWE4ZDRkN2E2OTk0NjczYjFkMjA0NTc2Y2JmMTI1YWNhNzU0OWY3YTIxNDBjYTEzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNTIxNjA0YjM1ZmM0MGFmMDBjYmE0ZWVhMmZkNWUyYzNhZjE4NjNiMzkxMTg1ZDdiZjRiYjA5ZTcyZDBjOGIzIn0"
         },
         {
           "resource": "repo://src-tauri/src/app/tray.rs#L269-L275",
@@ -73,7 +77,7 @@
           "version": "repo-lines-v1:sha256:736dce70cbf4b7bec25cf71a84692ade727c2af1f1d71d25af6c933ecdcb9009:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmUwYTM5N2EwNDZmNzUzZGE1ZjhmYmFlMGIwNDVlODgwYjJlYjVmMDM3NWZlZjBkNDcxNjgzZGUzOTljNDVhNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGVlZGQ0ZmYzMDdhYmQyZjI0NDc1OGU1NzViOWJjODZiNzAyNjdjNzZjMDliMTE3OGYzNWMxZGUzOWQ4ZGVkZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzgyMjcxMDBlZTU2N2E0NTlkNGJkZThlOTI0ZTM4NTUwMGUzOWEzNDkxM2Y0NjY1N2RmY2M3MTE4NWZiNjQwZSJ9"
         },
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L196-L229",
+          "resource": "repo://src-tauri/src/app/mod.rs#L198-L231",
           "version": "repo-lines-v1:sha256:6ae3abd2f88828d09a95e19bffb7ea8cc326d7b341c1b92c9a26dd5dc3724989:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyYjVlZGY1OTQ5Y2ZlYTY3ODIyY2Y2OTExMzIzNjNkNjhkNmYxZTE2OWY1ZTBkNGY3YzE0ZTVmYTFlNmQ0ZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4YzAxYjExZWE5YjEzZmM4MmRhYzgwYjkzYzUwMjM4OWZkY2EwNmEzNDJlZmM2YTdlMjRhZWU5YjM1MWQxMzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ5ZWMzYjNmYzljZWRmMDgyMDRiY2M0YWUwYTVmMTMwYzhkODEzYjgxNTQ0ZWQ0NGVhYWJjYTA4ODEzOTg2MzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTRkMDJhODEyMTk0NGQxNzZkMjY1ZTliYjljYzU5ZjZhYjg5MGJjYWRmOGFlZmRlYmRiYmI0ZjJlYTg0NDQifQ"
         },
         {
@@ -87,16 +91,20 @@
       "statement": "Background startup runs deferred-watch reconciliation, a delayed startup scan, a debounced watcher consumer, and removable-volume processing; watcher queue overflow triggers a full watched-folder rescan rather than relying on lost incremental events.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/background.rs#L17-L27",
-          "version": "repo-lines-v1:sha256:8c5b44e7af5bd3c6afcb9c13ab84911548f601397405813ad03512c7bca33235:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5YjhmNzQwNDIyZjQwMDkzYzk0YmVkMTE2M2U0ZTJlMTQwMWVhYjAzMGRiOGZiZWIxYzFkYzBmNTdlZmUyNzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJmZDYwYmEyZWRlYzhmOWRhYjg5MWUzNWUzOTBkYmRjYzZlNTI3YmFlZGZlYTEwOWFjNzQzZTdmNjkzZTcyNTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4Yzk2ZTY4NzBmZjZhYmI5MmZjODBiZjA2NTVhYzEwOTEwMGVjNDc2YzFlOWZkZWE2OGJjY2QxYjdiMDE3M2YifQ"
+          "resource": "repo://src-tauri/src/app/background.rs#L14-L24",
+          "version": "repo-lines-v1:sha256:8c5b44e7af5bd3c6afcb9c13ab84911548f601397405813ad03512c7bca33235:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5YjhmNzQwNDIyZjQwMDkzYzk0YmVkMTE2M2U0ZTJlMTQwMWVhYjAzMGRiOGZiZWIxYzFkYzBmNTdlZmUyNzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmZjFiZTI5MGU1OWFjN2U0NmYwZDRjYTg2MTZkNmQyZTVjZTAyMmIzOWM5ZmUzNTU2YjVlZjE0NTk3ZDBlYmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4Yzk2ZTY4NzBmZjZhYmI5MmZjODBiZjA2NTVhYzEwOTEwMGVjNDc2YzFlOWZkZWE2OGJjY2QxYjdiMDE3M2YifQ"
         },
         {
-          "resource": "repo://src-tauri/src/app/background.rs#L247-L358",
-          "version": "repo-lines-v1:sha256:cd5f34725231bbac407b6a3fd7ee7d6a2afbb24658987593085d423ce22808a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzNTRhZTk2ZjBkZmVjNDFjYjZkNTZhNGY5NGVmZmNlYzc5NGFhYWNjOGExNTIwMzhiMTA4ZTJmOTFlNTk2YjNjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJjZWM3ZGU4YTNiZTljMmNiM2RkNmY4MDNmM2EyZjA3OWYyYzFkODIzYzUwNGNhYzFiNGNhNGEwNGQ3M2I5ZmVkIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIn0"
+          "resource": "repo://src-tauri/src/app/background.rs#L52-L232",
+          "version": "repo-lines-v1:sha256:23de9c5a43cfd7d79ee971d78723a83db3e5da73c53f8a623a20d9da98016922:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI1ODFiYjA1MDkzM2Y5YWM1MmEwMDVjNzNkOGVkZGZlMmI1ZDFhYmNmMWYzMjIzMDEzOGE3MzI2ZDE5NmU3YmNlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkZmFiNzEwZGRmNzg1OWU1NzU3NjRhOTEzYTAwMmM3NDU4NWZmYTcwMDE1MTBjYjg4MTFkYTgzZDJjZjc0YjM0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI2MDA4ZDZiZjg0MjEzYWM5YWZhYTYyNThmM2QwMGViZDEwOWE3YTRjZjI2OTYwYmNhY2I4NmQwNjMwNWVjZWE1In0"
         },
         {
-          "resource": "repo://src-tauri/src/app/background.rs#L55-L230",
-          "version": "repo-lines-v1:sha256:01becaab35c0ac1d0af4d9ca9f17c58eda200b902e1a331b73fd15888f6d24d9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTc2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI1ODFiYjA1MDkzM2Y5YWM1MmEwMDVjNzNkOGVkZGZlMmI1ZDFhYmNmMWYzMjIzMDEzOGE3MzI2ZDE5NmU3YmNlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5ODgzMmZiNDQwOGE2ZjJkNWQyZDllNGU0MjI1ZmM5MmExZWNhYjI0MGZkMTliNzdiZjE0M2Y3NDYwY2U2NTQ1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkZmFiNzEwZGRmNzg1OWU1NzU3NjRhOTEzYTAwMmM3NDU4NWZmYTcwMDE1MTBjYjg4MTFkYTgzZDJjZjc0YjM0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkZmFiNzEwZGRmNzg1OWU1NzU3NjRhOTEzYTAwMmM3NDU4NWZmYTcwMDE1MTBjYjg4MTFkYTgzZDJjZjc0YjM0In0"
+          "resource": "repo://src-tauri/src/watcher/ingestion.rs#L159-L185",
+          "version": "repo-lines-v1:sha256:ab945778c2f9d0a315352e8e8c932ca7e40f3a203d382f314167796bd70c9735:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZGQ4ZTMwMzZmYzM0ZDBjNDkzYWJkZmMzNDBiYTE4ZmZlYTI4M2EzMjVkYmE4ZTMzOWVkY2ZlNDI0OGJmOWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/watcher/ingestion.rs#L49-L95",
+          "version": "repo-lines-v1:sha256:83e84f8b2e66b0c77d500caecf909a4e7b147f82e2f0bc78724982ef16c42736:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2NzNiOGViY2M5ODg0NjcwNmY2NTRiYWJlYTVkMWUxOGQ5MTk4MTMzZDBjZDhiNGVhMDkzMjQyOGI5YTVmZjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIyY2RmN2JiYjhiYmRkYTQyYWU2NzZhOThmMGJlOTExMzFmMWNjZTA0ODE3YjkyNDZhNWRjMGMyZjg5MjFmMjMifQ"
         }
       ]
     },
@@ -105,7 +113,7 @@
       "statement": "The synchronization subscription registers listeners for progress, snapshots, lifecycle, errors, `trigger-sync`, logs, and idle events, and its disposer unregisters listeners including ones that resolve after teardown.",
       "evidence": [
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L320-L380",
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L322-L382",
           "version": "repo-lines-v1:sha256:b00436f0e329024004b2b1a3dc5934c7a1bc56f92570c12750b4e189f2d34243:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzYWE4YzkzZjM4MmQzZWI3ODZkMmMyMWE2Njc1NmNkM2RmODIwZWU3MDEyOTYyNTZlYTI4OThmOWIyY2Q5N2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0MTY4MmFiNDg1NTEzY2I2MTJiNmYyNWViYjUzYTFmNjlkYWMxZTQzNzIwNTIzNTQwZDEzOTU0OTBjMWQ1YTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZGFhZDk0YWJlNGViOWM1NzU5MGZlOThkOGZmZjQ3NjQ3Yzk5MjQxOGM0ZDVlOTIyZTlhMDcyMjBkYTJmMTEifQ"
         },
         {
@@ -151,7 +159,7 @@
       "statement": "Startup records audited phase outcomes for host readiness, failures, tray setup, queued and completed main-window display, and event-loop readiness; on exit it records and flushes an `app.shutdown` audit event when the logger is managed.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L121-L147",
+          "resource": "repo://src-tauri/src/app/mod.rs#L122-L148",
           "version": "repo-lines-v1:sha256:3be98d9f2b4ec71386fa21888c72c8f3c96c595f43efde87c80e14cd9b658dd6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiOGUyNjUwNTQ5YjhjZDU0ZjFhMWRiNWMxM2Y4MzE5YzgzMmNlNDBlZmU1MDNmMDk3MGU5ZTFkOGU0MDkxNmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MjJjNDJjZDE5YzZkMDNkODA4YzQ1MjcyMDU1MjgyNWI3ZWExYzViNDkxYjIxODUxMWNhYzc0MTVjZjlkOWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkwZTQ4ZGU2NjVlNGE1YTNmMTZkZTkwYjQ5MjI5YTU4ZTcyNWQwNTkwZjA2ZTljYzYzMjdhOWZkMGQ5Nzg3N2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI0NjFkNDcxZTE1ZDg2MDVjN2Y5MjI1MjJlNWE2ZjFkNjgyNDZjMDMzODhmYWQwYmY3NmZiZDY4OWU3Yzg2MWQifQ"
         },
         {
@@ -187,7 +195,7 @@
       "statement": "The root route starts controller lifecycles before concurrent authentication, sync, and preferences hydration, subscribes to sync events only after sync hydration, and destroys those lifecycles on route teardown to prevent late event mutations.",
       "evidence": [
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L320-L380",
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L322-L382",
           "version": "repo-lines-v1:sha256:b00436f0e329024004b2b1a3dc5934c7a1bc56f92570c12750b4e189f2d34243:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzYWE4YzkzZjM4MmQzZWI3ODZkMmMyMWE2Njc1NmNkM2RmODIwZWU3MDEyOTYyNTZlYTI4OThmOWIyY2Q5N2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0MTY4MmFiNDg1NTEzY2I2MTJiNmYyNWViYjUzYTFmNjlkYWMxZTQzNzIwNTIzNTQwZDEzOTU0OTBjMWQ1YTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZGFhZDk0YWJlNGViOWM1NzU5MGZlOThkOGZmZjQ3NjQ3Yzk5MjQxOGM0ZDVlOTIyZTlhMDcyMjBkYTJmMTEifQ"
         },
         {
@@ -199,10 +207,24 @@
           "version": "repo-lines-v1:sha256:f5233261056c05be3c37d0b18ac999ff833fd7a5326dd200b99a5759c3d91f16:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZjVmYTE1OTFmN2RiOTQ2YjVhMjQ4NmYwY2NjNTY2NmY4MDM5YThlMjJhNDc2NjQ1MDUzYzY3NjNjYmFkZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyMGZjOWU2N2RiMDdlZDIzOWJiM2FkMjMxMmVhYWI5YTcwZTFmNmZiYTAxMjg4YjBiYTZlNjFkN2Y4ZWU3ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk5YjgwOTg1NDBiNzcwZWU5NjFlZGU3ZDFhOTdkNjAzYmEyMDg0ZTU1OTZhMjRjNDI3Nzc5MDA1YmQzYWUzOTkifQ"
         }
       ]
+    },
+    {
+      "id": "claim_7bc672b123b048dc973f59a52984c2aa",
+      "statement": "A watcher-rescan notification can interrupt the debounce wait; when a batch requires a full rescan, ingestion clears its incremental buffers and scans all watched folders before handoff.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/watcher/ingestion.rs#L159-L185",
+          "version": "repo-lines-v1:sha256:ab945778c2f9d0a315352e8e8c932ca7e40f3a203d382f314167796bd70c9735:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZGQ4ZTMwMzZmYzM0ZDBjNDkzYWJkZmMzNDBiYTE4ZmZlYTI4M2EzMjVkYmE4ZTMzOWVkY2ZlNDI0OGJmOWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/watcher/ingestion.rs#L71-L94",
+          "version": "repo-lines-v1:sha256:ebd62d9f6e6391bd4ca6de9058d81e35332cd01205fc3930a2fd6a97551e6ab3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4MTA0MDg1ZTk1NWE3YTY2YTI5YmZhMTQwMWM0NjA4ZTA5ZmM4Y2MyZDkwOWQwN2FjNWY4NGYwNGU2YTc5ZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5YjE5ODJlOGRkNzQ4MTE4MTQ2YjM5YTJkMDA2MmY0MDgxZTM0Nzc5Yjg2NzVjMjM0YzRmYjEyNGRjMzkzOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgzNzljZGNkMzAxYjY1NzkyZmZiZThiM2Q5MjVkMmMzN2Y0ZTk1OTBkZTJkZTFmMjI4YjkzOGJjODA4NmQ2N2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhmOTQ5ZmU3YjU3OWFjM2FhMTQ3OTliNzE3NTUxMjJiZjAzODRkODZlNmM1NmY1ZmM1ZDNlOGFmMzJjYzRmNjcifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-19T15:10:01.321Z"
+    "at": "2026-10-25T12:52:45.890Z"
   }
 }
