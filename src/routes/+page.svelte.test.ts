@@ -54,8 +54,11 @@ vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: tauri.relaunch }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
 
-function renderAuthenticatedPage() {
-  tauri.invoke.mockImplementation((command: string) => {
+function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) => Promise<unknown>> = {}) {
+  tauri.invoke.mockImplementation((command: string, args?: unknown) => {
+    if (command in handlers) {
+      return handlers[command](args);
+    }
     switch (command) {
       case "get_auth_status":
         return Promise.resolve(true);
@@ -79,6 +82,10 @@ function renderAuthenticatedPage() {
         return Promise.resolve();
     }
   });
+}
+
+function renderAuthenticatedPage(handlers: Record<string, (args?: unknown) => Promise<unknown>> = {}) {
+  mockAuthenticatedDashboard(handlers);
   return render(Page);
 }
 
@@ -1202,34 +1209,15 @@ describe("removable volume setup flow", () => {
 describe("watched folder setup flow with target album", () => {
   it("prompts for target album when adding folder from dashboard and adds folder with selected target album", async () => {
     tauri.open.mockResolvedValue("D:/Photos");
-    renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
-
-    tauri.invoke.mockImplementation((command: string) => {
-      switch (command) {
-        case "get_auth_status":
-          return Promise.resolve(true);
-        case "get_server_url":
-          return Promise.resolve("https://immich.example");
-        case "get_current_user":
-          return Promise.resolve({ displayName: "Meyer", profileImage: null });
-        case "get_folders":
-          return Promise.resolve(watchedFolders);
-        case "get_failed_syncs":
-          return Promise.resolve(failedSyncs);
-        case "get_upload_parallelism":
-          return Promise.resolve(uploadParallelism);
-        case "get_sync_status":
-          return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
-        case "get_albums":
-          return Promise.resolve([{ id: "alb-family", albumName: "Family 2026" }]);
-        case "add_folder":
-          watchedFolders = [{ id: 1, path: "D:/Photos", recursive: true, target_album_id: "alb-family" }];
-          return Promise.resolve(1);
-        default:
-          return Promise.resolve();
-      }
+    mockAuthenticatedDashboard({
+      get_albums: () => Promise.resolve([{ id: "alb-family", albumName: "Family 2026" }]),
+      add_folder: () => {
+        watchedFolders = [{ id: 1, path: "D:/Photos", recursive: true, target_album_id: "alb-family" }];
+        return Promise.resolve(1);
+      },
     });
+    render(Page);
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     const addFolderButton = screen.getByRole("button", { name: "Add" });
     await fireEvent.click(addFolderButton);
@@ -1263,34 +1251,15 @@ describe("watched folder setup flow with target album", () => {
 
   it("creates watched folder with no target album when confirmed without selecting album", async () => {
     tauri.open.mockResolvedValue("D:/Photos");
-    renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
-
-    tauri.invoke.mockImplementation((command: string) => {
-      switch (command) {
-        case "get_auth_status":
-          return Promise.resolve(true);
-        case "get_server_url":
-          return Promise.resolve("https://immich.example");
-        case "get_current_user":
-          return Promise.resolve({ displayName: "Meyer", profileImage: null });
-        case "get_folders":
-          return Promise.resolve(watchedFolders);
-        case "get_failed_syncs":
-          return Promise.resolve(failedSyncs);
-        case "get_upload_parallelism":
-          return Promise.resolve(uploadParallelism);
-        case "get_sync_status":
-          return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
-        case "get_albums":
-          return Promise.resolve([{ id: "alb-family", albumName: "Family 2026" }]);
-        case "add_folder":
-          watchedFolders = [{ id: 1, path: "D:/Photos", recursive: true, target_album_id: null }];
-          return Promise.resolve(1);
-        default:
-          return Promise.resolve();
-      }
+    mockAuthenticatedDashboard({
+      get_albums: () => Promise.resolve([{ id: "alb-family", albumName: "Family 2026" }]),
+      add_folder: () => {
+        watchedFolders = [{ id: 1, path: "D:/Photos", recursive: true, target_album_id: null }];
+        return Promise.resolve(1);
+      },
     });
+    render(Page);
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     const addFolderButton = screen.getByRole("button", { name: "Add" });
     await fireEvent.click(addFolderButton);
@@ -1315,31 +1284,11 @@ describe("watched folder setup flow with target album", () => {
 
   it("leaves no pending folder state and does not create folder when cancelled", async () => {
     tauri.open.mockResolvedValue("D:/Photos");
-    renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
-
-    tauri.invoke.mockImplementation((command: string) => {
-      switch (command) {
-        case "get_auth_status":
-          return Promise.resolve(true);
-        case "get_server_url":
-          return Promise.resolve("https://immich.example");
-        case "get_current_user":
-          return Promise.resolve({ displayName: "Meyer", profileImage: null });
-        case "get_folders":
-          return Promise.resolve(watchedFolders);
-        case "get_failed_syncs":
-          return Promise.resolve(failedSyncs);
-        case "get_upload_parallelism":
-          return Promise.resolve(uploadParallelism);
-        case "get_sync_status":
-          return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
-        case "get_albums":
-          return Promise.resolve([{ id: "alb-family", albumName: "Family 2026" }]);
-        default:
-          return Promise.resolve();
-      }
+    mockAuthenticatedDashboard({
+      get_albums: () => Promise.resolve([{ id: "alb-family", albumName: "Family 2026" }]),
     });
+    render(Page);
+    await screen.findByText("Synchronization", { selector: "h1" });
 
     const addFolderButton = screen.getByRole("button", { name: "Add" });
     await fireEvent.click(addFolderButton);

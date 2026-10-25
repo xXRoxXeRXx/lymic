@@ -167,7 +167,7 @@ describe("sync controller", () => {
     const controller = createController(adapter);
 
     await controller.dashboard.onAddFolder();
-    await controller.dashboard.onConfirmAddFolder("alb-99");
+    await controller.confirmAddFolder("alb-99");
 
     expect(adapter.addFolder).toHaveBeenCalledWith("C:/media/photos", "alb-99");
     expect(controller.watchedFolders).toEqual([{ id: 1, path: "C:/media/photos", target_album_id: "alb-99" }]);
@@ -180,7 +180,7 @@ describe("sync controller", () => {
     const controller = createController(adapter, { onRemovableVolumeAccepted });
 
     await controller.acceptRemovableFolder({ volumeId: "vol-sd-1", mountPath: "E:\\", displayName: "EOS_DIGITAL" });
-    await controller.dashboard.onConfirmAddFolder("alb-vacation");
+    await controller.confirmAddFolder("alb-vacation");
 
     expect(adapter.acceptRemovableMediaFolder).toHaveBeenCalledWith("vol-sd-1", "E:/DCIM", "alb-vacation");
     expect(onRemovableVolumeAccepted).toHaveBeenCalledWith("vol-sd-1");
@@ -194,7 +194,7 @@ describe("sync controller", () => {
     const controller = createController(adapter, { reportError });
 
     await controller.acceptRemovableFolder({ volumeId: "vol-sd-1", mountPath: "E:\\", displayName: "EOS_DIGITAL" });
-    await controller.dashboard.onConfirmAddFolder(null);
+    await controller.confirmAddFolder(null);
 
     expect(reportError).toHaveBeenCalledWith(error);
   });

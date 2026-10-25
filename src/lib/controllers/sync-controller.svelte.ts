@@ -26,15 +26,11 @@ export interface DashboardViewState {
   failedSyncs: FailedSyncEntry[];
   logs: LogEntry[];
   isSyncActionPending: boolean;
-  isTargetAlbumModalOpen: boolean;
-  pendingFolderPath: string | null;
   onSyncAction(): Promise<void>;
   onRetryFailedSyncs(): Promise<void>;
   onAddFolder(): Promise<void>;
   onRemoveFolder(id: number): Promise<void>;
   onUpdateFolderExclusionPatterns(id: number, exclusionPatterns: string[]): Promise<void>;
-  onConfirmAddFolder(targetAlbumId: string | null): Promise<void>;
-  onCancelAddFolder(): void;
 }
 
 export interface SyncControllerOptions {
@@ -388,14 +384,11 @@ export function createSyncController(options: SyncControllerOptions) {
         syncStatus, lastSync, progress, processed, syncTotal, currentFile,
         transferredBytes, transferRateBytesPerSecond, estimatedSecondsRemaining,
         watchedFolders, failedSyncs, logs, isSyncActionPending,
-        isTargetAlbumModalOpen, pendingFolderPath,
         onSyncAction: syncAction,
         onRetryFailedSyncs: retryFailedSyncs,
         onAddFolder: addFolder,
         onRemoveFolder: removeFolder,
         onUpdateFolderExclusionPatterns: updateFolderExclusionPatterns,
-        onConfirmAddFolder: confirmAddFolder,
-        onCancelAddFolder: cancelAddFolder,
       };
     },
     get syncStatus() { return syncStatus; },
