@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Page from "./+page.svelte";
 
@@ -54,8 +54,11 @@ vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: tauri.relaunch }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
 
-function renderAuthenticatedPage() {
-  tauri.invoke.mockImplementation((command: string) => {
+function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) => Promise<unknown>> = {}) {
+  tauri.invoke.mockImplementation((command: string, args?: unknown) => {
+    if (command in handlers) {
+      return handlers[command](args);
+    }
     switch (command) {
       case "get_auth_status":
         return Promise.resolve(true);
@@ -79,6 +82,10 @@ function renderAuthenticatedPage() {
         return Promise.resolve();
     }
   });
+}
+
+function renderAuthenticatedPage(handlers: Record<string, (args?: unknown) => Promise<unknown>> = {}) {
+  mockAuthenticatedDashboard(handlers);
   return render(Page);
 }
 
@@ -1196,6 +1203,108 @@ describe("removable volume setup flow", () => {
     await screen.findByText("Language");
     expect(screen.queryByRole("button", { name: "Check for updates" })).toBeNull();
     expect(screen.queryByText("Updates")).toBeNull();
+  });
+});
+
+describe("watched folder setup flow with target album", () => {
+  it("prompts for target album when adding folder from dashboard and adds folder with selected target album", async () => {
+    tauri.open.mockResolvedValue("D:/Photos");
+    mockAuthenticatedDashboard({
+      get_albums: () => Promise.resolve([{ id: "alb-family", albumName: "Family 2026" }]),
+      add_folder: () => {
+        watchedFolders = [{ id: 1, path: "D:/Photos", recursive: true, target_album_id: "alb-family" }];
+        return Promise.resolve(1);
+      },
+    });
+    render(Page);
+    await screen.findByText("Synchronization", { selector: "h1" });
+
+    const addFolderButton = screen.getByRole("button", { name: "Add" });
+    await fireEvent.click(addFolderButton);
+
+    expect(tauri.open).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      title: "Select Folder",
+    });
+
+    const dialog = await screen.findByRole("dialog", { name: "Select Target Album" });
+    expect(within(dialog).getByText('Select an optional Immich album for "Photos"')).toBeInTheDocument();
+    expect(await within(dialog).findByText("Family 2026")).toBeInTheDocument();
+
+    await fireEvent.click(within(dialog).getByText("Family 2026"));
+
+    const confirmButton = within(dialog).getByRole("button", { name: "Add folder" });
+    await fireEvent.click(confirmButton);
+
+    expect(tauri.invoke).toHaveBeenCalledWith("add_folder", {
+      path: "D:/Photos",
+      targetAlbumId: "alb-family",
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Select Target Album" })).not.toBeInTheDocument();
+    });
+
+    expect(await screen.findByText("D:/Photos")).toBeInTheDocument();
+  });
+
+  it("creates watched folder with no target album when confirmed without selecting album", async () => {
+    tauri.open.mockResolvedValue("D:/Photos");
+    mockAuthenticatedDashboard({
+      get_albums: () => Promise.resolve([{ id: "alb-family", albumName: "Family 2026" }]),
+      add_folder: () => {
+        watchedFolders = [{ id: 1, path: "D:/Photos", recursive: true, target_album_id: null }];
+        return Promise.resolve(1);
+      },
+    });
+    render(Page);
+    await screen.findByText("Synchronization", { selector: "h1" });
+
+    const addFolderButton = screen.getByRole("button", { name: "Add" });
+    await fireEvent.click(addFolderButton);
+
+    const dialog = await screen.findByRole("dialog", { name: "Select Target Album" });
+    expect(within(dialog).getByText('Select an optional Immich album for "Photos"')).toBeInTheDocument();
+
+    const confirmButton = within(dialog).getByRole("button", { name: "Add folder" });
+    await fireEvent.click(confirmButton);
+
+    expect(tauri.invoke).toHaveBeenCalledWith("add_folder", {
+      path: "D:/Photos",
+      targetAlbumId: null,
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Select Target Album" })).not.toBeInTheDocument();
+    });
+
+    expect(await screen.findByText("D:/Photos")).toBeInTheDocument();
+  });
+
+  it("leaves no pending folder state and does not create folder when cancelled", async () => {
+    tauri.open.mockResolvedValue("D:/Photos");
+    mockAuthenticatedDashboard({
+      get_albums: () => Promise.resolve([{ id: "alb-family", albumName: "Family 2026" }]),
+    });
+    render(Page);
+    await screen.findByText("Synchronization", { selector: "h1" });
+
+    const addFolderButton = screen.getByRole("button", { name: "Add" });
+    await fireEvent.click(addFolderButton);
+
+    const dialog = await screen.findByRole("dialog", { name: "Select Target Album" });
+    expect(within(dialog).getByText('Select an optional Immich album for "Photos"')).toBeInTheDocument();
+
+    const cancelButton = within(dialog).getByRole("button", { name: "Cancel" });
+    await fireEvent.click(cancelButton);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Select Target Album" })).not.toBeInTheDocument();
+    });
+
+    expect(tauri.invoke).not.toHaveBeenCalledWith("add_folder", expect.anything());
+    expect(screen.queryByText("D:/Photos")).not.toBeInTheDocument();
   });
 });
 

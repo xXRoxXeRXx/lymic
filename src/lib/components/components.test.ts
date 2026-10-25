@@ -177,9 +177,7 @@ describe("DashboardView", () => {
       syncStatus: "idle" as const, lastSync: "10:00", progress: 0, processed: 0, syncTotal: 0, currentFile: "",
       transferredBytes: 0, transferRateBytesPerSecond: null, estimatedSecondsRemaining: null,
       watchedFolders: [], failedSyncs: [], logs: [], isSyncActionPending: false,
-      isTargetAlbumModalOpen: false, pendingFolderPath: null,
       onSyncAction: vi.fn(), onRetryFailedSyncs: vi.fn(), onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns: vi.fn(),
-      onConfirmAddFolder: vi.fn(), onCancelAddFolder: vi.fn(),
     },
   };
 

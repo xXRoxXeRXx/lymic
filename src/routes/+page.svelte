@@ -294,7 +294,7 @@
       onInstall={updater.installUpdate}
     />
   {/if}
-  {#if !auth.isAuthenticated && sync.isTargetAlbumModalOpen}
+  {#if auth.isAuthenticated && sync.isTargetAlbumModalOpen}
     <TargetAlbumModal
       isOpen={sync.isTargetAlbumModalOpen}
       folderPath={sync.pendingFolderPath ?? ""}
