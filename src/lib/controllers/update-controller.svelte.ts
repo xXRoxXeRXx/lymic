@@ -1,9 +1,15 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import type { DesktopAdapter } from "../tauri/desktop-adapter";
+import type { DesktopAdapter, ReleaseChannel } from "../tauri/desktop-adapter";
+import { getEffectiveReleaseChannel } from "../release-channel";
 
-export function createUpdateController(isSyncActive: () => boolean, adapter: DesktopAdapter) {
+export function createUpdateController(
+  isSyncActive: () => boolean,
+  adapter: DesktopAdapter,
+  initialChannel: ReleaseChannel = getEffectiveReleaseChannel(),
+) {
+  let releaseChannel = $state<ReleaseChannel>(initialChannel);
   let appVersion = $state<string | undefined>();
   let availableUpdate = $state<Update | null>(null);
   let isUpdateDialogOpen = $state(false);
@@ -23,6 +29,7 @@ export function createUpdateController(isSyncActive: () => boolean, adapter: Des
   }
 
   async function checkForUpdates() {
+    if (releaseChannel === "store") return;
     if (isCheckingForUpdates) return;
     isCheckingForUpdates = true;
     try {
@@ -47,6 +54,13 @@ export function createUpdateController(isSyncActive: () => boolean, adapter: Des
 
   function startup() {
     void (async () => {
+      try {
+        const channel = await adapter.getReleaseChannel();
+        if (mounted) releaseChannel = channel;
+      } catch (error) {
+        console.warn("Failed to query release channel from adapter", error);
+      }
+      if (releaseChannel === "store") return;
       await record("update_check_started");
       await checkForUpdates();
       await record("update_check_complete");
@@ -64,6 +78,7 @@ export function createUpdateController(isSyncActive: () => boolean, adapter: Des
   }
 
   async function installUpdate() {
+    if (releaseChannel === "store") return;
     if (!availableUpdate || isSyncActive() || updateInstallState === "downloading" || updateInstallState === "installing") return;
     downloadedUpdateBytes = 0;
     updateContentLength = null;
@@ -83,6 +98,8 @@ export function createUpdateController(isSyncActive: () => boolean, adapter: Des
   }
 
   return {
+    get releaseChannel() { return releaseChannel; },
+    get isUpdatesSupported() { return releaseChannel !== "store"; },
     get appVersion() { return appVersion; },
     get availableUpdate() { return availableUpdate; },
     get isUpdateDialogOpen() { return isUpdateDialogOpen; },

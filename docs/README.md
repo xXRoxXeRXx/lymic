@@ -264,6 +264,14 @@ Create a `vX.Y.Z` tag only after the three version fields are synchronized. The 
 
 The first updater-enabled release can update only installations that already include this updater public key. Existing `0.14.0` installations must install the first updater-enabled release manually from GitHub. Linux in-app updates apply to AppImage packages only. macOS artifacts also require Apple code signing and notarization for Gatekeeper trust; those credentials and steps are separate from Tauri updater signing.
 
+### Release channels
+
+Lymic supports two Windows distribution channels via the build input `LYMIC_RELEASE_CHANNEL`:
+- `github` (default): Preserves the GitHub NSIS installer and Tauri updater. The desktop application queries GitHub for updates, exposes the update dialog, and displays update options in settings.
+- `store`: Intended for Microsoft Store MSIX packaging. Disables the in-app Tauri update checks, update dialog, and settings update UI. Updates are managed exclusively by the Microsoft Store.
+
+Maintainers can configure this build input at build time via `LYMIC_RELEASE_CHANNEL=store` (or `VITE_LYMIC_RELEASE_CHANNEL=store` for frontend builds). At runtime, the active channel is exposed via the `get_release_channel` IPC command.
+
 ## 12. Troubleshooting
 
 | Symptom | Check |

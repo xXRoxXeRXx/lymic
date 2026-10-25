@@ -46,6 +46,7 @@ describe("tauriDesktopAdapter", () => {
     await adapter.updateLocale("de");
     await adapter.getDatabaseRecoveryNotice();
     await adapter.recordWebviewStartupPhaseProbe("on_mount_started");
+    await adapter.getReleaseChannel();
 
     expect(invoke.mock.calls).toEqual([
       ["start_sync"],
@@ -79,6 +80,7 @@ describe("tauriDesktopAdapter", () => {
       ["update_locale", { locale: "de" }],
       ["get_database_recovery_notice"],
       ["record_webview_startup_phase_probe", { phase: "on_mount_started" }],
+      ["get_release_channel"],
     ]);
   });
 });

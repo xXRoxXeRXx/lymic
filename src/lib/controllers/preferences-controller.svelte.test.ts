@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createPreferencesController } from "./preferences-controller.svelte";
 import { localeCatalog } from "../i18n/locale-catalog";
 import type { DesktopAdapter } from "../tauri/desktop-adapter";
@@ -12,6 +12,7 @@ function createDesktopAdapter(overrides: Partial<DesktopAdapter> = {}): DesktopA
     getUploadParallelism: vi.fn().mockResolvedValue(3), setUploadParallelism: vi.fn(), addFolder: vi.fn(), acceptRemovableMediaFolder: vi.fn(), getFolders: vi.fn(), updateFolderExclusionPatterns: vi.fn(), removeFolder: vi.fn(),
     getAuthStatus: vi.fn(), getServerUrl: vi.fn(), getCurrentUser: vi.fn(), login: vi.fn(), logout: vi.fn(), getAlbums: vi.fn(), createAlbum: vi.fn(),
     getLocaleCatalog: vi.fn().mockResolvedValue(localeCatalog), updateLocale: vi.fn(), getDatabaseRecoveryNotice: vi.fn().mockResolvedValue(null), recordWebviewStartupPhaseProbe: vi.fn(),
+    getReleaseChannel: vi.fn().mockResolvedValue("github"),
     ...overrides,
   };
 }

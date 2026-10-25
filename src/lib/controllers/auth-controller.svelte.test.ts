@@ -11,6 +11,7 @@ function createDesktopAdapter(overrides: Partial<DesktopAdapter> = {}): DesktopA
     getUploadParallelism: vi.fn(), setUploadParallelism: vi.fn(), addFolder: vi.fn(), acceptRemovableMediaFolder: vi.fn(), getFolders: vi.fn(), updateFolderExclusionPatterns: vi.fn(), removeFolder: vi.fn(),
     getAuthStatus: vi.fn().mockResolvedValue(false), getServerUrl: vi.fn(), getCurrentUser: vi.fn(), login: vi.fn(), logout: vi.fn(),
     getAlbums: vi.fn(), createAlbum: vi.fn(), getLocaleCatalog: vi.fn(), updateLocale: vi.fn(), getDatabaseRecoveryNotice: vi.fn(), recordWebviewStartupPhaseProbe: vi.fn(),
+    getReleaseChannel: vi.fn().mockResolvedValue("github"),
     ...overrides,
   };
 }
