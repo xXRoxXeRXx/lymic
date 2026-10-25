@@ -772,6 +772,7 @@ async fn await_or_cancellation<T>(
     operation: impl std::future::Future<Output = T>,
 ) -> Option<T> {
     tokio::select! {
+        biased;
         _ = cancellation.cancelled() => None,
         result = operation => Some(result),
     }
