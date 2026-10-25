@@ -515,7 +515,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("lymic-ingestion-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join(name), b"media").unwrap();
-        root
+        crate::media::paths::normalize_folder_path(&root)
     }
 
     fn folders_for(root: &std::path::Path) -> Vec<crate::db::WatchedFolder> {

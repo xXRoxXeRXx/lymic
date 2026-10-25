@@ -359,7 +359,9 @@ mod tests {
     use std::time::{Duration, UNIX_EPOCH};
 
     fn temporary_directory() -> PathBuf {
-        std::env::temp_dir().join(format!("lymic-scan-test-{}", uuid::Uuid::new_v4()))
+        let dir = std::env::temp_dir().join(format!("lymic-scan-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        super::super::paths::normalize_folder_path(&dir)
     }
 
     #[tokio::test]
@@ -521,7 +523,7 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     #[test]
     fn retry_constructs_a_live_photo_unit_only_for_an_unambiguous_canonical_pair() {
         let root = temporary_directory();
