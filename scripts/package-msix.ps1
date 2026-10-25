@@ -25,7 +25,8 @@ $quadVersion = ($parts[0..3] -join '.')
 Write-Host "Packaging Lymic MSIX version $quadVersion ($IdentityName)..."
 
 # Locate makeappx.exe
-$makeappx = (Get-Command makeappx.exe -ErrorAction SilentlyContinue)?.Source
+$cmd = Get-Command makeappx.exe -ErrorAction SilentlyContinue
+$makeappx = if ($cmd) { $cmd.Source } else { $null }
 if (-not $makeappx) {
     $kits = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "makeappx.exe" -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -like "*\x64\makeappx.exe" } |
