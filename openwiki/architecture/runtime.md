@@ -5,7 +5,7 @@ description: Tauri process composition, recovery-first startup, managed Rust ser
 tags: [architecture, tauri, svelte, runtime]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-19T15:10:01.321Z
+    at: 2026-10-25T12:52:45.890Z
 sources:
   - id: openwiki-source-3638749eb6f61a23896edb4d
     resource: repo://src-tauri/src/app/background.rs
@@ -19,13 +19,15 @@ sources:
     resource: repo://src-tauri/src/app/tray.rs
   - id: openwiki-source-d86d6ce7cb2c85ce2672a18b
     resource: repo://src-tauri/src/sync/service.rs
+  - id: openwiki-source-9a712a1a91500c698b23fdc0
+    resource: repo://src-tauri/src/watcher/ingestion.rs
   - id: openwiki-source-9d08ef4075c63d08906a8b88
     resource: repo://src/lib/controllers/sync-controller.svelte.ts
   - id: openwiki-source-88425a733aa79bac537f50d8
     resource: repo://src/lib/tauri/sync-event-subscription.ts
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
-generated: { by: "openwiki/0.7.2", at: "2026-10-19T15:10:01.321Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-10-25T12:52:45.890Z" }
 ---
 
 # Desktop Runtime Architecture
@@ -93,9 +95,9 @@ Tauri-managed state is the host-side sharing boundary for commands, tray actions
 
 `background::spawn` starts four independent tasks after that state is available: a startup scan delayed by two seconds, a debounced watcher-event consumer, deferred-watch reconciliation every 30 seconds, and a removable-volume event consumer. Deferred reconciliation checks persisted paths, reconciles registrations under the watcher mutex, and scans paths that have just become registered. A removable-event handling error is reported to the UI and does not terminate the event loop.
 
-All scan producers call `sync_scan_result_if_authenticated`. It converts scan output into upload units and failures, persists them to the SQLite queue, updates the tray and emits a snapshot **before** it considers starting work. A restored pause returns after enqueueing. Otherwise the durable lifecycle gate admits at most one runner; it is aborted when credentials or an authenticated client are unavailable. Thus scanning can continue to make durable progress while a run is active, paused, or cannot yet authenticate. See [Synchronization Workflow](../workflows/synchronization.md).
+All scan producers call `admit_and_run`. It converts scan output into upload units and failures, persists them to the SQLite queue, updates the tray and emits a snapshot **before** it considers starting work. A restored pause returns after enqueueing. Otherwise the lifecycle gate admits at most one runner; it records failure when credentials or an authenticated client are unavailable. Thus scanning can continue to make durable progress while a run is active, paused, or cannot yet authenticate. See [Synchronization Workflow](../workflows/synchronization.md).
 
-The watcher channel is bounded by design. On overflow, the watcher requests a rescan; after the debounce interval, the consumer discards incremental buffers, scans every watched folder, then queues the reconciled result. This prefers reconciliation to silently losing filesystem changes. See [Watched Folders](../workflows/watched-folders.md).
+The watcher channel is bounded by design. On overflow, the watcher requests a rescan; the consumer clears its incremental buffers, scans every watched folder, then queues the reconciled result. The rescan notification can interrupt a debounce wait, so recovery does not depend on another filesystem event. This prefers reconciliation to silently losing filesystem changes. See [Watched Folders](../workflows/watched-folders.md).
 
 ## Webview bootstrapping and IPC
 

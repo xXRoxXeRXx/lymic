@@ -1,11 +1,11 @@
 ---
 type: persistence
-title: Local State and Recovery
-description: SQLite-backed local state, schema evolution, and recovery behavior for watched folders, synchronization work, settings, and hash caching.
-tags: [persistence, sqlite, recovery, synchronization]
+title: Local State and Durable Queue
+description: SQLite-backed local state, schema evolution, watched-folder settings, and the durable synchronization queue with recovery and completion semantics.
+tags: [persistence, sqlite, synchronization, recovery]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-19T15:10:01.321Z
+    at: 2026-10-25T12:52:45.890Z
 sources:
   - id: openwiki-source-941c10286ffa11a6881678ef
     resource: repo://src-tauri/migrations/0004_sync_queue.sql
@@ -15,6 +15,8 @@ sources:
     resource: repo://src-tauri/migrations/0008_queued_upload_units.sql
   - id: openwiki-source-3a0f4d835e821b012feba2c6
     resource: repo://src-tauri/migrations/0009_watched_folder_exclusion_patterns.sql
+  - id: openwiki-source-a6946ba9fd6a4f69d72ef7c5
+    resource: repo://src-tauri/migrations/0010_sync_job_failed_status.sql
   - id: openwiki-source-2fd48a041dfbcb39bc092be1
     resource: repo://src-tauri/src/app/startup.rs
   - id: openwiki-source-8dda64652f19eba279222e0a
@@ -31,20 +33,24 @@ sources:
     resource: repo://src-tauri/src/db/sync_state.rs
   - id: openwiki-source-e852d51f343149f2ec60ea2b
     resource: repo://src-tauri/src/db/tests.rs
-generated: { by: "openwiki/0.7.2", at: "2026-10-19T15:10:01.321Z" }
+  - id: openwiki-source-b2f629aa0dbd7cd17fa4902e
+    resource: repo://src-tauri/src/sync/queue_runner.rs
+  - id: openwiki-source-d86d6ce7cb2c85ce2672a18b
+    resource: repo://src-tauri/src/sync/service.rs
+generated: { by: "openwiki/0.7.2", at: "2026-10-25T12:52:45.890Z" }
 ---
 
-# Local State and Recovery
+# Local State and Durable Queue
 
-Lymic keeps operational state in `immich_sync.db` in the application data directory. SQLite is the durable boundary for watched-folder configuration, synchronization work, upload outcomes, the upload-concurrency preference, and the local hash cache; credentials are held separately in the platform keyring. See [Authentication and Credential Security](../security/authentication.md).
+Lymic stores operational state in `immich_sync.db` in the application data directory. SQLite is the durable boundary for watched-folder configuration, synchronization work and outcomes, the upload-concurrency preference, and the local hash cache. Credentials are held separately in the platform keyring; see [Authentication and Credential Security](../security/authentication.md).
 
-## Durable model
+## Persisted model
 
-The database contains one synchronization job, enforced by `sync_jobs.id = 1`, and its ordered `sync_queue`. A job has `RUNNING`, `PAUSED`, or `IDLE` status, aggregate counts, a current path, and the next sequence number. Queue records are keyed by `(job_id, local_path)`, carry local metadata and optional target-album and remote-asset IDs, and are `PENDING`, `SYNCED`, or `FAILED`. A queue item may belong to an upload unit, allowing a primary image and live-photo video to be recovered and processed together.
+`sync_jobs` is a singleton: its database constraint permits only `id = 1`. It records the job status (`RUNNING`, `PAUSED`, `IDLE`, or `FAILED`), aggregate counts, the current path, and the next sequence number. Its `sync_queue` children are uniquely identified by `(job_id, local_path)`, ordered by `sequence`, and have `PENDING`, `SYNCED`, or `FAILED` row status. Each row includes file metadata, an optional target album and remote ID, and upload-unit fields. Upload units retain the association between a primary image and an optional live-photo video; the primary owns the target album and remote ID when reconstructed for processing.
 
-`sync_state` is an independent, longer-lived per-path record. It holds the hash, mtime, size, status, remote ID, and failure information used by duplicate and cache decisions. A hash cache hit requires an exact match of path, nanosecond mtime, size, `SYNCED` status, and a nonempty hash. Persisting a completed upload unit is transactional; only the primary member receives the remote asset ID.
+`sync_state` is independent, longer-lived per-path state. It stores the hash, mtime, size, status, remote ID, and failure information used for cache and duplicate decisions. A hash-cache hit requires an exact path, nanosecond mtime, and size match, plus `SYNCED` status and a nonempty hash. Completion of an uploaded unit is transactional, and only its first (primary) member is assigned the remote asset ID.
 
-A watched folder stores its unique path, recursive setting, optional target album, and JSON-encoded exclusion patterns. A removable-volume binding associates one watched-folder ID with a volume ID and relative path; deleting its folder cascades to the binding. `app_settings` is a key/value table and currently stores `upload_parallelism`: invalid or absent stored values fall back to 3, while writes accept only 1 through 8.
+A watched folder stores its unique path, recursive setting, optional target album, and JSON-encoded exclusion patterns. A removable-volume binding associates one watched-folder ID with a volume ID and relative path; the foreign key cascades when the folder is deleted. `app_settings` is a key/value table. Its `upload_parallelism` value defaults to 3 when absent or invalid, and writes are restricted to 1 through 8.
 
 ```mermaid
 erDiagram
@@ -96,53 +102,60 @@ erDiagram
     }
 ```
 
-This diagram shows the persisted entities and database-enforced relationships. `sync_state` is keyed independently of the queue; the current schema does not define a foreign key from either state table to a watched folder.
+*Persisted entities and database-enforced relationships. `sync_state` is independently keyed; the schema has no foreign key from either synchronization-state table to a watched folder.*
 
-## Queue lifecycle and crash recovery
+## Admission, ownership, and execution
 
-Discovery enqueues upload units and discovery failures in one transaction. Newly seen paths receive increasing sequence numbers. Re-enqueuing an existing row refreshes metadata and upload-unit membership, retains `SYNCED` status, and otherwise returns it to `PENDING`; its originally stored target album is not overwritten. Starting work from `IDLE`, or from a `RUNNING` job with no pending rows, resets the job and deletes the prior queue before adding new work. A paused job instead retains terminal records and accepts newly discovered rows without resuming.
+`Synchronization::admit_and_run` is the producer boundary for manual scans, watcher batches, removable-media reconnects, startup work, and recovery. It first admits the scan result to SQLite, assigning a watched folder's current target album when the asset does not already have one. Producers therefore do not choose queue ordering or runner ownership.
 
-Consumers read pending upload units in sequence order. Before later work needs a remote ID, it can be stored on the queued primary asset. Finalizing a block updates row statuses, counts, and `current_path`, reads the snapshot, and commits as one transaction. `complete_sync_job_if_finished` transitions the job to `IDLE` only when no `PENDING` rows remain; both synced and failed rows count as completed bytes.
+Admission is transactional. New paths receive increasing sequences. Re-admitting an existing row refreshes metadata and upload-unit membership, retains `SYNCED` status, and otherwise makes the row `PENDING`; it deliberately does not replace the stored target album. Discovery failures are queued as terminal `FAILED` rows. If the job is `IDLE` or `FAILED`, or is `RUNNING` without pending rows, admitting nonempty work resets job counters and sequence state and deletes the old queue before inserting new work. A paused job instead preserves its terminal history while accepting newly discovered work.
 
-On startup, `recover_sync_job` changes a persisted `RUNNING` job to `PAUSED` before returning its snapshot. The application therefore requires explicit user confirmation before it resumes a crash-interrupted upload, rather than assuming an in-flight HTTP request did or did not reach the server. Startup then reloads watched folders and attempts to register each path. An unavailable folder is deferred and reported, while another registration failure is reported but does not prevent the rest of startup.
+An atomic `running` flag elects one lifecycle starter; concurrent callers join it, and an async mutex serializes the actual runner. A `PAUSED` job is not claimed by ordinary admission. The runner reads the durable queue—rather than the producer's scan result—in windows of at most 50 upload units, so recovered work uses the same path. It checks current exclusions at that boundary and transactionally discards only matching pending rows before processing.
 
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    IDLE --> RUNNING: enqueue work
-    RUNNING --> RUNNING: enqueue or finalize block
-    RUNNING --> PAUSED: startup recovery
-    PAUSED --> PAUSED: discover work
+    IDLE --> RUNNING: admit nonempty work
+    FAILED --> RUNNING: admit nonempty work
+    RUNNING --> RUNNING: admit or finalize block
+    RUNNING --> PAUSED: user pause or startup recovery
+    PAUSED --> PAUSED: admit work
     PAUSED --> RUNNING: user resumes
     RUNNING --> IDLE: no pending rows
     PAUSED --> IDLE: discard last pending row
-    IDLE --> RUNNING: retry failed folder work
+    RUNNING --> FAILED: setup or runner failure
 ```
 
-This diagram is the durable job-status lifecycle. `SYNCED` and `FAILED` are terminal queue-row states; retrying a folder changes its failed queue and state rows back to `PENDING` and changes an idle job to `RUNNING` when work was reset.
+*Durable job-status lifecycle. Queue rows independently become `SYNCED` or `FAILED`; only `PENDING` rows keep a `RUNNING` job from completing.*
 
-## Folder changes and retention boundaries
+## Queue invariants and recovery
 
-Removing a folder configuration deletes its `watched_folders` row, but synchronization data is managed explicitly. To determine whether a folder has pending work, and to discard its data, the code first obtains candidate paths and then applies normalized, path-component-aware checks; this avoids treating a sibling such as `drive2` as a descendant of `drive`. Folder-scoped discard deletes matching queue rows and only non-`SYNCED` `sync_state` rows. Synced state is retained so its hash and duplicate knowledge survive folder removal. It recomputes the job snapshot atomically and makes the job `IDLE` if no pending work remains.
+Pending units are read in sequence order. The runner can persist a primary asset's remote ID before later processing needs it. After a processor block, it persists only the terminal outcomes reported by that block; items not reported—for example after a pause boundary—remain pending for a lossless resume. Finalization updates queue statuses, aggregate counts, `current_path`, and the returned snapshot in one transaction. Snapshot byte totals derive from queue sizes, with `SYNCED` and `FAILED` rows contributing to completed bytes.
 
-Discarding selected failed paths is intentionally broader: it deletes the selected paths from both `sync_state` and `sync_queue` and recomputes totals in the same transaction. Changing exclusions only discards *pending* queue paths supplied by the caller; already materialized work is outside that operation. Conversely, retrying failures in a folder safely targets that folder and descendants, clears failure reasons, and returns matching queue and state records to `PENDING` without affecting sibling paths.
+When the runner observes no pending units, it clears its in-memory ownership before a conditional completion update. The update changes the job from `RUNNING` to `IDLE` and clears `current_path` only when no `PENDING` row exists. This ordering allows a producer admitted in the narrow handoff window to claim a successor runner instead; its new pending row makes the conditional completion a no-op.
 
-For a removable volume whose mount path changes, `remap_watched_folder_path` transactionally updates the watched-folder path plus matching descendant paths in `sync_state`, `sync_queue.local_path`, `sync_queue.upload_unit_id`, and `sync_jobs.current_path`. This makes path moves a coordinated persistent-state change rather than a folder-row update alone.
+At startup, `recover_sync_job` converts a persisted `RUNNING` job to `PAUSED` before returning the snapshot. Since the application cannot know whether an in-flight HTTP upload reached the server, recovery requires an explicit resume rather than guessing. Resuming a recovered job restarts the runner if pending work exists; if none does, it completes the job immediately. A setup or runner failure is durable as `FAILED` without discarding queued work, and a later nonempty admission resets that job for a new run.
+
+## Folder-scoped retention and path changes
+
+Removing a folder configuration deletes its `watched_folders` row, but synchronization data is explicitly managed. Folder-work checks and folder discard normalize paths and use component-aware containment, avoiding a false match such as `drive2` beneath `drive`. Folder-scoped discard deletes matching queue rows and only non-`SYNCED` `sync_state` rows. Synced state is retained so hash and duplicate knowledge survive folder removal. The same transaction recomputes the snapshot and makes the job idle when no pending work remains.
+
+Discarding selected failed paths intentionally deletes the selected paths from both `sync_state` and `sync_queue`, then recomputes counts in the same transaction. Changing exclusions discards only pending queue paths supplied by the caller; materialized work is outside that operation. Retrying failures within a folder targets that folder and descendants, clears failure reasons, restores matching queue and state rows to `PENDING`, and moves an idle job to `RUNNING` if it reset queue work.
+
+For a removable volume whose mount path changes, `remap_watched_folder_path` transactionally updates the watched-folder path plus matching descendant paths in `sync_state`, `sync_queue.local_path`, `sync_queue.upload_unit_id`, and `sync_jobs.current_path`. This is a coordinated persistent-state change rather than a watched-folder-only update.
 
 ## Initialization, migrations, and repair
 
-`db::init` creates the app-data directory if needed and opens `immich_sync.db` with foreign keys enabled, WAL journal mode, a five-second SQLite busy timeout, and a pool of one to four connections with a ten-second acquisition timeout. WAL keeps readers responsive while SQLite serializes writers.
+`db::init` creates the application-data directory if needed and opens `immich_sync.db` with foreign keys enabled, WAL journal mode, a five-second SQLite busy timeout, and a pool of one to four connections with a ten-second acquisition timeout. Each open runs `PRAGMA quick_check(1)` before SQLx applies the embedded migrations in `src-tauri/migrations/`. The migration history establishes folders and sync state, failure details, settings, the singleton queue, queue album and remote IDs, removable bindings, upload units, exclusions, and the durable `FAILED` job status. Add schema changes as new migrations: SQLx validates previously applied versions and checksums.
 
-Every database open runs `PRAGMA quick_check(1)` before embedded SQLx migrations from `src-tauri/migrations/`. The migration history builds the base folder and state tables, failure details, settings, singleton queue, queue album/remote IDs, removable bindings, upload-unit grouping, and watched-folder exclusions. Because SQLx validates applied migration versions and checksums, schema changes should be introduced as new migrations rather than by modifying a migration that may already have been applied.
+Repair is intentionally narrow. SQLite corruption (`SQLITE_CORRUPT` primary code 11 or `SQLITE_NOTADB` primary code 26), a non-`ok` quick check, and a SQLx migration version/checksum mismatch are recoverable. A lock or another open or migration failure is returned without quarantining the database. For a recoverable failure, the application:
 
-Repair is deliberately narrow. Corruption (`SQLITE_CORRUPT` primary code 11 or `SQLITE_NOTADB` primary code 26), a non-`ok` quick check, and a SQLx migration version/checksum mismatch are recoverable. Other open or migration failures—such as a locked database or an unrelated migration failure—are returned without quarantining the database. For a recoverable failure, the application:
-
-1. Tries a short, read-only folder query to salvage watched folders.
-2. Moves the database to a collision-free timestamped `.corrupted.*` path, retrying rename and falling back to copy then removal; matching `-wal` and `-shm` files move with it.
+1. Attempts a short read-only folder query to salvage watched folders.
+2. Moves the database to a collision-free timestamped `.corrupted.*` name, retrying rename and falling back to copy then removal; matching `-wal` and `-shm` files move with it.
 3. Creates and migrates a fresh database, then restores each salvageable folder's path, recursion, and target album.
-4. Emits a user notification, startup recovery notice, and `database.repaired` audit event with the backup path, reason, and restored-folder count.
+4. Presents a repair notice and records the `database.repaired` audit event with the backup path, reason, and restored-folder count.
 
-Only those three watched-folder fields are restored. Settings, queue history, hash/cache state, removable bindings, and exclusion patterns are not restored; a fresh database that also cannot be initialized fails startup rather than reporting a successful repair.
+Only those three watched-folder fields are restored. Settings, queue history, hash/cache state, removable bindings, and exclusion patterns are not restored. If the fresh database cannot be initialized, startup fails rather than reporting repair success. After initialization, startup reloads watched folders and attempts to register each watcher; unavailable folders are deferred and failures are reported without stopping registration of remaining folders.
 
 ```mermaid
 flowchart TD
@@ -153,23 +166,24 @@ flowchart TD
     Migrate -->|checksum mismatch or corruption| Salvage
     Salvage --> Quarantine["Quarantine database WAL and SHM"]
     Quarantine --> Fresh["Create fresh database and migrate"]
-    Fresh --> Restore["Restore salvageable folder fields"]
+    Fresh --> Restore["Restore folder fields"]
     Restore --> Repaired["Notify and audit repaired status"]
-    Check -->|other error| Failed["Fail initialization"]
-    Migrate -->|other error| Failed
+    Check -->|other error| InitFailed["Fail initialization"]
+    Migrate -->|other error| InitFailed
 ```
 
-This flow distinguishes the limited repair set from failures that must be surfaced without changing the existing database.
+*Initialization distinguishes narrowly recoverable database failures from errors that must leave the existing database in place and fail startup.*
 
-## Safe change and verification checklist
+## Safe changes and focused verification
 
-- Treat `sync_jobs` as a singleton and preserve queue status checks, composite queue identity, sequence ordering, and the queue-to-upload-unit reconstruction contract when evolving queue storage.
-- Put related queue/state mutations in one transaction. This is particularly important for a live-photo unit, count snapshots, safe folder discard, path remapping, and retry state.
-- If adding watched-folder fields that must survive repair, extend both read-only salvage and `restore_folder`; current recovery intentionally preserves only path, recursion, and target album.
-- Test migrations from an existing database as well as a new one. The database tests cover schema creation, ordering/deduplication and paging, pause preservation, bytes and terminal completion, settings validation, hash invalidation at nanosecond precision, upload-unit atomicity, folder-scoped deletion and remapping, and failure retry isolation. Recovery tests cover corrupt databases, WAL/SHM quarantine, collision-free backup paths, checksum mismatch, and the negative cases that must not trigger quarantine.
+- Preserve the singleton constraint, composite queue identity, sequence ordering, upload-unit reconstruction, and the conditional no-pending completion check when changing queue storage.
+- Keep related queue and state mutations transactional, especially for upload units, count snapshots, folder discard, retry, and path remapping.
+- Extend both read-only salvage and `restore_folder` if a new watched-folder field must survive database repair; current recovery intentionally preserves only path, recursion, and target album.
+- Test a new migration against both a new database and an existing one. The database and runner tests cover ordering and deduplication, pause preservation, terminal bytes and completion, settings validation, nanosecond cache invalidation, upload-unit atomicity, folder deletion/remapping, retry isolation, partial processor outcomes, exclusion filtering at the queue boundary, recovery, WAL/SHM quarantine, checksum mismatch, and failures that must not trigger repair.
 
 ## Related pages
 
+- [Runtime Architecture](../architecture/runtime.md) describes application startup and managed runtime state.
 - [Audit Logging](../operations/audit-logging.md) describes durable recovery and startup events.
 - [Synchronization Workflow](../workflows/synchronization.md) describes queue production and consumption.
 - [Watched Folders and Media Discovery](../workflows/watched-folders.md) describes configured-folder behavior.

@@ -3,9 +3,6 @@ type: workflow
 title: Watched Folders and Media Discovery
 description: How Lymic validates and persists watched roots, discovers media through scans and filesystem events, and recovers folders on unavailable or removable volumes.
 tags: [folders, watcher, media, removable-volumes, synchronization]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-19T15:10:01.321Z
 sources:
   - id: openwiki-source-5834cc73f881f690a60014d3
     resource: repo://src-tauri/migrations/0006_removable_watched_folders.sql

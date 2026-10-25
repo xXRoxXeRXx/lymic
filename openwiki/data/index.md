@@ -1,3 +1,3 @@
 # Files
 
-- [Local State and Recovery](local-state.md) - SQLite-backed local state, schema evolution, and recovery behavior for watched folders, synchronization work, settings, and hash caching.
+- [Local State and Durable Queue](local-state.md) - SQLite-backed local state, schema evolution, watched-folder settings, and the durable synchronization queue with recovery and completion semantics.
