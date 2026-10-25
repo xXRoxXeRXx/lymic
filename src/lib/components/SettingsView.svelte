@@ -26,6 +26,7 @@
     isSavingUploadParallelism: boolean;
     updateStatus: "unknown" | "current" | "available";
     isCheckingForUpdates: boolean;
+    isUpdatesSupported?: boolean;
     locales: readonly LocaleCatalogEntry[];
     onToggleAutostart: () => void;
     onLocaleChange: (locale: string) => void;
@@ -44,6 +45,7 @@
     isSavingUploadParallelism,
     updateStatus,
     isCheckingForUpdates,
+    isUpdatesSupported = true,
     locales,
     onToggleAutostart,
     onLocaleChange,
@@ -195,41 +197,43 @@
   </section>
 
   <!-- Category 4: Updates -->
-  <section class="space-y-3">
-    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 flex items-center gap-2">
-      <Sparkles class="w-3.5 h-3.5" />
-      <span>{$t('updates')}</span>
-    </h2>
+  {#if isUpdatesSupported}
+    <section class="space-y-3">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 flex items-center gap-2">
+        <Sparkles class="w-3.5 h-3.5" />
+        <span>{$t('updates')}</span>
+      </h2>
 
-    <div class="settings-card flex items-center justify-between gap-4">
-      <div class="flex items-start gap-3">
-        <div class="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-sky-400 shrink-0 mt-0.5">
-          <Sparkles class="w-4 h-4" />
+      <div class="settings-card flex items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+          <div class="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-sky-400 shrink-0 mt-0.5">
+            <Sparkles class="w-4 h-4" />
+          </div>
+          <div class="space-y-0.5">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm">{$t('updates')}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-lg">
+              {#if updateStatus === 'current'}
+                {$t('update_current')}
+              {:else if updateStatus === 'available'}
+                {$t('update_available_short')}
+              {:else}
+                {$t('update_check_subtitle')}
+              {/if}
+            </p>
+          </div>
         </div>
-        <div class="space-y-0.5">
-          <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm">{$t('updates')}</p>
-          <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-lg">
-            {#if updateStatus === 'current'}
-              {$t('update_current')}
-            {:else if updateStatus === 'available'}
-              {$t('update_available_short')}
-            {:else}
-              {$t('update_check_subtitle')}
-            {/if}
-          </p>
-        </div>
+
+        <button
+          type="button"
+          class="rounded-lg border border-slate-200 bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-slate-200 dark:hover:bg-zinc-700 cursor-pointer"
+          onclick={onCheckForUpdates}
+          disabled={isCheckingForUpdates}
+        >
+          {isCheckingForUpdates ? $t('update_checking') : $t('check_for_updates')}
+        </button>
       </div>
-
-      <button
-        type="button"
-        class="rounded-lg border border-slate-200 bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-slate-200 dark:hover:bg-zinc-700 cursor-pointer"
-        onclick={onCheckForUpdates}
-        disabled={isCheckingForUpdates}
-      >
-        {isCheckingForUpdates ? $t('update_checking') : $t('check_for_updates')}
-      </button>
-    </div>
-  </section>
+    </section>
+  {/if}
 
   <!-- Category 5: Account (Moved to the bottom) -->
   <section class="space-y-3">

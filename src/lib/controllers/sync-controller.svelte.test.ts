@@ -33,6 +33,7 @@ function createDesktopAdapter(overrides: Partial<DesktopAdapter> = {}): DesktopA
     updateLocale: vi.fn(),
     getDatabaseRecoveryNotice: vi.fn(),
     recordWebviewStartupPhaseProbe: vi.fn(),
+    getReleaseChannel: vi.fn().mockResolvedValue("github"),
     ...overrides,
   };
 }

@@ -54,7 +54,10 @@ export interface DesktopAdapter {
   updateLocale(locale: string): Promise<void>;
   getDatabaseRecoveryNotice(): Promise<DatabaseRecoveryNotice | null>;
   recordWebviewStartupPhaseProbe(phase: string): Promise<void>;
+  getReleaseChannel(): Promise<ReleaseChannel>;
 }
+
+export type ReleaseChannel = "github" | "store";
 
 export const tauriDesktopAdapter: DesktopAdapter = {
   startSync: () => invoke<SyncSummary>("start_sync"),
@@ -94,4 +97,5 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),
   getDatabaseRecoveryNotice: () => invoke<DatabaseRecoveryNotice | null>("get_database_recovery_notice"),
   recordWebviewStartupPhaseProbe: (phase) => invoke<void>("record_webview_startup_phase_probe", { phase }),
+  getReleaseChannel: () => invoke<ReleaseChannel>("get_release_channel"),
 };

@@ -406,6 +406,35 @@ describe("SettingsView", () => {
     expect(onCheckForUpdates).toHaveBeenCalledOnce();
     expect(onLogout).toHaveBeenCalledOnce();
   });
+
+  it("hides update checking section when updates are not supported in Store mode", () => {
+    const onLocaleChange = vi.fn();
+    const onThemeChange = vi.fn();
+    const onToggleAutostart = vi.fn();
+    const onUploadParallelismChange = vi.fn();
+    const onCheckForUpdates = vi.fn();
+    const onLogout = vi.fn();
+    render(SettingsView, {
+      currentUserName: "Meyer",
+      serverUrl: "https://immich.example",
+      isAutostartEnabled: false,
+      themePreference: "system",
+      uploadParallelism: 3,
+      isSavingUploadParallelism: false,
+      updateStatus: "unknown",
+      isCheckingForUpdates: false,
+      isUpdatesSupported: false,
+      locales: localeCatalog,
+      onToggleAutostart,
+      onLocaleChange,
+      onThemeChange,
+      onUploadParallelismChange,
+      onCheckForUpdates,
+      onLogout,
+    });
+    expect(screen.queryByRole("button", { name: "Check for updates" })).toBeNull();
+    expect(screen.queryByText("Updates")).toBeNull();
+  });
 });
 
 describe("TargetAlbumModal", () => {

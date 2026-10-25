@@ -264,6 +264,7 @@
             isSavingUploadParallelism={preferences.isSavingUploadParallelism}
             updateStatus={updater.updateStatus}
             isCheckingForUpdates={updater.isCheckingForUpdates}
+            isUpdatesSupported={updater.isUpdatesSupported}
             locales={preferences.locales}
             onToggleAutostart={preferences.toggleAutostart}
             onLocaleChange={preferences.setLocale}
@@ -281,7 +282,7 @@
     </div>
   {/if}
 
-  {#if updater.isUpdateDialogOpen && updater.availableUpdate}
+  {#if updater.isUpdatesSupported && updater.isUpdateDialogOpen && updater.availableUpdate}
     <UpdateDialog
       version={updater.availableUpdate.version}
       notes={updater.availableUpdate.body ?? ""}

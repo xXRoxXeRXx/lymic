@@ -114,6 +114,7 @@ pub(crate) fn run() {
             crate::commands::settings::update_locale,
             crate::commands::settings::record_webview_startup_phase_probe,
             crate::commands::settings::get_database_recovery_notice,
+            crate::commands::settings::get_release_channel,
         ])
         .on_window_event(tray::hide_on_close)
         .build(tauri::generate_context!())
@@ -181,6 +182,7 @@ mod tests {
             "update_locale",
             "get_database_recovery_notice",
             "record_webview_startup_phase_probe",
+            "get_release_channel",
         ] {
             assert!(
                 adapter.contains(&format!("\"{command}\"")),

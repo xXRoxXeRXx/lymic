@@ -73,6 +73,8 @@ function renderAuthenticatedPage() {
         return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
       case "update_locale":
         return Promise.resolve();
+      case "get_release_channel":
+        return Promise.resolve("github");
       default:
         return Promise.resolve();
     }
@@ -1124,6 +1126,76 @@ describe("removable volume setup flow", () => {
     expect(screen.queryByTestId("sidebar-profile-image")).not.toBeInTheDocument();
     expect(screen.getByTestId("sidebar-user-icon")).toBeInTheDocument();
     expect(screen.getByText("Meyer")).toBeInTheDocument();
+  });
+
+  it("renders update actions in settings when running in GitHub release channel", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      switch (command) {
+        case "get_auth_status":
+          return Promise.resolve(true);
+        case "get_server_url":
+          return Promise.resolve("https://immich.example");
+        case "get_current_user":
+          return Promise.resolve({ displayName: "Meyer", profileImage: null });
+        case "get_folders":
+          return Promise.resolve([]);
+        case "get_failed_syncs":
+          return Promise.resolve([]);
+        case "get_upload_parallelism":
+          return Promise.resolve(3);
+        case "get_sync_status":
+          return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
+        case "get_locale_catalog":
+          return Promise.resolve(localeCatalog);
+        case "update_locale":
+          return Promise.resolve();
+        case "get_release_channel":
+          return Promise.resolve("github");
+        default:
+          return Promise.resolve();
+      }
+    });
+    render(Page);
+    await screen.findByText("Synchronization", { selector: "h1" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(await screen.findByRole("button", { name: "Check for updates" })).toBeInTheDocument();
+  });
+
+  it("omits update actions in settings when running in Store release channel", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      switch (command) {
+        case "get_auth_status":
+          return Promise.resolve(true);
+        case "get_server_url":
+          return Promise.resolve("https://immich.example");
+        case "get_current_user":
+          return Promise.resolve({ displayName: "Meyer", profileImage: null });
+        case "get_folders":
+          return Promise.resolve([]);
+        case "get_failed_syncs":
+          return Promise.resolve([]);
+        case "get_upload_parallelism":
+          return Promise.resolve(3);
+        case "get_sync_status":
+          return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
+        case "get_locale_catalog":
+          return Promise.resolve(localeCatalog);
+        case "update_locale":
+          return Promise.resolve();
+        case "get_release_channel":
+          return Promise.resolve("store");
+        default:
+          return Promise.resolve();
+      }
+    });
+    render(Page);
+    await screen.findByText("Synchronization", { selector: "h1" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await screen.findByText("Language");
+    expect(screen.queryByRole("button", { name: "Check for updates" })).toBeNull();
+    expect(screen.queryByText("Updates")).toBeNull();
   });
 });
 
