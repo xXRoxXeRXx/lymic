@@ -10,7 +10,7 @@ const SAMPLE_VALID_MANIFEST = `<?xml version="1.0" encoding="utf-8"?>
 
   <Identity
     Name="xXRoxXeRXx.Lymic"
-    Publisher="CN=xXRoxXeRXx"
+    Publisher="CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC"
     Version="0.21.0.0"
     ProcessorArchitecture="x64" />
 
@@ -41,12 +41,27 @@ describe("msix validator", () => {
   it("validates a matching Store MSIX manifest", () => {
     const result = validateMsixManifest(SAMPLE_VALID_MANIFEST, {
       identityName: "xXRoxXeRXx.Lymic",
+      publisher: "CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC",
       version: "0.21.0",
       architecture: "x64",
     });
 
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
+  });
+
+  it("detects wrong publisher", () => {
+    const result = validateMsixManifest(SAMPLE_VALID_MANIFEST, {
+      identityName: "xXRoxXeRXx.Lymic",
+      publisher: "CN=xXRoxXeRXx",
+      version: "0.21.0",
+      architecture: "x64",
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "Publisher mismatch: expected 'CN=xXRoxXeRXx', got 'CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC'",
+    );
   });
 
   it("detects wrong identity name", () => {

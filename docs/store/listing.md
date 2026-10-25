@@ -10,8 +10,14 @@ This document contains the official metadata, localized descriptions, questionna
 |---|---|
 | **App Name** | Lymic |
 | **Package Identity** | `xXRoxXeRXx.Lymic` |
-| **Publisher** | `CN=xXRoxXeRXx` |
+| **Publisher** | `CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC` |
 | **Publisher Display Name** | `xXRoxXeRXx` |
+| **Package Family Name (PFN)** | `xXRoxXeRXx.Lymic_5pq7hxkq5cr6j` |
+| **Package SID** | `S-1-15-2-2281093430-885897720-1483119853-4043636694-2962100176-2089881768-2617100744` |
+| **Store ID** | `9NLQWHTHR1FZ` |
+| **Store URL** | `https://apps.microsoft.com/detail/9NLQWHTHR1FZ` |
+| **Store Protocol Link** | `ms-windows-store://pdp/?productid=9NLQWHTHR1FZ` |
+| **MSA-App-ID** | `b2c23d01-1c1f-4143-931d-221a2a54717b` |
 | **Primary Category** | Photo & video |
 | **Secondary Category** | Utilities & tools |
 | **Pricing** | Free (Worldwide, all markets) |

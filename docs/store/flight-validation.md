@@ -11,7 +11,8 @@ This document records the private Flight verification runbook, WACK (Windows App
 - **Target OS**: Windows 10 (10.0.17763.0+) & Windows 11 x64
 - **Package Tested**: `Lymic_0.22.0_x64.msix`
 - **Package Identity**: `xXRoxXeRXx.Lymic`
-- **Publisher**: `CN=xXRoxXeRXx`
+- **Publisher**: `CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC`
+- **Package Family Name (PFN)**: `xXRoxXeRXx.Lymic_5pq7hxkq5cr6j`
 - **Signing Mechanism**: Microsoft Store Ingestion Signing (No external Authenticode certificate required)
 
 ---

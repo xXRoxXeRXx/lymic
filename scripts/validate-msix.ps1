@@ -5,6 +5,7 @@ param (
 
     [string]$ExpectedVersion,
     [string]$ExpectedIdentity = "xXRoxXeRXx.Lymic",
+    [string]$ExpectedPublisher = "CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC",
     [string]$ExpectedArchitecture = "x64"
 )
 
@@ -54,6 +55,15 @@ if ($manifestXml -notmatch '(?s)<Identity\s+([^>]+?)\s*\/?>') {
         }
     } else {
         $errors += "Missing Name attribute on Identity element"
+    }
+
+    if ($identityAttrs -match 'Publisher="([^"]+)"') {
+        $pub = $Matches[1]
+        if ($ExpectedPublisher -and $pub -ne $ExpectedPublisher) {
+            $errors += "Publisher mismatch: expected '$ExpectedPublisher', got '$pub'"
+        }
+    } else {
+        $errors += "Missing Publisher attribute on Identity element"
     }
 
     if ($identityAttrs -match 'ProcessorArchitecture="([^"]+)"') {

@@ -2,7 +2,7 @@
 param (
     [string]$Version,
     [string]$IdentityName = "xXRoxXeRXx.Lymic",
-    [string]$Publisher = "CN=xXRoxXeRXx",
+    [string]$Publisher = "CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC",
     [string]$PublisherDisplayName = "xXRoxXeRXx",
     [string]$SourceExe,
     [string]$OutputDir = "dist/msix"

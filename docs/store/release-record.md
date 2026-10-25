@@ -12,6 +12,10 @@ This document records the official public release parameters for Lymic on Micros
 |---|---|
 | **Application** | Lymic |
 | **Package Identity** | `xXRoxXeRXx.Lymic` |
+| **Publisher** | `CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC` |
+| **Package Family Name (PFN)** | `xXRoxXeRXx.Lymic_5pq7hxkq5cr6j` |
+| **Store ID** | `9NLQWHTHR1FZ` |
+| **Store URL** | `https://apps.microsoft.com/detail/9NLQWHTHR1FZ` |
 | **Target Channel** | Microsoft Store (Windows 10/11 x64 MSIX) |
 | **Release Version** | `0.22.0` (MSIX Package Version `0.22.0.0`) |
 | **Availability** | Worldwide (All Microsoft Store markets) |
