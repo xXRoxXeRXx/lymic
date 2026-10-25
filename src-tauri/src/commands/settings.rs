@@ -100,9 +100,35 @@ pub(crate) fn update_locale(
     Ok(())
 }
 
+pub(crate) const DEFAULT_RELEASE_CHANNEL: &str = "github";
+
+pub(crate) fn resolve_release_channel(channel: Option<&str>) -> &'static str {
+    match channel {
+        Some("store") => "store",
+        _ => DEFAULT_RELEASE_CHANNEL,
+    }
+}
+
+pub(crate) fn effective_release_channel() -> &'static str {
+    resolve_release_channel(option_env!("LYMIC_RELEASE_CHANNEL"))
+}
+
+#[tauri::command]
+pub(crate) fn get_release_channel() -> &'static str {
+    effective_release_channel()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn defaults_to_github_release_channel_when_unset() {
+        assert_eq!(resolve_release_channel(None), "github");
+        assert_eq!(resolve_release_channel(Some("unknown")), "github");
+        assert_eq!(resolve_release_channel(Some("github")), "github");
+        assert_eq!(resolve_release_channel(Some("store")), "store");
+    }
 
     #[test]
     fn validates_all_supported_locales_and_translations() {

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import ActivityLog from "./ActivityLog.svelte";
 import DashboardView from "./DashboardView.svelte";
+import ExclusionPatternsModal from "./ExclusionPatternsModal.svelte";
 import FailedSyncsModal from "./FailedSyncsModal.svelte";
 import FolderList from "./FolderList.svelte";
 import LoginView from "./LoginView.svelte";
@@ -250,14 +251,26 @@ describe("FolderList and ActivityLog", () => {
     expect(onRemoveFolder).toHaveBeenCalledWith(1);
   });
 
-  it("edits exclusion patterns as a validated list", async () => {
-    const onUpdateFolderExclusionPatterns = vi.fn();
+  it("forwards onOpenExclusionSettings callback when clicking folder exclusions button", async () => {
+    const onOpenExclusionSettings = vi.fn();
     render(FolderList, {
       watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
-      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
+      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns: vi.fn(),
+      onOpenExclusionSettings,
+      catalogue: createCatalogue(),
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
+    expect(onOpenExclusionSettings).toHaveBeenCalledWith(expect.objectContaining({ id: 1, path: "C:/photos" }));
+  });
+
+  it("edits exclusion patterns as a validated list", async () => {
+    const onSave = vi.fn();
+    render(ExclusionPatternsModal, {
+      folder: { id: 1, path: "C:/photos", recursive: true, target_album_id: null },
+      onSave,
+      onClose: vi.fn(),
     });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
     const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
     await fireEvent.input(input, { target: { value: "*.{jpg,png}" } });
     await fireEvent.click(screen.getByRole("button", { name: "Add" }));
@@ -267,41 +280,41 @@ describe("FolderList and ActivityLog", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(screen.getByText("*.mp4")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Save exclusions" }));
-    expect(onUpdateFolderExclusionPatterns).toHaveBeenCalledWith(1, ["*.mp4"]);
+    expect(onSave).toHaveBeenCalledWith(1, ["*.mp4"]);
   });
 
   it("rejects a single backslash inline before saving exclusion patterns", async () => {
-    const onUpdateFolderExclusionPatterns = vi.fn();
-    render(FolderList, {
-      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
-      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
+    const onSave = vi.fn();
+    render(ExclusionPatternsModal, {
+      folder: { id: 1, path: "C:/photos", recursive: true, target_album_id: null },
+      onSave,
+      onClose: vi.fn(),
     });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
     const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
     await fireEvent.input(input, { target: { value: "Screenshots\\**" } });
     await fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent("Use a relative pattern");
-    expect(onUpdateFolderExclusionPatterns).not.toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it("clears a saved exclusion draft and warns for broad patterns", async () => {
-    const onUpdateFolderExclusionPatterns = vi.fn().mockResolvedValue(undefined);
+    const onSave = vi.fn().mockResolvedValue(undefined);
     const props = {
-      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
-      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns, catalogue: createCatalogue(),
+      folder: { id: 1, path: "C:/photos", recursive: true, target_album_id: null },
+      onSave,
+      onClose: vi.fn(),
     };
-    const { rerender } = render(FolderList, props);
+    const { rerender } = render(ExclusionPatternsModal, props);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
     const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
     await fireEvent.input(input, { target: { value: "*.*" } });
     await fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(screen.getByText("This rule set excludes all media in this Watched Folder.")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Save exclusions" }));
-    await vi.waitFor(() => expect(onUpdateFolderExclusionPatterns).toHaveBeenCalledWith(1, ["*.*"]));
-    rerender({ ...props, watchedFolders: [{ ...props.watchedFolders[0], exclusion_patterns: ["**/exports/**"] }] });
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledWith(1, ["*.*"]));
+    rerender({ ...props, folder: { ...props.folder, exclusion_patterns: ["**/exports/**"] } });
     expect(screen.getByText("**/exports/**")).toBeInTheDocument();
     expect(screen.queryByText("*.*")).not.toBeInTheDocument();
   });
@@ -405,6 +418,35 @@ describe("SettingsView", () => {
     expect(onUploadParallelismChange).toHaveBeenCalledOnce();
     expect(onCheckForUpdates).toHaveBeenCalledOnce();
     expect(onLogout).toHaveBeenCalledOnce();
+  });
+
+  it("hides update checking section when updates are not supported in Store mode", () => {
+    const onLocaleChange = vi.fn();
+    const onThemeChange = vi.fn();
+    const onToggleAutostart = vi.fn();
+    const onUploadParallelismChange = vi.fn();
+    const onCheckForUpdates = vi.fn();
+    const onLogout = vi.fn();
+    render(SettingsView, {
+      currentUserName: "Meyer",
+      serverUrl: "https://immich.example",
+      isAutostartEnabled: false,
+      themePreference: "system",
+      uploadParallelism: 3,
+      isSavingUploadParallelism: false,
+      updateStatus: "unknown",
+      isCheckingForUpdates: false,
+      isUpdatesSupported: false,
+      locales: localeCatalog,
+      onToggleAutostart,
+      onLocaleChange,
+      onThemeChange,
+      onUploadParallelismChange,
+      onCheckForUpdates,
+      onLogout,
+    });
+    expect(screen.queryByRole("button", { name: "Check for updates" })).toBeNull();
+    expect(screen.queryByText("Updates")).toBeNull();
   });
 });
 

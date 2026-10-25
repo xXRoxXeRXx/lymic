@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lymic - Desktop Synchronization Client for Immich</title>
+  <meta name="description" content="Lymic is a high-performance cross-platform desktop synchronization client for self-hosted Immich servers.">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --border: #334155;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --text: #0f172a;
+        --text-muted: #64748b;
+        --primary: #0284c7;
+        --border: #e2e8f0;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    header {
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--primary);
+      margin-bottom: 1rem;
+    }
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.5rem;
+    }
+    p { margin-bottom: 1.25rem; color: var(--text-muted); }
+    .nav {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .nav a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1.05rem;
+    }
+    .nav a:hover { text-decoration: underline; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin: 2rem 0;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      transition: border-color 0.2s;
+    }
+    .card:hover {
+      border-color: var(--primary);
+    }
+    .card h2 {
+      font-size: 1.25rem;
+      margin-bottom: 0.75rem;
+      color: var(--text);
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Open Source Desktop Client</span>
+      <h1>Lymic</h1>
+      <p>High-performance desktop synchronization client for self-hosted Immich servers.</p>
+      <nav class="nav">
+        <a href="privacy/">Privacy Policy &rarr;</a>
+        <a href="support/">Support & Help &rarr;</a>
+        <a href="https://github.com/xXRoxXeRXx/lymic" target="_blank" rel="noopener">GitHub &rarr;</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="grid">
+        <div class="card">
+          <h2>Privacy Policy</h2>
+          <p>Read how Lymic protects your privacy: zero advertising, zero telemetry, local configuration, and direct uploads exclusively to your configured Immich server.</p>
+          <a href="privacy/" style="color: var(--primary); font-weight: 600; text-decoration: none;">Read Privacy Policy &rarr;</a>
+        </div>
+        <div class="card">
+          <h2>Support & Documentation</h2>
+          <p>Get help connecting your self-hosted server, setting up watched folders, managing removable media, or filing defect reports and feature requests.</p>
+          <a href="support/" style="color: var(--primary); font-weight: 600; text-decoration: none;">Get Support &rarr;</a>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 Lymic Contributors. Distributed under the MIT License.</p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -23,6 +23,7 @@ export default defineConfig(async () => ({
   resolve: {
     conditions: ["browser"],
   },
+  envPrefix: ["VITE_", "LYMIC_"],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
