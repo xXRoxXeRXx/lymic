@@ -4,7 +4,6 @@
   import FailedSyncsModal from "./FailedSyncsModal.svelte";
   import FolderList from "./FolderList.svelte";
   import ExclusionPatternsModal from "./ExclusionPatternsModal.svelte";
-  import TargetAlbumModal from "./TargetAlbumModal.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { DashboardViewState } from "../controllers/sync-controller.svelte";
   import type { WatchedFolder } from "./types";
@@ -97,12 +96,5 @@
   <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} onUpdateFolderExclusionPatterns={dashboard.onUpdateFolderExclusionPatterns} onOpenExclusionSettings={(folder) => exclusionSettingsFolder = folder} {catalogue} />
 </div>
 
-<TargetAlbumModal
-  isOpen={dashboard.isTargetAlbumModalOpen}
-  folderPath={dashboard.pendingFolderPath ?? ""}
-  onConfirm={dashboard.onConfirmAddFolder}
-  onCancel={dashboard.onCancelAddFolder}
-  {catalogue}
-/>
 
 <ExclusionPatternsModal folder={exclusionSettingsFolder} onSave={dashboard.onUpdateFolderExclusionPatterns} onClose={() => exclusionSettingsFolder = null} />
