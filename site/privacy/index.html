@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - Lymic</title>
+  <meta name="description" content="Privacy Policy for Lymic, an independent desktop synchronization client for self-hosted Immich servers.">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --border: #334155;
+      --accent: #0ea5e9;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --text: #0f172a;
+        --text-muted: #64748b;
+        --primary: #0284c7;
+        --border: #e2e8f0;
+        --accent: #0369a1;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    header {
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+    }
+    .nav {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .nav a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .nav a:hover { text-decoration: underline; }
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.5rem;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--primary);
+      margin-bottom: 1rem;
+    }
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      color: var(--text);
+    }
+    p { margin-bottom: 1rem; color: var(--text-muted); }
+    ul { margin-bottom: 1rem; padding-left: 1.5rem; color: var(--text-muted); }
+    li { margin-bottom: 0.5rem; }
+    strong { color: var(--text); }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lymic Privacy Policy</span>
+      <h1>Privacy Policy for Lymic</h1>
+      <p>Effective date: October 2026</p>
+      <nav class="nav">
+        <a href="../">Home</a>
+        <a href="../privacy/">Privacy Policy</a>
+        <a href="../support/">Support & Help</a>
+        <a href="https://github.com/xXRoxXeRXx/lymic" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="card">
+        <h2>Summary: Privacy First by Design</h2>
+        <p>
+          <strong>Lymic contains no advertising, tracking, or analytics telemetry of any kind.</strong>
+          Lymic is an independent open-source desktop client built to upload your local media files directly to your own self-hosted Immich server. We do not operate central servers, collect user accounts, or profile user behavior.
+        </p>
+      </div>
+
+      <h2>1. No Advertising, Tracking, or Analytics</h2>
+      <p>
+        Lymic does not collect, record, or transmit any user tracking information or analytics telemetry. There are no tracking SDKs, advertising frameworks, crash-reporting servers, or analytics beacons integrated into Lymic.
+      </p>
+
+      <h2>2. Destination of Media Assets</h2>
+      <p>
+        Your photos, videos, and associated metadata (such as sidecar files and checksums) are transferred <strong>exclusively to the Immich server URL you configure</strong>.
+      </p>
+      <ul>
+        <li>All uploads occur directly between your device and your configured Immich server.</li>
+        <li>No media files, checksums, or metadata are ever routed through intermediate proxy servers or third-party cloud infrastructure operated by Lymic.</li>
+      </ul>
+
+      <h2>3. Native Operating System Credential Storage</h2>
+      <p>
+        Sensitive authentication credentials—including your Immich API key and optional Cloudflare Access service token credentials—are stored exclusively in your operating system's native secure keyring (Windows Credential Manager on Windows, Keychain on macOS, Secret Service on Linux).
+      </p>
+      <p>
+        Credentials are never written to unencrypted SQLite databases, configuration files, application log files, or user interface events.
+      </p>
+
+      <h2>4. Local Settings & Synchronization State</h2>
+      <p>
+        Lymic maintains local operational state in a private local SQLite database on your device:
+      </p>
+      <ul>
+        <li><strong>Local preferences:</strong> Configured watched folder paths, target album assignments, exclusion patterns, user interface theme preference, language locale, and upload concurrency settings.</li>
+        <li><strong>Synchronization progress:</strong> Checksum cache, queue status (pending, synced, failed), and remote asset identifiers to ensure resumable uploads and avoid duplicate re-uploads.</li>
+      </ul>
+      <p>
+        This data remains strictly on your local computer and is never uploaded or shared.
+      </p>
+
+      <h2>5. Local Structured Audit Logging</h2>
+      <p>
+        To assist with troubleshooting and security monitoring, Lymic records security-relevant administrative events (such as authentication state changes, watched folder additions/removals, and queue lifecycle operations) into local structured audit logs.
+      </p>
+      <p>
+        These logs remain stored locally in your operating system user profile directory with automated retention and rotation, and are never automatically transmitted over the network.
+      </p>
+
+      <h2>6. Independence from Immich</h2>
+      <p>
+        Lymic is an independent desktop client application designed for self-hosted Immich servers. It is not affiliated with, endorsed by, or sponsored by Immich or its developers.
+      </p>
+
+      <h2>7. Contact and Questions</h2>
+      <p>
+        If you have any questions about this Privacy Policy or Lymic's data handling practices, you can contact the project maintainers via our <a href="../support/" style="color: var(--primary);">Support page</a> or open an issue on our <a href="https://github.com/xXRoxXeRXx/lymic" target="_blank" rel="noopener" style="color: var(--primary);">GitHub repository</a>.
+      </p>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 Lymic Contributors. Distributed under the MIT License.</p>
+    </footer>
+  </div>
+</body>
+</html>
