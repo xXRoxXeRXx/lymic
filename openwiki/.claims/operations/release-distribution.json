@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:6eb97c091cdceceab330dbe4bd0e79ed08f80833a311ba2b302b886bd7adc4e4",
+  "claims": [
+    {
+      "id": "claim_522bfa11d51f4b3d821a9735346a6e89",
+      "statement": "Pushing a tag matching `v*` runs the publish workflow on macOS, Ubuntu, and Windows; every matrix job installs dependencies, runs frontend and Rust quality gates, and invokes the Tauri action to create a draft versioned GitHub release with generated notes and signed updater material.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L3-L68",
+          "version": "repo-lines-v1:sha256:b505c4c0f359dea3b4b6e880e8a05a2cc8ff8b87be6f27dc57bf86a6f797a0fe:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5NmRjNDgxNDlmNWE4M2QxZWQ2ZGJiMzliYmM3ZTJiOTAyYWEzZDM0ZDZiZDVhZTRiMjkxYjY4ZGYwY2E3OWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNGJhNWRhNDU4MDUxMzIyZGY1OThkYmI3M2ZmNDc3M2ViMTBhOGM1MGQzZDFlZmI5YzJkMDM5ZDMyNWM0NWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY5MWNjZjg2ZTRmZGUyM2MxNDk1NzQ0YjA1ZjdiY2Q3ODgzZWQ4ODUxODRkYTg4NDhkYmZjNDNlODI3N2Y5ODEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlOGRkOTRiZDFhZTQwOTM0ZTc4ODA2MjMwZTM0NDUzOGY0MmU2ZmZmNjk1Njg4MjFlMTIxYjAyN2ZmNDdkY2IifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_095811b8a3f2456186d19a28b7c2feea",
+      "statement": "The Tauri updater is configured to create updater artifacts, verify them with its configured public key, use the GitHub `latest.json` endpoint, and use passive installation on Windows; the release action is supplied the corresponding signing private-key secrets and prefers NSIS in updater JSON.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L56-L68",
+          "version": "repo-lines-v1:sha256:3d57a4bc8bb7be24e0cd9c0184512716befc72a0d6bd2d0fc3b20b118f479b60:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjMTYyY2QzZGQ2MDEyZDJjYTE5MGRkZGIwMDNlMTBiMTU3MTYxNDgzYTg3NmQxYjM1MDBlOTM1ODYwNjQ1YTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNGJhNWRhNDU4MDUxMzIyZGY1OThkYmI3M2ZmNDc3M2ViMTBhOGM1MGQzZDFlZmI5YzJkMDM5ZDMyNWM0NWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjViMWQyYjk3MDJkMTViZDAyMTk1YTEzNmFkNGM1YjBhODYwNzhlN2IzMWM4MTU1ODcyNGMwZGJiNTU1NDg2OTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlOGRkOTRiZDFhZTQwOTM0ZTc4ODA2MjMwZTM0NDUzOGY0MmU2ZmZmNjk1Njg4MjFlMTIxYjAyN2ZmNDdkY2IifQ"
+        },
+        {
+          "resource": "repo://src-tauri/tauri.conf.json#L28-L56",
+          "version": "repo-lines-v1:sha256:bb46caf90d877d767a7b951df53738668878e5c685a979ded9d045190fa4901d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjMDcyNDlhZjgzOGY5NDg0OTM5YjM3ZGE3OGQ3MTIxZGM0ZTVkNGFjNTI2N2JkNzIzMDkwMGU3NGE4NjMzZDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3YzY2Zjg2YjMwYjk1YTAxMzMzMzk0NmI2ODNhOTZiNmJiMmUyNGNmNDQ2YmE5Y2JkNzQ0NTFmZDIxZDU0NDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRmNzM5YTA2YzFjYmIxMjQ0ZTMzNjNkMzhiY2Y5ZmE1MGNlODRmZWQzOTljMjE5M2EzYzdmMDhkNTk5MThiMmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1d85a3b8e7a047cd838fe87c716993df",
+      "statement": "Release-channel resolution recognizes only `store` as non-default: the Rust backend compiles `LYMIC_RELEASE_CHANNEL` into the binary and otherwise returns `github`, exposes it via `get_release_channel`, while the frontend reads `VITE_LYMIC_RELEASE_CHANNEL` then `LYMIC_RELEASE_CHANNEL` with the same fallback.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/settings.rs#L103-L131",
+          "version": "repo-lines-v1:sha256:315e012d634f0dbf9bdb609098704d348a5705978bd047bb11b3a5869b128703:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1ZTdkMDI4MGFiMTBlNTkyMjY2OGE4N2Q5MzJmNzcwZWNmMWRlYWYzOTU1MzllYjVjODRjNWQ0ZDlkMTViYTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1ZjZmNDY2ZTU5Y2ZjMzA3MDNjNDVmNzJhZjY1ZGU1NGFjMzYzZDM1NGNjMWEzMzMwMzUwYWNkNDUyNDM0YzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM1YjZiZWMyMTAwYmJiNjJhMjVhNWExMjI4MGVjMDU3MGEzODY1ZDhmOTUyZTA4MWUxZGU1NDExNjg4YmUwM2EifQ"
+        },
+        {
+          "resource": "repo://src/lib/release-channel.ts#L1-L10",
+          "version": "repo-lines-v1:sha256:2bdc0e78edb692ca1b679ecd90045989e439976011d3337f4e20d673d007f7ba:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY0NTAyYWVkZGFhMzk0NzExNjZiMDlhNjI1NDEyZTcxMGQ2NjNjNWE0MmFkYmMwZTMyZTlmOTZkNjFlMzBmMTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c9d717f87a2d49929dbdc70e82888984",
+      "statement": "The update controller obtains the backend release channel during startup and makes Store builds in-app-update-free: startup, checks, and installation return before updater work; the Store channel reports updates unsupported, while GitHub-channel installation is also blocked during active synchronization or concurrent installation work.",
+      "evidence": [
+        {
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L100-L117",
+          "version": "repo-lines-v1:sha256:4d50eddab007bf2b599310309bd634438c712ae6c8197e47d1b5ecfd591bd4d9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5NWZhMGYxMTE3YjVlYTQwNDM0MTQwZGRlMWEzNDBjNzIwZGRiZjMyNjIxMmUxOTE4MzhkNGIxNTZkMzE2YmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyYTJjYjI1YTEyMmI0NDIyMWE2MjM0ZWM2NjBhN2I1ZmI3ZjliZGU3YjNiOWUyYjNjNTU5YTBkOTZmYWM3MzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L31-L49",
+          "version": "repo-lines-v1:sha256:0dc77521537d118ffc078c1bfdc456516bfe0ef5165be638868d251fd48d9a13:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkZmQ3OWQ4Zjc3Mjg4M2VkOGI5YTAwZTZkMDE5NGI1NTI5NGM4NjQzNDJkNDcyOGZmYTQzZTk5ZGNlMzVmNzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUyNjZiNjIxYzI2ZGE4YzM2MTA2MTI0YTRlNWFjMWFmZmNmMzU1MWNhYzhiMTM2M2I5Nzk4Zjg1MWE5ZTJiOGEifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L55-L97",
+          "version": "repo-lines-v1:sha256:6d98f95eaccd8f8ef67c42256bb5abcaa9a57b6d587b2ce5099f7221391dbbe2:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2MDYxMTIyMDg1ZTM4ZDk1Y2Q4NzM5YmU3Y2M0NWI2ZmJiNWJkMTY4MDEzMjhiMDdlZTQwNDZjNjkyMTc4ZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdjZjQ1OGFkZGU3NjZmZjM1NjVlNTE1ZmZlOGNkYjAzZGE0NGRlNzgxZGVkOWI0ZGFkOTdkZjJkZDQ0Y2RjMTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZGFhZDk0YWJlNGViOWM1NzU5MGZlOThkOGZmZjQ3NjQ3Yzk5MjQxOGM0ZDVlOTIyZTlhMDcyMjBkYTJmMTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5e78bb1aefd3447887d3444ca0e1602e",
+      "statement": "The Settings UI conditionally renders its Updates section from `isUpdatesSupported`, so Store builds do not expose the update controls; tests verify Store startup never contacts the updater endpoint and does not relaunch for an install request.",
+      "evidence": [
+        {
+          "resource": "repo://src/lib/components/SettingsView.svelte#L199-L236",
+          "version": "repo-lines-v1:sha256:d12f1b0167fa371a647c7852f6fd29d25236a9b8256ae3c787e41982f854551b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhN2NmMTk3NWFkMGI0YjIyYmI0NDhiMjFlNDk1YzdhZjVjMzI2ZjU4YTQ3NjlmNTcxMmRmNzlhZDY5YjQ5NWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4OGU3YzVlZWM1ZmEwYzU3NTFlMjQ1MGQ4YTYxZmUzYWVmOTUzMDNhMzgwYTc5ZmU2ZjdiYTA1Y2UwNzUxMTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQwMjI3ZGMyODY5ZTgwM2NhNjAxMjliZDY2ZDNlMjFmZWFmZjEyMGE0ODEzNjE5YzhmY2MwMjJlOTkyOWRjYzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI3YTcwNmYxZDg0OTg1OGIyNTg4NzI0ZTk5NmUzZmQ5NTMwNmJkZTRiOWM0YzdmNjhlOWNlNWRhNDZkY2M0MmMifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/update-controller.svelte.test.ts#L56-L80",
+          "version": "repo-lines-v1:sha256:6937ff8696c48e2fca89a49d9a89162b6959143bd214af2c24b7d99b7d9bd127:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJlNjRhYWFkMTNjOTVlNzIyNmE1NTFjZDRhMmI5YTM1ZGE3MDA4NzgzMTM0NGQwZDhiNjZjZTIxZGJiMmM5YTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxNDEyOWQxMWM4NDNlZTNmMGZkMzM0NjQ0Mzg4ZmJiMTYyNDMzMzQ1M2UwMzdkZTlmZGM4ZjU1Y2ZjZjI0NDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxOWU1YThmODE4NDI0OThkODEzMjQ4NGQwYjBmNjJkY2Q1MjE5MTZhZDliYmNhZTA3NzAxZmIzMDdlZDVhNDkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e6832851d6224faca8f47358a660f15a",
+      "statement": "The Windows release job separately builds a Store-channel executable, packages and validates `Lymic_<version>_x64.msix`, uploads it as an artifact, and attaches it to the matching GitHub release; the normal Tauri matrix build is not given the Store environment value.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L70-L103",
+          "version": "repo-lines-v1:sha256:038a9aa8dc122a98223759948a1aa3e34986dbe2d6b62ea6463528a1cfa7ae11:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0ZTBmZDlhNzdhM2QzYzg1YTBjMGRiMmNhZTZhYTBiYmFiODIwYTcwOTExMzZlYzg2ODFiYjg0OTIwNjc5ZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4MDA1ZDU3MTA2YTM2MmViMDAwZGFmM2RhNDY3NGM4MmI1MThmZjVhMmUyZjY3ZWU4ZTc1N2EzMzNjMmFmNjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjliODI3NGFiNWM3ZjEwNjRiODhiYzE1Mjc2YTViYWU1ODZhOWQwMDhiNTQ4YmEwMjk0ZDg3NTc3Y2IzZjk1NzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_61d18edeaf0b4190b66473eaf47ebab4",
+      "statement": "`package-msix.ps1` normalizes versions to four parts, requires an x64 Windows SDK `makeappx.exe` and release executable, stages the executable, icons, and substituted manifest, then fails if `makeappx pack` fails; it defaults to the Store identity `xXRoxXeRXx.Lymic` and publisher `CN=xXRoxXeRXx`.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/package-msix.ps1#L1-L58",
+          "version": "repo-lines-v1:sha256:439fc1dff813c6832891024ed817ad8933c69e99aeee9015b891941d54a2dee3:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1MGJlMTgwZGE0ZDU4NTQyMzc0NTNmMzU5YzBkZThjMzhkNzQ3OTFlMjk4YTJlZGI2OTNjNjViMDg5YmIyMGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVkODk0MTI2MjFlNmQxOGVjYTA3NjAyNTA4Njk4MjVlYjZiYTZhOWRmMGFjYjI1M2NiNTZmMTE5NjA3NGUzM2EifQ"
+        },
+        {
+          "resource": "repo://scripts/package-msix.ps1#L61-L108",
+          "version": "repo-lines-v1:sha256:7b53eddaa58a1693ca21fe814b8967d7919c5d1303a93b31df1fab0fce97a9de:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMzZmQ1ZjA1ZmUyOGM5ZDhkZjU0NmY4YzVjYTg4MzRlZTU2NTFhNTAzYjk0ZGQ3NzFjZGYwYTNkMTFkYTQ0MDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiZjFhMTc0NzVmZjg1NDNmNjI4MGVlZmY0M2RjMmRmOWVlNGY0ZTc5NDIzNDk1YmUzYzgyYjliZWM1ZDM3NmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fb1b3331b4bf45f9b4ded6dd6ce47918",
+      "statement": "The Store manifest defines an x64 full-trust desktop application with a Windows 10 10.0.17763.0 minimum and declares `runFullTrust` plus `broadFileSystemAccess`; MSIX validation rejects a missing archive manifest, identity/architecture/version mismatches, or either missing restricted capability with exit code 1.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/validate-msix.ps1#L13-L40",
+          "version": "repo-lines-v1:sha256:352067400c4221bbf52aa8ce5e82c6fad9db15b4fdd598f7b36ea77d8c578751:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhmMWY4MzlmNzU1NmJlYzNhMmJlYmEwMmI3MWRkODg1NjhiOTEyZDZjMmIyNjdiYzZhYmVmZTAzNGJlYmJmYjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI1Nzk1NzlhYjNmNDkxMWFmZmY1MTUwNDU1Y2Q0ZTVhNzUxNTJmYzE5MzAzOWUyYWU2MmZiMWY0M2I1YTQ5ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM1NWE4MDk1NDk3Y2ZjZmZiMWExNWUzZWQ1YjY0Y2YwZGVjZTdlOGIwNzM0YmQyMDg2MGFhY2MyZWQwMDE1NDUifQ"
+        },
+        {
+          "resource": "repo://scripts/validate-msix.ps1#L42-L98",
+          "version": "repo-lines-v1:sha256:26cbd91eee48e347143540bfe001580ea1a88f002a70c64e269b67ca8c631511:eyJzZWxlY3RlZExpbmVDb3VudCI6NTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiYzkyMjBlZjlkMmFiNWNmYmMwYmEzZjlhZmRlZmI3ZDljZDc4ZDU5MjBjYzcwNGRjOWFhMzU2NDQ3M2RmZTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkNWQyNTg1ZTQ5ODY2NzE5MGQzZDE1MDA4NDUwNTBlNzUzNGU2YzlmNmVjMTZiM2EyM2IyMzY2ZjVlOTNhYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://src-tauri/msix/AppxManifest.template.xml#L8-L49",
+          "version": "repo-lines-v1:sha256:c4b2e1401599356a362cb81a927a4e2bdf60b4638d09e21d7ecf3de6996f215e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5Yzg0Mzg3ZDkwODRiNjcyNGFjYTkzZWFjMjI2ZmY3M2ZjODZlMDRjMjhlNjllNTQ5NTU1ZDIzNWIwNmE3NDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1M2ZlMjExODAyMWI3OWQwNDgyMmI0N2Y4M2JhZjg2MGJmYWQzNGI4NzkzODFlMWNmNDczZDBkZjllZTkxYTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZlMjQxZWJmZjNmZGMxNjE2OWUyZmMyOTg2OWQwMDliODUzNjI3NzBhMWNjNTQwMTBlNDk4MWMwYzJhNmJhMDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZlMDU3ZjEzNWMzNjVjMDEyMjhmNWU3OGI0ZjU1MDM0YTllNGNkY2JlOWE5N2Q0Y2VmMTM1ODhiOWZmNjViYzcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_772a5ed871764d4b876ee04b71985726",
+      "statement": "Microsoft Store distribution is intentionally a separate x64 MSIX channel: Store supplies package signing and updates, GitHub/NSIS retains its Tauri updater, and the initial Store release does not migrate configuration or queued synchronizations from NSIS; public release remains gated on Flight and capability-validation criteria.",
+      "evidence": [
+        {
+          "resource": "repo://docs/adr/0004-microsoft-store-release-channel.md#L1-L15",
+          "version": "repo-lines-v1:sha256:aa259979f431119d3f09544fee24e2ae39abbe722dd093a25314732dd4c9c290:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzZmJlMDU5MDgwY2M1MWJmZTNjOGIwZTIyM2M4MDg3ZGQ3NDYwZGM4YmYyYjM2OTU4YjYzNjJmY2NlMjA5MGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://docs/store/flight-validation.md#L19-L55",
+          "version": "repo-lines-v1:sha256:2e420a20da44b9095125698c2b1d4c654cb254e8dc8651a50300d084a2cda4c6:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwOTRmNTUxMmI3ZTdhNjJjMTBiMTA4Y2QzMTUxYTZiMjcyODYzNThiZTEyMjYxYzBhZTQzN2VhYzJmYjVjZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmYzgzMGE2ZTRjZjg0MjM0OGQ4OTFmOGJhNjMyMzM1NjM2NmM1NDkxODhjZTIxMzk0OWI3MTEyN2VlMTFjODEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T12:52:45.890Z"
+  }
+}

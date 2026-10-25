@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:7c1a360a678ede33b459f18d34924e6fb1d35cac3310cbc7f9b8e8838b623ff5",
+  "pageVersion": "sha256:a48d292f9abf9c6549aaf0cddb2e31e9ae98304a1bfa07ce7d2e666b1e4a7ecf",
   "claims": [
     {
       "id": "claim_307a20f803294b5582675f834f48ba0a",
@@ -14,15 +14,27 @@
     },
     {
       "id": "claim_0fbffafac8db4fe8a17333796745cff8",
-      "statement": "The `start_sync` command is a thin Tauri adapter to `Synchronization::start`; that service requires a watched folder, rejects a concurrent manual run, starts the synchronization lifecycle, scans folders, and delegates to the sync pipeline, aborting the lifecycle on an error.",
+      "statement": "The `start_sync` command is a thin Tauri adapter to `Synchronization::start`; the service requires a watched folder, scans and admits its work, and atomically claims a running lifecycle before pipeline execution. A concurrent producer joins the claimed lifecycle rather than receiving an independent run, while a failed manual run clears the guard, persists/emits a failed snapshot when possible, audits the abort, and returns the error.",
       "evidence": [
         {
           "resource": "repo://src-tauri/src/commands/sync.rs#L17-L32",
           "version": "repo-lines-v1:sha256:2941a36f32269bc5853a1f1abceaf001795334203366838391cd62ceeec61c3c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllMWVlMzNlZTk1ZmFlZTFjMTBlOWViZjNkM2RlNDFiYjE5MjUxNWNhZDc3Y2RhMjA1ZTU0NmRhMTcwMDFhNjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzMWExZWRhOGQ4NGI3NjI0NGEwNzIzZTRlZTIwNjQyODI1NTFhNmEyMzkyOTUxNWIzMzU5YWNhZTllMzZmNTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYzOTU0OWMyNTRiZmI1YTcwYzM1NjQ1MmYyMmVlMjE5NmJkOTQ1NjVlMDA1MjM3NDA2NDEzYmE5NDhjNjIxODgifQ"
         },
         {
-          "resource": "repo://src-tauri/src/sync/service.rs#L124-L199",
-          "version": "repo-lines-v1:sha256:8e09e9ca7691a5196322a1da6755d6654a37ad048585eb81adca6f588df00d1a:eyJzZWxlY3RlZExpbmVDb3VudCI6NzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmZmQ2YzZhNDlkMGY5NTdkY2Q0YTljNDQ4ZTMyZmYwNzg0MjZmNWJmMzQzM2RjNzFlMDVhNDI4ZmZlYjc5MGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1YzI1MmE3ODVhOTNmZWNiZWQ1ZDE2OTU3Mjc2NjUwNDU5YjI2YjljOGQ2YzBiMzhlMmQwOWUxNzM2OWZlMjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkxYTQ1OTQxOGNhYzVmMzVlZTk5ZDI5YTYxN2Y5NWYwZTY3NGQ2YzA0MGU1MDkzNzQ2NDYyNTYyMmMwMTg0YjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIyOTZkMDE3ZTllZWU2NWUyMjM3YWY1MTI0NWY4MWExZWY0ZTYwMjRkZTFiMjA5M2M0OTUyOGU1YzBlZjdlZWEifQ"
+          "resource": "repo://src-tauri/src/sync/service.rs#L183-L208",
+          "version": "repo-lines-v1:sha256:66e4d4c7b27b7c210486316e2430decb695b90e9aba6cc67f3e98dd23c8b842f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmZmQ2YzZhNDlkMGY5NTdkY2Q0YTljNDQ4ZTMyZmYwNzg0MjZmNWJmMzQzM2RjNzFlMDVhNDI4ZmZlYjc5MGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiMjNkODdhMTM3NTI4ZWRjNDgyOTY2YjdjYzJmMzY5YWI4YTMwMzdhZWVmYjI1NGNlNTNjYTc4ZjRiNDRlYmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQxNzUxOThlODY4OGRmMjJmYjZkMTQxZmYzNTFlNTE1MGM5YzQ4NTg5YjZmNmFhMGFiZmY4YWQwMWYyZDg4MjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIyOTZkMDE3ZTllZWU2NWUyMjM3YWY1MTI0NWY4MWExZWY0ZTYwMjRkZTFiMjA5M2M0OTUyOGU1YzBlZjdlZWEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L231-L277",
+          "version": "repo-lines-v1:sha256:7588f2ece75761e57285bfd0e7b0b0ce483df69ed7a02c755ee4ef8e4f6e61a7:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZjFjZGEyZWE4ODU2YjgyNGM5ZWEwODUxOTI2YmZmNTMwZDg3YjBhOTE0N2ZhOGJlNTI4YjBjYzZkM2MzM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MjJjNDJjZDE5YzZkMDNkODA4YzQ1MjcyMDU1MjgyNWI3ZWExYzViNDkxYjIxODUxMWNhYzc0MTVjZjlkOWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY1ZTFjZGZmNDYyMjc0NzczOWYxOTkyYjY5NWZmNGIwZDE0ODNmNTk3NjVkNDAzNmU3MDk1MWIxNTFhYmI2YjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0NDAxNTA5YThlNmM2Yzc1MDE3ZjU3MDk3MTg1MTgzZjIzYTViNDRjZmM0ODViNmMzYWNlZWM3OTc4MTg5OWIifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L308-L327",
+          "version": "repo-lines-v1:sha256:e396dd788ae6de53a62e26b64ee71aebf5931388384423a52214f7be015c6ff5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI5MjA3ODRmMzUwYjE2YWQwZGY2ZjIzYmFiOTM1ZWJhZjc4MjFjY2M4MzVkNTk5ZDI1Y2YyNjlhMWY4NWM3MTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg5ZjE2Zjc5YWEzOWUwMjY1Mjc2ODM0NWRiMTQ3MjZlMzliNDU2YWRkMDQxZDg2MjE5YjczYWIxZjc2NDUwZjkifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L81-L112",
+          "version": "repo-lines-v1:sha256:56640fadf5dbfc002ff5fe93588507208c744c558ee48afc7adeeb89add3db19:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjljNzMwM2M3NWVhMGMwZWJjYjQxYTE0ODUzODMwZWIwM2JjYTY2YTJlZTcxYWZjODJkNmU5N2M1ODE2OTgyMTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhZGIxYzAyMWZkZDhiMGI2OGQ3NTkyODM5ZTc4YjRiNmU0ODAyNDY4MmZmNDc3ZDgxZDNlMTIxNzgyYTkxYTgifQ"
         }
       ]
     },
@@ -45,8 +57,8 @@
           "version": "repo-lines-v1:sha256:e8d17a46c04f3dc345e82c17192d49bae9b9051d6a65b3bdda1ff90e0098f50d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhMjUwM2EzZTJiMjkxYjNhYzZkY2U2NzdmZmZmM2E5NjM2NWQ2MGY3NmRiODRiY2EyYmZlNWQ2MTgxYjMyZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzZWFlOWUyMmQzYmYyNTg0ZWZkOGVmZTJlYThhZDE0MGEwMzk0Mzc5NmJlYjExMDk0MWUxMjg2NWIxMTg3MzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkzZjIyNjU4ZGFhN2VmNWU2MDk4MjU3NjlmYWE1MWVjYWU4ZTg4ODlkNzlhNjUwNTM0NjQ4ODI2MjZhYWJiMDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhNzFlZTM0NGU3YjY2ZTQxZWQ3ODA4ZmUyYzlhZTFhNjY5N2FhZjU1NDNkMjNiNDM4ZTZkMjdlNDFhYWQ4ZDcifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L91-L304",
-          "version": "repo-lines-v1:sha256:b9813447e2a03fdc482ded5c62cd2f67747ca2b68698d63cf14e7592ef1833c4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjE0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmNWMxZWI4MjRkMmY4NGY3YzdmYjQ0MjBkNzE0ZDU3NzVhZmNlZDI4ZDBjNmE4N2VkMTFhYjc0N2VkZWRiYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3ODhlN2M1ZWVjNWZhMGM1NzUxZTI0NTBkOGE2MWZlM2FlZjk1MzAzYTM4MGE3OWZlNmY3YmEwNWNlMDc1MTE1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5OWI4MDk4NTQwYjc3MGVlOTYxZWRlN2QxYTk3ZDYwM2JhMjA4NGU1NTk2YTI0YzQyNzc3OTAwNWJkM2FlMzk5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1ZWI1MTY1OGM0ZmYwMzVmZWNkZWI0YzI2OWVmYjJkMzNhNjdhYzk5MjhhMmE2YzJkMmQ5YTE0NjMwYTBlYzM1In0"
+          "resource": "repo://src/routes/%2Bpage.svelte#L91-L305",
+          "version": "repo-lines-v1:sha256:909a5c827792b102786838df5f361091cfaf9cc003c785a85e70c4a7e928c5c6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjE1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmNWMxZWI4MjRkMmY4NGY3YzdmYjQ0MjBkNzE0ZDU3NzVhZmNlZDI4ZDBjNmE4N2VkMTFhYjc0N2VkZWRiYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3ODhlN2M1ZWVjNWZhMGM1NzUxZTI0NTBkOGE2MWZlM2FlZjk1MzAzYTM4MGE3OWZlNmY3YmEwNWNlMDc1MTE1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5OWI4MDk4NTQwYjc3MGVlOTYxZWRlN2QxYTk3ZDYwM2JhMjA4NGU1NTk2YTI0YzQyNzc3OTAwNWJkM2FlMzk5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1ZWI1MTY1OGM0ZmYwMzVmZWNkZWI0YzI2OWVmYjJkMzNhNjdhYzk5MjhhMmE2YzJkMmQ5YTE0NjMwYTBlYzM1In0"
         }
       ]
     },
@@ -55,11 +67,11 @@
       "statement": "The sync controller treats backend data as the reconciliation source: it hydrates folders and a sync snapshot through commands, applies pause/resume snapshots returned by commands, and refreshes failed items and folders before resolving a completed sync to idle or error.",
       "evidence": [
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L143-L176",
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L145-L178",
           "version": "repo-lines-v1:sha256:0143d4f396da34445b6c81a02264770843cecdf18cf5b696f61f6b06d0418355:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3OWEwNmZjZGE3OWJmYjJjMWViN2JmMTYyZjdmMGI3YzM0MzA1NjllMzA5OTQ4OTAzZjllMmFmZjU1Y2ZiN2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM1NDkxZDA5NTA1MmVjMmZhZDk5MWQ1YmVkMWQ5ZWZhMWRhYjYxMjJmNjVlMzYzZDI4NDY0ZTI5OWE3YjNkODIifQ"
         },
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L195-L225",
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L197-L227",
           "version": "repo-lines-v1:sha256:e040e8271523fffcb894bd4cc4dd66a1a4c8cbf57f8dd3731a9bafa367d4ffa7:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIwY2NiNjMyNmRjNjM4Yzk2MTBiYjg1ZjU2NThjOGIzNjFkYzczMGUwNzlhMjFkMjlhODlmYThjZTU0ZDQwMjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlZjA3MWE3YzIwY2Y4ZmE1MDA2ZDJmNjFkNjlhY2VkZDcwMmJiODNlNWMwMTRkMzdhZjU0ZjMwNDJjYzhkMmQifQ"
         }
       ]
@@ -69,7 +81,7 @@
       "statement": "The route starts sync event subscriptions only after sync hydration and tears down controller lifecycles on unmount; the sync event helper also immediately removes a listener whose asynchronous registration resolves after disposal or inactivity.",
       "evidence": [
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L376-L381",
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L378-L383",
           "version": "repo-lines-v1:sha256:47eb141ad60e937eb824cd3308507f35894e70e133b0a2e2d1ecca261b40003b:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQ0NzZmNzM3YjJjNTFhM2U1Yjg2YTI5Y2Y1YWEwNmJlMGVlNmI4OWJiODgyYmI3ZDg1Mjg2YmVkYWJiN2U1MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDUwYmY2MmNkODNmNmUyYWRmOWRmYWI2NDE3ODE1YjE5ZjdkN2NiMWNiYmNiOGFhNDI2YmYzOTQyZTYxYmEwNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWU3YTE1YzBmZjFmNjI5NDc0YjFhN2Q3MDgzZDA5MTI5MTQ0ZjhjMTFiMGVjYTNiODAzNDQ5MDU3MjVjZTc0NiJ9"
         },
         {
@@ -91,11 +103,11 @@
       "statement": "The sync controller uses a two-stage folder removal protocol: it first invokes `remove_folder` to obtain cancellation requirements, asks for confirmation, then reinvokes `remove_folder` with `confirmCancellation: true` only when confirmed.",
       "evidence": [
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L291-L308",
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L293-L310",
           "version": "repo-lines-v1:sha256:891c14ccb5af747a19cab52913b1e16298590e164b8d8b91362ad44909bc5898:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0N2I3OGIxODE5MzZjOWVjZjk4ZTI2ZmQ0ZDZmZjY0ZThkNWEyMTE2YWEyZDhiNTI3ODFlNDZmNzhhZWQxOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhOWI2MzE0ZDYyYWIzOGM2NzZlODVhODU5ZTI4MzQwYzQxZmJjOTQ3NTAwNmFjNThlYWFkMjA1M2VjYmRjODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwNDkzMDczOTg5MTNjZjg0MTQ5NDc3YmUyMDE0ODg0NGQzNjViMzM0OWQ1YjllNWYyYTk2MmZmMDc5ZGEwMDUifQ"
         },
         {
-          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L73-L76",
+          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L76-L79",
           "version": "repo-lines-v1:sha256:f7aff8ddc3ff4659dbaf32f0673aa9a6c9d3ce6512066d25fa0c0c84e81c3f5f:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjVhZjlhMmRmODhlNjA4YmRkZjgwNDZjYTdjNzIyYWI2ZWZjYzQ3YThjNDFmNTAxYmZmYThjYjgwNjA4ZGU1YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzAxOTk1ZjJhM2U0YTNhNzBmMmVjNmVlZWNmN2I4MTZiZDY5Mjc4ZDRlM2E2NzZhOWZmNDkxOTQ0MGJhYzcyZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDYxYzI5YTY5NTUxYTNkZGZlNjhkOGRhNGNjYThkMTVhNTIyMGY1Yjc0NWRiMzcxYjY0Y2UxNjAyYzMwYjYwNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDIwYzkwNDY1Y2I5MDFhZjk3OWE3Y2UxMzllNTcxNDY1ZWEyZmU0NGYyZWMzZDMxOTk3NzA0ZTdhZjc5MGZmYiJ9"
         }
       ]
@@ -116,15 +128,23 @@
     },
     {
       "id": "claim_ff3688f3f9ba4954a0614bdd3ffb2524",
-      "statement": "Update installation is guarded against active synchronization; when allowed, the update controller reports download/install progress, installs through the updater plugin, and relaunches through the process plugin.",
+      "statement": "The update controller disables update checks, installation, and update UI for the `store` release channel; for a supported channel it also guards installation against active synchronization and an in-progress install, reports download/install progress, installs through the updater plugin, and relaunches through the process plugin.",
       "evidence": [
         {
-          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L66-L83",
-          "version": "repo-lines-v1:sha256:d3fbda45c3b3f81358c5b6863800bd8293f2e7f816b2411b866f70690f264549:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxZmQzNzg2ZWUxODY1NDQ0YWU3MDY1YTYxYzdkNDdiMDRlNjY4ZWQ4N2NhMjc4MWZmYWZhYTQzMzY1YzJmZDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVlNTNhY2UyMTNkNWFkMDQwNWZkMzQ1OWRiM2Y1YTNjOTg5NmUzYjFiOWU4YmVmMGMxZDNiODU0MjM4NTYyNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2ZTE4YzJmODhiMTg5M2Q0Mjk3NGE1ZDBiMjIyYjhmNmI2NjZkNzIxN2YyZTEyODE0NmVhY2FhYjY4MWRmODAifQ"
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L100-L116",
+          "version": "repo-lines-v1:sha256:fd3d3abc93ee1c408f40a33638f2a5527aae93e117614068191a0c123a9ea60c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5NWZhMGYxMTE3YjVlYTQwNDM0MTQwZGRlMWEzNDBjNzIwZGRiZjMyNjIxMmUxOTE4MzhkNGIxNTZkMzE2YmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5NmQwMWYxZjBjODZkZWE5MTM4ZWU0OTU1NTI3MDBlYTU2YmUzYzVmMDA4YjU1YmZiNzcwZWYyMTk0ZmEyOGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRiNDQ2MmQwNzIyZmRmYzA2YmE3YmZlNWMyMTA5ZThhM2RlZDY0N2U3MGNjYTY4MTU1NzBhOWU4MzE1ZDBkM2IifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L57-L57",
-          "version": "repo-lines-v1:sha256:d3eae9e22d3bf2584efd8efe2ea8ad140a03943796beb110941e12865b118731:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDNlYWU5ZTIyZDNiZjI1ODRlZmQ4ZWZlMmVhOGFkMTQwYTAzOTQzNzk2YmViMTEwOTQxZTEyODY1YjExODczMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDNlYWU5ZTIyZDNiZjI1ODRlZmQ4ZWZlMmVhOGFkMTQwYTAzOTQzNzk2YmViMTEwOTQxZTEyODY1YjExODczMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGU4NjBiNTk4MjkwNjFhMzliNGFiZDVlMWEwNzBhYzEzNjFjMGY5NWVkN2YyMGM1ZWEzOTNmOGU1NmFlZDdkMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWE3MWVlMzQ0ZTdiNjZlNDFlZDc4MDhmZTJjOWFlMWE2Njk3YWFmNTU0M2QyM2I0MzhlNmQyN2U0MWFhZDhkNyJ9"
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L31-L49",
+          "version": "repo-lines-v1:sha256:0dc77521537d118ffc078c1bfdc456516bfe0ef5165be638868d251fd48d9a13:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkZmQ3OWQ4Zjc3Mjg4M2VkOGI5YTAwZTZkMDE5NGI1NTI5NGM4NjQzNDJkNDcyOGZmYTQzZTk5ZGNlMzVmNzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUyNjZiNjIxYzI2ZGE4YzM2MTA2MTI0YTRlNWFjMWFmZmNmMzU1MWNhYzhiMTM2M2I5Nzk4Zjg1MWE5ZTJiOGEifQ"
+        },
+        {
+          "resource": "repo://src/lib/controllers/update-controller.svelte.ts#L55-L98",
+          "version": "repo-lines-v1:sha256:8fd8e193bdd76d20a53e479649548059eb37d9f477d68cabd2eef61d20d73444:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2MDYxMTIyMDg1ZTM4ZDk1Y2Q4NzM5YmU3Y2M0NWI2ZmJiNWJkMTY4MDEzMjhiMDdlZTQwNDZjNjkyMTc4ZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdjZjQ1OGFkZGU3NjZmZjM1NjVlNTE1ZmZlOGNkYjAzZGE0NGRlNzgxZGVkOWI0ZGFkOTdkZjJkZDQ0Y2RjMTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdmYzY0ZDFiYTM1NmJmYjcwYTQ0OTU2NDAyOTM5MjkxZDE3YzRjNGVhNjE4MjYwMmJlNzkwOTRlZjc4NmFkZjAifQ"
+        },
+        {
+          "resource": "repo://src/routes/%2Bpage.svelte#L285-L295",
+          "version": "repo-lines-v1:sha256:c75555db57b8ff709741ca6cc8b9aff0d95f3fe0b9c45a5f5c30df4e5a03be4e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5Y2Y2ZmY5MWEyN2MxMTljYWVkNGYwZDdmMDE1NjRlZjJmMmMwODY0MmZjZmUwYmNjOGZiYzliY2FjNjdlOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3YWQ2YTdiYWFkYjcwODAzNDU3NGVlMDQwY2I4ZjA1ZTc5OTVjZTUwNDk0ZTIyZjUyMDZlOWEwYTE2N2ZiZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFmOTc4Y2I4NjBiMDU5ZTIzYmY5MGM0YjgzOTZhNGNiYjJhODk4N2U4MjlkMzZjMWZlMDc0M2ZlM2IyMTRlNzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU3ZTNiNDc2NTcwNGIwYmRjZGE3YTE2MTExNDU1MTc4MjdhYTQ0ZjQ0MDEwN2Y1N2ViZGNjMGRlNmI4OWMwZTkifQ"
         }
       ]
     },
@@ -141,7 +161,7 @@
           "version": "repo-lines-v1:sha256:fe79b817309e08159312f0e1ff127c3db57fd35fb88917d335ce906195db03bb:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyMjkwYjRkYzNjYjI1NTVkMWNkOTFmNzdkNmU1ODJiYjRlODYxYmYyNTkzOGU4ZWJiZWYwNjA2NGE3ODAzMDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyZjNjZmQxMWRhNjE1MDE5N2FjZWVkMDg0MDZhYzY0YjA1MDM0MGRlN2JjMDQxMjRhNGNiN2VmYTY3MTM0MGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBhZTA3OTdjOWQzMzRjODJiMTBkZWRjNWVlMTk3MTk2M2ZkMGZhNDA1OWY4ZTVlM2Y1MGE4ODA1ZmNjMjQwYmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg4OWNjMzM0ZTE4ZDU3YjlhZWZkNjhjMzVkZjg2ZmE5ODBjZWYwNTE5MDE0ZTk3MDdjOTg0MjM3NzliNmY4ODIifQ"
         },
         {
-          "resource": "repo://src/lib/components/components.test.ts#L552-L573",
+          "resource": "repo://src/lib/components/components.test.ts#L594-L615",
           "version": "repo-lines-v1:sha256:3a94fc3ad56b5afc4dfc0fc9b4bc6770d68efa2c2f2e949f90366d7c23d4022d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkZTUxYTU4ZThhZDJlODAzZWZhOWU4MWU3MWFhM2NlY2E1NDcxMjI2NjAzM2M5OTM0NmNjNjhjYjgwNjc0NmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NzlkMTE4ZDZlM2NiZjQ1MDUzOTc0OGRlZTdhNDMwN2FjYmU2NDQ2Y2JhMjk3ZjI3NjBmYTVkMGJiYTFiYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
         }
       ]
@@ -173,16 +193,16 @@
       "statement": "`DesktopAdapter` is the typed frontend contract for Tauri commands, and the production adapter maps its methods to `invoke` calls with camel-case argument objects; a Rust test checks that every adapter command string is also registered in the Tauri invoke handler.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L151-L194",
-          "version": "repo-lines-v1:sha256:48f4d8cb9d79b68990da024c1c44a504655a5a20a775aa7880758f9feb271a6e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1Y2Y1ZmMyM2YyYTZkMjNjM2VhNTFlNzJmNWU4OTZjNzU1NWZiYWEwNWNkNWIxZWExODJiZjk2MThhOGU4MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0NjFkNDcxZTE1ZDg2MDVjN2Y5MjI1MjJlNWE2ZjFkNjgyNDZjMDMzODhmYWQwYmY3NmZiZDY4OWU3Yzg2MWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkOTAzNTEyOTg2OWUzNDVjYWExNDliYjNlMWE3N2E0NTBiN2E2MDMwNjIyNWEzNWQ4MDE0Y2RjMThmYmJhOTgifQ"
+          "resource": "repo://src-tauri/src/app/mod.rs#L152-L196",
+          "version": "repo-lines-v1:sha256:c4d4854c6661abdc0899c1c507c0992118a460b49da851212ce50e98942fe531:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1Y2Y1ZmMyM2YyYTZkMjNjM2VhNTFlNzJmNWU4OTZjNzU1NWZiYWEwNWNkNWIxZWExODJiZjk2MThhOGU4MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0NjFkNDcxZTE1ZDg2MDVjN2Y5MjI1MjJlNWE2ZjFkNjgyNDZjMDMzODhmYWQwYmY3NmZiZDY4OWU3Yzg2MWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkOTAzNTEyOTg2OWUzNDVjYWExNDliYjNlMWE3N2E0NTBiN2E2MDMwNjIyNWEzNWQ4MDE0Y2RjMThmYmJhOTgifQ"
         },
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L92-L117",
-          "version": "repo-lines-v1:sha256:68b17e9932860d078c3d30f4249ca4829c30c9ad45adff367471d4bfd3357e53:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhM2I5NWFlMzgyMWJjZmZjNDQzYjQzOWUxZjY5Nzc1MmUxNjA1ZDdkNTVmZjA2OGY4ZDk4NzE2MzFhMjRkZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyNzZjMWQxZjk3ODVlNTU2MGQwYmI1Zjc5YzJlOTc5OTk3YjcwY2RlZDFmM2I2OGVlYjBjZDE5MTBhZTIyN2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiMDE2ZjE2M2NhYWFjM2YxMGVjNjg4ZjE4YTFjMjcyOTUyOTg1MDY3OGRhZmM0YjAwNzg4MWIyNjE2NjdlNDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwZTQ4ZGU2NjVlNGE1YTNmMTZkZTkwYjQ5MjI5YTU4ZTcyNWQwNTkwZjA2ZTljYzYzMjdhOWZkMGQ5Nzg3N2YifQ"
+          "resource": "repo://src-tauri/src/app/mod.rs#L92-L118",
+          "version": "repo-lines-v1:sha256:4f3df4c26c856ad3d1ba07b776fb323d16848caa020e4b93830491813b19ae6f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhM2I5NWFlMzgyMWJjZmZjNDQzYjQzOWUxZjY5Nzc1MmUxNjA1ZDdkNTVmZjA2OGY4ZDk4NzE2MzFhMjRkZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyNzZjMWQxZjk3ODVlNTU2MGQwYmI1Zjc5YzJlOTc5OTk3YjcwY2RlZDFmM2I2OGVlYjBjZDE5MTBhZTIyN2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiMDE2ZjE2M2NhYWFjM2YxMGVjNjg4ZjE4YTFjMjcyOTUyOTg1MDY3OGRhZmM0YjAwNzg4MWIyNjE2NjdlNDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwZTQ4ZGU2NjVlNGE1YTNmMTZkZTkwYjQ5MjI5YTU4ZTcyNWQwNTkwZjA2ZTljYzYzMjdhOWZkMGQ5Nzg3N2YifQ"
         },
         {
-          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L27-L97",
-          "version": "repo-lines-v1:sha256:47df662342c9dd035ec9f92b2f9fcc5f5b56f0dee6908fb60ed0c5e3e4a06f84:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkMjdiYTZlY2Y5ZDJhNGJhMTcxZGQzNWViNzE4MTIyZmUxYWMwMTNiNzU4YTFhMjU5ZjJlNjk5M2FiMDdiNjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMWQxYTYzMzkwMjI5Yzc5ODM0N2U4M2EwNDA1NDQxYzk0MDAwMzUyODRhZDE2OGMxYmY2Y2RmMWQ3MGEzNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ1YTNjYTdjMDczNGE1OTUxYTIwNjcxMmRhYTNkZWQ0MTY2ZjNjZmZhY2RkNjBmNmIzNDQ4MDY2NTczYzg5NDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L27-L101",
+          "version": "repo-lines-v1:sha256:a8359a1f7b81bfb457140629c7363f6ea1731863f8768cc580d87c7cd2285224:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkMjdiYTZlY2Y5ZDJhNGJhMTcxZGQzNWViNzE4MTIyZmUxYWMwMTNiNzU4YTFhMjU5ZjJlNjk5M2FiMDdiNjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMWQxYTYzMzkwMjI5Yzc5ODM0N2U4M2EwNDA1NDQxYzk0MDAwMzUyODRhZDE2OGMxYmY2Y2RmMWQ3MGEzNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ1YTNjYTdjMDczNGE1OTUxYTIwNjcxMmRhYTNkZWQ0MTY2ZjNjZmZhY2RkNjBmNmIzNDQ4MDY2NTczYzg5NDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
@@ -191,7 +211,7 @@
       "statement": "The root route starts controller lifecycles before hydration, starts sync-event subscriptions only after sync hydration succeeds, and destroys controllers/subscriptions on unmount; the event adapter immediately unregisters listeners that resolve after disposal or deactivation.",
       "evidence": [
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L376-L381",
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L378-L383",
           "version": "repo-lines-v1:sha256:47eb141ad60e937eb824cd3308507f35894e70e133b0a2e2d1ecca261b40003b:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQ0NzZmNzM3YjJjNTFhM2U1Yjg2YTI5Y2Y1YWEwNmJlMGVlNmI4OWJiODgyYmI3ZDg1Mjg2YmVkYWJiN2U1MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDUwYmY2MmNkODNmNmUyYWRmOWRmYWI2NDE3ODE1YjE5ZjdkN2NiMWNiYmNiOGFhNDI2YmYzOTQyZTYxYmEwNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWU3YTE1YzBmZjFmNjI5NDc0YjFhN2Q3MDgzZDA5MTI5MTQ0ZjhjMTFiMGVjYTNiODAzNDQ5MDU3MjVjZTc0NiJ9"
         },
         {
@@ -209,11 +229,11 @@
       "statement": "The sync event boundary subscribes to progress, snapshot, pause/resume, error, trigger, log, and idle events; the sync controller maps them to derived dashboard state and uses `finishSync` on idle to refresh persisted failed items and folders before selecting a terminal state.",
       "evidence": [
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L152-L176",
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L154-L178",
           "version": "repo-lines-v1:sha256:95612f0ef720b607421f0f978011a9cbfa650b41057d9d8926edc4ea572d90ed:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0YmE2MTFhMjRiM2EzMzMyZTlmOWRmNDVmZTNhY2QxNzAyZGIzYTdiZGJlZDU4ZTBlOTc0MWU2YTBkNTI1ZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM1NDkxZDA5NTA1MmVjMmZhZDk5MWQ1YmVkMWQ5ZWZhMWRhYjYxMjJmNjVlMzYzZDI4NDY0ZTI5OWE3YjNkODIifQ"
         },
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L320-L354",
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L322-L356",
           "version": "repo-lines-v1:sha256:8212a8330708e6997a5e10b94ecd8c2f41229566c894ccb35e19898df658bd4e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzYWE4YzkzZjM4MmQzZWI3ODZkMmMyMWE2Njc1NmNkM2RmODIwZWU3MDEyOTYyNTZlYTI4OThmOWIyY2Q5N2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3N2YwM2VhODE3OTUwOTYzYWNkZTViOTg0YTJhYjBiMDIwMGVhMjUyMGU2NGQxZjQ1NTI5ZThlN2VhNTkxOGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE3ZDM5OTRlMDYwYTJhOGM1NjdhYzgzNTU1ZDI4NzU3ZWE3Nzg0Y2VhZTNlZWVmMWE3NTk5ZmU1YjA4YzAzNDMifQ"
         },
         {
@@ -227,7 +247,7 @@
       "statement": "A removable-volume folder is not dismissed at prompt acceptance: after the picker and album selection, the sync controller calls `acceptRemovableMediaFolder`, invokes the supplied dismissal callback only on success, and refreshes folders.",
       "evidence": [
         {
-          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L242-L281",
+          "resource": "repo://src/lib/controllers/sync-controller.svelte.ts#L244-L283",
           "version": "repo-lines-v1:sha256:6f96bd598c936c99ae86c02e6a64344b0005459a71efe97a62d8577c0b0f04c7:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0ZjMzODMzMWI2YjY4MjhiNDdmMDgxMGI3ZWVkMWJhMDBhNWI2MWZmODE2MTc2OWY5NDc2YzQwYzgwOTJkMzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ODliNjljYWE3Y2RlMWJmZDIzZDdmYmEzNWQyZTJhMjg4MDY4Mjg5YmI1NWQ2Mzg2OTg2NmRmZWJjOTQzOGIifQ"
         },
         {
@@ -239,6 +259,6 @@
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-19T15:10:01.321Z"
+    "at": "2026-10-25T12:52:45.890Z"
   }
 }

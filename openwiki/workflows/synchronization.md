@@ -3,9 +3,6 @@ type: workflow
 title: Synchronization Pipeline
 description: How Lymic turns manual, automatic, recovered, and retry inputs into durable queue work, checks or uploads it to Immich, and exposes progress, pause, completion, and failure recovery.
 tags: [synchronization, queue, immich, recovery, uploads]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-19T15:10:01.321Z
 sources:
   - id: openwiki-source-ab40d61d1bfa656ad091dbd7
     resource: repo://docs/agents/application-map.md

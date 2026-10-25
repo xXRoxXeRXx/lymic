@@ -1,4 +1,5 @@
 # Files
 
-- [Audit Logging and Operational Diagnostics](audit-logging.md) - Structured local audit events record important application, authentication, and synchronization activity through a bounded asynchronous writer. This guide covers the event schema, sensitive-data boundaries, persistence limits, and how audit failures are reported to the UI.
-- [Development, Testing, and Release Operations](development-and-testing.md) - Verified local development, build, test, desktop smoke-test, configuration, release, and updater guidance for the Lymic Tauri application. Distinguishes repository commands from host-specific prerequisites and test boundaries.
+- [Audit Logging and Operational Signals](audit-logging.md) - Structured local audit events and UI signals expose startup, watched-folder, synchronization, and shutdown behavior for troubleshooting. This guide explains event safety, bounded persistence, failure reporting, notifications, and transfer telemetry.
+- [Development, Validation, and Test Boundaries](development-and-testing.md) - Local development and validation guidance for the SvelteKit and Rust desktop application. Explains test-layer limits, IPC contract coverage, durable synchronization tests, and release gates.
+- [Release Channels and Distribution](release-distribution.md) - How version tags publish signed cross-platform releases, how the GitHub and Microsoft Store channels are selected, and how the Store MSIX package is built and validated.
