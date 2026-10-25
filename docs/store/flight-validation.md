@@ -1,4 +1,4 @@
-﻿# Microsoft Store Flight Validation: Lymic
+# Microsoft Store Flight Validation: Lymic
 
 This document records the private Flight verification runbook, WACK (Windows App Certification Kit) compliance, capability certification justification, and flight test outcomes for Lymic package identity `xXRoxXeRXx.Lymic`.
 
@@ -9,7 +9,7 @@ This document records the private Flight verification runbook, WACK (Windows App
 - **Flight Name**: `Alpha Private Flight`
 - **Distribution Scope**: Restricted Flight Group (Internal validation accounts)
 - **Target OS**: Windows 10 (10.0.17763.0+) & Windows 11 x64
-- **Package Tested**: `Lymic_0.21.0_x64.msix`
+- **Package Tested**: `Lymic_0.22.0_x64.msix`
 - **Package Identity**: `xXRoxXeRXx.Lymic`
 - **Publisher**: `CN=xXRoxXeRXx`
 - **Signing Mechanism**: Microsoft Store Ingestion Signing (No external Authenticode certificate required)
@@ -22,7 +22,7 @@ This document records the private Flight verification runbook, WACK (Windows App
 The MSIX package structure and `AppxManifest.xml` were validated using `scripts/validate-msix.ps1` and the Windows App Certification Kit:
 1. **Processor Architecture**: Strictly `x64`.
 2. **Package Identity**: Matches reserved name `xXRoxXeRXx.Lymic`.
-3. **Version Alignment**: Quad-part version format `0.21.0.0` matches repository version `0.21.0`.
+3. **Version Alignment**: Quad-part version format `0.22.0.0` matches repository version `0.22.0`.
 4. **App Execution**: `EntryPoint="Windows.FullTrustApplication"` executes `Lymic.exe`.
 
 ### Restricted Capabilities Justification

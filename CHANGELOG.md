@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0] - 2026-10-25
+
+### Added
+- **Microsoft Store distribution and MSIX packaging**:
+  - Adds build-time release-channel selection (`LYMIC_RELEASE_CHANNEL=store` or `github`).
+  - Completely omits and disables in-app update checks, dialogues, and GitHub updater calls when running in Microsoft Store mode.
+  - Adds automated packaging script producing Windows x64 MSIX packages with the reserved Store identity (`xXRoxXeRXx.Lymic`) via Windows SDK `makeappx.exe`.
+  - Adds manifest and package integrity validator ensuring identity, architecture, version, and restricted capabilities (`runFullTrust`, `broadFileSystemAccess`) match requirements.
+  - Extends GitHub Actions release workflow to build, package, validate, and attach the Store MSIX package alongside existing GitHub NSIS installers.
+  - Deploys public privacy and support pages on GitHub Pages (`https://xxroxxerxx.github.io/lymic/privacy/` and `https://xxroxxerxx.github.io/lymic/support/`).
+  - Documents localized German and English Microsoft Store listing metadata, screenshot assets, and Partner Center capability justification.
+
+### Fixed
+- **Sync cancellation responsiveness**:
+  - Prioritizes cancellation tokens in sync processor `await_or_cancellation` select branch to prevent race conditions during immediate aborts.
+
 ## [0.21.0] - 2026-10-18
 
 ### Added
