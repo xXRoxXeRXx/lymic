@@ -1146,7 +1146,7 @@ describe("removable volume setup flow", () => {
         case "get_sync_status":
           return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
         case "get_locale_catalog":
-          return Promise.resolve(localeCatalog);
+          return Promise.resolve([{ code: "en", name: "English" }]);
         case "update_locale":
           return Promise.resolve();
         case "get_release_channel":
@@ -1180,7 +1180,7 @@ describe("removable volume setup flow", () => {
         case "get_sync_status":
           return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
         case "get_locale_catalog":
-          return Promise.resolve(localeCatalog);
+          return Promise.resolve([{ code: "en", name: "English" }]);
         case "update_locale":
           return Promise.resolve();
         case "get_release_channel":

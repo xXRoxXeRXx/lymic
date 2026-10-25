@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support & Help - Lymic</title>
+  <meta name="description" content="Support and Help for Lymic, an independent desktop synchronization client for self-hosted Immich servers.">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --border: #334155;
+      --accent: #0ea5e9;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --text: #0f172a;
+        --text-muted: #64748b;
+        --primary: #0284c7;
+        --border: #e2e8f0;
+        --accent: #0369a1;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    header {
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+    }
+    .nav {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .nav a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .nav a:hover { text-decoration: underline; }
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.5rem;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--primary);
+      margin-bottom: 1rem;
+    }
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      color: var(--text);
+    }
+    p { margin-bottom: 1rem; color: var(--text-muted); }
+    ul { margin-bottom: 1rem; padding-left: 1.5rem; color: var(--text-muted); }
+    li { margin-bottom: 0.5rem; }
+    strong { color: var(--text); }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+    }
+    .btn {
+      display: inline-block;
+      background: var(--primary);
+      color: #0f172a;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      text-decoration: none;
+      margin-right: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-secondary {
+      background: var(--card-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lymic Support</span>
+      <h1>Support & Help for Lymic</h1>
+      <p>How to get help, report issues, or contribute to Lymic.</p>
+      <nav class="nav">
+        <a href="../">Home</a>
+        <a href="../privacy/">Privacy Policy</a>
+        <a href="../support/">Support & Help</a>
+        <a href="https://github.com/xXRoxXeRXx/lymic" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="card">
+        <h2>Primary Support Channels</h2>
+        <p>
+          Lymic is developed as open-source software on GitHub. The most durable way to obtain assistance, report defects, or request enhancements is through our public issue tracker and community discussions.
+        </p>
+        <div style="margin-top: 1rem;">
+          <a class="btn" href="https://github.com/xXRoxXeRXx/lymic/issues" target="_blank" rel="noopener">Report an Issue on GitHub</a>
+          <a class="btn btn-secondary" href="https://github.com/xXRoxXeRXx/lymic/discussions" target="_blank" rel="noopener">Community Discussions</a>
+        </div>
+      </div>
+
+      <h2>Frequently Asked Questions</h2>
+
+      <div class="card">
+        <h2>1. Connecting to your Immich Server</h2>
+        <p>
+          Lymic requires an existing self-hosted Immich instance. You will need:
+        </p>
+        <ul>
+          <li><strong>Server URL:</strong> The full HTTPS address of your Immich server (e.g. <code>https://immich.example.com</code>). Unencrypted HTTP is permitted only for local loopback addresses (127.0.0.1 or localhost) with explicit confirmation.</li>
+          <li><strong>API Key:</strong> Generated in your Immich web interface under <em>Account Settings &rarr; API Keys</em>.</li>
+          <li><strong>Cloudflare Access (optional):</strong> If your Immich server is protected behind Cloudflare Zero Trust, provide your Service Token Client ID and Client Secret in the Advanced Options section.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>2. Watched Folders and Removable Media</h2>
+        <p>
+          Add one or more local folders to synchronize to your Immich server.
+        </p>
+        <ul>
+          <li><strong>Target Albums:</strong> You can assign a specific Watched Folder to an Immich album. Both newly uploaded and already existing matching media will be added to that album.</li>
+          <li><strong>Removable Drives:</strong> Removable drives (such as SD cards or external hard drives) can be bound to watched folders. If the drive is disconnected, the folder configuration is preserved and synchronization resumes automatically when reconnected.</li>
+          <li><strong>File Access Restrictions:</strong> Ensure the Lymic desktop app has permission to read files within your selected folders.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>3. Updates and Distribution Channels</h2>
+        <p>
+          Lymic is distributed via two official Windows channels:
+        </p>
+        <ul>
+          <li><strong>Microsoft Store (MSIX):</strong> Installed and kept updated automatically through the Windows Microsoft Store. In-app updater checks are intentionally disabled for Store packages to avoid conflicting update mechanisms.</li>
+          <li><strong>GitHub Releases (NSIS):</strong> Self-contained Windows installer that receives signed in-app updates via GitHub releases.</li>
+        </ul>
+      </div>
+
+      <h2>4. Direct Contact</h2>
+      <p>
+        For security vulnerability reports or questions not suitable for public GitHub issues, contact the project maintainer at:
+      </p>
+      <p>
+        <strong>Email:</strong> <a href="mailto:gh@grenzallee.eu" style="color: var(--primary);">gh@grenzallee.eu</a><br>
+        <strong>Project Repository:</strong> <a href="https://github.com/xXRoxXeRXx/lymic" target="_blank" rel="noopener" style="color: var(--primary);">https://github.com/xXRoxXeRXx/lymic</a>
+      </p>
+
+      <h2>5. Independent Project Notice</h2>
+      <p>
+        Lymic is an independent client developed by the community. Immich is a separate project. For issues with the core Immich server itself, consult the official <a href="https://immich.app" target="_blank" rel="noopener" style="color: var(--primary);">Immich documentation</a>.
+      </p>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 Lymic Contributors. Distributed under the MIT License.</p>
+    </footer>
+  </div>
+</body>
+</html>
