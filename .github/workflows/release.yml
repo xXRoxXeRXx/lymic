@@ -66,3 +66,38 @@ jobs:
           generateReleaseNotes: true
           updaterJsonPreferNsis: true
           args: -- --locked
+
+      - name: build Store x64 executable (windows only)
+        if: matrix.platform == 'windows-latest'
+        env:
+          LYMIC_RELEASE_CHANNEL: store
+        run: |
+          npm run build
+          cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+
+      - name: package and validate MSIX (windows only)
+        if: matrix.platform == 'windows-latest'
+        shell: powershell
+        run: |
+          $ver = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          ./scripts/package-msix.ps1 -Version $ver -OutputDir dist/msix
+          ./scripts/validate-msix.ps1 -MsixPath "dist/msix/Lymic_${ver}_x64.msix" -ExpectedVersion $ver
+
+      - name: upload MSIX artifact (windows only)
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lymic-store-msix
+          path: dist/msix/*.msix
+
+      - name: attach MSIX to release (windows only)
+        if: matrix.platform == 'windows-latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: powershell
+        run: |
+          $ver = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $msix = "dist/msix/Lymic_${ver}_x64.msix"
+          if (Test-Path $msix) {
+            gh release upload "v$ver" $msix --clobber || true
+          }
