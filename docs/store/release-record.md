@@ -1,4 +1,6 @@
-# Microsoft Store Public Release Record: Lymic
+﻿# Microsoft Store Public Release Record: Lymic
+
+> Status: Entwurf. Die Checkliste in Abschnitt 4 wird erst nach Flight und Freigabe abgehakt.
 
 This document records the official public release parameters for Lymic on Microsoft Store, documenting worldwide availability, category, localized listings, capability approval, and release-channel isolation.
 
@@ -36,7 +38,7 @@ Lymic maintains two isolated Windows distribution channels:
 
 ## 3. Flight Evidence & Certification Links
 
-- **Private Flight Validation**: Fully documented and passed in [`docs/store/flight-validation.md`](file:///c:/Users/meyer/Development/lymic/docs/store/flight-validation.md).
+- **Private Flight Validation**: Runbook und offene Kriterien in [`docs/store/flight-validation.md`](file:///c:/Users/meyer/Development/lymic/docs/store/flight-validation.md).
 - **Restricted Capability Justification**: Declaring `runFullTrust` and `broadFileSystemAccess` for persistent user-selected Watched Folders and real-time filesystem change observation, documented in [`src-tauri/msix/justification.md`](file:///c:/Users/meyer/Development/lymic/src-tauri/msix/justification.md).
 - **Store Listing & Metadata**: Complete German and English descriptions, categories, and screenshot assets documented in [`docs/store/listing.md`](file:///c:/Users/meyer/Development/lymic/docs/store/listing.md).
 - **Public Legal & Help URLs**:
@@ -48,9 +50,11 @@ Lymic maintains two isolated Windows distribution channels:
 
 ## 4. Release Checklist & Verification Sign-Off
 
-- [x] Exact Flight-validated package (`Lymic_0.21.0_x64.msix`) submitted for worldwide public distribution.
-- [x] Store listing configured as Free, Photo & Video, with full German and English metadata.
-- [x] All-ages content questionnaire completed truthfully.
-- [x] Store-only updater channel verified; no conflicting GitHub updater UI.
-- [x] Restricted capability justification approved by Microsoft Partner Center.
-- [x] GitHub Pages privacy and support pages live and HTTPS enforced.
+- [ ] Exact Flight-validated package (`Lymic_0.21.0_x64.msix`) submitted for worldwide public distribution.
+- [ ] Store listing configured as Free, Photo & Video, with full German and English metadata.
+- [ ] All-ages content questionnaire completed truthfully.
+- [ ] Store-only updater channel verified; no conflicting GitHub updater UI.
+- [ ] Restricted capability justification von Microsoft Partner Center genehmigt (ausstehend).
+- [ ] GitHub Pages privacy and support pages live and HTTPS enforced.
+
+

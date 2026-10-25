@@ -1,4 +1,4 @@
-# Microsoft Store Flight Validation: Lymic
+﻿# Microsoft Store Flight Validation: Lymic
 
 This document records the private Flight verification runbook, WACK (Windows App Certification Kit) compliance, capability certification justification, and flight test outcomes for Lymic package identity `xXRoxXeRXx.Lymic`.
 
@@ -42,14 +42,15 @@ The certification justification was submitted verbatim from [`src-tauri/msix/jus
 
 | Acceptance Criterion | Verification Method | Outcome | Notes |
 |---|---|---|---|
-| **AC-1: Certification & Capability Approval** | Submission to Partner Center with restricted capability justification | **PASSED** | Certified without objections or restrictions. |
-| **AC-2: Fresh Install & Persistent Watched Folders** | Clean install via Store flight link on Windows 11; sign in; add Watched Folder `D:\CameraRoll`; restart app | **PASSED** | Watched folder configuration and volume bindings persisted across restart without re-prompt. |
-| **AC-3: Active Media Asset Synchronization** | Place test JPEG and companion MP4 (Live Photo) in watched folder | **PASSED** | Successfully detected, hashed, paired, and synchronized directly to Immich server with audit logging. |
-| **AC-4: Absence of GitHub Updater & Store Update Channel** | Inspect Settings view and app lifecycle for update controls | **PASSED** | No in-app update button or check exists (`isUpdatesSupported === false`); update checks against GitHub endpoint are completely disabled; Store delivers package updates. |
-| **AC-5: Hard Block Policy on Capability Denial** | Architectural verification of capability policy | **PASSED** | Confirmed policy: Any capability denial or inability to access persistent folders blocks release; no degraded sync mode is offered. |
+| **AC-1: Certification & Capability Approval** | Submission to Partner Center with restricted capability justification | **PENDING** | Noch nicht eingereicht. |
+| **AC-2: Fresh Install & Persistent Watched Folders** | Clean install via Store flight link on Windows 11; sign in; add Watched Folder `D:\CameraRoll`; restart app | **PENDING** | Manuell im Flight zu prüfen. |
+| **AC-3: Active Media Asset Synchronization** | Place test JPEG and companion MP4 (Live Photo) in watched folder | **PENDING** | Manuell im Flight zu prüfen. |
+| **AC-4: Absence of GitHub Updater & Store Update Channel** | Inspect Settings view and app lifecycle for update controls | **PENDING** | Im Code durch Tests abgedeckt (`isUpdatesSupported === false`); Update-Zustellung über den Store ist im Flight zu prüfen. |
+| **AC-5: Hard Block Policy on Capability Denial** | Architectural verification of capability policy | **PENDING** | Richtlinie: Bei Ablehnung der Capability oder fehlendem Ordnerzugriff wird nicht veröffentlicht. |
 
 ---
 
 ## 4. Release Gate Decision
 
-All 5 Flight acceptance criteria have passed. The MSIX package and localized listing are proven in a real Windows Store runtime environment and are cleared for public release in Microsoft Store (Issue #77).
+Status: **offen**. Alle Kriterien in Abschnitt 3 sind erst nach einem echten privaten Flight abzuhaken. Bis dahin ist die öffentliche Veröffentlichung (Issue #77) blockiert.
+

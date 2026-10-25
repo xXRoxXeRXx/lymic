@@ -82,7 +82,7 @@ describe("public privacy and support pages", () => {
     expect(flightDoc).toMatch(/runFullTrust/);
     expect(flightDoc).toMatch(/Watched Folders/i);
     expect(flightDoc).toMatch(/Synchronization/i);
-    expect(flightDoc).toMatch(/PASSED/i);
+    expect(flightDoc).toMatch(/PENDING/i);
     expect(flightDoc).toMatch(/Issue #77/i);
   });
 

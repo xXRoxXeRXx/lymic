@@ -1,4 +1,4 @@
-name: "publish"
+﻿name: "publish"
 
 on:
   push:
@@ -99,5 +99,6 @@ jobs:
           $ver = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           $msix = "dist/msix/Lymic_${ver}_x64.msix"
           if (Test-Path $msix) {
-            gh release upload "v$ver" $msix --clobber || true
+            gh release upload "v$ver" $msix --clobber
           }
+
