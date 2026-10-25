@@ -70,5 +70,20 @@ describe("public privacy and support pages", () => {
       expect(listing).toContain(screenshot);
     }
   });
+
+  it("records private Flight validation covering all acceptance criteria", () => {
+    const flightDocPath = resolve(root, "docs/store/flight-validation.md");
+    expect(existsSync(flightDocPath)).toBe(true);
+    const flightDoc = readFileSync(flightDocPath, "utf-8");
+
+    // Flight criteria verification
+    expect(flightDoc).toMatch(/xXRoxXeRXx\.Lymic/);
+    expect(flightDoc).toMatch(/broadFileSystemAccess/);
+    expect(flightDoc).toMatch(/runFullTrust/);
+    expect(flightDoc).toMatch(/Watched Folders/i);
+    expect(flightDoc).toMatch(/Synchronization/i);
+    expect(flightDoc).toMatch(/PASSED/i);
+    expect(flightDoc).toMatch(/Issue #77/i);
+  });
 });
 
