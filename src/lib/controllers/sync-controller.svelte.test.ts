@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SyncDesktopAdapter, WatchedFoldersDesktopAdapter } from "../tauri/desktop-adapter";
+import type { SyncControllerDesktopAdapter } from "../tauri/desktop-adapter";
 import { createSyncController } from "./sync-controller.svelte";
 
 const dialog = vi.hoisted(() => ({ confirm: vi.fn(), open: vi.fn() }));
@@ -7,9 +7,7 @@ const events = vi.hoisted(() => ({ listen: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 vi.mock("@tauri-apps/api/event", () => events);
 
-type SyncControllerAdapter = SyncDesktopAdapter & WatchedFoldersDesktopAdapter;
-
-function createDesktopAdapter(overrides: Partial<SyncControllerAdapter> = {}): SyncControllerAdapter {
+function createDesktopAdapter(overrides: Partial<SyncControllerDesktopAdapter> = {}): SyncControllerDesktopAdapter {
   return {
     startSync: vi.fn().mockResolvedValue({ processed: 1, uploaded: 1, failed: 0 }),
     pauseSync: vi.fn().mockResolvedValue({ status: "PAUSED", total: 0, succeeded: 0, failed: 0, currentPath: null }),
@@ -26,7 +24,7 @@ function createDesktopAdapter(overrides: Partial<SyncControllerAdapter> = {}): S
   };
 }
 
-function createController(adapter: SyncControllerAdapter, overrides = {}) {
+function createController(adapter: SyncControllerDesktopAdapter, overrides = {}) {
   return createSyncController({
     adapter,
     reportError: vi.fn(),

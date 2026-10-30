@@ -15,7 +15,7 @@
   } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
-  import type { ThemePreference } from "./types";
+  import type { ThemePreference } from "../contracts";
 
   interface Props {
     currentUserName: string;

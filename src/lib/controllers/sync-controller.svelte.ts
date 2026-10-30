@@ -1,16 +1,17 @@
 import { confirm, open } from "@tauri-apps/plugin-dialog";
-import type { LogEntry, SyncStatus } from "../components/types";
 import type {
   DetectedVolume,
   FailedSyncEntry,
+  LogEntry,
   RemoveFolderResult,
   SyncSnapshot,
+  SyncStatus,
   SyncSummary,
   TransferStatsEvent,
   UiLogMessage,
   WatchedFolder,
 } from "../contracts";
-import type { SyncDesktopAdapter, WatchedFoldersDesktopAdapter } from "../tauri/desktop-adapter";
+import type { SyncControllerDesktopAdapter } from "../tauri/desktop-adapter";
 import { subscribeToSyncEvents } from "../tauri/sync-event-subscription";
 import { toBcp47Locale } from "../i18n";
 
@@ -36,7 +37,7 @@ export interface DashboardViewState {
 }
 
 export interface SyncControllerOptions {
-  adapter: SyncDesktopAdapter & WatchedFoldersDesktopAdapter;
+  adapter: SyncControllerDesktopAdapter;
   reportError(error: unknown): void;
   t(key: string): string;
   locale(): string;

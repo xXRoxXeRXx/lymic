@@ -19,7 +19,7 @@ function sorted(albums: Album[]) {
   return [...albums].sort((a, b) => a.albumName.toLowerCase().localeCompare(b.albumName.toLowerCase()));
 }
 
-export function createTargetAlbumCatalogue(gateway: AlbumsDesktopAdapter): TargetAlbumCatalogue {
+export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): TargetAlbumCatalogue {
   let albums = $state<Album[]>([]);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -34,7 +34,7 @@ export function createTargetAlbumCatalogue(gateway: AlbumsDesktopAdapter): Targe
     error = null;
 
     try {
-      const loadedAlbums = await gateway.getAlbums();
+      const loadedAlbums = await adapter.getAlbums();
       if (request === latestRequest) {
         for (const album of loadedAlbums) pendingCreated.delete(album.id);
         albums = sorted([...loadedAlbums, ...[...pendingCreated.values()].filter((album) => !loadedAlbums.some((loaded) => loaded.id === album.id))]);
@@ -47,7 +47,7 @@ export function createTargetAlbumCatalogue(gateway: AlbumsDesktopAdapter): Targe
   }
 
   async function create(name: string) {
-    const created = await gateway.createAlbum(name);
+    const created = await adapter.createAlbum(name);
     pendingCreated.set(created.id, created);
     albums = sorted([...albums.filter((album) => album.id !== created.id), created]);
     await refresh();

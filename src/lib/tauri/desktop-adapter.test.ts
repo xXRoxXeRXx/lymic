@@ -8,7 +8,6 @@ import {
   tauriDesktopAdapter,
   type AlbumsDesktopAdapter,
   type AuthDesktopAdapter,
-  type DesktopAdapter,
   type PreferencesDesktopAdapter,
   type SyncDesktopAdapter,
   type UpdateDesktopAdapter,
@@ -16,7 +15,6 @@ import {
 } from "./desktop-adapter";
 
 describe("tauriDesktopAdapter", () => {
-  const adapter: DesktopAdapter = tauriDesktopAdapter;
   const authAdapter: AuthDesktopAdapter = tauriDesktopAdapter;
   const syncAdapter: SyncDesktopAdapter = tauriDesktopAdapter;
   const foldersAdapter: WatchedFoldersDesktopAdapter = tauriDesktopAdapter;
@@ -59,7 +57,6 @@ describe("tauriDesktopAdapter", () => {
     await preferencesAdapter.getDatabaseRecoveryNotice();
     await updateAdapter.recordWebviewStartupPhaseProbe("on_mount_started");
     await updateAdapter.getReleaseChannel();
-    expect(adapter).toBe(tauriDesktopAdapter);
 
     expect(invoke.mock.calls).toEqual([
       ["start_sync"],

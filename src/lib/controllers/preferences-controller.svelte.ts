@@ -1,6 +1,5 @@
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
-import type { ThemePreference } from "../components/types";
-import type { UiLogMessage } from "../contracts";
+import type { ThemePreference, UiLogMessage } from "../contracts";
 import { isSupportedLocale } from "../i18n";
 import { localeCatalog, type LocaleCatalogEntry } from "../i18n/locale-catalog";
 import type { PreferencesDesktopAdapter } from "../tauri/desktop-adapter";

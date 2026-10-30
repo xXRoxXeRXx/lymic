@@ -1,8 +1,7 @@
 <script lang="ts">
   import { AlertCircle, ChevronRight } from "lucide-svelte";
   import { t } from "svelte-i18n";
-  import type { FailedSyncEntry } from "../contracts";
-  import type { SyncStatus } from "./types";
+  import type { FailedSyncEntry, SyncStatus } from "../contracts";
 
   let { failedSyncs, syncStatus, onRetry }: { failedSyncs: FailedSyncEntry[]; syncStatus: SyncStatus; onRetry: () => void } = $props();
   let showFailedSyncs = $state(false);

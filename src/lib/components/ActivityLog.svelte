@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Clock } from "lucide-svelte";
   import { t } from "svelte-i18n";
-  import type { LogEntry } from "./types";
+  import type { LogEntry } from "../contracts";
 
   interface Props { logs: LogEntry[]; }
   let { logs }: Props = $props();

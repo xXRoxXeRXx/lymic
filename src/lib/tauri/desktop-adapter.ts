@@ -38,6 +38,8 @@ export interface WatchedFoldersDesktopAdapter {
   removeFolder(id: number, confirmCancellation?: boolean): Promise<RemoveFolderResult>;
 }
 
+export type SyncControllerDesktopAdapter = SyncDesktopAdapter & WatchedFoldersDesktopAdapter;
+
 export interface AlbumsDesktopAdapter {
   getAlbums(): Promise<Album[]>;
   createAlbum(name: string): Promise<Album>;

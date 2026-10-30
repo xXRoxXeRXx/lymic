@@ -36,6 +36,7 @@ Rust application services
 | UI composition | `src/routes/+page.svelte` | Creates controllers, hydrates them, and selects login, dashboard, or settings views. |
 | UI state and IPC callers | `src/lib/controllers/` | One controller per concern: auth, sync, preferences, update, and feedback. |
 | UI components and translations | `src/lib/components/`, `src/lib/i18n/` | Present controller state; locale files are the UI strings. |
+| Frontend IPC contracts and adapters | `src/lib/contracts.ts`, `src/lib/tauri/desktop-adapter.ts` | Shared frontend DTOs/state types and domain-split Tauri command adapters. |
 | UI event bridge | `src/lib/tauri/sync-event-subscription.ts` | Stable frontend subscriptions and event payload expectations. |
 | Tauri surface | `src-tauri/src/commands/`, `src-tauri/src/app/mod.rs` | Command inputs, responses, and registration. |
 | Sync orchestration | `src-tauri/src/sync/` | Scan results, durable queue, pause/resume, retries, upload processing, progress. |
@@ -74,7 +75,7 @@ The durable queue is the recovery boundary: `RUNNING`, `PAUSED`, and `IDLE` live
 
 ### Tauri IPC
 
-Commands are registered in `app/mod.rs`; implementations live in `commands/`. The command groups are `auth`, `albums`, `folders`, `sync`, and `settings`. When changing a command, update its controller caller and tests in the same change.
+Commands are registered in `app/mod.rs`; implementations live in `commands/`. The command groups are `auth`, `albums`, `folders`, `sync`, and `settings`. Shared frontend IPC contracts live in `src/lib/contracts.ts`, and domain-specific adapter interfaces live in `src/lib/tauri/desktop-adapter.ts`. When changing a command, update its contract, domain adapter interface, controller caller, and tests in the same change.
 
 The backend emits `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `trigger-sync`, `log-message`, and `sync-idle`. Keep event names and serialized payloads backward-compatible within the application release.
 
