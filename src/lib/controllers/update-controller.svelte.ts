@@ -1,12 +1,13 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import type { DesktopAdapter, ReleaseChannel } from "../tauri/desktop-adapter";
+import type { ReleaseChannel } from "../contracts";
+import type { UpdateDesktopAdapter } from "../tauri/desktop-adapter";
 import { getEffectiveReleaseChannel } from "../release-channel";
 
 export function createUpdateController(
   isSyncActive: () => boolean,
-  adapter: DesktopAdapter,
+  adapter: UpdateDesktopAdapter,
   initialChannel: ReleaseChannel = getEffectiveReleaseChannel(),
 ) {
   let releaseChannel = $state<ReleaseChannel>(initialChannel);

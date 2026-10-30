@@ -1,7 +1,5 @@
-import type { Album } from "../components/types";
-import type { DesktopAdapter } from "../tauri/desktop-adapter";
-
-export type TargetAlbumCatalogueGateway = Pick<DesktopAdapter, "getAlbums" | "createAlbum">;
+import type { Album } from "../contracts";
+import type { AlbumsDesktopAdapter } from "../tauri/desktop-adapter";
 
 export interface TargetAlbumCatalogue {
   readonly albums: Album[];
@@ -21,7 +19,7 @@ function sorted(albums: Album[]) {
   return [...albums].sort((a, b) => a.albumName.toLowerCase().localeCompare(b.albumName.toLowerCase()));
 }
 
-export function createTargetAlbumCatalogue(gateway: TargetAlbumCatalogueGateway): TargetAlbumCatalogue {
+export function createTargetAlbumCatalogue(gateway: AlbumsDesktopAdapter): TargetAlbumCatalogue {
   let albums = $state<Album[]>([]);
   let isLoading = $state(false);
   let error = $state<string | null>(null);

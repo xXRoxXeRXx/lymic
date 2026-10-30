@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DesktopAdapter } from "../tauri/desktop-adapter";
+import type { SyncDesktopAdapter, WatchedFoldersDesktopAdapter } from "../tauri/desktop-adapter";
 import { createSyncController } from "./sync-controller.svelte";
 
 const dialog = vi.hoisted(() => ({ confirm: vi.fn(), open: vi.fn() }));
@@ -7,7 +7,9 @@ const events = vi.hoisted(() => ({ listen: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 vi.mock("@tauri-apps/api/event", () => events);
 
-function createDesktopAdapter(overrides: Partial<DesktopAdapter> = {}): DesktopAdapter {
+type SyncControllerAdapter = SyncDesktopAdapter & WatchedFoldersDesktopAdapter;
+
+function createDesktopAdapter(overrides: Partial<SyncControllerAdapter> = {}): SyncControllerAdapter {
   return {
     startSync: vi.fn().mockResolvedValue({ processed: 1, uploaded: 1, failed: 0 }),
     pauseSync: vi.fn().mockResolvedValue({ status: "PAUSED", total: 0, succeeded: 0, failed: 0, currentPath: null }),
@@ -15,30 +17,16 @@ function createDesktopAdapter(overrides: Partial<DesktopAdapter> = {}): DesktopA
     getSyncStatus: vi.fn().mockResolvedValue({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null }),
     getFailedSyncs: vi.fn().mockResolvedValue([]),
     retryFailedSyncs: vi.fn().mockResolvedValue({ processed: 1, uploaded: 1, failed: 0 }),
-    getUploadParallelism: vi.fn(),
-    setUploadParallelism: vi.fn(),
     addFolder: vi.fn().mockResolvedValue(1),
     acceptRemovableMediaFolder: vi.fn().mockResolvedValue(1),
     getFolders: vi.fn().mockResolvedValue([]),
     updateFolderExclusionPatterns: vi.fn(),
     removeFolder: vi.fn().mockResolvedValue({ requiresSyncCancellation: false }),
-    getAuthStatus: vi.fn(),
-    getServerUrl: vi.fn(),
-    getCurrentUser: vi.fn(),
-    login: vi.fn(),
-    logout: vi.fn(),
-    getAlbums: vi.fn(),
-    createAlbum: vi.fn(),
-    getLocaleCatalog: vi.fn(),
-    updateLocale: vi.fn(),
-    getDatabaseRecoveryNotice: vi.fn(),
-    recordWebviewStartupPhaseProbe: vi.fn(),
-    getReleaseChannel: vi.fn().mockResolvedValue("github"),
     ...overrides,
   };
 }
 
-function createController(adapter: DesktopAdapter, overrides = {}) {
+function createController(adapter: SyncControllerAdapter, overrides = {}) {
   return createSyncController({
     adapter,
     reportError: vi.fn(),

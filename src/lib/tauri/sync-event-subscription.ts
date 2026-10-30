@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import type { SyncSnapshot, TransferStatsEvent, UiLogMessage } from "../controllers/types";
+import type { SyncSnapshot, TransferStatsEvent, UiLogMessage } from "../contracts";
 
 export interface SyncEventHandlers {
   onProgress(path: string): void;

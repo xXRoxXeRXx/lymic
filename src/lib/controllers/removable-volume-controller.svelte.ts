@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { isPermissionGranted, sendNotification } from "@tauri-apps/plugin-notification";
-import type { DetectedVolume } from "./types";
+import type { DetectedVolume } from "../contracts";
 
 export interface RemovableVolumeControllerOptions {
   isAppInBackground?: () => boolean;

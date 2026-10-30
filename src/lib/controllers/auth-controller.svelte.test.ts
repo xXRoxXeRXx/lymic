@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DesktopAdapter } from "../tauri/desktop-adapter";
+import type { AuthDesktopAdapter } from "../tauri/desktop-adapter";
 import { createAuthController } from "./auth-controller.svelte";
 
 const tauri = vi.hoisted(() => ({ confirm: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm: tauri.confirm }));
 
-function createDesktopAdapter(overrides: Partial<DesktopAdapter> = {}): DesktopAdapter {
+function createDesktopAdapter(overrides: Partial<AuthDesktopAdapter> = {}): AuthDesktopAdapter {
   return {
-    startSync: vi.fn(), pauseSync: vi.fn(), resumeSync: vi.fn(), getSyncStatus: vi.fn(), getFailedSyncs: vi.fn(), retryFailedSyncs: vi.fn(),
-    getUploadParallelism: vi.fn(), setUploadParallelism: vi.fn(), addFolder: vi.fn(), acceptRemovableMediaFolder: vi.fn(), getFolders: vi.fn(), updateFolderExclusionPatterns: vi.fn(), removeFolder: vi.fn(),
-    getAuthStatus: vi.fn().mockResolvedValue(false), getServerUrl: vi.fn(), getCurrentUser: vi.fn(), login: vi.fn(), logout: vi.fn(),
-    getAlbums: vi.fn(), createAlbum: vi.fn(), getLocaleCatalog: vi.fn(), updateLocale: vi.fn(), getDatabaseRecoveryNotice: vi.fn(), recordWebviewStartupPhaseProbe: vi.fn(),
-    getReleaseChannel: vi.fn().mockResolvedValue("github"),
+    getAuthStatus: vi.fn().mockResolvedValue(false),
+    getServerUrl: vi.fn(),
+    getCurrentUser: vi.fn(),
+    login: vi.fn(),
+    logout: vi.fn(),
     ...overrides,
   };
 }

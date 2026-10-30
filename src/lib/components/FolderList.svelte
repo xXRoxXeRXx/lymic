@@ -2,7 +2,7 @@
   import { Album, Folder, FolderPlus, Settings, Trash2 } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
-  import type { WatchedFolder } from "./types";
+  import type { WatchedFolder } from "../contracts";
 
   interface Props {
     watchedFolders: WatchedFolder[];

@@ -13,7 +13,7 @@ import InfoView from "./InfoView.svelte";
 import { localeCatalog } from "../i18n/locale-catalog";
 import TargetAlbumModal from "./TargetAlbumModal.svelte";
 import { createTargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
-import type { Album } from "./types";
+import type { Album } from "../contracts";
 
 const tauri = vi.hoisted(() => ({ invoke: vi.fn(), openUrl: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));

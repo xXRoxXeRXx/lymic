@@ -6,47 +6,60 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 import {
   tauriDesktopAdapter,
+  type AlbumsDesktopAdapter,
+  type AuthDesktopAdapter,
   type DesktopAdapter,
+  type PreferencesDesktopAdapter,
+  type SyncDesktopAdapter,
+  type UpdateDesktopAdapter,
+  type WatchedFoldersDesktopAdapter,
 } from "./desktop-adapter";
 
 describe("tauriDesktopAdapter", () => {
   const adapter: DesktopAdapter = tauriDesktopAdapter;
+  const authAdapter: AuthDesktopAdapter = tauriDesktopAdapter;
+  const syncAdapter: SyncDesktopAdapter = tauriDesktopAdapter;
+  const foldersAdapter: WatchedFoldersDesktopAdapter = tauriDesktopAdapter;
+  const albumsAdapter: AlbumsDesktopAdapter = tauriDesktopAdapter;
+  const preferencesAdapter: PreferencesDesktopAdapter = tauriDesktopAdapter;
+  const updateAdapter: UpdateDesktopAdapter = tauriDesktopAdapter;
 
-  it("delegates every desktop IPC operation with its backend command and payload", async () => {
+  it("delegates every desktop IPC operation through its domain interfaces with backend command and payload", async () => {
     invoke.mockResolvedValue(undefined);
 
-    await adapter.startSync();
-    await adapter.pauseSync();
-    await adapter.resumeSync();
-    await adapter.getSyncStatus();
-    await adapter.getFailedSyncs();
-    await adapter.retryFailedSyncs();
-    await adapter.getUploadParallelism();
-    await adapter.setUploadParallelism(4);
-    await adapter.addFolder("C:/Photos", "album-1");
-    await adapter.acceptRemovableMediaFolder("volume-1", "E:/DCIM", null);
-    await adapter.getFolders();
-    await adapter.updateFolderExclusionPatterns(7, ["Screenshots/**"]);
-    await adapter.removeFolder(7);
-    await adapter.removeFolder(7, true);
-    await adapter.getAuthStatus();
-    await adapter.getServerUrl();
-    await adapter.getCurrentUser();
-    await adapter.login({
+    await syncAdapter.startSync();
+    await syncAdapter.pauseSync();
+    await syncAdapter.resumeSync();
+    await syncAdapter.getSyncStatus();
+    await syncAdapter.getFailedSyncs();
+    await syncAdapter.retryFailedSyncs();
+    await preferencesAdapter.getUploadParallelism();
+    await preferencesAdapter.setUploadParallelism(4);
+    await foldersAdapter.addFolder("C:/Photos", "album-1");
+    await foldersAdapter.acceptRemovableMediaFolder("volume-1", "E:/DCIM", null);
+    await foldersAdapter.getFolders();
+    await foldersAdapter.updateFolderExclusionPatterns(7, ["Screenshots/**"]);
+    await foldersAdapter.removeFolder(7);
+    await foldersAdapter.removeFolder(7, true);
+    await authAdapter.getAuthStatus();
+    await authAdapter.getServerUrl();
+    await authAdapter.getCurrentUser();
+    await authAdapter.login({
       serverUrl: "https://immich.example",
       apiKey: "api-key",
       allowLocalHttp: false,
       cloudflareClientId: null,
       cloudflareClientSecret: null,
     });
-    await adapter.logout();
-    await adapter.getAlbums();
-    await adapter.createAlbum("Summer");
-    await adapter.getLocaleCatalog();
-    await adapter.updateLocale("de");
-    await adapter.getDatabaseRecoveryNotice();
-    await adapter.recordWebviewStartupPhaseProbe("on_mount_started");
-    await adapter.getReleaseChannel();
+    await authAdapter.logout();
+    await albumsAdapter.getAlbums();
+    await albumsAdapter.createAlbum("Summer");
+    await preferencesAdapter.getLocaleCatalog();
+    await preferencesAdapter.updateLocale("de");
+    await preferencesAdapter.getDatabaseRecoveryNotice();
+    await updateAdapter.recordWebviewStartupPhaseProbe("on_mount_started");
+    await updateAdapter.getReleaseChannel();
+    expect(adapter).toBe(tauriDesktopAdapter);
 
     expect(invoke.mock.calls).toEqual([
       ["start_sync"],

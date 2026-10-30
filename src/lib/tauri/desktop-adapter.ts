@@ -1,63 +1,69 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Album, FailedSyncEntry, WatchedFolder } from "../components/types";
+import type {
+  Album,
+  CurrentUser,
+  DatabaseRecoveryNotice,
+  FailedSyncEntry,
+  LoginRequest,
+  ReleaseChannel,
+  RemoveFolderResult,
+  SyncSnapshot,
+  SyncSummary,
+  WatchedFolder,
+} from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
-import type { RemoveFolderResult, SyncSnapshot, SyncSummary } from "../controllers/types";
 
-export interface CurrentUser {
-  displayName: string;
-  profileImage: string | null;
+export interface AuthDesktopAdapter {
+  getAuthStatus(): Promise<boolean>;
+  getServerUrl(): Promise<string>;
+  getCurrentUser(): Promise<CurrentUser>;
+  login(request: LoginRequest): Promise<void>;
+  logout(): Promise<void>;
 }
 
-export interface DatabaseRecoveryNotice {
-  message: string;
-  key: string;
-  reason: string;
-  backup: string;
-  count: number;
-}
-
-export interface LoginRequest {
-  serverUrl: string;
-  apiKey: string;
-  allowLocalHttp: boolean;
-  cloudflareClientId: string | null;
-  cloudflareClientSecret: string | null;
-}
-
-/** The complete frontend contract for Tauri commands registered by Lymic. */
-export interface DesktopAdapter {
+export interface SyncDesktopAdapter {
   startSync(): Promise<SyncSummary>;
   pauseSync(): Promise<SyncSnapshot>;
   resumeSync(): Promise<SyncSnapshot>;
   getSyncStatus(): Promise<SyncSnapshot>;
   getFailedSyncs(): Promise<FailedSyncEntry[]>;
   retryFailedSyncs(): Promise<SyncSummary>;
-  getUploadParallelism(): Promise<number>;
-  setUploadParallelism(uploadParallelism: number): Promise<void>;
+}
 
+export interface WatchedFoldersDesktopAdapter {
   addFolder(path: string, targetAlbumId: string | null): Promise<number>;
   acceptRemovableMediaFolder(volumeId: string, path: string, targetAlbumId: string | null): Promise<number>;
   getFolders(): Promise<WatchedFolder[]>;
   updateFolderExclusionPatterns(id: number, exclusionPatterns: string[]): Promise<void>;
   removeFolder(id: number, confirmCancellation?: boolean): Promise<RemoveFolderResult>;
+}
 
-  getAuthStatus(): Promise<boolean>;
-  getServerUrl(): Promise<string>;
-  getCurrentUser(): Promise<CurrentUser>;
-  login(request: LoginRequest): Promise<void>;
-  logout(): Promise<void>;
-
+export interface AlbumsDesktopAdapter {
   getAlbums(): Promise<Album[]>;
   createAlbum(name: string): Promise<Album>;
+}
 
+export interface PreferencesDesktopAdapter {
+  getUploadParallelism(): Promise<number>;
+  setUploadParallelism(uploadParallelism: number): Promise<void>;
   getLocaleCatalog(): Promise<LocaleCatalogEntry[]>;
   updateLocale(locale: string): Promise<void>;
   getDatabaseRecoveryNotice(): Promise<DatabaseRecoveryNotice | null>;
+}
+
+export interface UpdateDesktopAdapter {
   recordWebviewStartupPhaseProbe(phase: string): Promise<void>;
   getReleaseChannel(): Promise<ReleaseChannel>;
 }
 
-export type ReleaseChannel = "github" | "store";
+/** The complete frontend contract for Tauri commands registered by Lymic. */
+export interface DesktopAdapter
+  extends AuthDesktopAdapter,
+    SyncDesktopAdapter,
+    WatchedFoldersDesktopAdapter,
+    AlbumsDesktopAdapter,
+    PreferencesDesktopAdapter,
+    UpdateDesktopAdapter {}
 
 export const tauriDesktopAdapter: DesktopAdapter = {
   startSync: () => invoke<SyncSummary>("start_sync"),

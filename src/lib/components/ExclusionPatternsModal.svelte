@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AlertCircle, Folder, Plus, X } from "lucide-svelte";
   import { t } from "svelte-i18n";
-  import type { WatchedFolder } from "./types";
+  import type { WatchedFolder } from "../contracts";
 
   interface Props {
     folder: WatchedFolder | null;

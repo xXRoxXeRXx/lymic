@@ -1,4 +1,4 @@
-import type { ReleaseChannel } from "./tauri/desktop-adapter";
+import type { ReleaseChannel } from "./contracts";
 
 export function getEffectiveReleaseChannel(): ReleaseChannel {
   const env =

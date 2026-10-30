@@ -7,24 +7,6 @@ export interface LogEntry {
   params?: Record<string, string>;
 }
 
-export interface WatchedFolder {
-  id: number;
-  path: string;
-  recursive: boolean;
-  target_album_id: string | null;
-  exclusion_patterns?: string[];
-}
-
-export interface FailedSyncEntry {
-  localPath: string;
-  failureReason: string;
-}
-
 export type SyncStatus = "idle" | "syncing" | "paused" | "error";
 
 export type ThemePreference = "system" | "light" | "dark";
-
-export interface Album {
-  id: string;
-  albumName: string;
-}

@@ -6,7 +6,7 @@
   import ExclusionPatternsModal from "./ExclusionPatternsModal.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { DashboardViewState } from "../controllers/sync-controller.svelte";
-  import type { WatchedFolder } from "./types";
+  import type { WatchedFolder } from "../contracts";
 
   interface Props {
     dashboard: DashboardViewState;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { HardDrive, ArrowRight } from "lucide-svelte";
   import { t } from "svelte-i18n";
-  import type { DetectedVolume } from "../controllers/types";
+  import type { DetectedVolume } from "../contracts";
 
   let {
     volume,
