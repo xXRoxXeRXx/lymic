@@ -21,7 +21,7 @@ Tauri command layer (src-tauri/src/commands/)
         │
         ▼
 Rust application services
-  sync/  watcher/  immich/  db/  audit/  app/
+  sync/  watched_folders/  watcher/  immich/  db/  audit/  app/
         │              │        │
         ▼              ▼        ▼
  Immich REST API    local FS   SQLite + native keyring
@@ -39,6 +39,7 @@ Rust application services
 | UI event bridge | `src/lib/tauri/sync-event-subscription.ts` | Stable frontend subscriptions and event payload expectations. |
 | Tauri surface | `src-tauri/src/commands/`, `src-tauri/src/app/mod.rs` | Command inputs, responses, and registration. |
 | Sync orchestration | `src-tauri/src/sync/` | Scan results, durable queue, pause/resume, retries, upload processing, progress. |
+| Watched Folder registration | `src-tauri/src/watched_folders/` | Watched Folder validation, watcher registration, persistence with compensation, and initial sync trigger. |
 | File discovery | `src-tauri/src/media/` | Supported extensions, pairing, sidecars, path handling, and scanning. |
 | Filesystem watching | `src-tauri/src/watcher/` | Recursive watcher lifecycle, debouncing, overflow recovery, unavailable-folder handling. |
 | Immich integration | `src-tauri/src/immich/` | Authenticated client, endpoint calls, streaming multipart uploads, album calls. |
@@ -91,7 +92,7 @@ Add schema changes as a new, forward-only file in `src-tauri/migrations/`. Keep 
 | --- | --- |
 | A UI action or displayed state | Component, owning controller, Tauri command, event type/subscription, locale strings, relevant test. |
 | Sync semantics | `sync/`, `db/queue.rs`, `db/sync_state.rs`, `commands/sync.rs`, and the frontend sync controller. |
-| Folder lifecycle | `commands/folders.rs`, `watcher/`, `media/paths.rs`, scanner, persistence, and folder UI. |
+| Folder lifecycle | `watched_folders/`, `commands/folders.rs`, `watcher/`, `media/paths.rs`, scanner, persistence, and folder UI. |
 | Media recognition or pairing | `media/extensions.rs`, `media/model.rs`, `media/scanner.rs`, upload representation, and tests. |
 | An Immich request | `immich/client.rs` plus the endpoint module, credential policy, audit redaction, and error handling. |
 | Album behaviour | `immich/album.rs`, `sync/album_batch.rs`, queue schema, folder UI, and ADR-0001. |

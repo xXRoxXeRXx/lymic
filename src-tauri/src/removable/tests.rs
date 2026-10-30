@@ -396,12 +396,13 @@ async fn manual_folder_addition_detects_removable_volume_and_persists_binding() 
     });
 
     // Detect binding as add_folder does
-    let binding = crate::commands::folders::detect_removable_binding_for_path(
-        &active_volumes,
-        std::path::Path::new(folder_path),
+    let params = crate::watched_folders::RegisterFolderParams::from_local_path(
+        folder_path,
+        None,
+        Some(&active_volumes),
     );
-    assert!(binding.is_some());
-    let binding = binding.unwrap();
+    assert!(params.removable_binding.is_some());
+    let binding = params.removable_binding.unwrap();
     assert_eq!(binding.volume_id, volume_id);
     assert_eq!(binding.relative_path, "DCIM/100MEDIA");
 

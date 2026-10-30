@@ -7,6 +7,7 @@ mod immich;
 mod media;
 pub(crate) mod removable;
 mod sync;
+mod watched_folders;
 mod watcher;
 
 pub fn run() {
