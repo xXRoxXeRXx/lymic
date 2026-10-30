@@ -115,10 +115,13 @@ async fn verify_and_migrate(pool: &SqlitePool) -> Result<(), InitFailure> {
 
     let migration_result = sqlx::migrate!("./migrations").run(&mut *connection).await;
 
-    sqlx::query("PRAGMA foreign_keys = ON")
+    if let Err(error) = sqlx::query("PRAGMA foreign_keys = ON")
         .execute(&mut *connection)
         .await
-        .map_err(|e| InitFailure::Other(Box::new(e)))?;
+    {
+        let _ = connection.close().await;
+        return Err(InitFailure::Other(Box::new(error)));
+    }
 
     migration_result.map_err(classify_migrate_error)?;
 
