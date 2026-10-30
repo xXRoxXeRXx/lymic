@@ -36,14 +36,14 @@ beforeEach(() => {
 });
 
 describe("watched folders controller", () => {
-  it("hydrates watched folders and exposes folder view state", async () => {
+  it("refreshes watched folders and exposes folder view state", async () => {
     const adapter = createFoldersAdapter({
       getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }]),
     });
     const controller = createController(adapter);
 
     expect(controller.hasFolders).toBe(false);
-    await controller.hydrate();
+    await controller.refresh();
 
     expect(controller.hasFolders).toBe(true);
     expect(controller.folders.watchedFolders).toEqual([
@@ -171,24 +171,16 @@ describe("watched folders controller", () => {
     ]);
   });
 
-  it("clears pending target album dialog state on clearUserState", async () => {
-    const adapter = createFoldersAdapter();
-    dialog.open.mockResolvedValue("E:/DCIM");
-    const controller = createController(adapter);
-
-    await controller.acceptRemovableFolder({
-      volumeId: "vol-sd-1",
-      mountPath: "E:\\",
-      displayName: "EOS_DIGITAL",
+  it("ignores folder updates after destroy", async () => {
+    const adapter = createFoldersAdapter({
+      getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }]),
     });
-    expect(controller.targetAlbumDialog.isOpen).toBe(true);
+    const controller = createController(adapter);
+    controller.destroy();
 
-    controller.clearUserState();
+    await controller.refresh();
 
-    expect(controller.targetAlbumDialog.isOpen).toBe(false);
-    expect(controller.targetAlbumDialog.folderPath).toBeNull();
-    await controller.targetAlbumDialog.confirm("alb-1");
-    expect(adapter.acceptRemovableMediaFolder).not.toHaveBeenCalled();
+    expect(controller.hasFolders).toBe(false);
   });
 });
 

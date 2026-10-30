@@ -92,8 +92,8 @@ Add schema changes as a new, forward-only file in `src-tauri/migrations/`. Keep 
 | If changing… | Inspect together |
 | --- | --- |
 | A UI action or displayed state | Component, owning controller, Tauri command, event type/subscription, locale strings, relevant test. |
-| Sync semantics | `sync/`, `db/queue.rs`, `db/sync_state.rs`, `commands/sync.rs`, and the frontend sync controller. |
-| Folder lifecycle | `watched_folders/`, `commands/folders.rs`, `watcher/`, `media/paths.rs`, scanner, persistence, and folder UI. |
+| Sync semantics | `sync/`, `db/queue.rs`, `db/sync_state.rs`, `commands/sync.rs`, and `controllers/sync-controller.svelte.ts`. |
+| Folder lifecycle | `watched_folders/`, `commands/folders.rs`, `watcher/`, `media/paths.rs`, scanner, persistence, `controllers/watched-folders-controller.svelte.ts`, and folder UI. |
 | Media recognition or pairing | `media/extensions.rs`, `media/model.rs`, `media/scanner.rs`, upload representation, and tests. |
 | An Immich request | `immich/client.rs` plus the endpoint module, credential policy, audit redaction, and error handling. |
 | Album behaviour | `immich/album.rs`, `sync/album_batch.rs`, queue schema, folder UI, and ADR-0001. |

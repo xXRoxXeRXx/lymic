@@ -18,6 +18,23 @@
   let { status, folders, catalogue }: Props = $props();
   let exclusionSettingsFolder = $state<WatchedFolder | null>(null);
 
+  const isSyncRunning = $derived(status.syncStatus === "syncing");
+  const isSyncPaused = $derived(status.syncStatus === "paused");
+  const isSyncActive = $derived(isSyncRunning || isSyncPaused);
+  const isSyncDisabled = $derived(status.isSyncActionPending || (!isSyncActive && !status.canStartSync));
+  const statusHeadingKey = $derived(
+    isSyncRunning
+      ? "sync_running"
+      : isSyncPaused
+        ? "sync_paused"
+        : status.syncStatus === "error"
+          ? "sync_completed_with_errors"
+          : "all_up_to_date"
+  );
+  const syncActionKey = $derived(
+    isSyncRunning ? "pause_sync" : isSyncPaused ? "resume_sync" : "sync_now"
+  );
+
   const transferredBytes = $derived(status.transferredBytes);
   const transferRateBytesPerSecond = $derived(status.transferRateBytesPerSecond);
   const estimatedSecondsRemaining = $derived(status.estimatedSecondsRemaining);
@@ -42,24 +59,24 @@
     <div class="flex items-center justify-between gap-4">
       <div>
         <h3 class="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          {status.syncStatus === 'syncing' ? $t('sync_running') : status.syncStatus === 'paused' ? $t('sync_paused') : status.syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
+          {$t(statusHeadingKey)}
         </h3>
       </div>
       <button
-        class="px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors cursor-pointer shadow-sm disabled:opacity-50 {status.syncStatus === 'syncing' ? 'bg-slate-200 dark:bg-zinc-700 text-slate-800 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-zinc-600' : status.syncStatus === 'paused' ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}"
+        class="px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors cursor-pointer shadow-sm disabled:opacity-50 {isSyncRunning ? 'bg-slate-200 dark:bg-zinc-700 text-slate-800 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-zinc-600' : isSyncPaused ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}"
         onclick={status.onSyncAction}
-        disabled={status.isSyncActionPending || ((status.syncStatus !== 'syncing' && status.syncStatus !== 'paused') && folders.watchedFolders.length === 0)}
-        title={folders.watchedFolders.length === 0 ? $t('sync_requires_folder') : undefined}
-        aria-describedby={folders.watchedFolders.length === 0 ? 'sync-requires-folder' : undefined}
+        disabled={isSyncDisabled}
+        title={!status.canStartSync ? $t('sync_requires_folder') : undefined}
+        aria-describedby={!status.canStartSync ? 'sync-requires-folder' : undefined}
       >
-        {status.syncStatus === 'syncing' ? $t('pause_sync') : status.syncStatus === 'paused' ? $t('resume_sync') : $t('sync_now')}
+        {$t(syncActionKey)}
       </button>
-      {#if folders.watchedFolders.length === 0}
+      {#if !status.canStartSync}
         <span id="sync-requires-folder" class="sr-only">{$t('sync_requires_folder')}</span>
       {/if}
     </div>
 
-    {#if status.syncStatus === 'syncing' || status.syncStatus === 'paused'}
+    {#if isSyncActive}
       <div class="space-y-3 pt-2">
         <div class="w-full h-2 rounded-full bg-slate-100 dark:bg-zinc-800 border border-slate-200/60 dark:border-zinc-700/60 overflow-hidden">
           <div class="h-full bg-blue-600 dark:bg-sky-500 rounded-full transition-all duration-300" style="width: {status.progress}%;"></div>
@@ -71,14 +88,14 @@
         <p class="text-xs font-medium text-slate-500 dark:text-zinc-400">
           {$t('processed')}: {status.processed.toLocaleString(numberLocale)} / {status.syncTotal.toLocaleString(numberLocale)}
         </p>
-        {#if status.transferredBytes > 0 || status.transferRateBytesPerSecond !== null || status.estimatedSecondsRemaining !== null}
+        {#if transferredBytes > 0 || transferRateBytesPerSecond !== null || estimatedSecondsRemaining !== null}
           <p class="text-xs font-medium text-slate-500 dark:text-zinc-400">
-            {#if status.transferredBytes > 0}{$t('transferred')}: {formatBytes(status.transferredBytes)}{/if}
+            {#if transferredBytes > 0}{$t('transferred')}: {formatBytes(transferredBytes)}{/if}
             {#if transferRateBytesPerSecond !== null} {transferredBytes > 0 ? ' · ' : ''}{$t('transfer_rate')}: {(transferRateBytesPerSecond / 1_000_000).toLocaleString(numberLocale, { maximumFractionDigits: 1 })} MB/s{/if}
             {#if estimatedSecondsRemaining !== null} {(transferredBytes > 0 || transferRateBytesPerSecond !== null) ? ' · ' : ''}{$t('remaining_time')}: {formatDuration(estimatedSecondsRemaining)}{/if}
           </p>
         {/if}
-        {#if status.syncStatus === 'paused'}
+        {#if isSyncPaused}
           <p class="text-xs text-amber-600 dark:text-amber-400">{$t('sync_paused_hint')}</p>
         {/if}
       </div>

@@ -175,6 +175,7 @@ describe("DashboardView", () => {
   function createStatusState(overrides: Partial<SyncStatusViewState> = {}): SyncStatusViewState {
     return {
       syncStatus: "idle",
+      canStartSync: true,
       lastSync: "10:00",
       progress: 0,
       processed: 0,
@@ -204,7 +205,7 @@ describe("DashboardView", () => {
   it("disables sync without folders", () => {
     render(DashboardView, {
       catalogue: createCatalogue(),
-      status: createStatusState(),
+      status: createStatusState({ canStartSync: false }),
       folders: createFoldersState(),
     });
     expect(screen.getByRole("button", { name: "Sync Now" })).toBeDisabled();

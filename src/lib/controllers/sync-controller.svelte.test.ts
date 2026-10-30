@@ -115,26 +115,27 @@ describe("sync controller", () => {
 
     await controller.status.onSyncAction();
 
+    expect(controller.status.canStartSync).toBe(false);
     expect(adapter.startSync).not.toHaveBeenCalled();
     expect(controller.status.syncStatus).toBe("idle");
   });
 
-  it("retries failed synchronization through the adapter and notifies onSyncFinished", async () => {
+  it("retries failed synchronization through the adapter and notifies onSyncSettled", async () => {
     const adapter = createSyncAdapter({
       getFailedSyncs: vi
         .fn()
         .mockResolvedValueOnce([{ localPath: "C:/photos/failed.jpg", failureReason: "temporary failure" }])
         .mockResolvedValueOnce([]),
     });
-    const onSyncFinished = vi.fn();
-    const controller = createController(adapter, { onSyncFinished });
+    const onSyncSettled = vi.fn();
+    const controller = createController(adapter, { onSyncSettled });
     controller.startLifecycle();
     await controller.refreshFailedSyncs();
 
     await controller.status.onRetryFailedSyncs();
 
     expect(adapter.retryFailedSyncs).toHaveBeenCalledOnce();
-    expect(onSyncFinished).toHaveBeenCalledOnce();
+    expect(onSyncSettled).toHaveBeenCalledOnce();
     expect(controller.status.syncStatus).toBe("idle");
   });
 

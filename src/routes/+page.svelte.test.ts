@@ -268,7 +268,7 @@ describe("application updates", () => {
     render(Page);
 
     await screen.findByText("Sync paused");
-    const install = screen.getByRole("button", { name: "Install and restart" });
+    const install = await screen.findByRole("button", { name: "Install and restart" });
     expect(install).toBeDisabled();
     expect(screen.getByText("Finish or resume and complete synchronization before installing this update.")).toBeInTheDocument();
     await waitFor(() => expect(syncProgressSnapshot).toBeTypeOf("function"));

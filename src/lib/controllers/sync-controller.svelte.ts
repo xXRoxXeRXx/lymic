@@ -13,6 +13,7 @@ import { toBcp47Locale } from "../i18n";
 
 export interface SyncStatusViewState {
   readonly syncStatus: SyncStatus;
+  readonly canStartSync: boolean;
   readonly lastSync: string | null;
   readonly progress: number;
   readonly processed: number;
@@ -45,7 +46,7 @@ export interface SyncControllerOptions {
   reportError(error: unknown): void;
   locale(): string;
   canStartSync?(): boolean;
-  onSyncFinished?(): Promise<void> | void;
+  onSyncSettled?(): Promise<void> | void;
 }
 
 export function createSyncController(options: SyncControllerOptions): SyncController {
@@ -145,7 +146,7 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
     if (!mounted) return;
     await refreshFailedSyncs();
     if (!mounted) return;
-    await options.onSyncFinished?.();
+    await options.onSyncSettled?.();
     if (!mounted) return;
 
     if (syncStatus === "error" || !!summary?.failed || failedSyncs.length > 0) {
@@ -284,6 +285,7 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
     get status(): SyncStatusViewState {
       return {
         syncStatus,
+        canStartSync: canStartSync(),
         lastSync,
         progress,
         processed,

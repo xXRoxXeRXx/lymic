@@ -41,7 +41,7 @@
     reportError: feedback.report,
     locale: () => $locale ?? "en",
     canStartSync: () => watchedFolders.hasFolders,
-    onSyncFinished: () => watchedFolders.refresh(),
+    onSyncSettled: () => watchedFolders.refresh(),
   });
 
   const auth = createAuthController({
@@ -52,7 +52,7 @@
     onLogin: sync.refreshFailedSyncs,
     onLogout: () => {
       sync.clearUserState();
-      watchedFolders.clearUserState();
+      watchedFolders.targetAlbumDialog.cancel();
       currentView = "dashboard";
     },
   });
@@ -64,6 +64,7 @@
     setLocale: (value) => $locale = value,
   });
   const updater = createUpdateController(() => sync.isActive, desktop);
+  const targetAlbumDialog = $derived(watchedFolders.targetAlbumDialog);
 
   let profileImageLoadFailed = $state(false);
 
@@ -75,6 +76,7 @@
 
   onMount(() => {
     sync.startLifecycle();
+    watchedFolders.startLifecycle();
     updater.startLifecycle();
     preferences.startLifecycle();
     void removable.startSubscriptions();
@@ -82,8 +84,9 @@
     void auth.hydrate()
       .then(() => auth.isAuthenticated ? sync.refreshFailedSyncs() : undefined)
       .catch((error) => console.error("Failed to hydrate authentication", error));
-    void watchedFolders.hydrate()
-      .then(() => sync.hydrate())
+    void watchedFolders.refresh()
+      .catch((error) => console.error("Failed to hydrate watched folders", error));
+    void sync.hydrate()
       .then(() => sync.startSubscriptions())
       .catch((error) => console.error("Failed to hydrate sync state", error));
     void preferences.hydrate().catch((error) => console.error("Failed to hydrate preferences", error));
@@ -91,6 +94,7 @@
 
     return () => {
       sync.destroy();
+      watchedFolders.destroy();
       updater.destroy();
       preferences.stopLifecycle();
       removable.destroy();
@@ -304,12 +308,12 @@
       onInstall={updater.installUpdate}
     />
   {/if}
-  {#if auth.isAuthenticated && watchedFolders.targetAlbumDialog.isOpen}
+  {#if auth.isAuthenticated && targetAlbumDialog.isOpen}
     <TargetAlbumModal
-      isOpen={watchedFolders.targetAlbumDialog.isOpen}
-      folderPath={watchedFolders.targetAlbumDialog.folderPath ?? ""}
-      onConfirm={watchedFolders.targetAlbumDialog.confirm}
-      onCancel={watchedFolders.targetAlbumDialog.cancel}
+      isOpen={targetAlbumDialog.isOpen}
+      folderPath={targetAlbumDialog.folderPath ?? ""}
+      onConfirm={targetAlbumDialog.confirm}
+      onCancel={targetAlbumDialog.cancel}
       catalogue={targetAlbumCatalogue}
     />
   {/if}

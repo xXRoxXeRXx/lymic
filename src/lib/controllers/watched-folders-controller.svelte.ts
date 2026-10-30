@@ -20,10 +20,10 @@ export interface WatchedFoldersController {
   readonly folders: WatchedFoldersViewState;
   readonly targetAlbumDialog: TargetAlbumDialogState;
   readonly hasFolders: boolean;
-  hydrate(): Promise<void>;
+  startLifecycle(): void;
+  destroy(): void;
   refresh(): Promise<void>;
   acceptRemovableFolder(volume: DetectedVolume): Promise<void>;
-  clearUserState(): void;
 }
 
 export interface WatchedFoldersControllerOptions {
@@ -46,13 +46,23 @@ export function createWatchedFoldersController(
 
   let watchedFolders = $state<WatchedFolder[]>([]);
   let pendingAddition = $state<PendingFolderAddition | null>(null);
+  let mounted = true;
+
+  function startLifecycle() {
+    mounted = true;
+  }
+
+  function destroy() {
+    mounted = false;
+  }
 
   async function refresh() {
     try {
-      watchedFolders = await adapter.getFolders();
+      const nextFolders = await adapter.getFolders();
+      if (mounted) watchedFolders = nextFolders;
     } catch (error) {
       console.error("Failed to load folders", error);
-      options.reportError(error);
+      if (mounted) options.reportError(error);
     }
   }
 
@@ -64,12 +74,12 @@ export function createWatchedFoldersController(
         ...(volume ? { defaultPath: volume.mountPath } : {}),
         title: options.t("select_folder"),
       });
-      if (typeof selected === "string") {
+      if (mounted && typeof selected === "string") {
         pendingAddition = { path: selected, volume };
       }
     } catch (error) {
       console.error(logMessage, error);
-      options.reportError(error);
+      if (mounted) options.reportError(error);
     }
   }
 
@@ -95,7 +105,7 @@ export function createWatchedFoldersController(
       await refresh();
     } catch (error) {
       console.error("Failed to add folder", error);
-      options.reportError(error);
+      if (mounted) options.reportError(error);
     }
   }
 
@@ -119,7 +129,7 @@ export function createWatchedFoldersController(
       await options.onFolderRemoved?.();
     } catch (error) {
       console.error("Failed to remove folder", error);
-      options.reportError(error);
+      if (mounted) options.reportError(error);
     }
   }
 
@@ -128,12 +138,8 @@ export function createWatchedFoldersController(
       await adapter.updateFolderExclusionPatterns(id, exclusionPatterns);
       await refresh();
     } catch (error) {
-      options.reportError(error);
+      if (mounted) options.reportError(error);
     }
-  }
-
-  async function hydrate() {
-    await refresh();
   }
 
   return {
@@ -156,9 +162,9 @@ export function createWatchedFoldersController(
     get hasFolders() {
       return watchedFolders.length > 0;
     },
-    hydrate,
+    startLifecycle,
+    destroy,
     refresh,
     acceptRemovableFolder,
-    clearUserState: cancelAddFolder,
   };
 }
