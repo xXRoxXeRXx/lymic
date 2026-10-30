@@ -34,7 +34,7 @@ Rust application services
 | Area | Start here | Responsibility |
 | --- | --- | --- |
 | UI composition | `src/routes/+page.svelte` | Creates controllers, hydrates them, and selects login, dashboard, or settings views. |
-| UI state and IPC callers | `src/lib/controllers/` | One controller per concern: auth, sync, preferences, update, and feedback. |
+| UI state and IPC callers | `src/lib/controllers/` | One controller per concern: auth, sync, watched folders, preferences, update, and feedback. |
 | UI components and translations | `src/lib/components/`, `src/lib/i18n/` | Present controller state; locale files are the UI strings. |
 | Frontend IPC contracts and adapters | `src/lib/contracts.ts`, `src/lib/tauri/desktop-adapter.ts` | Shared frontend DTOs/state types and domain-split Tauri command adapters. |
 | UI event bridge | `src/lib/tauri/sync-event-subscription.ts` | Stable frontend subscriptions and event payload expectations. |

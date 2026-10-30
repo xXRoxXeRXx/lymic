@@ -8,7 +8,6 @@
     watchedFolders: WatchedFolder[];
     onAddFolder: () => void;
     onRemoveFolder: (id: number) => void;
-    onUpdateFolderExclusionPatterns: (id: number, patterns: string[]) => Promise<void>;
     onOpenExclusionSettings?: (folder: WatchedFolder) => void;
     catalogue: TargetAlbumCatalogue;
   }

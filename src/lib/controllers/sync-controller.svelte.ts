@@ -1,51 +1,56 @@
-import { confirm, open } from "@tauri-apps/plugin-dialog";
 import type {
-  DetectedVolume,
   FailedSyncEntry,
   LogEntry,
-  RemoveFolderResult,
   SyncSnapshot,
   SyncStatus,
   SyncSummary,
   TransferStatsEvent,
   UiLogMessage,
-  WatchedFolder,
 } from "../contracts";
-import type { SyncControllerDesktopAdapter } from "../tauri/desktop-adapter";
+import type { SyncDesktopAdapter } from "../tauri/desktop-adapter";
 import { subscribeToSyncEvents } from "../tauri/sync-event-subscription";
 import { toBcp47Locale } from "../i18n";
 
-export interface DashboardViewState {
-  syncStatus: SyncStatus;
-  lastSync: string | null;
-  progress: number;
-  processed: number;
-  syncTotal: number;
-  currentFile: string;
-  transferredBytes: number;
-  transferRateBytesPerSecond: number | null;
-  estimatedSecondsRemaining: number | null;
-  watchedFolders: WatchedFolder[];
-  failedSyncs: FailedSyncEntry[];
-  logs: LogEntry[];
-  isSyncActionPending: boolean;
+export interface SyncStatusViewState {
+  readonly syncStatus: SyncStatus;
+  readonly lastSync: string | null;
+  readonly progress: number;
+  readonly processed: number;
+  readonly syncTotal: number;
+  readonly currentFile: string;
+  readonly transferredBytes: number;
+  readonly transferRateBytesPerSecond: number | null;
+  readonly estimatedSecondsRemaining: number | null;
+  readonly failedSyncs: FailedSyncEntry[];
+  readonly isSyncActionPending: boolean;
   onSyncAction(): Promise<void>;
   onRetryFailedSyncs(): Promise<void>;
-  onAddFolder(): Promise<void>;
-  onRemoveFolder(id: number): Promise<void>;
-  onUpdateFolderExclusionPatterns(id: number, exclusionPatterns: string[]): Promise<void>;
+}
+
+export interface SyncController {
+  readonly status: SyncStatusViewState;
+  readonly isActive: boolean;
+  readonly logs: LogEntry[];
+  startLifecycle(): void;
+  hydrate(): Promise<void>;
+  startSubscriptions(): void;
+  refreshFailedSyncs(): Promise<void>;
+  addLog(payload: UiLogMessage): void;
+  clearUserState(): void;
+  destroy(): void;
 }
 
 export interface SyncControllerOptions {
-  adapter: SyncControllerDesktopAdapter;
+  adapter: SyncDesktopAdapter;
   reportError(error: unknown): void;
-  t(key: string): string;
   locale(): string;
-  onRemovableVolumeAccepted?(volumeId: string): void;
+  canStartSync?(): boolean;
+  onSyncFinished?(): Promise<void> | void;
 }
 
-export function createSyncController(options: SyncControllerOptions) {
+export function createSyncController(options: SyncControllerOptions): SyncController {
   const { adapter } = options;
+  const canStartSync = options.canStartSync ?? (() => true);
 
   let syncStatus = $state<SyncStatus>("idle");
   let lastSync = $state<string | null>(null);
@@ -56,13 +61,9 @@ export function createSyncController(options: SyncControllerOptions) {
   let transferredBytes = $state(0);
   let transferRateBytesPerSecond = $state<number | null>(null);
   let estimatedSecondsRemaining = $state<number | null>(null);
-  let watchedFolders = $state<WatchedFolder[]>([]);
   let failedSyncs = $state<FailedSyncEntry[]>([]);
   let logs = $state<LogEntry[]>([]);
   let isSyncActionPending = $state(false);
-  let isTargetAlbumModalOpen = $state(false);
-  let pendingFolderPath = $state<string | null>(null);
-  let pendingVolume = $state<DetectedVolume | null>(null);
   let mounted = false;
   let logCounter = 0;
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -132,17 +133,7 @@ export function createSyncController(options: SyncControllerOptions) {
     }
   }
 
-  async function refreshFolders() {
-    try {
-      watchedFolders = await adapter.getFolders();
-    } catch (error) {
-      console.error("Failed to load folders", error);
-      options.reportError(error);
-    }
-  }
-
   async function hydrate() {
-    await refreshFolders();
     try {
       applySyncSnapshot(await adapter.getSyncStatus());
     } catch (error) {
@@ -154,7 +145,7 @@ export function createSyncController(options: SyncControllerOptions) {
     if (!mounted) return;
     await refreshFailedSyncs();
     if (!mounted) return;
-    await refreshFolders();
+    await options.onSyncFinished?.();
     if (!mounted) return;
 
     if (syncStatus === "error" || !!summary?.failed || failedSyncs.length > 0) {
@@ -177,7 +168,7 @@ export function createSyncController(options: SyncControllerOptions) {
   }
 
   async function startSync() {
-    if (isSyncActive() || isSyncActionPending || watchedFolders.length === 0) return;
+    if (isSyncActive() || isSyncActionPending || !canStartSync()) return;
     if (progressResetTimer) clearTimeout(progressResetTimer);
     progressResetTimer = undefined;
     syncStatus = "syncing";
@@ -226,99 +217,8 @@ export function createSyncController(options: SyncControllerOptions) {
     }
   }
 
-  async function addFolder() {
-    try {
-      const selected = await open({ directory: true, multiple: false, title: options.t("select_folder") });
-      if (typeof selected === "string") {
-        pendingVolume = null;
-        pendingFolderPath = selected;
-        isTargetAlbumModalOpen = true;
-      }
-    } catch (error) {
-      console.error("Failed to add folder", error);
-      options.reportError(error);
-    }
-  }
-
-  async function acceptRemovableFolder(volume: DetectedVolume) {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        defaultPath: volume.mountPath,
-        title: options.t("select_folder"),
-      });
-      if (typeof selected === "string") {
-        pendingVolume = volume;
-        pendingFolderPath = selected;
-        isTargetAlbumModalOpen = true;
-      }
-    } catch (error) {
-      console.error("Failed to select folder for removable volume", error);
-      options.reportError(error);
-    }
-  }
-
-  async function confirmAddFolder(targetAlbumId: string | null) {
-    if (!pendingFolderPath) return;
-    const path = pendingFolderPath;
-    const volume = pendingVolume;
-    isTargetAlbumModalOpen = false;
-    pendingFolderPath = null;
-    pendingVolume = null;
-    try {
-      if (volume) {
-        await adapter.acceptRemovableMediaFolder(volume.volumeId, path, targetAlbumId);
-        if (options.onRemovableVolumeAccepted) {
-          options.onRemovableVolumeAccepted(volume.volumeId);
-        }
-      } else {
-        await adapter.addFolder(path, targetAlbumId);
-      }
-      await refreshFolders();
-    } catch (error) {
-      console.error("Failed to add folder", error);
-      options.reportError(error);
-    }
-  }
-
-  function cancelAddFolder() {
-    isTargetAlbumModalOpen = false;
-    pendingFolderPath = null;
-    pendingVolume = null;
-  }
-
-
-  async function removeFolder(id: number) {
-    try {
-      const result = await adapter.removeFolder(id);
-      const warningMessage = result?.requiresSyncCancellation
-        ? options.t("remove_folder_sync_warning")
-        : options.t("remove_folder_confirmation");
-      const confirmed = await confirm(warningMessage, {
-        title: options.t("remove_folder"),
-        kind: "warning",
-      });
-      if (!confirmed) return;
-      await adapter.removeFolder(id, true);
-      await refreshFolders();
-      await refreshFailedSyncs();
-    } catch (error) {
-      console.error("Failed to remove folder", error);
-      options.reportError(error);
-    }
-  }
-
-  async function updateFolderExclusionPatterns(id: number, exclusionPatterns: string[]) {
-    try {
-      await adapter.updateFolderExclusionPatterns(id, exclusionPatterns);
-      await refreshFolders();
-    } catch (error) {
-      options.reportError(error);
-    }
-  }
-
   function startSubscriptions() {
+    if (!mounted || stopEvents) return;
     stopEvents = subscribeToSyncEvents({
       onProgress(path) {
         if (!mounted) return;
@@ -368,8 +268,6 @@ export function createSyncController(options: SyncControllerOptions) {
     resetTransferStats();
     failedSyncs = [];
     logs = [];
-    isTargetAlbumModalOpen = false;
-    pendingFolderPath = null;
     if (progressResetTimer) clearTimeout(progressResetTimer);
     progressResetTimer = undefined;
   }
@@ -379,52 +277,35 @@ export function createSyncController(options: SyncControllerOptions) {
     if (progressResetTimer) clearTimeout(progressResetTimer);
     progressResetTimer = undefined;
     stopEvents?.();
+    stopEvents = undefined;
   }
 
   return {
-    get dashboard(): DashboardViewState {
+    get status(): SyncStatusViewState {
       return {
-        syncStatus, lastSync, progress, processed, syncTotal, currentFile,
-        transferredBytes, transferRateBytesPerSecond, estimatedSecondsRemaining,
-        watchedFolders, failedSyncs, logs, isSyncActionPending,
+        syncStatus,
+        lastSync,
+        progress,
+        processed,
+        syncTotal,
+        currentFile,
+        transferredBytes,
+        transferRateBytesPerSecond,
+        estimatedSecondsRemaining,
+        failedSyncs,
+        isSyncActionPending,
         onSyncAction: syncAction,
         onRetryFailedSyncs: retryFailedSyncs,
-        onAddFolder: addFolder,
-        onRemoveFolder: removeFolder,
-        onUpdateFolderExclusionPatterns: updateFolderExclusionPatterns,
       };
     },
-    get syncStatus() { return syncStatus; },
     get isActive() { return isSyncActive(); },
-    get lastSync() { return lastSync; },
-    get progress() { return progress; },
-    get processed() { return processed; },
-    get syncTotal() { return syncTotal; },
-    get currentFile() { return currentFile; },
-    get transferredBytes() { return transferredBytes; },
-    get transferRateBytesPerSecond() { return transferRateBytesPerSecond; },
-    get estimatedSecondsRemaining() { return estimatedSecondsRemaining; },
-    get watchedFolders() { return watchedFolders; },
-    get failedSyncs() { return failedSyncs; },
     get logs() { return logs; },
-    get isSyncActionPending() { return isSyncActionPending; },
-    get isTargetAlbumModalOpen() { return isTargetAlbumModalOpen; },
-    get pendingFolderPath() { return pendingFolderPath; },
-    get pendingVolume() { return pendingVolume; },
     startLifecycle,
-    addLog,
-    refreshFailedSyncs,
     hydrate,
     startSubscriptions,
-    destroy,
+    refreshFailedSyncs,
+    addLog,
     clearUserState,
-    syncAction,
-    retryFailedSyncs,
-    addFolder,
-    acceptRemovableFolder,
-    confirmAddFolder,
-    cancelAddFolder,
-    removeFolder,
-    updateFolderExclusionPatterns,
+    destroy,
   };
 }

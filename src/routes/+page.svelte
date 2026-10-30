@@ -15,6 +15,7 @@
   import { createFeedbackController } from "#lib/controllers/feedback-controller.svelte.ts";
   import { createAuthController } from "#lib/controllers/auth-controller.svelte.ts";
   import { createSyncController } from "#lib/controllers/sync-controller.svelte.ts";
+  import { createWatchedFoldersController } from "#lib/controllers/watched-folders-controller.svelte.ts";
   import { createPreferencesController } from "#lib/controllers/preferences-controller.svelte.ts";
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
   import { createRemovableVolumeController } from "#lib/controllers/removable-volume-controller.svelte.ts";
@@ -28,12 +29,19 @@
   const removable = createRemovableVolumeController({
     t: (key, params) => $t(key, params),
   });
-  const sync = createSyncController({
+  const watchedFolders = createWatchedFoldersController({
     adapter: desktop,
     reportError: feedback.report,
     t: (key) => $t(key),
-    locale: () => $locale ?? "en",
     onRemovableVolumeAccepted: (volumeId) => removable.dismiss(volumeId),
+    onFolderRemoved: () => sync.refreshFailedSyncs(),
+  });
+  const sync = createSyncController({
+    adapter: desktop,
+    reportError: feedback.report,
+    locale: () => $locale ?? "en",
+    canStartSync: () => watchedFolders.hasFolders,
+    onSyncFinished: () => watchedFolders.refresh(),
   });
 
   const auth = createAuthController({
@@ -44,6 +52,7 @@
     onLogin: sync.refreshFailedSyncs,
     onLogout: () => {
       sync.clearUserState();
+      watchedFolders.clearUserState();
       currentView = "dashboard";
     },
   });
@@ -73,7 +82,8 @@
     void auth.hydrate()
       .then(() => auth.isAuthenticated ? sync.refreshFailedSyncs() : undefined)
       .catch((error) => console.error("Failed to hydrate authentication", error));
-    void sync.hydrate()
+    void watchedFolders.hydrate()
+      .then(() => sync.hydrate())
       .then(() => sync.startSubscriptions())
       .catch((error) => console.error("Failed to hydrate sync state", error));
     void preferences.hydrate().catch((error) => console.error("Failed to hydrate preferences", error));
@@ -240,7 +250,7 @@
             volume={removable.currentPrompt}
             onAccept={async (vol) => {
               currentView = "dashboard";
-              await sync.acceptRemovableFolder(vol);
+              await watchedFolders.acceptRemovableFolder(vol);
             }}
             onDismiss={(volId) => removable.dismiss(volId)}
           />
@@ -248,12 +258,12 @@
 
         {#if currentView === "dashboard"}
           <DashboardView
-            dashboard={sync.dashboard}
-            serverUrl={auth.serverUrl}
+            status={sync.status}
+            folders={watchedFolders.folders}
             catalogue={targetAlbumCatalogue}
           />
         {:else if currentView === "logs"}
-          <ActivityLog logs={sync.dashboard.logs} />
+          <ActivityLog logs={sync.logs} />
         {:else if currentView === "settings"}
           <SettingsView
             currentUserName={auth.currentUserName}
@@ -294,12 +304,12 @@
       onInstall={updater.installUpdate}
     />
   {/if}
-  {#if auth.isAuthenticated && sync.isTargetAlbumModalOpen}
+  {#if auth.isAuthenticated && watchedFolders.targetAlbumDialog.isOpen}
     <TargetAlbumModal
-      isOpen={sync.isTargetAlbumModalOpen}
-      folderPath={sync.pendingFolderPath ?? ""}
-      onConfirm={sync.confirmAddFolder}
-      onCancel={sync.cancelAddFolder}
+      isOpen={watchedFolders.targetAlbumDialog.isOpen}
+      folderPath={watchedFolders.targetAlbumDialog.folderPath ?? ""}
+      onConfirm={watchedFolders.targetAlbumDialog.confirm}
+      onCancel={watchedFolders.targetAlbumDialog.cancel}
       catalogue={targetAlbumCatalogue}
     />
   {/if}

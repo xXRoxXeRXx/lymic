@@ -5,21 +5,22 @@
   import FolderList from "./FolderList.svelte";
   import ExclusionPatternsModal from "./ExclusionPatternsModal.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
-  import type { DashboardViewState } from "../controllers/sync-controller.svelte";
+  import type { SyncStatusViewState } from "../controllers/sync-controller.svelte";
+  import type { WatchedFoldersViewState } from "../controllers/watched-folders-controller.svelte";
   import type { WatchedFolder } from "../contracts";
 
   interface Props {
-    dashboard: DashboardViewState;
-    serverUrl?: string;
+    status: SyncStatusViewState;
+    folders: WatchedFoldersViewState;
     catalogue: TargetAlbumCatalogue;
   }
 
-  let { dashboard, catalogue }: Props = $props();
+  let { status, folders, catalogue }: Props = $props();
   let exclusionSettingsFolder = $state<WatchedFolder | null>(null);
 
-  const transferredBytes = $derived(dashboard.transferredBytes);
-  const transferRateBytesPerSecond = $derived(dashboard.transferRateBytesPerSecond);
-  const estimatedSecondsRemaining = $derived(dashboard.estimatedSecondsRemaining);
+  const transferredBytes = $derived(status.transferredBytes);
+  const transferRateBytesPerSecond = $derived(status.transferRateBytesPerSecond);
+  const estimatedSecondsRemaining = $derived(status.estimatedSecondsRemaining);
 
   const numberLocale = $derived(toBcp47Locale($locale));
   function formatBytes(bytes: number) {
@@ -41,60 +42,60 @@
     <div class="flex items-center justify-between gap-4">
       <div>
         <h3 class="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          {dashboard.syncStatus === 'syncing' ? $t('sync_running') : dashboard.syncStatus === 'paused' ? $t('sync_paused') : dashboard.syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
+          {status.syncStatus === 'syncing' ? $t('sync_running') : status.syncStatus === 'paused' ? $t('sync_paused') : status.syncStatus === 'error' ? $t('sync_completed_with_errors') : $t('all_up_to_date')}
         </h3>
       </div>
       <button
-        class="px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors cursor-pointer shadow-sm disabled:opacity-50 {dashboard.syncStatus === 'syncing' ? 'bg-slate-200 dark:bg-zinc-700 text-slate-800 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-zinc-600' : dashboard.syncStatus === 'paused' ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}"
-        onclick={dashboard.onSyncAction}
-        disabled={dashboard.isSyncActionPending || ((dashboard.syncStatus !== 'syncing' && dashboard.syncStatus !== 'paused') && dashboard.watchedFolders.length === 0)}
-        title={dashboard.watchedFolders.length === 0 ? $t('sync_requires_folder') : undefined}
-        aria-describedby={dashboard.watchedFolders.length === 0 ? 'sync-requires-folder' : undefined}
+        class="px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors cursor-pointer shadow-sm disabled:opacity-50 {status.syncStatus === 'syncing' ? 'bg-slate-200 dark:bg-zinc-700 text-slate-800 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-zinc-600' : status.syncStatus === 'paused' ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}"
+        onclick={status.onSyncAction}
+        disabled={status.isSyncActionPending || ((status.syncStatus !== 'syncing' && status.syncStatus !== 'paused') && folders.watchedFolders.length === 0)}
+        title={folders.watchedFolders.length === 0 ? $t('sync_requires_folder') : undefined}
+        aria-describedby={folders.watchedFolders.length === 0 ? 'sync-requires-folder' : undefined}
       >
-        {dashboard.syncStatus === 'syncing' ? $t('pause_sync') : dashboard.syncStatus === 'paused' ? $t('resume_sync') : $t('sync_now')}
+        {status.syncStatus === 'syncing' ? $t('pause_sync') : status.syncStatus === 'paused' ? $t('resume_sync') : $t('sync_now')}
       </button>
-      {#if dashboard.watchedFolders.length === 0}
+      {#if folders.watchedFolders.length === 0}
         <span id="sync-requires-folder" class="sr-only">{$t('sync_requires_folder')}</span>
       {/if}
     </div>
 
-    {#if dashboard.syncStatus === 'syncing' || dashboard.syncStatus === 'paused'}
+    {#if status.syncStatus === 'syncing' || status.syncStatus === 'paused'}
       <div class="space-y-3 pt-2">
         <div class="w-full h-2 rounded-full bg-slate-100 dark:bg-zinc-800 border border-slate-200/60 dark:border-zinc-700/60 overflow-hidden">
-          <div class="h-full bg-blue-600 dark:bg-sky-500 rounded-full transition-all duration-300" style="width: {dashboard.progress}%;"></div>
+          <div class="h-full bg-blue-600 dark:bg-sky-500 rounded-full transition-all duration-300" style="width: {status.progress}%;"></div>
         </div>
         <div class="flex justify-between text-xs font-medium text-slate-500 dark:text-zinc-400">
-          <span>{dashboard.progress}% {$t('completed')}</span>
-          <span class="truncate max-w-[280px] font-mono text-[11px]">{dashboard.currentFile}</span>
+          <span>{status.progress}% {$t('completed')}</span>
+          <span class="truncate max-w-[280px] font-mono text-[11px]">{status.currentFile}</span>
         </div>
         <p class="text-xs font-medium text-slate-500 dark:text-zinc-400">
-          {$t('processed')}: {dashboard.processed.toLocaleString(numberLocale)} / {dashboard.syncTotal.toLocaleString(numberLocale)}
+          {$t('processed')}: {status.processed.toLocaleString(numberLocale)} / {status.syncTotal.toLocaleString(numberLocale)}
         </p>
-        {#if dashboard.transferredBytes > 0 || dashboard.transferRateBytesPerSecond !== null || dashboard.estimatedSecondsRemaining !== null}
+        {#if status.transferredBytes > 0 || status.transferRateBytesPerSecond !== null || status.estimatedSecondsRemaining !== null}
           <p class="text-xs font-medium text-slate-500 dark:text-zinc-400">
-            {#if dashboard.transferredBytes > 0}{$t('transferred')}: {formatBytes(dashboard.transferredBytes)}{/if}
+            {#if status.transferredBytes > 0}{$t('transferred')}: {formatBytes(status.transferredBytes)}{/if}
             {#if transferRateBytesPerSecond !== null} {transferredBytes > 0 ? ' · ' : ''}{$t('transfer_rate')}: {(transferRateBytesPerSecond / 1_000_000).toLocaleString(numberLocale, { maximumFractionDigits: 1 })} MB/s{/if}
             {#if estimatedSecondsRemaining !== null} {(transferredBytes > 0 || transferRateBytesPerSecond !== null) ? ' · ' : ''}{$t('remaining_time')}: {formatDuration(estimatedSecondsRemaining)}{/if}
           </p>
         {/if}
-        {#if dashboard.syncStatus === 'paused'}
+        {#if status.syncStatus === 'paused'}
           <p class="text-xs text-amber-600 dark:text-amber-400">{$t('sync_paused_hint')}</p>
         {/if}
       </div>
     {:else}
       <div class="pt-4 border-t border-slate-100 dark:border-zinc-800">
         <p class="text-xs text-slate-500 dark:text-zinc-400">
-          {$t('last_sync')}: {dashboard.lastSync ? `${dashboard.lastSync} Uhr` : $t('never')}
+          {$t('last_sync')}: {status.lastSync ? `${status.lastSync} Uhr` : $t('never')}
         </p>
       </div>
     {/if}
 
-    <FailedSyncsModal failedSyncs={dashboard.failedSyncs} syncStatus={dashboard.syncStatus} onRetry={dashboard.onRetryFailedSyncs} />
+    <FailedSyncsModal failedSyncs={status.failedSyncs} syncStatus={status.syncStatus} onRetry={status.onRetryFailedSyncs} />
   </section>
 
   <!-- Bottom: Folder List -->
-  <FolderList watchedFolders={dashboard.watchedFolders} onAddFolder={dashboard.onAddFolder} onRemoveFolder={dashboard.onRemoveFolder} onUpdateFolderExclusionPatterns={dashboard.onUpdateFolderExclusionPatterns} onOpenExclusionSettings={(folder) => exclusionSettingsFolder = folder} {catalogue} />
+  <FolderList watchedFolders={folders.watchedFolders} onAddFolder={folders.onAddFolder} onRemoveFolder={folders.onRemoveFolder} onOpenExclusionSettings={(folder) => exclusionSettingsFolder = folder} {catalogue} />
 </div>
 
 
-<ExclusionPatternsModal folder={exclusionSettingsFolder} onSave={dashboard.onUpdateFolderExclusionPatterns} onClose={() => exclusionSettingsFolder = null} />
+<ExclusionPatternsModal folder={exclusionSettingsFolder} onSave={folders.onUpdateFolderExclusionPatterns} onClose={() => exclusionSettingsFolder = null} />

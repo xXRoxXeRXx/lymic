@@ -1,13 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SyncControllerDesktopAdapter } from "../tauri/desktop-adapter";
+import type { SyncDesktopAdapter } from "../tauri/desktop-adapter";
 import { createSyncController } from "./sync-controller.svelte";
 
-const dialog = vi.hoisted(() => ({ confirm: vi.fn(), open: vi.fn() }));
 const events = vi.hoisted(() => ({ listen: vi.fn() }));
-vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 vi.mock("@tauri-apps/api/event", () => events);
 
-function createDesktopAdapter(overrides: Partial<SyncControllerDesktopAdapter> = {}): SyncControllerDesktopAdapter {
+function createSyncAdapter(overrides: Partial<SyncDesktopAdapter> = {}): SyncDesktopAdapter {
   return {
     startSync: vi.fn().mockResolvedValue({ processed: 1, uploaded: 1, failed: 0 }),
     pauseSync: vi.fn().mockResolvedValue({ status: "PAUSED", total: 0, succeeded: 0, failed: 0, currentPath: null }),
@@ -15,28 +13,20 @@ function createDesktopAdapter(overrides: Partial<SyncControllerDesktopAdapter> =
     getSyncStatus: vi.fn().mockResolvedValue({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null }),
     getFailedSyncs: vi.fn().mockResolvedValue([]),
     retryFailedSyncs: vi.fn().mockResolvedValue({ processed: 1, uploaded: 1, failed: 0 }),
-    addFolder: vi.fn().mockResolvedValue(1),
-    acceptRemovableMediaFolder: vi.fn().mockResolvedValue(1),
-    getFolders: vi.fn().mockResolvedValue([]),
-    updateFolderExclusionPatterns: vi.fn(),
-    removeFolder: vi.fn().mockResolvedValue({ requiresSyncCancellation: false }),
     ...overrides,
   };
 }
 
-function createController(adapter: SyncControllerDesktopAdapter, overrides = {}) {
+function createController(adapter: SyncDesktopAdapter, overrides = {}) {
   return createSyncController({
     adapter,
     reportError: vi.fn(),
-    t: (key: string) => key,
     locale: () => "en",
     ...overrides,
   });
 }
 
 beforeEach(() => {
-  dialog.confirm.mockClear();
-  dialog.open.mockClear();
   events.listen.mockClear();
 });
 
@@ -45,45 +35,62 @@ afterEach(() => vi.useRealTimers());
 describe("sync controller", () => {
   it("clears the progress reset timer on disposal", async () => {
     vi.useFakeTimers();
-    const adapter = createDesktopAdapter({ getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos" }]) });
+    const adapter = createSyncAdapter();
     const controller = createController(adapter);
     controller.startLifecycle();
     await controller.hydrate();
-    await controller.dashboard.onSyncAction();
+    await controller.status.onSyncAction();
 
-    expect(controller.progress).toBe(100);
+    expect(controller.status.progress).toBe(100);
     controller.destroy();
     vi.advanceTimersByTime(2000);
-    expect(controller.progress).toBe(100);
+    expect(controller.status.progress).toBe(100);
   });
 
-  it("exposes dashboard state and intentions through one view-state interface", async () => {
-    const adapter = createDesktopAdapter({
-      getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos" }]),
-      getSyncStatus: vi.fn().mockResolvedValue({ status: "PAUSED", total: 4, succeeded: 1, failed: 0, currentPath: "C:/photos/two.jpg" }),
+  it("exposes synchronization status and actions through the status view-state interface", async () => {
+    const adapter = createSyncAdapter({
+      getSyncStatus: vi.fn().mockResolvedValue({
+        status: "PAUSED",
+        total: 4,
+        succeeded: 1,
+        failed: 0,
+        currentPath: "C:/photos/two.jpg",
+      }),
     });
     const controller = createController(adapter);
     controller.startLifecycle();
     await controller.hydrate();
 
-    expect(controller.dashboard).toMatchObject({ syncStatus: "paused", processed: 1, syncTotal: 4, currentFile: "two.jpg", watchedFolders: [{ id: 1, path: "C:/photos" }] });
+    expect(controller.status).toMatchObject({
+      syncStatus: "paused",
+      processed: 1,
+      syncTotal: 4,
+      currentFile: "two.jpg",
+    });
+    expect("watchedFolders" in controller.status).toBe(false);
+    expect("onAddFolder" in controller.status).toBe(false);
   });
 
   it("shows a durable failed synchronization even without failed queue entries", async () => {
-    const adapter = createDesktopAdapter({
-      getSyncStatus: vi.fn().mockResolvedValue({ status: "FAILED", total: 0, succeeded: 0, failed: 0, currentPath: null }),
+    const adapter = createSyncAdapter({
+      getSyncStatus: vi.fn().mockResolvedValue({
+        status: "FAILED",
+        total: 0,
+        succeeded: 0,
+        failed: 0,
+        currentPath: null,
+      }),
     });
     const controller = createController(adapter);
     controller.startLifecycle();
 
     await controller.hydrate();
 
-    expect(controller.syncStatus).toBe("error");
+    expect(controller.status.syncStatus).toBe("error");
   });
 
   it("pauses and resumes synchronization through the adapter", async () => {
-    const adapter = createDesktopAdapter({
-      getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos" }]),
+    const adapter = createSyncAdapter({
       getSyncStatus: vi.fn().mockResolvedValue({ status: "RUNNING", total: 4, succeeded: 1, failed: 0, currentPath: null }),
       pauseSync: vi.fn().mockResolvedValue({ status: "PAUSED", total: 4, succeeded: 1, failed: 0, currentPath: null }),
       resumeSync: vi.fn().mockResolvedValue({ status: "RUNNING", total: 4, succeeded: 1, failed: 0, currentPath: null }),
@@ -92,96 +99,64 @@ describe("sync controller", () => {
     controller.startLifecycle();
     await controller.hydrate();
 
-    await controller.syncAction();
-    await controller.syncAction();
+    await controller.status.onSyncAction();
+    await controller.status.onSyncAction();
 
     expect(adapter.pauseSync).toHaveBeenCalledOnce();
     expect(adapter.resumeSync).toHaveBeenCalledOnce();
-    expect(controller.syncStatus).toBe("syncing");
+    expect(controller.status.syncStatus).toBe("syncing");
   });
 
-  it("retries failed synchronization through the adapter", async () => {
-    const adapter = createDesktopAdapter();
-    const controller = createController(adapter);
+  it("does not start synchronization when canStartSync returns false", async () => {
+    const adapter = createSyncAdapter();
+    const controller = createController(adapter, { canStartSync: () => false });
     controller.startLifecycle();
-    controller.dashboard.failedSyncs.push({ localPath: "C:/photos/failed.jpg", failureReason: "temporary failure" });
+    await controller.hydrate();
 
-    await controller.dashboard.onRetryFailedSyncs();
+    await controller.status.onSyncAction();
+
+    expect(adapter.startSync).not.toHaveBeenCalled();
+    expect(controller.status.syncStatus).toBe("idle");
+  });
+
+  it("retries failed synchronization through the adapter and notifies onSyncFinished", async () => {
+    const adapter = createSyncAdapter({
+      getFailedSyncs: vi
+        .fn()
+        .mockResolvedValueOnce([{ localPath: "C:/photos/failed.jpg", failureReason: "temporary failure" }])
+        .mockResolvedValueOnce([]),
+    });
+    const onSyncFinished = vi.fn();
+    const controller = createController(adapter, { onSyncFinished });
+    controller.startLifecycle();
+    await controller.refreshFailedSyncs();
+
+    await controller.status.onRetryFailedSyncs();
 
     expect(adapter.retryFailedSyncs).toHaveBeenCalledOnce();
-    expect(controller.dashboard.syncStatus).toBe("idle");
+    expect(onSyncFinished).toHaveBeenCalledOnce();
+    expect(controller.status.syncStatus).toBe("idle");
   });
 
-  it("removes a folder after the required sync cancellation warning", async () => {
-    const adapter = createDesktopAdapter({ removeFolder: vi.fn().mockResolvedValue({ requiresSyncCancellation: true }) });
-    dialog.confirm.mockResolvedValue(true);
+  it("keeps event subscription and cleanup active once per mount and unmount", async () => {
+    const unlisten = vi.fn();
+    events.listen.mockResolvedValue(unlisten);
+    const adapter = createSyncAdapter();
     const controller = createController(adapter);
 
-    await controller.dashboard.onRemoveFolder(4);
+    controller.startSubscriptions();
+    expect(events.listen).not.toHaveBeenCalled();
 
-    expect(dialog.confirm).toHaveBeenCalledWith("remove_folder_sync_warning", { title: "remove_folder", kind: "warning" });
-    expect(adapter.removeFolder).toHaveBeenNthCalledWith(1, 4);
-    expect(adapter.removeFolder).toHaveBeenNthCalledWith(2, 4, true);
-  });
+    controller.startLifecycle();
+    controller.startSubscriptions();
+    const listenerCount = events.listen.mock.calls.length;
+    expect(listenerCount).toBeGreaterThan(0);
 
-  it("does not remove a folder after a declined confirmation", async () => {
-    const adapter = createDesktopAdapter();
-    dialog.confirm.mockResolvedValue(false);
-    const controller = createController(adapter);
+    controller.startSubscriptions();
+    expect(events.listen).toHaveBeenCalledTimes(listenerCount);
 
-    await controller.dashboard.onRemoveFolder(4);
-
-    expect(adapter.removeFolder).toHaveBeenCalledOnce();
-    expect(adapter.removeFolder).toHaveBeenCalledWith(4);
-  });
-
-  it("opens the target album modal when a folder is selected", async () => {
-    const adapter = createDesktopAdapter();
-    dialog.open.mockResolvedValue("C:/media/photos");
-    const controller = createController(adapter);
-
-    await controller.dashboard.onAddFolder();
-
-    expect(controller.isTargetAlbumModalOpen).toBe(true);
-    expect(controller.pendingFolderPath).toBe("C:/media/photos");
-    expect(adapter.addFolder).not.toHaveBeenCalled();
-  });
-
-  it("adds a folder with its target album and refreshes the folder list", async () => {
-    const adapter = createDesktopAdapter({ getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/media/photos", target_album_id: "alb-99" }]) });
-    dialog.open.mockResolvedValue("C:/media/photos");
-    const controller = createController(adapter);
-
-    await controller.dashboard.onAddFolder();
-    await controller.confirmAddFolder("alb-99");
-
-    expect(adapter.addFolder).toHaveBeenCalledWith("C:/media/photos", "alb-99");
-    expect(controller.watchedFolders).toEqual([{ id: 1, path: "C:/media/photos", target_album_id: "alb-99" }]);
-  });
-
-  it("adds a removable folder with its volume and target album", async () => {
-    const adapter = createDesktopAdapter({ getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "E:/DCIM", target_album_id: "alb-vacation" }]) });
-    dialog.open.mockResolvedValue("E:/DCIM");
-    const onRemovableVolumeAccepted = vi.fn();
-    const controller = createController(adapter, { onRemovableVolumeAccepted });
-
-    await controller.acceptRemovableFolder({ volumeId: "vol-sd-1", mountPath: "E:\\", displayName: "EOS_DIGITAL" });
-    await controller.confirmAddFolder("alb-vacation");
-
-    expect(adapter.acceptRemovableMediaFolder).toHaveBeenCalledWith("vol-sd-1", "E:/DCIM", "alb-vacation");
-    expect(onRemovableVolumeAccepted).toHaveBeenCalledWith("vol-sd-1");
-  });
-
-  it("reports adapter errors when adding a removable folder", async () => {
-    const error = new Error("Path does not reside within removable volume");
-    const adapter = createDesktopAdapter({ acceptRemovableMediaFolder: vi.fn().mockRejectedValue(error) });
-    dialog.open.mockResolvedValue("C:/Photos");
-    const reportError = vi.fn();
-    const controller = createController(adapter, { reportError });
-
-    await controller.acceptRemovableFolder({ volumeId: "vol-sd-1", mountPath: "E:\\", displayName: "EOS_DIGITAL" });
-    await controller.confirmAddFolder(null);
-
-    expect(reportError).toHaveBeenCalledWith(error);
+    await Promise.resolve();
+    controller.destroy();
+    expect(unlisten).toHaveBeenCalledTimes(listenerCount);
   });
 });

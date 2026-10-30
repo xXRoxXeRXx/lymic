@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import ActivityLog from "./ActivityLog.svelte";
@@ -13,6 +13,8 @@ import InfoView from "./InfoView.svelte";
 import { localeCatalog } from "../i18n/locale-catalog";
 import TargetAlbumModal from "./TargetAlbumModal.svelte";
 import { createTargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
+import type { SyncStatusViewState } from "../controllers/sync-controller.svelte";
+import type { WatchedFoldersViewState } from "../controllers/watched-folders-controller.svelte";
 import type { Album } from "../contracts";
 
 const tauri = vi.hoisted(() => ({ invoke: vi.fn(), openUrl: vi.fn() }));
@@ -170,19 +172,41 @@ describe("LoginView", () => {
 });
 
 describe("DashboardView", () => {
-  const props = {
-    serverUrl: "https://immich.example",
-    catalogue: createCatalogue(),
-    dashboard: {
-      syncStatus: "idle" as const, lastSync: "10:00", progress: 0, processed: 0, syncTotal: 0, currentFile: "",
-      transferredBytes: 0, transferRateBytesPerSecond: null, estimatedSecondsRemaining: null,
-      watchedFolders: [], failedSyncs: [], logs: [], isSyncActionPending: false,
-      onSyncAction: vi.fn(), onRetryFailedSyncs: vi.fn(), onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns: vi.fn(),
-    },
-  };
+  function createStatusState(overrides: Partial<SyncStatusViewState> = {}): SyncStatusViewState {
+    return {
+      syncStatus: "idle",
+      lastSync: "10:00",
+      progress: 0,
+      processed: 0,
+      syncTotal: 0,
+      currentFile: "",
+      transferredBytes: 0,
+      transferRateBytesPerSecond: null,
+      estimatedSecondsRemaining: null,
+      failedSyncs: [],
+      isSyncActionPending: false,
+      onSyncAction: vi.fn(),
+      onRetryFailedSyncs: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  function createFoldersState(overrides: Partial<WatchedFoldersViewState> = {}): WatchedFoldersViewState {
+    return {
+      watchedFolders: [],
+      onAddFolder: vi.fn(),
+      onRemoveFolder: vi.fn(),
+      onUpdateFolderExclusionPatterns: vi.fn(),
+      ...overrides,
+    };
+  }
 
   it("disables sync without folders", () => {
-    render(DashboardView, props);
+    render(DashboardView, {
+      catalogue: createCatalogue(),
+      status: createStatusState(),
+      folders: createFoldersState(),
+    });
     expect(screen.getByRole("button", { name: "Sync Now" })).toBeDisabled();
     expect(screen.getByText("No folders added yet.")).toBeInTheDocument();
   });
@@ -190,17 +214,18 @@ describe("DashboardView", () => {
   it("shows progress and forwards sync actions with folders", async () => {
     const onSyncAction = vi.fn();
     render(DashboardView, {
-      ...props,
-      dashboard: {
-        ...props.dashboard,
+      catalogue: createCatalogue(),
+      status: createStatusState({
         syncStatus: "syncing",
         progress: 45,
         processed: 9,
         syncTotal: 20,
         currentFile: "photo.jpg",
-        watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
         onSyncAction,
-      },
+      }),
+      folders: createFoldersState({
+        watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+      }),
     });
     expect(screen.getByText("45% completed")).toBeInTheDocument();
     expect(screen.getByText("Processed: 9 / 20")).toBeInTheDocument();
@@ -211,17 +236,48 @@ describe("DashboardView", () => {
 
   it("renders available transfer statistics and hides unavailable rate and ETA", () => {
     render(DashboardView, {
-      ...props,
-      dashboard: {
-        ...props.dashboard,
+      catalogue: createCatalogue(),
+      status: createStatusState({
         syncStatus: "syncing",
-        watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
         transferredBytes: 1_024,
-      },
+      }),
+      folders: createFoldersState({
+        watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+      }),
     });
     expect(screen.getByText("Transferred: 1 KiB")).toBeInTheDocument();
     expect(screen.queryByText(/Rate:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Time remaining:/)).not.toBeInTheDocument();
+  });
+
+  it("forwards watched folder actions through the folders interface", async () => {
+    const onAddFolder = vi.fn();
+    const onRemoveFolder = vi.fn();
+    const onUpdateFolderExclusionPatterns = vi.fn().mockResolvedValue(undefined);
+    render(DashboardView, {
+      catalogue: createCatalogue(),
+      status: createStatusState(),
+      folders: createFoldersState({
+        watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
+        onAddFolder,
+        onRemoveFolder,
+        onUpdateFolderExclusionPatterns,
+      }),
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(onAddFolder).toHaveBeenCalledOnce();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Exclusions: C:/photos" }));
+    const dialog = screen.getByRole("dialog");
+    const input = within(dialog).getByPlaceholderText("e.g. **/exports/** or *.mp4");
+    await fireEvent.input(input, { target: { value: "*.mp4" } });
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Save exclusions" }));
+    expect(onUpdateFolderExclusionPatterns).toHaveBeenCalledWith(1, ["*.mp4"]);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Remove folder: C:/photos" }));
+    expect(onRemoveFolder).toHaveBeenCalledWith(1);
   });
 });
 
@@ -241,7 +297,7 @@ describe("FolderList and ActivityLog", () => {
     const onAddFolder = vi.fn();
     const onRemoveFolder = vi.fn();
     tauri.invoke.mockResolvedValue([{ id: "album-1", albumName: "Summer holidays" }]);
-    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder, onUpdateFolderExclusionPatterns: vi.fn(), catalogue: createCatalogue() });
+    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder, catalogue: createCatalogue() });
     expect(await screen.findByText("Target Album: Summer holidays")).toBeInTheDocument();
     await fireEvent.click(screen.getAllByRole("button")[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Remove folder: C:/photos" }));
@@ -253,7 +309,7 @@ describe("FolderList and ActivityLog", () => {
     const onOpenExclusionSettings = vi.fn();
     render(FolderList, {
       watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }],
-      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns: vi.fn(),
+      onAddFolder: vi.fn(), onRemoveFolder: vi.fn(),
       onOpenExclusionSettings,
       catalogue: createCatalogue(),
     });
@@ -325,7 +381,6 @@ describe("FolderList and ActivityLog", () => {
       watchedFolders: [],
       onAddFolder: vi.fn(),
       onRemoveFolder: vi.fn(),
-      onUpdateFolderExclusionPatterns: vi.fn(),
       catalogue: createCatalogue(),
     });
 
@@ -340,7 +395,7 @@ describe("FolderList and ActivityLog", () => {
   });
 
   it("renders the empty folder state", () => {
-    render(FolderList, { watchedFolders: [], onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), onUpdateFolderExclusionPatterns: vi.fn(), catalogue: createCatalogue() });
+    render(FolderList, { watchedFolders: [], onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), catalogue: createCatalogue() });
     expect(screen.getByText("No folders added yet.")).toBeInTheDocument();
   });
 
