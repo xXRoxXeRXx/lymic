@@ -104,10 +104,33 @@ async fn verify_and_migrate(pool: &SqlitePool) -> Result<(), InitFailure> {
         )));
     }
 
-    sqlx::migrate!("./migrations")
-        .run(pool)
+    let mut connection = pool
+        .acquire()
         .await
-        .map_err(classify_migrate_error)?;
+        .map_err(|e| InitFailure::Other(Box::new(e)))?;
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&mut *connection)
+        .await
+        .map_err(|e| InitFailure::Other(Box::new(e)))?;
+
+    let migration_result = sqlx::migrate!("./migrations").run(&mut *connection).await;
+
+    sqlx::query("PRAGMA foreign_keys = ON")
+        .execute(&mut *connection)
+        .await
+        .map_err(|e| InitFailure::Other(Box::new(e)))?;
+
+    migration_result.map_err(classify_migrate_error)?;
+
+    let foreign_key_violation = sqlx::query("PRAGMA foreign_key_check")
+        .fetch_optional(&mut *connection)
+        .await
+        .map_err(|e| InitFailure::Other(Box::new(e)))?;
+    if foreign_key_violation.is_some() {
+        return Err(InitFailure::Other(
+            "SQLite foreign_key_check found a constraint violation after migration".into(),
+        ));
+    }
 
     Ok(())
 }

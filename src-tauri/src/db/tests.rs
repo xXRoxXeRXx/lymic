@@ -6,7 +6,7 @@ mod database_tests {
         sqlite::{SqliteConnectOptions, SqlitePoolOptions},
         Row, SqlitePool,
     };
-    use std::time::Duration;
+    use std::{borrow::Cow, time::Duration};
 
     async fn test_pool() -> SqlitePool {
         let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
@@ -18,6 +18,64 @@ mod database_tests {
             .connect_with(options)
             .await
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn upgrading_to_sync_job_failed_status_preserves_queued_upload_units() {
+        let temp_dir = std::env::temp_dir().join(format!("lymic_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let db_path = temp_dir.join("pre_0010.db");
+
+        let options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true)
+            .foreign_keys(true);
+        let pre_upgrade_pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
+        let migrations = sqlx::migrate!("./migrations")
+            .iter()
+            .filter(|migration| migration.version < 10)
+            .cloned()
+            .collect();
+        let pre_upgrade_migrator = sqlx::migrate::Migrator {
+            migrations: Cow::Owned(migrations),
+            ignore_missing: false,
+            locking: true,
+            no_tx: false,
+        };
+        pre_upgrade_migrator.run(&pre_upgrade_pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status)\
+             VALUES (1, 1, 'pending.jpg', 1, 1, 'PENDING'),\
+                    (1, 2, 'synced.jpg', 1, 1, 'SYNCED'),\
+                    (1, 3, 'failed.jpg', 1, 1, 'FAILED')",
+        )
+        .execute(&pre_upgrade_pool)
+        .await
+        .unwrap();
+        pre_upgrade_pool.close().await;
+
+        let upgraded = init_at_path(&db_path).await.unwrap();
+        let statuses: Vec<String> = sqlx::query("SELECT status FROM sync_queue ORDER BY sequence")
+            .fetch_all(&upgraded.pool)
+            .await
+            .unwrap()
+            .iter()
+            .map(|row| row.get("status"))
+            .collect();
+        assert_eq!(statuses, ["PENDING", "SYNCED", "FAILED"]);
+
+        let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
+            .fetch_one(&upgraded.pool)
+            .await
+            .unwrap();
+        assert_eq!(foreign_keys, 1);
+
+        upgraded.pool.close().await;
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[tokio::test]
