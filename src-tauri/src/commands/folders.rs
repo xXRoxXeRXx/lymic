@@ -35,7 +35,7 @@ pub(crate) async fn add_folder(
     let input =
         RegisterFolderParams::from_local_path(path, target_album_id, active_volumes.as_deref());
 
-    WatchedFolderRegistration::new(&app, pool.inner(), watcher.inner())
+    WatchedFolderRegistration::for_tauri(&app, pool.inner(), watcher.inner())
         .register(input)
         .await
 }
@@ -51,15 +51,13 @@ pub(crate) async fn accept_removable_media_folder(
     target_album_id: Option<String>,
 ) -> Result<i64, String> {
     let input = RegisterFolderParams::from_removable_acceptance(
-        pool.inner(),
         active_volumes.inner(),
         volume_id,
         path,
         target_album_id,
-    )
-    .await?;
+    )?;
 
-    WatchedFolderRegistration::new(&app, pool.inner(), watcher.inner())
+    WatchedFolderRegistration::for_tauri(&app, pool.inner(), watcher.inner())
         .register(input)
         .await
 }

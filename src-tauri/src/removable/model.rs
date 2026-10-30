@@ -22,7 +22,7 @@ pub enum VolumeEvent {
 
 #[derive(Clone, Default)]
 pub struct ActiveRemovableVolumes(
-    pub std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, VolumeInfo>>>,
+    std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, VolumeInfo>>>,
 );
 
 impl ActiveRemovableVolumes {
@@ -52,6 +52,13 @@ impl ActiveRemovableVolumes {
 
     pub fn get(&self, volume_id: &str) -> Option<VolumeInfo> {
         self.0.lock().ok()?.get(volume_id).cloned()
+    }
+
+    pub fn list(&self) -> Vec<VolumeInfo> {
+        self.0
+            .lock()
+            .map(|lock| lock.values().cloned().collect())
+            .unwrap_or_default()
     }
 
     pub fn find_by_mount_path(&self, mount_path: &str) -> Option<VolumeInfo> {

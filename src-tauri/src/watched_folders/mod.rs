@@ -1,15 +1,42 @@
 use crate::audit::{AuditEvent, Outcome, Severity};
-use crate::db;
 use crate::immich::AlbumId;
 use crate::media::paths::{normalize_folder_path, path_is_within};
 use crate::removable::{ActiveRemovableVolumes, VolumeInfo};
-use crate::watcher::{self, WatchRegistration, WatcherState};
+use crate::watcher::WatchRegistration;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
 mod internal {
     use crate::audit::AuditEvent;
+    use crate::db::{self, RemovableFolderBinding, WatchedFolder};
+    use crate::immich::AlbumId;
+    use crate::watcher::{self, WatchRegistration, WatcherState};
     use std::path::PathBuf;
+
+    pub(crate) trait FolderPersistence {
+        async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String>;
+        async fn list_removable_bindings_by_volume(
+            &self,
+            volume_id: &str,
+        ) -> Result<Vec<RemovableFolderBinding>, String>;
+        async fn add_folder(
+            &self,
+            path: &str,
+            target_album_id: Option<&AlbumId>,
+        ) -> Result<i64, String>;
+        async fn bind_removable_folder(
+            &self,
+            folder_id: i64,
+            volume_id: &str,
+            relative_path: &str,
+        ) -> Result<(), String>;
+        async fn remove_folder(&self, folder_id: i64) -> Result<(), String>;
+    }
+
+    pub(crate) trait FolderWatcher {
+        async fn watch_available(&self, path: &str) -> Result<WatchRegistration, String>;
+        async fn unwatch(&self, path: &str) -> Result<(), String>;
+    }
 
     pub(crate) trait RegistrationEffects {
         fn enable_sync(&self);
@@ -17,6 +44,72 @@ mod internal {
         fn log_watcher_deferred(&self, path: &str);
         fn log_watcher_undo_failed(&self, path: &str, error: &str);
         fn record_audit(&self, event: AuditEvent);
+    }
+
+    pub(crate) struct SqliteFolderPersistence<'a> {
+        pub(crate) pool: &'a sqlx::SqlitePool,
+    }
+
+    impl FolderPersistence for SqliteFolderPersistence<'_> {
+        async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String> {
+            db::get_folders(self.pool)
+                .await
+                .map_err(|error| error.to_string())
+        }
+
+        async fn list_removable_bindings_by_volume(
+            &self,
+            volume_id: &str,
+        ) -> Result<Vec<RemovableFolderBinding>, String> {
+            db::get_removable_folders_by_volume(self.pool, volume_id)
+                .await
+                .map_err(|error| error.to_string())
+        }
+
+        async fn add_folder(
+            &self,
+            path: &str,
+            target_album_id: Option<&AlbumId>,
+        ) -> Result<i64, String> {
+            db::add_folder(self.pool, path, target_album_id)
+                .await
+                .map_err(|error| error.to_string())
+        }
+
+        async fn bind_removable_folder(
+            &self,
+            folder_id: i64,
+            volume_id: &str,
+            relative_path: &str,
+        ) -> Result<(), String> {
+            db::bind_removable_folder(self.pool, folder_id, volume_id, relative_path)
+                .await
+                .map_err(|error| error.to_string())
+        }
+
+        async fn remove_folder(&self, folder_id: i64) -> Result<(), String> {
+            db::remove_folder(self.pool, folder_id)
+                .await
+                .map_err(|error| error.to_string())
+        }
+    }
+
+    pub(crate) struct NotifyFolderWatcher<'a> {
+        pub(crate) watcher: &'a tokio::sync::Mutex<WatcherState>,
+    }
+
+    impl FolderWatcher for NotifyFolderWatcher<'_> {
+        async fn watch_available(&self, path: &str) -> Result<WatchRegistration, String> {
+            let mut watcher_guard = self.watcher.lock().await;
+            watcher_guard
+                .reconcile_path(path, true)
+                .map_err(|error| format!("Could not watch '{path}': {error}"))
+        }
+
+        async fn unwatch(&self, path: &str) -> Result<(), String> {
+            let mut watcher_guard = self.watcher.lock().await;
+            watcher::unwatch_path(&mut watcher_guard, path).map_err(|error| error.to_string())
+        }
     }
 
     pub(crate) struct TauriRegistrationEffects<'a> {
@@ -87,7 +180,10 @@ mod internal {
     }
 }
 
-use internal::{RegistrationEffects, TauriRegistrationEffects};
+use internal::{
+    FolderPersistence, FolderWatcher, NotifyFolderWatcher, RegistrationEffects,
+    SqliteFolderPersistence, TauriRegistrationEffects,
+};
 
 fn sanitize_target_album_id(target_album_id: Option<String>) -> Option<AlbumId> {
     target_album_id.and_then(|id| {
@@ -107,13 +203,10 @@ fn check_folder_conflict(
     let normalized_path = normalize_folder_path(candidate_path);
     let conflict = existing_paths.iter().find_map(|existing_path| {
         let normalized_existing = normalize_folder_path(existing_path);
-        let is_duplicate = path_is_within(&normalized_path, &normalized_existing)
-            && path_is_within(&normalized_existing, &normalized_path);
-        if is_duplicate
-            || path_is_within(&normalized_path, &normalized_existing)
-            || path_is_within(&normalized_existing, &normalized_path)
-        {
-            Some((normalized_existing, is_duplicate))
+        let candidate_within = path_is_within(&normalized_path, &normalized_existing);
+        let existing_within = path_is_within(&normalized_existing, &normalized_path);
+        if candidate_within || existing_within {
+            Some((normalized_existing, candidate_within && existing_within))
         } else {
             None
         }
@@ -139,16 +232,35 @@ fn check_folder_conflict(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RemovableBindingInput {
-    pub volume_id: String,
-    pub relative_path: String,
+pub(crate) struct RemovableVolumeBinding {
+    volume_id: String,
+    relative_path: String,
+    reject_if_already_bound: bool,
+}
+
+impl RemovableVolumeBinding {
+    pub fn new(volume_id: impl Into<String>, relative_path: impl Into<String>) -> Self {
+        Self {
+            volume_id: volume_id.into(),
+            relative_path: relative_path.into(),
+            reject_if_already_bound: false,
+        }
+    }
+
+    pub fn volume_id(&self) -> &str {
+        &self.volume_id
+    }
+
+    pub fn relative_path(&self) -> &str {
+        &self.relative_path
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RegisterFolderParams {
-    pub path: String,
-    pub target_album_id: Option<AlbumId>,
-    pub removable_binding: Option<RemovableBindingInput>,
+    path: String,
+    target_album_id: Option<AlbumId>,
+    removable_binding: Option<RemovableVolumeBinding>,
 }
 
 impl RegisterFolderParams {
@@ -175,79 +287,93 @@ impl RegisterFolderParams {
         }
     }
 
-    pub async fn from_removable_acceptance(
-        pool: &sqlx::SqlitePool,
+    pub fn from_removable_acceptance(
         active_volumes: &ActiveRemovableVolumes,
         volume_id: String,
         path: String,
         target_album_id: Option<String>,
     ) -> Result<Self, String> {
         let volume = active_volumes.get(&volume_id);
-        let existing_bindings = db::get_removable_folders_by_volume(pool, &volume_id)
-            .await
-            .map_err(|error| error.to_string())?;
+        let relative_path =
+            validate_removable_volume_containment(volume.as_ref(), &volume_id, Path::new(&path))?;
 
-        let relative_path = validate_removable_folder_acceptance(
-            volume.as_ref(),
-            &volume_id,
-            Path::new(&path),
-            &existing_bindings,
-        )?;
-
-        Ok(Self::new(path, target_album_id).with_removable_binding(volume_id, relative_path))
+        Ok(
+            Self::new(path, target_album_id).with_removable_binding(RemovableVolumeBinding {
+                volume_id,
+                relative_path,
+                reject_if_already_bound: true,
+            }),
+        )
     }
 
-    pub fn with_removable_binding(
-        mut self,
-        volume_id: impl Into<String>,
-        relative_path: impl Into<String>,
-    ) -> Self {
-        self.removable_binding = Some(RemovableBindingInput {
-            volume_id: volume_id.into(),
-            relative_path: relative_path.into(),
-        });
+    pub fn with_removable_binding(mut self, binding: RemovableVolumeBinding) -> Self {
+        self.removable_binding = Some(binding);
         self
+    }
+
+    #[cfg(test)]
+    pub fn removable_binding(&self) -> Option<&RemovableVolumeBinding> {
+        self.removable_binding.as_ref()
     }
 }
 
-pub(crate) struct WatchedFolderRegistration<'a, E = TauriRegistrationEffects<'a>> {
-    pool: &'a sqlx::SqlitePool,
-    watcher: &'a tokio::sync::Mutex<WatcherState>,
+pub(crate) struct WatchedFolderRegistration<P, W, E> {
+    persistence: P,
+    watcher: W,
     effects: E,
 }
 
-impl<'a> WatchedFolderRegistration<'a, TauriRegistrationEffects<'a>> {
-    pub(crate) fn new(
+impl<'a>
+    WatchedFolderRegistration<
+        SqliteFolderPersistence<'a>,
+        NotifyFolderWatcher<'a>,
+        TauriRegistrationEffects<'a>,
+    >
+{
+    pub(crate) fn for_tauri(
         app: &'a tauri::AppHandle,
         pool: &'a sqlx::SqlitePool,
-        watcher: &'a tokio::sync::Mutex<WatcherState>,
+        watcher: &'a tokio::sync::Mutex<crate::watcher::WatcherState>,
     ) -> Self {
-        Self {
-            pool,
-            watcher,
-            effects: TauriRegistrationEffects { app, pool },
-        }
+        Self::new(
+            SqliteFolderPersistence { pool },
+            NotifyFolderWatcher { watcher },
+            TauriRegistrationEffects { app, pool },
+        )
     }
 }
 
-impl<'a, E: RegistrationEffects> WatchedFolderRegistration<'a, E> {
-    #[cfg(test)]
-    pub(crate) fn for_test(
-        pool: &'a sqlx::SqlitePool,
-        watcher: &'a tokio::sync::Mutex<WatcherState>,
-        effects: E,
-    ) -> Self {
+impl<P, W, E> WatchedFolderRegistration<P, W, E>
+where
+    P: FolderPersistence,
+    W: FolderWatcher,
+    E: RegistrationEffects,
+{
+    pub(crate) fn new(persistence: P, watcher: W, effects: E) -> Self {
         Self {
-            pool,
+            persistence,
             watcher,
             effects,
         }
     }
 
     pub(crate) async fn register(&self, input: RegisterFolderParams) -> Result<i64, String> {
-        let folders = db::get_folders(self.pool)
-            .await
-            .map_err(|error| error.to_string())?;
+        if let Some(ref removable) = input.removable_binding {
+            if removable.reject_if_already_bound {
+                let existing = self
+                    .persistence
+                    .list_removable_bindings_by_volume(removable.volume_id())
+                    .await?;
+                if !existing.is_empty() {
+                    return Err(format!(
+                        "Removable volume '{}' is already bound to a watched folder.",
+                        removable.volume_id()
+                    ));
+                }
+            }
+        }
+
+        let folders = self.persistence.list_folders().await?;
         let path_for_normalization = PathBuf::from(&input.path);
         let existing_paths = folders
             .into_iter()
@@ -286,36 +412,39 @@ impl<'a, E: RegistrationEffects> WatchedFolderRegistration<'a, E> {
         };
 
         let registration = if is_available {
-            let mut w = self.watcher.lock().await;
-            w.reconcile_path(&path_string, true)
-                .map_err(|error| format!("Could not watch '{}': {}", path_string, error))?
+            self.watcher.watch_available(&path_string).await?
         } else {
             WatchRegistration::PathUnavailable
         };
 
-        let id = match db::add_folder(self.pool, &path_string, input.target_album_id.as_ref()).await
+        let id = match self
+            .persistence
+            .add_folder(&path_string, input.target_album_id.as_ref())
+            .await
         {
             Ok(id) => id,
             Err(error) => {
-                self.undo_watcher_registration(&registration, &path_string)
-                    .await;
-                return Err(error.to_string());
+                if registration == WatchRegistration::Registered {
+                    if let Err(unwatch_error) = self.watcher.unwatch(&path_string).await {
+                        self.effects
+                            .log_watcher_undo_failed(&path_string, &unwatch_error);
+                    }
+                }
+                return Err(error);
             }
         };
 
         if let Some(removable) = input.removable_binding {
-            if let Err(error) = db::bind_removable_folder(
-                self.pool,
-                id,
-                &removable.volume_id,
-                &removable.relative_path,
-            )
-            .await
+            if let Err(error) = self
+                .persistence
+                .bind_removable_folder(id, removable.volume_id(), removable.relative_path())
+                .await
             {
-                let _ = db::remove_folder(self.pool, id).await;
-                self.undo_watcher_registration(&registration, &path_string)
-                    .await;
-                return Err(error.to_string());
+                let _ = self.persistence.remove_folder(id).await;
+                if registration == WatchRegistration::Registered {
+                    let _ = self.watcher.unwatch(&path_string).await;
+                }
+                return Err(error);
             }
         }
 
@@ -348,26 +477,16 @@ impl<'a, E: RegistrationEffects> WatchedFolderRegistration<'a, E> {
 
         Ok(id)
     }
-
-    async fn undo_watcher_registration(&self, registration: &WatchRegistration, path: &str) {
-        if *registration == WatchRegistration::Registered {
-            let mut w = self.watcher.lock().await;
-            if let Err(unwatch_error) = watcher::unwatch_path(&mut w, path) {
-                self.effects
-                    .log_watcher_undo_failed(path, &unwatch_error.to_string());
-            }
-        }
-    }
 }
 
 fn detect_removable_binding_for_path(
     active_volumes: &ActiveRemovableVolumes,
     path: &Path,
-) -> Option<RemovableBindingInput> {
+) -> Option<RemovableVolumeBinding> {
     let normalized_path = normalize_folder_path(path);
-    let volumes = active_volumes.0.lock().ok()?;
-    let mut matching_volumes: Vec<(&VolumeInfo, String)> = volumes
-        .values()
+    let volumes = active_volumes.list();
+    let mut matching_volumes: Vec<(VolumeInfo, String)> = volumes
+        .into_iter()
         .filter_map(|vol| {
             let relative_path =
                 relative_path_within_mount(Path::new(&vol.mount_path), &normalized_path)?;
@@ -380,9 +499,8 @@ fn detect_removable_binding_for_path(
     matching_volumes
         .into_iter()
         .next()
-        .map(|(best_volume, relative_path)| RemovableBindingInput {
-            volume_id: best_volume.volume_id.clone(),
-            relative_path,
+        .map(|(best_volume, relative_path)| {
+            RemovableVolumeBinding::new(best_volume.volume_id, relative_path)
         })
 }
 
@@ -406,21 +524,13 @@ fn relative_path_within_mount(mount_path: &Path, normalized_folder: &Path) -> Op
     Some(parts.join("/"))
 }
 
-fn validate_removable_folder_acceptance(
+fn validate_removable_volume_containment(
     volume: Option<&VolumeInfo>,
     volume_id: &str,
     path: &Path,
-    existing_bindings: &[db::RemovableFolderBinding],
 ) -> Result<String, String> {
     let volume =
         volume.ok_or_else(|| format!("Removable volume '{}' is not connected.", volume_id))?;
-
-    if !existing_bindings.is_empty() {
-        return Err(format!(
-            "Removable volume '{}' is already bound to a watched folder.",
-            volume_id
-        ));
-    }
 
     let normalized_path = normalize_folder_path(path);
     relative_path_within_mount(Path::new(&volume.mount_path), &normalized_path).ok_or_else(|| {

@@ -401,18 +401,23 @@ async fn manual_folder_addition_detects_removable_volume_and_persists_binding() 
         None,
         Some(&active_volumes),
     );
-    assert!(params.removable_binding.is_some());
-    let binding = params.removable_binding.unwrap();
-    assert_eq!(binding.volume_id, volume_id);
-    assert_eq!(binding.relative_path, "DCIM/100MEDIA");
+    assert!(params.removable_binding().is_some());
+    let binding = params.removable_binding().unwrap();
+    assert_eq!(binding.volume_id(), volume_id);
+    assert_eq!(binding.relative_path(), "DCIM/100MEDIA");
 
     // Add folder with this detected binding
     let folder_id = crate::db::add_folder(&pool, folder_path, None)
         .await
         .unwrap();
-    crate::db::bind_removable_folder(&pool, folder_id, &binding.volume_id, &binding.relative_path)
-        .await
-        .unwrap();
+    crate::db::bind_removable_folder(
+        &pool,
+        folder_id,
+        binding.volume_id(),
+        binding.relative_path(),
+    )
+    .await
+    .unwrap();
 
     let stored_binding = crate::db::get_removable_folder_binding(&pool, folder_id)
         .await

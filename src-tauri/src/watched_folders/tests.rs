@@ -1,5 +1,7 @@
-use super::internal::RegistrationEffects;
-use super::{RegisterFolderParams, WatchedFolderRegistration};
+use super::internal::{
+    FolderWatcher, NotifyFolderWatcher, RegistrationEffects, SqliteFolderPersistence,
+};
+use super::{RegisterFolderParams, RemovableVolumeBinding, WatchedFolderRegistration};
 use crate::audit::AuditEvent;
 use crate::removable::{ActiveRemovableVolumes, VolumeInfo};
 use crate::watcher::{create_watcher, WatchRegistration, WatcherState};
@@ -107,7 +109,11 @@ async fn registers_available_watched_folder_with_sanitized_target_album_and_trig
     let temp = TempDir::new("available");
     let raw_path = format!("{}/", temp.path().to_string_lossy());
 
-    let registration = WatchedFolderRegistration::for_test(&pool, &watcher, &effects);
+    let registration = WatchedFolderRegistration::new(
+        SqliteFolderPersistence { pool: &pool },
+        NotifyFolderWatcher { watcher: &watcher },
+        &effects,
+    );
 
     let folder_id = registration
         .register(RegisterFolderParams::new(
@@ -165,7 +171,11 @@ async fn rejects_duplicate_overlapping_and_non_directory_paths_while_admitting_s
     std::fs::create_dir_all(&sibling).unwrap();
     std::fs::write(&regular_file, b"image").unwrap();
 
-    let registration = WatchedFolderRegistration::for_test(&pool, &watcher, &effects);
+    let registration = WatchedFolderRegistration::new(
+        SqliteFolderPersistence { pool: &pool },
+        NotifyFolderWatcher { watcher: &watcher },
+        &effects,
+    );
 
     registration
         .register(RegisterFolderParams::new(
@@ -231,7 +241,11 @@ async fn unavailable_watched_folder_remains_configured_defers_watching_and_skips
         uuid::Uuid::new_v4()
     ));
 
-    let registration = WatchedFolderRegistration::for_test(&pool, &watcher, &effects);
+    let registration = WatchedFolderRegistration::new(
+        SqliteFolderPersistence { pool: &pool },
+        NotifyFolderWatcher { watcher: &watcher },
+        &effects,
+    );
 
     let folder_id = registration
         .register(RegisterFolderParams::new(
@@ -280,16 +294,18 @@ async fn registers_removable_watched_folder_and_persists_volume_binding() {
     });
 
     let input = RegisterFolderParams::from_removable_acceptance(
-        &pool,
         &active_volumes,
         "vol-sd-999".to_string(),
         dcim.to_string_lossy().to_string(),
         Some("album-sd".to_string()),
     )
-    .await
     .unwrap();
 
-    let registration = WatchedFolderRegistration::for_test(&pool, &watcher, &effects);
+    let registration = WatchedFolderRegistration::new(
+        SqliteFolderPersistence { pool: &pool },
+        NotifyFolderWatcher { watcher: &watcher },
+        &effects,
+    );
     let folder_id = registration.register(input).await.unwrap();
 
     let binding = crate::db::get_removable_folder_binding(&pool, folder_id)
@@ -305,8 +321,22 @@ async fn registers_removable_watched_folder_and_persists_volume_binding() {
     );
 }
 
+struct FailingUnwatchWatcher<'a> {
+    inner: NotifyFolderWatcher<'a>,
+}
+
+impl FolderWatcher for FailingUnwatchWatcher<'_> {
+    async fn watch_available(&self, path: &str) -> Result<WatchRegistration, String> {
+        self.inner.watch_available(path).await
+    }
+
+    async fn unwatch(&self, _path: &str) -> Result<(), String> {
+        Err("simulated unwatch failure".to_string())
+    }
+}
+
 #[tokio::test]
-async fn persistence_failure_undoes_watcher_registration() {
+async fn persistence_failure_undoes_watcher_registration_and_logs_if_undo_fails() {
     let pool = test_pool().await;
     sqlx::query(
         "CREATE TRIGGER fail_watched_folder_insert BEFORE INSERT ON watched_folders \
@@ -323,7 +353,11 @@ async fn persistence_failure_undoes_watcher_registration() {
         .to_string_lossy()
         .to_string();
 
-    let registration = WatchedFolderRegistration::for_test(&pool, &watcher, &effects);
+    let registration = WatchedFolderRegistration::new(
+        SqliteFolderPersistence { pool: &pool },
+        NotifyFolderWatcher { watcher: &watcher },
+        &effects,
+    );
 
     let err = registration
         .register(RegisterFolderParams::new(
@@ -346,6 +380,25 @@ async fn persistence_failure_undoes_watcher_registration() {
     assert!(effects.triggered_syncs.lock().unwrap().is_empty());
     assert!(effects.audit_events.lock().unwrap().is_empty());
     assert!(effects.undo_errors.lock().unwrap().is_empty());
+
+    let failing_unwatch_registration = WatchedFolderRegistration::new(
+        SqliteFolderPersistence { pool: &pool },
+        FailingUnwatchWatcher {
+            inner: NotifyFolderWatcher { watcher: &watcher },
+        },
+        &effects,
+    );
+    let _ = failing_unwatch_registration
+        .register(RegisterFolderParams::new(
+            temp.path().to_string_lossy(),
+            None,
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        *effects.undo_errors.lock().unwrap(),
+        vec![(expected_path, "simulated unwatch failure".to_string())]
+    );
 }
 
 #[tokio::test]
@@ -366,12 +419,16 @@ async fn removable_binding_failure_undoes_persisted_folder_and_watcher_registrat
         .to_string_lossy()
         .to_string();
 
-    let registration = WatchedFolderRegistration::for_test(&pool, &watcher, &effects);
+    let registration = WatchedFolderRegistration::new(
+        SqliteFolderPersistence { pool: &pool },
+        NotifyFolderWatcher { watcher: &watcher },
+        &effects,
+    );
 
     let err = registration
         .register(
             RegisterFolderParams::new(temp.path().to_string_lossy(), None)
-                .with_removable_binding("vol-fail-1", "DCIM"),
+                .with_removable_binding(RemovableVolumeBinding::new("vol-fail-1", "DCIM")),
         )
         .await
         .unwrap_err();
@@ -391,7 +448,7 @@ async fn removable_binding_failure_undoes_persisted_folder_and_watcher_registrat
     let folder_id = registration
         .register(
             RegisterFolderParams::new(temp.path().to_string_lossy(), None)
-                .with_removable_binding("vol-fail-1", "DCIM"),
+                .with_removable_binding(RemovableVolumeBinding::new("vol-fail-1", "DCIM")),
         )
         .await
         .unwrap();
@@ -409,103 +466,84 @@ async fn removable_binding_failure_undoes_persisted_folder_and_watcher_registrat
 #[tokio::test]
 async fn removable_acceptance_validates_presence_bounds_and_containment() {
     let pool = test_pool().await;
+    let watcher = test_watcher();
+    let effects = RecordedEffects::default();
     let active_volumes = ActiveRemovableVolumes::new();
-    let mount_path = if cfg!(windows) {
-        "E:\\"
-    } else {
-        "/media/sdcard"
-    };
+    let mount_dir = TempDir::new("sdcard");
+    let mount_path = mount_dir.path().to_string_lossy().to_string();
+    let dcim_dir = mount_dir.path().join("DCIM").join("100EOS");
+    std::fs::create_dir_all(&dcim_dir).unwrap();
+
     active_volumes.insert(VolumeInfo {
         volume_id: "vol-sd-123".to_string(),
-        mount_path: mount_path.to_string(),
+        mount_path: mount_path.clone(),
         display_name: "SD_CARD".to_string(),
     });
 
     // 1. Disconnected volume
     let err = RegisterFolderParams::from_removable_acceptance(
-        &pool,
         &active_volumes,
         "vol-missing".to_string(),
-        if cfg!(windows) {
-            "E:\\DCIM".to_string()
-        } else {
-            "/media/sdcard/DCIM".to_string()
-        },
+        dcim_dir.to_string_lossy().to_string(),
         None,
     )
-    .await
     .unwrap_err();
     assert!(err.contains("not connected") || err.contains("not found"));
 
     // 2. Path outside volume mount
-    let outside_path = if cfg!(windows) {
-        "C:\\Photos".to_string()
-    } else {
-        "/home/user/Photos".to_string()
-    };
+    let outside_dir = TempDir::new("outside");
     let err = RegisterFolderParams::from_removable_acceptance(
-        &pool,
         &active_volumes,
         "vol-sd-123".to_string(),
-        outside_path,
+        outside_dir.path().to_string_lossy().to_string(),
         None,
     )
-    .await
     .unwrap_err();
     assert!(err.contains("does not reside within") || err.contains("outside"));
 
     // 3. Valid path inside volume
-    let valid_path = if cfg!(windows) {
-        "E:\\DCIM\\100EOS".to_string()
-    } else {
-        "/media/sdcard/DCIM/100EOS".to_string()
-    };
     let params = RegisterFolderParams::from_removable_acceptance(
-        &pool,
         &active_volumes,
         "vol-sd-123".to_string(),
-        valid_path,
+        dcim_dir.to_string_lossy().to_string(),
         None,
     )
-    .await
     .unwrap();
     assert_eq!(
         params
-            .removable_binding
+            .removable_binding()
             .unwrap()
-            .relative_path
+            .relative_path()
             .replace('\\', "/"),
         "DCIM/100EOS"
     );
 
     // 4. Valid path at mount root
     let root_params = RegisterFolderParams::from_removable_acceptance(
-        &pool,
         &active_volumes,
         "vol-sd-123".to_string(),
-        mount_path.to_string(),
+        mount_path.clone(),
         None,
     )
-    .await
     .unwrap();
-    assert_eq!(root_params.removable_binding.unwrap().relative_path, "");
+    assert_eq!(root_params.removable_binding().unwrap().relative_path(), "");
 
-    // 5. Already bound volume
-    let folder_id = crate::db::add_folder(&pool, mount_path, None)
-        .await
-        .unwrap();
-    crate::db::bind_removable_folder(&pool, folder_id, "vol-sd-123", "")
-        .await
-        .unwrap();
-    let err = RegisterFolderParams::from_removable_acceptance(
-        &pool,
+    // 5. Already bound volume is rejected during registration
+    let registration = WatchedFolderRegistration::new(
+        SqliteFolderPersistence { pool: &pool },
+        NotifyFolderWatcher { watcher: &watcher },
+        &effects,
+    );
+    registration.register(root_params).await.unwrap();
+
+    let second_attempt = RegisterFolderParams::from_removable_acceptance(
         &active_volumes,
         "vol-sd-123".to_string(),
-        mount_path.to_string(),
+        dcim_dir.to_string_lossy().to_string(),
         None,
     )
-    .await
-    .unwrap_err();
+    .unwrap();
+    let err = registration.register(second_attempt).await.unwrap_err();
     assert!(err.contains("already bound"));
 }
 
@@ -531,10 +569,10 @@ fn detect_removable_binding_for_path_resolves_mounted_volumes() {
     };
     let params = RegisterFolderParams::from_local_path(card_path, None, Some(&active_volumes));
     let binding = params
-        .removable_binding
+        .removable_binding()
         .expect("removable binding detected");
-    assert_eq!(binding.volume_id, "vol-card-456");
-    assert_eq!(binding.relative_path.replace('\\', "/"), "DCIM/100CANON");
+    assert_eq!(binding.volume_id(), "vol-card-456");
+    assert_eq!(binding.relative_path().replace('\\', "/"), "DCIM/100CANON");
 
     // Path on fixed local drive
     let fixed_path = if cfg!(windows) {
@@ -544,5 +582,5 @@ fn detect_removable_binding_for_path_resolves_mounted_volumes() {
     };
     let fixed_params =
         RegisterFolderParams::from_local_path(fixed_path, None, Some(&active_volumes));
-    assert!(fixed_params.removable_binding.is_none());
+    assert!(fixed_params.removable_binding().is_none());
 }
