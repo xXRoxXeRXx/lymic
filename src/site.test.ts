@@ -15,6 +15,130 @@ describe("landing page", () => {
     );
   });
 
+  it("publishes accurate SoftwareApplication structured data", () => {
+    const script = document.querySelector<HTMLScriptElement>(
+      'script[type="application/ld+json"][data-schema="software-application"]',
+    );
+
+    expect(script?.textContent).toBeTruthy();
+    const schema = JSON.parse(script!.textContent!);
+
+    expect(schema).toMatchObject({
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "Lymic",
+      applicationCategory: "MultimediaApplication",
+      operatingSystem: ["Windows 10 or later", "macOS (Apple Silicon)", "Linux (x86_64)"],
+      author: {
+        "@type": "Organization",
+        name: "Lymic contributors",
+      },
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+      },
+      downloadUrl: "https://github.com/xXRoxXeRXx/lymic/releases",
+    });
+    expect(schema.description).toMatch(/upload.*Immich/i);
+    expect(JSON.stringify(schema)).not.toMatch(/Virtual Library|Microsoft Store/i);
+  });
+
+  it("maps every on-page FAQ item into valid FAQPage structured data", () => {
+    const faqItems = Array.from(document.querySelectorAll<HTMLElement>("[data-faq-item]")).map(
+      (item) => ({
+        "@type": "Question",
+        name: item.querySelector("h3")?.textContent?.trim(),
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: item.querySelector("p")?.textContent?.replace(/\s+/g, " ").trim(),
+        },
+      }),
+    );
+    const script = document.querySelector<HTMLScriptElement>(
+      'script[type="application/ld+json"][data-schema="faq-page"]',
+    );
+
+    expect(faqItems).toHaveLength(3);
+    expect(faqItems.map((item) => item.name)).toEqual([
+      "Is Lymic a two-way synchronization tool?",
+      "Which Immich Server versions work with Lymic?",
+      "How does Lymic protect my credentials?",
+    ]);
+    expect(script?.textContent).toBeTruthy();
+    expect(JSON.parse(script!.textContent!)).toEqual({
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: faqItems,
+    });
+  });
+
+  it("publishes canonical, Open Graph, and Twitter metadata", () => {
+    const meta = (selector: string) =>
+      document.querySelector<HTMLMetaElement>(selector)?.getAttribute("content");
+    const description = meta('meta[name="description"]');
+
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe(
+      "https://xxroxxerxx.github.io/lymic/",
+    );
+    expect({
+      title: meta('meta[property="og:title"]'),
+      description: meta('meta[property="og:description"]'),
+      image: meta('meta[property="og:image"]'),
+      url: meta('meta[property="og:url"]'),
+      type: meta('meta[property="og:type"]'),
+    }).toEqual({
+      title: document.title,
+      description,
+      image: "https://xxroxxerxx.github.io/lymic/assets/logo.png",
+      url: "https://xxroxxerxx.github.io/lymic/",
+      type: "website",
+    });
+    expect({
+      card: meta('meta[name="twitter:card"]'),
+      title: meta('meta[name="twitter:title"]'),
+      description: meta('meta[name="twitter:description"]'),
+      image: meta('meta[name="twitter:image"]'),
+    }).toEqual({
+      card: "summary",
+      title: document.title,
+      description,
+      image: "https://xxroxxerxx.github.io/lymic/assets/logo.png",
+    });
+  });
+
+  it("keeps accessible support, privacy, source, and license links in the header and footer", () => {
+    const expectedLinks = {
+      Privacy: "privacy/",
+      Support: "support/",
+      GitHub: "https://github.com/xXRoxXeRXx/lymic",
+      "MIT License": "https://github.com/xXRoxXeRXx/lymic/blob/master/LICENSE",
+    };
+
+    for (const selector of ["header nav", "footer nav"]) {
+      const nav = document.querySelector(selector);
+      const links = Object.fromEntries(
+        Array.from(nav?.querySelectorAll("a") ?? []).map((link) => [
+          link.textContent?.trim(),
+          link.getAttribute("href"),
+        ]),
+      );
+
+      expect(nav?.getAttribute("aria-label")).toBeTruthy();
+      expect(links).toEqual(expectedLinks);
+    }
+
+    for (const link of document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+      const target = link.getAttribute("href")!;
+      expect(link.textContent?.trim() || link.getAttribute("aria-label")).toBeTruthy();
+      if (/^https:\/\//.test(target)) {
+        expect(() => new URL(target)).not.toThrow();
+      } else {
+        expect(existsSync(resolve(root, "site", target))).toBe(true);
+      }
+    }
+  });
+
   it("references existing landing-page assets", () => {
     const localAssets = [
       document.querySelector('link[rel="icon"]')?.getAttribute("href"),

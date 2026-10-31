@@ -7,8 +7,80 @@
       name="description"
       content="Lymic is the open-source desktop client that synchronizes local media to your self-hosted Immich server."
     />
+    <link rel="canonical" href="https://xxroxxerxx.github.io/lymic/" />
+    <meta property="og:title" content="Lymic - Open-Source Desktop Client for Immich" />
+    <meta
+      property="og:description"
+      content="Lymic is the open-source desktop client that synchronizes local media to your self-hosted Immich server."
+    />
+    <meta property="og:image" content="https://xxroxxerxx.github.io/lymic/assets/logo.png" />
+    <meta property="og:url" content="https://xxroxxerxx.github.io/lymic/" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Lymic - Open-Source Desktop Client for Immich" />
+    <meta
+      name="twitter:description"
+      content="Lymic is the open-source desktop client that synchronizes local media to your self-hosted Immich server."
+    />
+    <meta name="twitter:image" content="https://xxroxxerxx.github.io/lymic/assets/logo.png" />
     <link rel="icon" type="image/png" href="assets/favicon.png" />
     <title>Lymic - Open-Source Desktop Client for Immich</title>
+    <script type="application/ld+json" data-schema="software-application">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Lymic",
+        "description": "An open-source desktop client that uploads local media to a self-hosted Immich Server.",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": [
+          "Windows 10 or later",
+          "macOS (Apple Silicon)",
+          "Linux (x86_64)"
+        ],
+        "author": {
+          "@type": "Organization",
+          "name": "Lymic contributors"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "downloadUrl": "https://github.com/xXRoxXeRXx/lymic/releases"
+      }
+    </script>
+    <script type="application/ld+json" data-schema="faq-page">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Is Lymic a two-way synchronization tool?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Lymic uploads Media Assets from Watched Folders to your Immich Server. It does not download Remote Assets or apply remote deletions or renames to local media."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which Immich Server versions work with Lymic?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Lymic does not declare a fixed minimum Immich version. It requires a reachable Immich Server that provides the user-profile, bulk-upload-check, asset-upload, and album APIs Lymic uses."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does Lymic protect my credentials?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Lymic stores your API key and optional Cloudflare Access token in the operating system's native keyring, not in its SQLite database or plaintext settings. Connections go directly to the Immich Server you configure."
+            }
+          }
+        ]
+      }
+    </script>
     <style>
       :root {
         color-scheme: light dark;
@@ -98,6 +170,8 @@
 
       .site-header nav {
         display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
         gap: 1.5rem;
       }
 
@@ -324,7 +398,8 @@
       }
 
       .platforms,
-      .requirements {
+      .requirements,
+      .faq {
         padding: 2rem 0 7rem;
       }
 
@@ -414,6 +489,30 @@
         margin-top: 0.7rem;
       }
 
+      .faq-grid {
+        display: grid;
+        gap: 1rem;
+        max-width: 52rem;
+        margin: 0 auto;
+      }
+
+      .faq-item {
+        padding: 1.5rem;
+        border: 1px solid var(--border);
+        border-radius: 1.2rem;
+        background: var(--surface);
+      }
+
+      .faq-item h3 {
+        margin: 0;
+        font-size: 1.25rem;
+      }
+
+      .faq-item p {
+        margin: 0.75rem 0 0;
+        color: var(--text-muted);
+      }
+
       footer {
         display: flex;
         align-items: center;
@@ -435,8 +534,15 @@
           width: min(100% - 2rem, 42rem);
         }
 
-        .site-header nav a:first-child {
-          display: none;
+        .site-header {
+          align-items: flex-start;
+          flex-direction: column;
+          padding: 1rem 0;
+        }
+
+        .site-header nav {
+          justify-content: flex-start;
+          gap: 0.75rem 1.25rem;
         }
 
         .hero {
@@ -510,8 +616,10 @@
           <span>Lymic</span>
         </a>
         <nav aria-label="Primary navigation">
+          <a href="privacy/">Privacy</a>
           <a href="support/">Support</a>
           <a href="https://github.com/xXRoxXeRXx/lymic">GitHub</a>
+          <a href="https://github.com/xXRoxXeRXx/lymic/blob/master/LICENSE">MIT License</a>
         </nav>
       </header>
 
@@ -784,6 +892,41 @@
             </article>
           </div>
         </section>
+
+        <section class="faq" aria-labelledby="faq-title">
+          <div class="section-heading">
+            <p class="eyebrow">Frequently asked questions</p>
+            <h2 id="faq-title">What to know before you connect Lymic.</h2>
+          </div>
+
+          <div class="faq-grid">
+            <article class="faq-item" data-faq-item>
+              <h3>Is Lymic a two-way synchronization tool?</h3>
+              <p>
+                No. Lymic uploads Media Assets from Watched Folders to your Immich Server. It does
+                not download Remote Assets or apply remote deletions or renames to local media.
+              </p>
+            </article>
+
+            <article class="faq-item" data-faq-item>
+              <h3>Which Immich Server versions work with Lymic?</h3>
+              <p>
+                Lymic does not declare a fixed minimum Immich version. It requires a reachable
+                Immich Server that provides the user-profile, bulk-upload-check, asset-upload, and
+                album APIs Lymic uses.
+              </p>
+            </article>
+
+            <article class="faq-item" data-faq-item>
+              <h3>How does Lymic protect my credentials?</h3>
+              <p>
+                Lymic stores your API key and optional Cloudflare Access token in the operating
+                system's native keyring, not in its SQLite database or plaintext settings.
+                Connections go directly to the Immich Server you configure.
+              </p>
+            </article>
+          </div>
+        </section>
       </main>
 
       <footer>
@@ -791,6 +934,8 @@
         <nav class="footer-links" aria-label="Legal and support">
           <a href="privacy/">Privacy</a>
           <a href="support/">Support</a>
+          <a href="https://github.com/xXRoxXeRXx/lymic">GitHub</a>
+          <a href="https://github.com/xXRoxXeRXx/lymic/blob/master/LICENSE">MIT License</a>
         </nav>
       </footer>
     </div>
