@@ -130,16 +130,22 @@ mod tests {
 
     #[tokio::test]
     async fn redacts_credentials_from_non_retryable_bulk_check_ui_log() {
-        let secret = "api-key-secret";
+        let api_key = "api-key-secret";
+        let cloudflare_client_id = "cloudflare-client-id";
+        let cloudflare_client_secret = "cloudflare-client-secret";
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
+        let server_url = format!("http://{address}");
+        let response_body = format!(
+            "request rejected: {server_url} {api_key} {cloudflare_client_id} {cloudflare_client_secret}"
+        );
         tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
             stream
                 .write_all(
                     format!(
-                        "HTTP/1.1 401 Unauthorized\r\nContent-Length: {}\r\nConnection: close\r\n\r\nrequest rejected: {secret}",
-                        "request rejected: ".len() + secret.len()
+                        "HTTP/1.1 401 Unauthorized\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response_body}",
+                        response_body.len()
                     )
                     .as_bytes(),
                 )
@@ -156,20 +162,20 @@ mod tests {
                 .push(serde_json::from_str::<serde_json::Value>(event.payload()).unwrap());
         });
         let client = ImmichClient::new(
-            format!("http://{address}"),
-            secret.to_string(),
+            server_url.clone(),
+            api_key.to_string(),
             true,
-            None,
-            None,
+            Some(cloudflare_client_id.to_string()),
+            Some(cloudflare_client_secret.to_string()),
         )
         .unwrap();
         let audit_context = SyncAuditContext::from_credentials(
             &AuthConfig {
-                server_url: format!("http://{address}"),
-                api_key: secret.to_string(),
+                server_url: server_url.clone(),
+                api_key: api_key.to_string(),
                 allow_local_http: true,
-                cloudflare_client_id: None,
-                cloudflare_client_secret: None,
+                cloudflare_client_id: Some(cloudflare_client_id.to_string()),
+                cloudflare_client_secret: Some(cloudflare_client_secret.to_string()),
             },
             "manual_sync",
         );
@@ -188,22 +194,36 @@ mod tests {
             .iter()
             .find(|log| log["key"] == "log_bulk_check_cannot_retry")
             .unwrap();
-        assert!(!serde_json::to_string(log).unwrap().contains(secret));
+        let payload = serde_json::to_string(log).unwrap();
+        for credential in [
+            server_url.as_str(),
+            api_key,
+            cloudflare_client_id,
+            cloudflare_client_secret,
+        ] {
+            assert!(!payload.contains(credential));
+        }
     }
 
     #[tokio::test]
     async fn redacts_credentials_from_retry_and_final_bulk_check_ui_logs() {
-        let secret = "api-key-secret";
+        let api_key = "api-key-secret";
+        let cloudflare_client_id = "cloudflare-client-id";
+        let cloudflare_client_secret = "cloudflare-client-secret";
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
+        let server_url = format!("http://{address}");
+        let response_body = format!(
+            "request rejected: {server_url} {api_key} {cloudflare_client_id} {cloudflare_client_secret}"
+        );
         tokio::spawn(async move {
             for _ in 0..3 {
                 let (mut stream, _) = listener.accept().await.unwrap();
                 stream
                     .write_all(
                         format!(
-                            "HTTP/1.1 500 Internal Server Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\nrequest rejected: {secret}",
-                            "request rejected: ".len() + secret.len()
+                            "HTTP/1.1 500 Internal Server Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response_body}",
+                            response_body.len()
                         )
                         .as_bytes(),
                     )
@@ -221,20 +241,20 @@ mod tests {
                 .push(serde_json::from_str::<serde_json::Value>(event.payload()).unwrap());
         });
         let client = ImmichClient::new(
-            format!("http://{address}"),
-            secret.to_string(),
+            server_url.clone(),
+            api_key.to_string(),
             true,
-            None,
-            None,
+            Some(cloudflare_client_id.to_string()),
+            Some(cloudflare_client_secret.to_string()),
         )
         .unwrap();
         let audit_context = SyncAuditContext::from_credentials(
             &AuthConfig {
-                server_url: format!("http://{address}"),
-                api_key: secret.to_string(),
+                server_url: server_url.clone(),
+                api_key: api_key.to_string(),
                 allow_local_http: true,
-                cloudflare_client_id: None,
-                cloudflare_client_secret: None,
+                cloudflare_client_id: Some(cloudflare_client_id.to_string()),
+                cloudflare_client_secret: Some(cloudflare_client_secret.to_string()),
             },
             "manual_sync",
         );
@@ -251,7 +271,15 @@ mod tests {
         let logs = logs.lock().unwrap();
         for key in ["log_bulk_check_retry", "log_bulk_check_failed_max_attempts"] {
             let log = logs.iter().find(|log| log["key"] == key).unwrap();
-            assert!(!serde_json::to_string(log).unwrap().contains(secret));
+            let payload = serde_json::to_string(log).unwrap();
+            for credential in [
+                server_url.as_str(),
+                api_key,
+                cloudflare_client_id,
+                cloudflare_client_secret,
+            ] {
+                assert!(!payload.contains(credential));
+            }
         }
     }
 }
