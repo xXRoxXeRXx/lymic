@@ -60,9 +60,7 @@ pub(crate) fn load_cached_profile(
 
     let image_path = cache_dir.join(AVATAR_FILE_NAME);
     let image_bytes = fs::read(&image_path).ok();
-    let profile_image = image_bytes
-        .as_deref()
-        .and_then(|bytes| to_data_url(bytes, meta.content_type.as_deref()));
+    let profile_image = image_bytes.as_deref().and_then(to_data_url);
 
     Some(CurrentUser {
         display_name: meta.display_name,
@@ -129,7 +127,7 @@ pub(crate) fn clear_profile_cache(cache_dir: &Path) {
     let _ = fs::remove_dir(cache_dir);
 }
 
-pub(crate) fn to_data_url(bytes: &[u8], _content_type: Option<&str>) -> Option<String> {
+pub(crate) fn to_data_url(bytes: &[u8]) -> Option<String> {
     let mime = detect_mime_type(bytes)?;
     let encoded = general_purpose::STANDARD.encode(bytes);
     Some(format!("data:{mime};base64,{encoded}"))
@@ -161,7 +159,7 @@ pub(crate) fn resolve_profile(
             bytes,
             content_type,
         } => {
-            let data_url = to_data_url(&bytes, content_type.as_deref());
+            let data_url = to_data_url(&bytes);
             let _ = save_cached_profile(
                 cache_dir,
                 account_id,
@@ -390,12 +388,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_svg_payload_even_when_server_declares_an_image_content_type() {
+    fn rejects_svg_payload() {
         assert_eq!(
-            to_data_url(
-                b"<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>",
-                Some("image/svg+xml")
-            ),
+            to_data_url(b"<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>"),
             None
         );
     }
