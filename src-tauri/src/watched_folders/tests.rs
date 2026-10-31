@@ -1,8 +1,11 @@
 use super::internal::{
-    FolderWatcher, NotifyFolderWatcher, RegistrationEffects, SqliteFolderPersistence,
+    FolderPersistence, FolderWatcher, NotifyFolderWatcher, RegistrationEffects,
+    SqliteFolderPersistence,
 };
 use super::{RegisterFolderParams, RemovableVolumeBinding, WatchedFolderRegistration};
 use crate::audit::AuditEvent;
+use crate::db::{RemovableFolderBinding, WatchedFolder};
+use crate::immich::AlbumId;
 use crate::removable::{ActiveRemovableVolumes, VolumeInfo};
 use crate::watcher::{create_watcher, WatchRegistration, WatcherState};
 use sqlx::{
@@ -71,6 +74,53 @@ struct RecordedEffects {
     deferred_warnings: Arc<Mutex<Vec<String>>>,
     undo_errors: Arc<Mutex<Vec<(String, String)>>>,
     audit_events: Arc<Mutex<Vec<AuditEvent>>>,
+}
+
+#[derive(Clone, Default)]
+struct ConfiguredFolderPersistence {
+    folder: Arc<Mutex<Option<WatchedFolder>>>,
+}
+
+impl FolderPersistence for ConfiguredFolderPersistence {
+    async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String> {
+        Ok(self.folder.lock().unwrap().iter().cloned().collect())
+    }
+
+    async fn list_removable_bindings_by_volume(
+        &self,
+        _volume_id: &str,
+    ) -> Result<Vec<RemovableFolderBinding>, String> {
+        Ok(Vec::new())
+    }
+
+    async fn add_folder(
+        &self,
+        path: &str,
+        target_album_id: Option<&AlbumId>,
+    ) -> Result<i64, String> {
+        *self.folder.lock().unwrap() = Some(WatchedFolder {
+            id: 1,
+            path: path.to_string(),
+            recursive: true,
+            target_album_id: target_album_id.cloned(),
+            exclusion_patterns: vec!["private.jpg".to_string()],
+        });
+        Ok(1)
+    }
+
+    async fn bind_removable_folder(
+        &self,
+        _folder_id: i64,
+        _volume_id: &str,
+        _relative_path: &str,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+
+    async fn remove_folder(&self, _folder_id: i64) -> Result<(), String> {
+        *self.folder.lock().unwrap() = None;
+        Ok(())
+    }
 }
 
 impl RegistrationEffects for &RecordedEffects {
@@ -162,6 +212,30 @@ async fn registers_available_watched_folder_with_sanitized_target_album_and_trig
     assert_eq!(audit_json["details"]["folder_id"], folder_id);
     assert_eq!(audit_json["details"]["local_path"], expected_path);
     assert_eq!(audit_json["details"]["target_album_id"], "album-uuid-1");
+}
+
+#[tokio::test]
+async fn initial_folder_sync_receives_persisted_exclusion_patterns() {
+    let watcher = test_watcher();
+    let effects = RecordedEffects::default();
+    let temp = TempDir::new("persisted-exclusions");
+    let registration = WatchedFolderRegistration::new(
+        ConfiguredFolderPersistence::default(),
+        NotifyFolderWatcher { watcher: &watcher },
+        &effects,
+    );
+
+    registration
+        .register(RegisterFolderParams::new(
+            temp.path().to_string_lossy().to_string(),
+            None,
+        ))
+        .await
+        .unwrap();
+
+    let triggered_syncs = effects.triggered_syncs.lock().unwrap();
+    assert_eq!(triggered_syncs.len(), 1);
+    assert_eq!(triggered_syncs[0].exclusion_patterns, ["private.jpg"]);
 }
 
 #[tokio::test]

@@ -15,6 +15,7 @@ pub async fn add_folder(
     path: &str,
     target_album_id: Option<&AlbumId>,
 ) -> Result<i64, sqlx::Error> {
+    let path = normalize_windows_drive_letter(path);
     let result = sqlx::query("INSERT INTO watched_folders (path, target_album_id) VALUES (?, ?)")
         .bind(path)
         .bind(target_album_id.map(|id| id.as_str()))
@@ -30,6 +31,7 @@ pub async fn restore_folder(
     target_album_id: Option<&AlbumId>,
     exclusion_patterns: &[String],
 ) -> Result<i64, sqlx::Error> {
+    let path = normalize_windows_drive_letter(path);
     let exclusion_patterns =
         serde_json::to_string(exclusion_patterns).expect("exclusion patterns serialize");
     let result = sqlx::query(

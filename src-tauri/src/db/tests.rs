@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod database_tests {
+    use super::super::folders::restore_folder;
     use super::super::init::quarantine_unusable_db;
     use crate::db::*;
     use sqlx::{
@@ -1399,6 +1400,25 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn watched_folder_persistence_normalizes_windows_drive_letters() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        add_folder(&pool, "e:/DCIM", None).await.unwrap();
+        restore_folder(&pool, "f:/Archive", true, None, &[])
+            .await
+            .unwrap();
+
+        let paths = get_folders(&pool)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|folder| folder.path)
+            .collect::<Vec<_>>();
+        assert_eq!(paths, vec!["E:/DCIM", "F:/Archive"]);
+    }
+
+    #[tokio::test]
     async fn target_album_id_and_remote_id_persist_in_sync_queue() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
@@ -1658,7 +1678,7 @@ mod database_tests {
         // Populate sync_state
         update_sync_state(
             &pool,
-            "E:/DCIM/100EOS/IMG_0001.JPG",
+            "e:/DCIM/100EOS/IMG_0001.JPG",
             "hash1",
             100,
             1000,
@@ -1669,7 +1689,7 @@ mod database_tests {
         .unwrap();
         update_sync_state(
             &pool,
-            "E:/DCIM/100EOS/IMG_0002.JPG",
+            "e:/DCIM/100EOS/IMG_0002.JPG",
             "hash2",
             200,
             2000,
@@ -1678,7 +1698,7 @@ mod database_tests {
         )
         .await
         .unwrap();
-        sqlx::query("UPDATE sync_state SET failure_reason = 'network timeout' WHERE local_path = 'E:/DCIM/100EOS/IMG_0002.JPG'")
+        sqlx::query("UPDATE sync_state SET failure_reason = 'network timeout' WHERE local_path = 'e:/DCIM/100EOS/IMG_0002.JPG'")
             .execute(&pool)
             .await
             .unwrap();
@@ -1698,7 +1718,7 @@ mod database_tests {
         let queue_units = vec![
             QueueUploadUnit {
                 image: QueueUploadAsset {
-                    path: "E:/DCIM/100EOS/IMG_0002.JPG".to_string(),
+                    path: "e:/DCIM/100EOS/IMG_0002.JPG".to_string(),
                     size: 2000,
                     mtime: 200,
                     target_album_id: None,
@@ -1734,7 +1754,7 @@ mod database_tests {
 
         // 2. Verify sync_state
         let old_item = sqlx::query(
-            "SELECT local_path FROM sync_state WHERE local_path = 'E:/DCIM/100EOS/IMG_0001.JPG'",
+            "SELECT local_path FROM sync_state WHERE local_path = 'e:/DCIM/100EOS/IMG_0001.JPG'",
         )
         .fetch_optional(&pool)
         .await
