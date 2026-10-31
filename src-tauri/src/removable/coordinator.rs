@@ -72,10 +72,10 @@ impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
                                     .join(&binding.relative_path)
                             };
                             let norm_new =
-                                crate::media::paths::normalize_folder_path(&candidate_path);
+                                crate::media::paths::normalize_path_lexical(&candidate_path);
                             let norm_new_str = norm_new.to_string_lossy().to_string();
 
-                            let norm_current = crate::media::paths::normalize_folder_path(
+                            let norm_current = crate::media::paths::normalize_path_lexical(
                                 std::path::Path::new(&folder.path),
                             );
                             let norm_current_str = norm_current.to_string_lossy().to_string();

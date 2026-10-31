@@ -484,17 +484,26 @@ pub(crate) fn prepare_scan_for_queue(
     scan_result: &ScanResult,
     folders: &[db::WatchedFolder],
 ) -> (Vec<db::QueueUploadUnit>, Vec<(String, String)>) {
+    let folders = folders
+        .iter()
+        .map(|folder| {
+            (
+                crate::media::paths::normalize_path_lexical(std::path::Path::new(&folder.path)),
+                folder.target_album_id.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
     let assets = scan_result
         .files
         .iter()
         .map(|asset| {
             let mut asset = asset.clone();
-            let asset_path = std::path::PathBuf::from(&asset.path);
+            let asset_path =
+                crate::media::paths::normalize_path_lexical(std::path::Path::new(&asset.path));
             asset.target_album_id = asset.target_album_id.or_else(|| {
-                folders.iter().find_map(|f| {
-                    let folder_path = std::path::PathBuf::from(&f.path);
-                    if crate::media::paths::path_is_within(&asset_path, &folder_path) {
-                        f.target_album_id.clone()
+                folders.iter().find_map(|(folder_path, target_album_id)| {
+                    if crate::media::paths::path_is_within_lexical(&asset_path, folder_path) {
+                        target_album_id.clone()
                     } else {
                         None
                     }

@@ -1,4 +1,4 @@
-use crate::media::paths::{normalize_folder_path, path_is_within};
+use crate::media::paths::{normalize_path_lexical, path_is_within_lexical};
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool, Transaction};
 use std::path::PathBuf;
 
@@ -199,10 +199,10 @@ pub async fn has_sync_work_in_folder(pool: &SqlitePool, folder: &str) -> Result<
     .bind(prefix)
     .fetch_all(pool)
     .await?;
-    let folder = normalize_folder_path(&PathBuf::from(folder));
+    let folder = normalize_path_lexical(&PathBuf::from(folder));
     Ok(paths
         .into_iter()
-        .any(|path| path_is_within(&normalize_folder_path(&PathBuf::from(path)), &folder)))
+        .any(|path| path_is_within_lexical(&normalize_path_lexical(&PathBuf::from(path)), &folder)))
 }
 
 pub async fn discard_sync_data_in_folder(
@@ -219,10 +219,12 @@ pub async fn discard_sync_data_in_folder(
     .bind(&prefix)
     .fetch_all(pool)
     .await?;
-    let folder = normalize_folder_path(&PathBuf::from(folder));
+    let folder = normalize_path_lexical(&PathBuf::from(folder));
     let matching: Vec<_> = paths
         .into_iter()
-        .filter(|path| path_is_within(&normalize_folder_path(&PathBuf::from(path)), &folder))
+        .filter(|path| {
+            path_is_within_lexical(&normalize_path_lexical(&PathBuf::from(path)), &folder)
+        })
         .collect();
     discard_folder_sync_paths(pool, &matching).await
 }

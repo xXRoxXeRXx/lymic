@@ -222,7 +222,7 @@ async fn known_volume_arrival_with_changed_mount_remaps_path_reconciles_watcher_
     let folders = crate::db::get_folders(&pool).await.unwrap();
     let folder = folders.iter().find(|f| f.id == folder_id).unwrap();
     let norm_expected =
-        crate::media::paths::normalize_folder_path(std::path::Path::new(expected_new_path))
+        crate::media::paths::canonicalize_folder_path(std::path::Path::new(expected_new_path))
             .to_string_lossy()
             .to_string();
     assert_eq!(folder.path, norm_expected);
@@ -288,9 +288,10 @@ async fn known_volume_arrival_with_same_mount_reconciles_watcher_and_triggers_sc
     assert_eq!(detected.len(), 0);
 
     // Watcher reconciled with None for old_path (no unwatch needed since path is identical)
-    let norm_path = crate::media::paths::normalize_folder_path(std::path::Path::new(folder_path))
-        .to_string_lossy()
-        .to_string();
+    let norm_path =
+        crate::media::paths::canonicalize_folder_path(std::path::Path::new(folder_path))
+            .to_string_lossy()
+            .to_string();
     let reconciled = emitter.reconciled.lock().unwrap().clone();
     assert_eq!(reconciled.len(), 1);
     assert_eq!(reconciled[0].0, None);
@@ -354,9 +355,10 @@ async fn volume_removal_clears_active_volumes_emits_removal_and_unwatches_bound_
     assert_eq!(removed[0], volume_id);
 
     // 3. Reconciles bound folder as unavailable to unwatch cleanly
-    let norm_path = crate::media::paths::normalize_folder_path(std::path::Path::new(folder_path))
-        .to_string_lossy()
-        .to_string();
+    let norm_path =
+        crate::media::paths::canonicalize_folder_path(std::path::Path::new(folder_path))
+            .to_string_lossy()
+            .to_string();
     let unwatched = emitter.unwatched.lock().unwrap().clone();
     assert_eq!(unwatched.len(), 1);
     assert_eq!(unwatched[0], norm_path);
@@ -449,9 +451,10 @@ async fn reconnecting_known_volume_resets_failed_queue_items_for_folder_to_pendi
     } else {
         "/media/user/SD/DCIM"
     };
-    let norm_folder = crate::media::paths::normalize_folder_path(std::path::Path::new(folder_path))
-        .to_string_lossy()
-        .to_string();
+    let norm_folder =
+        crate::media::paths::canonicalize_folder_path(std::path::Path::new(folder_path))
+            .to_string_lossy()
+            .to_string();
 
     let folder_id = crate::db::add_folder(&pool, folder_path, None)
         .await
@@ -543,9 +546,10 @@ async fn volume_removal_during_active_sync_transitions_inflight_to_failed_and_re
     } else {
         "/media/user/SD/DCIM/100NIKON"
     };
-    let norm_folder = crate::media::paths::normalize_folder_path(std::path::Path::new(folder_path))
-        .to_string_lossy()
-        .to_string();
+    let norm_folder =
+        crate::media::paths::canonicalize_folder_path(std::path::Path::new(folder_path))
+            .to_string_lossy()
+            .to_string();
 
     let folder_id = crate::db::add_folder(&pool, folder_path, None)
         .await

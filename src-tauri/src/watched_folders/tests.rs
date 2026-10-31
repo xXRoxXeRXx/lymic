@@ -123,7 +123,7 @@ async fn registers_available_watched_folder_with_sanitized_target_album_and_trig
         .await
         .unwrap();
 
-    let expected_path = crate::media::paths::normalize_folder_path(temp.path())
+    let expected_path = crate::media::paths::canonicalize_folder_path(temp.path())
         .to_string_lossy()
         .to_string();
 
@@ -255,7 +255,7 @@ async fn unavailable_watched_folder_remains_configured_defers_watching_and_skips
         .await
         .unwrap();
 
-    let expected_path = crate::media::paths::normalize_folder_path(&missing_path)
+    let expected_path = crate::media::paths::canonicalize_folder_path(&missing_path)
         .to_string_lossy()
         .to_string();
 
@@ -349,7 +349,7 @@ async fn persistence_failure_undoes_watcher_registration_and_logs_if_undo_fails(
     let watcher = test_watcher();
     let effects = RecordedEffects::default();
     let temp = TempDir::new("persist-fail");
-    let expected_path = crate::media::paths::normalize_folder_path(temp.path())
+    let expected_path = crate::media::paths::canonicalize_folder_path(temp.path())
         .to_string_lossy()
         .to_string();
 
@@ -415,7 +415,7 @@ async fn removable_binding_failure_undoes_persisted_folder_and_watcher_registrat
     let watcher = test_watcher();
     let effects = RecordedEffects::default();
     let temp = TempDir::new("bind-fail");
-    let expected_path = crate::media::paths::normalize_folder_path(temp.path())
+    let expected_path = crate::media::paths::canonicalize_folder_path(temp.path())
         .to_string_lossy()
         .to_string();
 

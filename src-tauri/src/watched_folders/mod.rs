@@ -1,6 +1,8 @@
 use crate::audit::{AuditEvent, Outcome, Severity};
 use crate::immich::AlbumId;
-use crate::media::paths::{normalize_folder_path, path_is_within};
+use crate::media::paths::{
+    canonicalize_folder_path, normalize_path_lexical, path_is_within_lexical,
+};
 use crate::removable::{ActiveRemovableVolumes, VolumeInfo};
 use crate::watcher::WatchRegistration;
 use serde_json::json;
@@ -200,11 +202,11 @@ fn check_folder_conflict(
     candidate_path: &Path,
     existing_paths: &[PathBuf],
 ) -> Result<PathBuf, String> {
-    let normalized_path = normalize_folder_path(candidate_path);
+    let normalized_path = canonicalize_folder_path(candidate_path);
     let conflict = existing_paths.iter().find_map(|existing_path| {
-        let normalized_existing = normalize_folder_path(existing_path);
-        let candidate_within = path_is_within(&normalized_path, &normalized_existing);
-        let existing_within = path_is_within(&normalized_existing, &normalized_path);
+        let normalized_existing = normalize_path_lexical(existing_path);
+        let candidate_within = path_is_within_lexical(&normalized_path, &normalized_existing);
+        let existing_within = path_is_within_lexical(&normalized_existing, &normalized_path);
         if candidate_within || existing_within {
             Some((normalized_existing, candidate_within && existing_within))
         } else {
@@ -483,7 +485,7 @@ fn detect_removable_binding_for_path(
     active_volumes: &ActiveRemovableVolumes,
     path: &Path,
 ) -> Option<RemovableVolumeBinding> {
-    let normalized_path = normalize_folder_path(path);
+    let normalized_path = normalize_path_lexical(path);
     let volumes = active_volumes.list();
     let mut matching_volumes: Vec<(VolumeInfo, String)> = volumes
         .into_iter()
@@ -505,8 +507,8 @@ fn detect_removable_binding_for_path(
 }
 
 fn relative_path_within_mount(mount_path: &Path, normalized_folder: &Path) -> Option<String> {
-    let normalized_mount = normalize_folder_path(mount_path);
-    if !path_is_within(normalized_folder, &normalized_mount) {
+    let normalized_mount = normalize_path_lexical(mount_path);
+    if !path_is_within_lexical(normalized_folder, &normalized_mount) {
         return None;
     }
 
@@ -532,7 +534,7 @@ fn validate_removable_volume_containment(
     let volume =
         volume.ok_or_else(|| format!("Removable volume '{}' is not connected.", volume_id))?;
 
-    let normalized_path = normalize_folder_path(path);
+    let normalized_path = normalize_path_lexical(path);
     relative_path_within_mount(Path::new(&volume.mount_path), &normalized_path).ok_or_else(|| {
         format!(
             "Path '{}' does not reside within removable volume '{}' (mounted at '{}').",

@@ -1,6 +1,32 @@
 use std::path::{Component, Path, PathBuf};
 
-pub(crate) fn normalize_folder_path(path: &Path) -> PathBuf {
+/// Normalizes a path without accessing the filesystem.
+pub(crate) fn normalize_path_lexical(path: &Path) -> PathBuf {
+    let mut normalized_path = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if matches!(
+                    normalized_path.components().next_back(),
+                    Some(Component::Normal(_))
+                ) {
+                    normalized_path.pop();
+                } else if !normalized_path.has_root() {
+                    normalized_path.push(component.as_os_str());
+                }
+            }
+            component => normalized_path.push(component.as_os_str()),
+        }
+    }
+
+    normalize_windows_drive_letter(remove_windows_verbatim_prefix(normalized_path))
+}
+
+/// Resolves filesystem aliases for an available Watched Folder at its registration boundary.
+///
+/// Unavailable folders retain their absolute lexical path so they can be retried later.
+pub(crate) fn canonicalize_folder_path(path: &Path) -> PathBuf {
     let absolute_path = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -8,22 +34,9 @@ pub(crate) fn normalize_folder_path(path: &Path) -> PathBuf {
             .unwrap_or_else(|_| PathBuf::from("."))
             .join(path)
     };
-
-    // Canonicalization resolves aliases for available folders. Offline folders
-    // remain valid selections, so retain an absolute lexical path for them.
-    let mut normalized_path = PathBuf::new();
-    for component in absolute_path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                normalized_path.pop();
-            }
-            component => normalized_path.push(component.as_os_str()),
-        }
-    }
-
+    let normalized_path = normalize_path_lexical(&absolute_path);
     let canonical_path = std::fs::canonicalize(&normalized_path).unwrap_or(normalized_path);
-    remove_windows_verbatim_prefix(canonical_path)
+    normalize_path_lexical(&canonical_path)
 }
 
 #[cfg(windows)]
@@ -52,6 +65,24 @@ fn remove_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
     path
 }
 
+#[cfg(windows)]
+fn normalize_windows_drive_letter(path: PathBuf) -> PathBuf {
+    let path_string = path.to_string_lossy();
+    let bytes = path_string.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        let mut normalized = path_string.into_owned();
+        normalized.replace_range(..1, &normalized[..1].to_ascii_uppercase());
+        PathBuf::from(normalized)
+    } else {
+        path
+    }
+}
+
+#[cfg(not(windows))]
+fn normalize_windows_drive_letter(path: PathBuf) -> PathBuf {
+    path
+}
+
 fn path_component_eq(left: Component<'_>, right: Component<'_>) -> bool {
     #[cfg(windows)]
     {
@@ -65,7 +96,7 @@ fn path_component_eq(left: Component<'_>, right: Component<'_>) -> bool {
     }
 }
 
-pub(crate) fn path_is_within(path: &Path, parent: &Path) -> bool {
+pub(crate) fn path_is_within_lexical(path: &Path, parent: &Path) -> bool {
     let mut path_components = path.components();
     parent
         .components()
@@ -80,7 +111,7 @@ pub(crate) fn overlapping_folder_paths(
 ) -> (Vec<PathBuf>, Vec<(PathBuf, PathBuf)>) {
     let mut paths = paths
         .into_iter()
-        .map(|path| normalize_folder_path(&path))
+        .map(|path| normalize_path_lexical(&path))
         .collect::<Vec<_>>();
     paths.sort_by_key(|path| path.components().count());
 
@@ -89,7 +120,7 @@ pub(crate) fn overlapping_folder_paths(
     for path in paths {
         if let Some(parent) = folders
             .iter()
-            .find(|folder: &&PathBuf| path_is_within(&path, folder))
+            .find(|folder: &&PathBuf| path_is_within_lexical(&path, folder))
         {
             overlaps.push((path, parent.clone()));
         } else {
@@ -108,7 +139,48 @@ mod tests {
         let parent = remove_windows_verbatim_prefix(PathBuf::from(r"\\?\C:\Fotos"));
         let child = PathBuf::from(r"c:\fotos\Urlaub");
         assert_eq!(parent, PathBuf::from(r"C:\Fotos"));
-        assert!(path_is_within(&child, &parent));
-        assert!(path_is_within(&parent, &PathBuf::from(r"c:\FOTOS")));
+        assert!(path_is_within_lexical(&child, &parent));
+        assert!(path_is_within_lexical(&parent, &PathBuf::from(r"c:\FOTOS")));
+    }
+
+    #[test]
+    fn lexical_normalization_removes_verbatim_prefix_resolves_segments_and_uppercases_drive() {
+        assert_eq!(
+            normalize_path_lexical(Path::new(r"\\?\c:\Fotos\.\Urlaub\..\Familie\\")),
+            PathBuf::from(r"C:\Fotos\Familie")
+        );
+    }
+}
+
+#[cfg(test)]
+mod lexical_tests {
+    use super::*;
+
+    #[test]
+    fn lexical_normalization_resolves_posix_segments_without_touching_the_filesystem() {
+        assert_eq!(
+            normalize_path_lexical(Path::new("/media/photos/./2026/../2025/")),
+            PathBuf::from("/media/photos/2025")
+        );
+    }
+
+    #[test]
+    fn lexical_containment_respects_component_boundaries() {
+        assert!(path_is_within_lexical(
+            Path::new("/media/photos/2025/image.jpg"),
+            Path::new("/media/photos")
+        ));
+        assert!(!path_is_within_lexical(
+            Path::new("/media/photos-backup/image.jpg"),
+            Path::new("/media/photos")
+        ));
+    }
+
+    #[test]
+    fn lexical_normalization_preserves_leading_parent_segments() {
+        assert_eq!(
+            normalize_path_lexical(Path::new("../../photos/./2025")),
+            PathBuf::from("../../photos/2025")
+        );
     }
 }

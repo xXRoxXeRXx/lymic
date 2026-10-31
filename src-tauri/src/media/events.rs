@@ -126,7 +126,7 @@ mod tests {
         let root =
             std::env::temp_dir().join(format!("lymic-events-exclusions-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
-        let root = super::super::paths::normalize_folder_path(&root);
+        let root = super::super::paths::canonicalize_folder_path(&root);
         let nested = root.join("Screenshots").join("Nested");
         std::fs::create_dir_all(&nested).unwrap();
         let excluded_by_directory = nested.join("one.JPG");
@@ -159,7 +159,7 @@ mod tests {
         let root =
             std::env::temp_dir().join(format!("lymic-events-live-photo-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
-        let root = super::super::paths::normalize_folder_path(&root);
+        let root = super::super::paths::canonicalize_folder_path(&root);
         let image = root.join("IMG_1.HEIC");
         let video = root.join("IMG_1.MOV");
         std::fs::write(&image, b"image").unwrap();

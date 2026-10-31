@@ -1,6 +1,6 @@
 use crate::media::{
     model::{HashedUploadUnit, UploadUnit},
-    paths::{normalize_folder_path, path_is_within},
+    paths::{normalize_path_lexical, path_is_within_lexical},
 };
 use std::{
     path::PathBuf,
@@ -63,7 +63,7 @@ impl ActiveWork {
             let cancellation = CancellationToken::new();
             for path in unit
                 .assets()
-                .map(|asset| normalize_folder_path(&PathBuf::from(&asset.path)))
+                .map(|asset| normalize_path_lexical(&PathBuf::from(&asset.path)))
             {
                 let id = self.next_id.fetch_add(1, Ordering::Relaxed);
                 ids.push(id);
@@ -93,23 +93,23 @@ impl ActiveWork {
     }
 
     pub(crate) fn has_work_in(&self, folder: &str) -> bool {
-        let folder = normalize_folder_path(&PathBuf::from(folder));
+        let folder = normalize_path_lexical(&PathBuf::from(folder));
         self.entries
             .lock()
             .expect("active work lock poisoned")
             .iter()
-            .any(|entry| path_is_within(&entry.path, &folder))
+            .any(|entry| path_is_within_lexical(&entry.path, &folder))
     }
 
     pub(crate) fn cancel_work_in(&self, folder: &str) {
-        let folder = normalize_folder_path(&PathBuf::from(folder));
+        let folder = normalize_path_lexical(&PathBuf::from(folder));
         for entry in self
             .entries
             .lock()
             .expect("active work lock poisoned")
             .iter()
         {
-            if path_is_within(&entry.path, &folder) {
+            if path_is_within_lexical(&entry.path, &folder) {
                 entry.cancellation.cancel();
             }
         }
@@ -142,7 +142,7 @@ impl ProcessingContext {
     }
 
     fn for_path(&self, path: &str) -> UnitProcessingContext {
-        let path = normalize_folder_path(&PathBuf::from(path));
+        let path = normalize_path_lexical(&PathBuf::from(path));
         let cancellation = self
             .entries
             .iter()
@@ -154,7 +154,7 @@ impl ProcessingContext {
 }
 
 fn same_path(left: &std::path::Path, right: &std::path::Path) -> bool {
-    path_is_within(left, right) && path_is_within(right, left)
+    path_is_within_lexical(left, right) && path_is_within_lexical(right, left)
 }
 
 impl UnitProcessingContext {

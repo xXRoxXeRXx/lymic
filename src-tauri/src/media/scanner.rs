@@ -361,7 +361,7 @@ mod tests {
     fn temporary_directory() -> PathBuf {
         let dir = std::env::temp_dir().join(format!("lymic-scan-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        super::super::paths::normalize_folder_path(&dir)
+        super::super::paths::canonicalize_folder_path(&dir)
     }
 
     #[tokio::test]
@@ -383,7 +383,7 @@ mod tests {
     async fn folder_scan_skips_hidden_and_nas_metadata_entries() {
         let root = temporary_directory();
         std::fs::create_dir_all(&root).unwrap();
-        let root = crate::media::paths::normalize_folder_path(&root);
+        let root = crate::media::paths::canonicalize_folder_path(&root);
         let media_path = root.join("Vacation").join("photo.jpg");
         let excluded_media_paths = [
             root.join(".cache").join("cached.jpg"),
@@ -591,7 +591,7 @@ mod tests {
     async fn scans_skip_windows_hidden_files_and_directories() {
         let root = temporary_directory();
         std::fs::create_dir_all(&root).unwrap();
-        let root = crate::media::paths::normalize_folder_path(&root);
+        let root = crate::media::paths::canonicalize_folder_path(&root);
         let visible_path = root.join("Vacation").join("photo.jpg");
         let hidden_file_path = root.join("hidden.jpg");
         let hidden_directory = root.join("hidden-directory");
