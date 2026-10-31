@@ -178,6 +178,7 @@ fn scan_folder_for_media(path: &Path) -> ScanResult {
     result
 }
 
+#[cfg(test)]
 pub(crate) async fn scan_folders_for_media(paths: Vec<PathBuf>) -> Result<ScanResult, String> {
     tokio::task::spawn_blocking(move || {
         let mut result = ScanResult::default();
@@ -471,7 +472,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn watched_folder_scan_excluding_one_live_photo_component_discards_the_upload_unit() {
+    async fn initial_watched_folder_scan_honors_exclusion_patterns() {
         let root = temporary_directory();
         let image = root.join("IMG_1.HEIC");
         let video = root.join("IMG_1.MOV");

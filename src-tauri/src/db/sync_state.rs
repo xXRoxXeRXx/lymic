@@ -192,11 +192,12 @@ pub async fn discard_failed_sync_paths(
 }
 
 pub async fn has_sync_work_in_folder(pool: &SqlitePool, folder: &str) -> Result<bool, sqlx::Error> {
-    let prefix = format!("{}%", folder.trim_end_matches(['/', '\\']));
-    let paths: Vec<String> = sqlx::query_scalar(
-        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND status = 'PENDING' AND local_path LIKE ?",
-    )
-    .bind(prefix)
+    let folder = folder.trim_end_matches(['/', '\\']);
+    let path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
+    let paths: Vec<String> = sqlx::query_scalar(&format!(
+        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND status = 'PENDING' AND {path_cond}"
+    ))
+    .bind(folder)
     .fetch_all(pool)
     .await?;
     let folder = normalize_path_lexical(&PathBuf::from(folder));
@@ -209,14 +210,14 @@ pub async fn discard_sync_data_in_folder(
     pool: &SqlitePool,
     folder: &str,
 ) -> Result<(), sqlx::Error> {
-    let prefix = format!("{}%", folder.trim_end_matches(['/', '\\']));
-    let paths: Vec<String> = sqlx::query_scalar(
-        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND local_path LIKE ? \
-         UNION \
-         SELECT local_path FROM sync_state WHERE status != 'SYNCED' AND local_path LIKE ?",
-    )
-    .bind(&prefix)
-    .bind(&prefix)
+    let folder = folder.trim_end_matches(['/', '\\']);
+    let path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
+    let paths: Vec<String> = sqlx::query_scalar(&format!(
+        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND {path_cond} \
+             UNION \
+             SELECT local_path FROM sync_state WHERE status != 'SYNCED' AND {path_cond}"
+    ))
+    .bind(folder)
     .fetch_all(pool)
     .await?;
     let folder = normalize_path_lexical(&PathBuf::from(folder));

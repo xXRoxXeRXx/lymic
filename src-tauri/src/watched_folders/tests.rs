@@ -67,7 +67,7 @@ impl Drop for TempDir {
 #[derive(Default, Clone)]
 struct RecordedEffects {
     sync_enabled: Arc<Mutex<bool>>,
-    triggered_syncs: Arc<Mutex<Vec<String>>>,
+    triggered_syncs: Arc<Mutex<Vec<crate::db::WatchedFolder>>>,
     deferred_warnings: Arc<Mutex<Vec<String>>>,
     undo_errors: Arc<Mutex<Vec<(String, String)>>>,
     audit_events: Arc<Mutex<Vec<AuditEvent>>>,
@@ -78,8 +78,8 @@ impl RegistrationEffects for &RecordedEffects {
         *self.sync_enabled.lock().unwrap() = true;
     }
 
-    fn trigger_folder_added_sync(&self, path: String) {
-        self.triggered_syncs.lock().unwrap().push(path);
+    fn trigger_folder_added_sync(&self, folder: crate::db::WatchedFolder) {
+        self.triggered_syncs.lock().unwrap().push(folder);
     }
 
     fn log_watcher_deferred(&self, path: &str) {
@@ -142,10 +142,17 @@ async fn registers_available_watched_folder_with_sanitized_target_album_and_trig
     );
 
     assert!(*effects.sync_enabled.lock().unwrap());
+    let triggered_syncs = effects.triggered_syncs.lock().unwrap();
+    assert_eq!(triggered_syncs.len(), 1);
+    assert_eq!(triggered_syncs[0].path, expected_path);
     assert_eq!(
-        *effects.triggered_syncs.lock().unwrap(),
-        vec![expected_path.clone()]
+        triggered_syncs[0]
+            .target_album_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("album-uuid-1")
     );
+    assert!(triggered_syncs[0].exclusion_patterns.is_empty());
     assert!(effects.deferred_warnings.lock().unwrap().is_empty());
 
     let audits = effects.audit_events.lock().unwrap();

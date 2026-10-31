@@ -30,8 +30,15 @@ pub use queue::{
 pub(crate) fn sql_path_is_or_descendant_of(column: &str, param_placeholder: &str) -> String {
     format!(
         "({col} = {param} \
+         OR (substr({col}, 2, 1) = ':' AND substr({param}, 2, 1) = ':' \
+             AND substr({col}, 1, 1) = substr({param}, 1, 1) COLLATE NOCASE \
+             AND substr({col}, 2) = substr({param}, 2)) \
          OR substr({col}, 1, length({param}) + 1) = {param} || '/' \
-         OR substr({col}, 1, length({param}) + 1) = {param} || '\\\\')",
+         OR substr({col}, 1, length({param}) + 1) = {param} || '\\\\' \
+         OR (substr({col}, 2, 1) = ':' AND substr({param}, 2, 1) = ':' \
+             AND substr({col}, 1, 1) = substr({param}, 1, 1) COLLATE NOCASE \
+             AND substr({col}, 2, length({param}) - 1) = substr({param}, 2) \
+             AND substr({col}, length({param}) + 1, 1) IN ('/', '\\\\')))",
         col = column,
         param = param_placeholder
     )

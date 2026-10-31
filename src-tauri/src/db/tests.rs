@@ -964,6 +964,58 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn folder_sync_queries_treat_like_metacharacters_as_literal_path_characters() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let assets = [
+            QueueAsset {
+                path: "C:/Photos%/inside.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            },
+            QueueAsset {
+                path: "C:/PhotosX/outside.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            },
+            QueueAsset {
+                path: "C:/Photos_/inside.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            },
+            QueueAsset {
+                path: "C:/PhotosA/outside.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            },
+        ];
+        enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+
+        assert!(has_sync_work_in_folder(&pool, "C:/Photos%").await.unwrap());
+        discard_sync_data_in_folder(&pool, "C:/Photos%")
+            .await
+            .unwrap();
+        assert!(has_sync_work_in_folder(&pool, "C:/Photos_").await.unwrap());
+        discard_sync_data_in_folder(&pool, "C:/Photos_")
+            .await
+            .unwrap();
+
+        let queue_paths: Vec<String> =
+            sqlx::query_scalar("SELECT local_path FROM sync_queue ORDER BY local_path")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            queue_paths,
+            vec!["C:/PhotosA/outside.jpg", "C:/PhotosX/outside.jpg"]
+        );
+    }
+
+    #[tokio::test]
     async fn discarding_folder_sync_data_preserves_completed_hash_cache() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
@@ -1668,7 +1720,7 @@ mod database_tests {
             .unwrap();
 
         // Perform remap
-        remap_watched_folder_path(&pool, folder_id, "E:/DCIM", "F:/DCIM")
+        remap_watched_folder_path(&pool, folder_id, "e:/DCIM", "f:/DCIM/")
             .await
             .unwrap();
 
@@ -1755,7 +1807,7 @@ mod database_tests {
         let predicate = crate::db::sql_path_is_or_descendant_of("local_path", "?1");
         assert_eq!(
             predicate,
-            "(local_path = ?1 OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\\\')"
+            "(local_path = ?1 OR (substr(local_path, 2, 1) = ':' AND substr(?1, 2, 1) = ':' AND substr(local_path, 1, 1) = substr(?1, 1, 1) COLLATE NOCASE AND substr(local_path, 2) = substr(?1, 2)) OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\\\' OR (substr(local_path, 2, 1) = ':' AND substr(?1, 2, 1) = ':' AND substr(local_path, 1, 1) = substr(?1, 1, 1) COLLATE NOCASE AND substr(local_path, 2, length(?1) - 1) = substr(?1, 2) AND substr(local_path, length(?1) + 1, 1) IN ('/', '\\\\')))"
         );
     }
 

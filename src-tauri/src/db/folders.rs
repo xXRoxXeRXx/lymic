@@ -163,13 +163,13 @@ pub async fn remap_watched_folder_path(
     old_path: &str,
     new_path: &str,
 ) -> Result<(), sqlx::Error> {
-    let clean_old = old_path.trim_end_matches(['/', '\\']);
-    let clean_new = new_path.trim_end_matches(['/', '\\']);
+    let clean_old = normalize_windows_drive_letter(old_path.trim_end_matches(['/', '\\']));
+    let clean_new = normalize_windows_drive_letter(new_path.trim_end_matches(['/', '\\']));
 
     let mut tx = pool.begin().await?;
 
     sqlx::query("UPDATE watched_folders SET path = ? WHERE id = ?")
-        .bind(new_path)
+        .bind(&clean_new)
         .bind(folder_id)
         .execute(&mut *tx)
         .await?;
@@ -184,8 +184,8 @@ pub async fn remap_watched_folder_path(
          WHERE {local_path_cond}"
     );
     sqlx::query(&sync_state_sql)
-        .bind(clean_old)
-        .bind(clean_new)
+        .bind(&clean_old)
+        .bind(&clean_new)
         .execute(&mut *tx)
         .await?;
 
@@ -195,8 +195,8 @@ pub async fn remap_watched_folder_path(
          WHERE {local_path_cond}"
     );
     sqlx::query(&sync_queue_path_sql)
-        .bind(clean_old)
-        .bind(clean_new)
+        .bind(&clean_old)
+        .bind(&clean_new)
         .execute(&mut *tx)
         .await?;
 
@@ -206,8 +206,8 @@ pub async fn remap_watched_folder_path(
          WHERE {upload_unit_cond}"
     );
     sqlx::query(&sync_queue_unit_sql)
-        .bind(clean_old)
-        .bind(clean_new)
+        .bind(&clean_old)
+        .bind(&clean_new)
         .execute(&mut *tx)
         .await?;
 
@@ -217,11 +217,20 @@ pub async fn remap_watched_folder_path(
          WHERE {current_path_cond}"
     );
     sqlx::query(&sync_jobs_sql)
-        .bind(clean_old)
-        .bind(clean_new)
+        .bind(&clean_old)
+        .bind(&clean_new)
         .execute(&mut *tx)
         .await?;
 
     tx.commit().await?;
     Ok(())
+}
+
+fn normalize_windows_drive_letter(path: &str) -> String {
+    let bytes = path.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        format!("{}{}", (bytes[0] as char).to_ascii_uppercase(), &path[1..])
+    } else {
+        path.to_string()
+    }
 }

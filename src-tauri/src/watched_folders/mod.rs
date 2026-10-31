@@ -13,7 +13,6 @@ mod internal {
     use crate::db::{self, RemovableFolderBinding, WatchedFolder};
     use crate::immich::AlbumId;
     use crate::watcher::{self, WatchRegistration, WatcherState};
-    use std::path::PathBuf;
 
     pub(crate) trait FolderPersistence {
         async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String>;
@@ -42,7 +41,7 @@ mod internal {
 
     pub(crate) trait RegistrationEffects {
         fn enable_sync(&self);
-        fn trigger_folder_added_sync(&self, path: String);
+        fn trigger_folder_added_sync(&self, folder: WatchedFolder);
         fn log_watcher_deferred(&self, path: &str);
         fn log_watcher_undo_failed(&self, path: &str, error: &str);
         fn record_audit(&self, event: AuditEvent);
@@ -124,22 +123,20 @@ mod internal {
             crate::app::tray::set_sync_enabled(self.app, true);
         }
 
-        fn trigger_folder_added_sync(&self, path: String) {
+        fn trigger_folder_added_sync(&self, folder: WatchedFolder) {
             let pool_inner = self.pool.clone();
             let app_for_scan = self.app.clone();
             tauri::async_runtime::spawn(async move {
                 let scan_result =
-                    match crate::sync::scan_folders_for_media(vec![PathBuf::from(path.clone())])
-                        .await
-                    {
+                    match crate::sync::scan_watched_folders_for_media(vec![folder.clone()]).await {
                         Ok(result) => result,
                         Err(error) => {
                             crate::app::events::log_to_ui_folder_error(
                                 &app_for_scan,
                                 "ERROR",
-                                &format!("Folder scanning failed for '{path}': {error}"),
+                                &format!("Folder scanning failed for '{}': {error}", folder.path),
                                 "log_folder_scan_failed",
-                                &path,
+                                &folder.path,
                                 &error,
                             );
                             return;
@@ -459,7 +456,14 @@ where
 
         // An offline folder will be scanned when the deferred-watch task registers it.
         if is_available {
-            self.effects.trigger_folder_added_sync(path_string.clone());
+            let folder = self
+                .persistence
+                .list_folders()
+                .await?
+                .into_iter()
+                .find(|folder| folder.id == id)
+                .ok_or_else(|| "Added Watched Folder was not found.".to_string())?;
+            self.effects.trigger_folder_added_sync(folder);
         }
 
         self.effects.record_audit(AuditEvent::new(
