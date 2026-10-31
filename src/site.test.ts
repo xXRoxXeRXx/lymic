@@ -78,6 +78,49 @@ describe("landing page", () => {
     expect(links).toContain("https://github.com/xXRoxXeRXx/lymic");
   });
 
+  it("explains each platform's verified capabilities and packages", () => {
+    const platforms = Object.fromEntries(
+      Array.from(document.querySelectorAll<HTMLElement>("[data-platform]")).map((section) => [
+        section.dataset.platform,
+        section.textContent?.replace(/\s+/g, " ").trim(),
+      ]),
+    );
+
+    expect(Object.keys(platforms)).toEqual(["Windows", "macOS", "Linux"]);
+    expect(platforms.Windows).toMatch(/Virtual Library.*read-only.*on-demand hydration/i);
+    expect(platforms.Windows).toMatch(/Windows Cloud Files API/i);
+    expect(platforms.Windows).toMatch(/MSI.*Microsoft Store/i);
+    expect(platforms.macOS).toMatch(/Apple Silicon.*Intel/i);
+    expect(platforms.macOS).toMatch(/menu bar.*notifications.*DMG/i);
+    expect(platforms.Linux).toMatch(/AppImage.*DEB.*background/i);
+  });
+
+  it("publishes explicit system requirements and platform download targets", () => {
+    const requirements = document
+      .querySelector("[data-system-requirements]")
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim();
+
+    expect(requirements).toMatch(/Windows 10.*17763.*Windows 11.*x64/i);
+    expect(requirements).toMatch(/macOS.*Apple Silicon.*Intel.*not currently published/i);
+    expect(requirements).toMatch(/Linux.*Ubuntu 22\.04.*x86_64/i);
+    expect(requirements).toMatch(/Immich Server.*no fixed minimum version/i);
+    expect(requirements).toMatch(/HTTPS.*API key/i);
+
+    const downloads = Object.fromEntries(
+      Array.from(document.querySelectorAll<HTMLAnchorElement>("a[data-download-platform]")).map(
+        (link) => [link.dataset.downloadPlatform, link.href],
+      ),
+    );
+
+    expect(downloads).toEqual({
+      "Windows GitHub": "https://github.com/xXRoxXeRXx/lymic/releases",
+      "Windows Store": "https://apps.microsoft.com/detail/9NLQWHTHR1FZ",
+      macOS: "https://github.com/xXRoxXeRXx/lymic/releases",
+      Linux: "https://github.com/xXRoxXeRXx/lymic/releases",
+    });
+  });
+
   it("adapts its responsive layout and colors to the viewport and system theme", () => {
     expect(content).toMatch(/@media\s*\([^)]*prefers-color-scheme:\s*dark[^)]*\)/i);
     expect(content).toMatch(/@media\s*\([^)]*max-width:/i);

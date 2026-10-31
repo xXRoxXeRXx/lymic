@@ -323,6 +323,97 @@
         border-radius: 0.85rem;
       }
 
+      .platforms,
+      .requirements {
+        padding: 2rem 0 7rem;
+      }
+
+      .platform-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1.25rem;
+      }
+
+      .platform-card {
+        padding: 1.75rem;
+        border: 1px solid var(--border);
+        border-radius: 1.35rem;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .platform-card h3 {
+        margin: 0;
+        font-size: 1.55rem;
+        letter-spacing: -0.025em;
+      }
+
+      .platform-card p {
+        margin: 1rem 0 0;
+        color: var(--text-muted);
+      }
+
+      .platform-card strong {
+        color: var(--text);
+      }
+
+      .requirements-table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 1.35rem;
+        background: var(--surface);
+      }
+
+      .requirements-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+      }
+
+      .requirements-table th,
+      .requirements-table td {
+        padding: 1rem 1.2rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+
+      .requirements-table tr:last-child th,
+      .requirements-table tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .requirements-table th {
+        color: var(--text);
+        font-weight: 750;
+      }
+
+      .requirements-table td {
+        color: var(--text-muted);
+      }
+
+      .download-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1.25rem;
+        margin-top: 1.5rem;
+      }
+
+      .download-card {
+        padding: 1.5rem;
+        border: 1px solid var(--border);
+        border-radius: 1.35rem;
+        background: var(--surface);
+      }
+
+      .download-card h3 {
+        margin: 0 0 1rem;
+      }
+
+      .download-card .button {
+        width: 100%;
+        margin-top: 0.7rem;
+      }
+
       footer {
         display: flex;
         align-items: center;
@@ -384,6 +475,14 @@
         .feature {
           grid-template-columns: 1fr;
           gap: 2rem;
+        }
+
+        .platform-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .download-grid {
+          grid-template-columns: 1fr;
         }
 
         .feature:nth-of-type(even) .feature-copy {
@@ -542,6 +641,146 @@
               />
             </figure>
           </article>
+        </section>
+
+        <section class="platforms" aria-labelledby="platforms-title">
+          <div class="section-heading">
+            <p class="eyebrow">Made for your desktop</p>
+            <h2 id="platforms-title">A native fit on every supported platform.</h2>
+            <p>
+              Choose the package for your operating system while keeping the same private,
+              upload-oriented Synchronization workflow.
+            </p>
+          </div>
+
+          <div class="platform-grid">
+            <article class="platform-card" data-platform="Windows">
+              <h3>Windows</h3>
+              <p>
+                The optional <strong>Virtual Library</strong> uses the Windows Cloud Files API to
+                project your Immich Library as read-only placeholders with on-demand hydration.
+                GitHub Releases provides MSI and NSIS installers, while the separate Microsoft
+                Store channel ships an x64 MSIX and lets the Store manage updates.
+              </p>
+            </article>
+
+            <article class="platform-card" data-platform="macOS">
+              <h3>macOS</h3>
+              <p>
+                The native menu bar tray keeps Synchronization controls available in the
+                background, with desktop notifications for important outcomes. GitHub Releases
+                currently provides a DMG for Apple Silicon; an Intel DMG is not currently
+                published.
+              </p>
+            </article>
+
+            <article class="platform-card" data-platform="Linux">
+              <h3>Linux</h3>
+              <p>
+                Choose the x86_64 AppImage or DEB package from GitHub Releases. Closing the main
+                window leaves Lymic operating in the background through its system tray so
+                Watched Folders remain under observation.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="requirements" aria-labelledby="requirements-title">
+          <div class="section-heading">
+            <p class="eyebrow">Before you install</p>
+            <h2 id="requirements-title">System requirements and downloads.</h2>
+            <p>
+              These requirements reflect the targets the project currently builds and publishes;
+              undeclared compatibility is called out explicitly.
+            </p>
+          </div>
+
+          <div class="requirements-table-wrap">
+            <table class="requirements-table" data-system-requirements>
+              <thead>
+                <tr>
+                  <th scope="col">Platform or service</th>
+                  <th scope="col">Supported requirement</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Windows</th>
+                  <td>Windows 10 build 17763 or later, or Windows 11, on x64 hardware.</td>
+                </tr>
+                <tr>
+                  <th scope="row">macOS</th>
+                  <td>
+                    Apple Silicon has a published DMG. An Intel package and minimum macOS version
+                    are not currently published by the project.
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">Linux</th>
+                  <td>
+                    Ubuntu 22.04 is the x86_64 release build target. Other distributions and
+                    versions are not currently declared as supported.
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">Immich Server</th>
+                  <td>
+                    No fixed minimum version is declared. Lymic requires a reachable server with
+                    the user-profile, bulk-upload-check, asset-upload, and album APIs it uses.
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">Connection</th>
+                  <td>
+                    An HTTPS Immich Server and an API key are required. Explicitly approved
+                    loopback HTTP is available for local development.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="download-grid" aria-label="Platform downloads">
+            <article class="download-card">
+              <h3>Windows downloads</h3>
+              <a
+                class="button primary"
+                data-download-platform="Windows GitHub"
+                href="https://github.com/xXRoxXeRXx/lymic/releases"
+              >
+                MSI or NSIS from GitHub
+              </a>
+              <a
+                class="button"
+                data-download-platform="Windows Store"
+                href="https://apps.microsoft.com/detail/9NLQWHTHR1FZ"
+              >
+                Get it from Microsoft Store
+              </a>
+            </article>
+
+            <article class="download-card">
+              <h3>macOS download</h3>
+              <a
+                class="button primary"
+                data-download-platform="macOS"
+                href="https://github.com/xXRoxXeRXx/lymic/releases"
+              >
+                Apple Silicon DMG
+              </a>
+            </article>
+
+            <article class="download-card">
+              <h3>Linux downloads</h3>
+              <a
+                class="button primary"
+                data-download-platform="Linux"
+                href="https://github.com/xXRoxXeRXx/lymic/releases"
+              >
+                AppImage or DEB
+              </a>
+            </article>
+          </div>
         </section>
       </main>
 
