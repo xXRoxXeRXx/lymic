@@ -33,7 +33,8 @@
         "description": "An open-source desktop client that uploads local media to a self-hosted Immich Server.",
         "applicationCategory": "MultimediaApplication",
         "operatingSystem": [
-          "Windows 10 or later",
+          "Windows 10 build 17763 or later (x64)",
+          "Windows 11 (x64)",
           "macOS (Apple Silicon)",
           "Linux (x86_64)"
         ],
@@ -768,8 +769,8 @@
                 A planned optional <strong>Virtual Library</strong> will use the Windows Cloud Files
                 API to project your Immich Library as read-only placeholders with on-demand
                 hydration; it is not included in the current GitHub build. GitHub Releases
-                provides MSI and NSIS installers, while a separate Microsoft Store channel is in
-                preparation.
+                provides MSI and NSIS installers, while a separate Microsoft Store channel is
+                planned but has not been submitted and is not public.
               </p>
             </article>
 
@@ -859,14 +860,10 @@
               >
                 MSI or NSIS from GitHub
               </a>
-              <a
-                class="button"
-                data-download-platform="Windows Store"
-                href="https://apps.microsoft.com/detail/9NLQWHTHR1FZ"
-              >
-                Private pre-release Store Flight
-              </a>
-              <p>The Microsoft Store listing is in a private Flight, not a public download.</p>
+              <p data-store-channel-status>
+                A Microsoft Store channel and private Flight are planned. The package has not been
+                submitted, and the channel is not public.
+              </p>
             </article>
 
             <article class="download-card">

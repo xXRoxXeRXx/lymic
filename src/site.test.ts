@@ -28,7 +28,12 @@ describe("landing page", () => {
       "@type": "SoftwareApplication",
       name: "Lymic",
       applicationCategory: "MultimediaApplication",
-      operatingSystem: ["Windows 10 or later", "macOS (Apple Silicon)", "Linux (x86_64)"],
+      operatingSystem: [
+        "Windows 10 build 17763 or later (x64)",
+        "Windows 11 (x64)",
+        "macOS (Apple Silicon)",
+        "Linux (x86_64)",
+      ],
       author: {
         "@type": "Organization",
         name: "Lymic contributors",
@@ -240,17 +245,17 @@ describe("landing page", () => {
 
     expect(downloads).toEqual({
       "Windows GitHub": "https://github.com/xXRoxXeRXx/lymic/releases",
-      "Windows Store": "https://apps.microsoft.com/detail/9NLQWHTHR1FZ",
       macOS: "https://github.com/xXRoxXeRXx/lymic/releases",
       Linux: "https://github.com/xXRoxXeRXx/lymic/releases",
     });
 
-    const storeLink = document.querySelector<HTMLAnchorElement>(
-      'a[data-download-platform="Windows Store"]',
-    );
-    expect(storeLink?.textContent).toMatch(/private.*pre-release.*Flight/i);
-    expect(storeLink?.textContent).not.toMatch(/get|download|install/i);
-    expect(storeLink?.closest("article")?.textContent).toMatch(/not a public download/i);
+    const storeCard = document.querySelector<HTMLElement>("[data-store-channel-status]");
+    const storeStatus = storeCard?.textContent?.replace(/\s+/g, " ").trim();
+    expect(storeStatus).toMatch(/planned|pending/i);
+    expect(storeStatus).toMatch(/has not been submitted/i);
+    expect(storeStatus).toMatch(/not public/i);
+    expect(storeCard?.querySelector('a[href*="apps.microsoft.com"]')).toBeNull();
+    expect(storeStatus).not.toMatch(/currently.*private.*Flight|listing.*private Flight/i);
   });
 
   it("adapts its responsive layout and colors to the viewport and system theme", () => {
@@ -294,10 +299,13 @@ describe("public privacy and support pages", () => {
     expect(content).toMatch(/issues|support/i);
   });
 
-  it("describes the Microsoft Store channel as a private pre-release", () => {
+  it("describes the Microsoft Store channel as planned and not submitted", () => {
     const content = readFileSync(supportPath, "utf-8");
 
-    expect(content).toMatch(/Microsoft Store.*private.*Flight.*not.*public/i);
+    expect(content).toMatch(/Microsoft Store.*(?:planned|pending)/i);
+    expect(content).toMatch(/has not been submitted/i);
+    expect(content).toMatch(/not public/i);
+    expect(content).not.toMatch(/currently.*private.*Flight|listing.*private Flight/i);
   });
 
   it("provides a complete Microsoft Store listing with localized descriptions, URLs, and screenshot assets", () => {
