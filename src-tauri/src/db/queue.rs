@@ -235,23 +235,25 @@ pub async fn next_queued_upload_units(
         asset: QueuedAsset,
     }
 
+    // Migration 0008 backfills every queued row, and enqueue_upload_units always assigns an ID.
+    // Failed discovery rows can remain NULL, but they are never PENDING and are excluded here.
     let rows = sqlx::query_as::<_, Row>(
         "WITH next_units AS ( \
-             SELECT COALESCE(upload_unit_id, local_path) AS unit_id, \
+             SELECT upload_unit_id AS unit_id, \
                     MIN(sequence) AS unit_seq \
              FROM sync_queue \
-             WHERE job_id = 1 AND status = 'PENDING' \
-             GROUP BY COALESCE(upload_unit_id, local_path) \
+             WHERE job_id = 1 AND status = 'PENDING' AND upload_unit_id IS NOT NULL \
+             GROUP BY upload_unit_id \
              ORDER BY unit_seq \
              LIMIT ?1 \
          ) \
          SELECT next_units.unit_id AS upload_unit_id, q.is_primary, \
                 q.local_path, q.size, q.last_modified, q.target_album_id, q.remote_id \
          FROM next_units \
-         JOIN sync_queue q \
+         CROSS JOIN sync_queue q \
            ON q.job_id = 1 \
           AND q.status = 'PENDING' \
-          AND COALESCE(q.upload_unit_id, q.local_path) = next_units.unit_id \
+          AND q.upload_unit_id = next_units.unit_id \
          ORDER BY next_units.unit_seq, next_units.unit_id, q.is_primary DESC, q.sequence",
     )
     .bind(limit)

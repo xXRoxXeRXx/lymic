@@ -21,6 +21,18 @@ mod database_tests {
             .unwrap()
     }
 
+    fn single_upload_unit(path: &str) -> QueueUploadUnit {
+        QueueUploadUnit {
+            image: QueueUploadAsset {
+                path: path.to_string(),
+                size: 100,
+                mtime: 10,
+                target_album_id: None,
+            },
+            live_photo_video: None,
+        }
+    }
+
     async fn force_migration_checksum_mismatch(pool: &SqlitePool) {
         sqlx::query("UPDATE _sqlx_migrations SET checksum = X'00' WHERE version = 1")
             .execute(pool)
@@ -1555,26 +1567,16 @@ mod database_tests {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
-        let single_asset_unit = |path: &str| QueueUploadUnit {
-            image: QueueUploadAsset {
-                path: path.to_string(),
-                size: 100,
-                mtime: 10,
-                target_album_id: None,
-            },
-            live_photo_video: None,
-        };
-
-        enqueue_upload_units(&pool, &[single_asset_unit("live.jpg")], &[])
+        enqueue_upload_units(&pool, &[single_upload_unit("live.jpg")], &[])
             .await
             .unwrap();
-        enqueue_upload_units(&pool, &[single_asset_unit("other.jpg")], &[])
+        enqueue_upload_units(&pool, &[single_upload_unit("other.jpg")], &[])
             .await
             .unwrap();
         enqueue_upload_units(
             &pool,
             &[QueueUploadUnit {
-                image: single_asset_unit("live.jpg").image,
+                image: single_upload_unit("live.jpg").image,
                 live_photo_video: Some(QueueUploadAsset {
                     path: "live.mov".to_string(),
                     size: 200,
@@ -1602,19 +1604,11 @@ mod database_tests {
     }
 
     #[tokio::test]
-    async fn queued_upload_unit_limit_bounds_rows_fetched_from_sqlite() {
+    async fn queued_upload_unit_limit_excludes_later_units() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
-        let units = ["first.jpg", "outside-window.jpg"].map(|path| QueueUploadUnit {
-            image: QueueUploadAsset {
-                path: path.to_string(),
-                size: 100,
-                mtime: 10,
-                target_album_id: None,
-            },
-            live_photo_video: None,
-        });
+        let units = ["first.jpg", "outside-window.jpg"].map(single_upload_unit);
         enqueue_upload_units(&pool, &units, &[]).await.unwrap();
 
         // SQLite's dynamic typing lets this later row act as a decoding sentinel. A query
