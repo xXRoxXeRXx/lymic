@@ -5,6 +5,7 @@
 # Lymic — Desktop upload client for Immich
 
 [![License](https://img.shields.io/github/license/xXRoxXeRXx/lymic?style=for-the-badge)](LICENSE)
+[![Snapcraft](https://img.shields.io/badge/Snapcraft-lymic-%23E95420.svg?style=for-the-badge&logo=snapcraft&logoColor=white)](https://snapcraft.io/lymic)
 [![Built with Tauri](https://img.shields.io/badge/Built%20with-Tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
 [![SvelteKit](https://img.shields.io/badge/Frontend-SvelteKit-%23FF3E00.svg?style=for-the-badge&logo=svelte&logoColor=white)](https://kit.svelte.dev/)
 
@@ -53,6 +54,16 @@
 ### Download
 
 Download the latest installer for your operating system from the [Lymic releases](https://github.com/xXRoxXeRXx/lymic/releases) page.
+
+#### Linux (Snap)
+
+Ubuntu and Linux users can install and update Lymic directly from the Snap Store:
+
+[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/lymic)
+
+```bash
+sudo snap install lymic
+```
 
 > [!IMPORTANT]
 > **macOS Users:** Since this is an open-source project without a paid Apple Developer certificate, macOS will block the app as "unidentified" or "damaged".
