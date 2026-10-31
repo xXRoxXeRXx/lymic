@@ -180,7 +180,6 @@ describe("removable volume controller", () => {
     controller.destroy();
 
     resolveDetected(detectedUnlisten);
-    await vi.waitFor(() => expect(tauri.listen).toHaveBeenCalledTimes(2));
     resolveRemoved(removedUnlisten);
     await starting;
 
@@ -188,14 +187,15 @@ describe("removable volume controller", () => {
     expect(removedUnlisten).toHaveBeenCalledOnce();
   });
 
-  it("shares an in-flight subscription setup across concurrent starts", async () => {
+  it("tears down one listener for each removable-volume event after concurrent starts", async () => {
     const controller = createRemovableVolumeController({
       isAppInBackground: () => false,
       t: (key) => key,
     });
 
     await Promise.all([controller.startSubscriptions(), controller.startSubscriptions()]);
+    controller.destroy();
 
-    expect(tauri.listen).toHaveBeenCalledTimes(2);
+    expect(unlistenFn).toHaveBeenCalledTimes(2);
   });
 });

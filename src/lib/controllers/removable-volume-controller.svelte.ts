@@ -64,29 +64,31 @@ export function createRemovableVolumeController(options: RemovableVolumeControll
     resolvedUnlisteners.splice(0).forEach((stopListening) => stopListening());
   }
 
+  function retainOrStopListener(stopListening: () => void) {
+    if (disposed) stopListening();
+    else resolvedUnlisteners.push(stopListening);
+  }
+
   function startSubscriptions(): Promise<void> {
     if (disposed || unlisten) return Promise.resolve();
     if (startingPromise) return startingPromise;
 
-    startingPromise = (async () => {
-      const unlistenDetected = await listen<DetectedVolume>("removable-volume-detected", (event) => {
+    startingPromise = Promise.all([
+      listen<DetectedVolume>("removable-volume-detected", (event) => {
         handleVolumeDetected(event.payload);
-      });
-      if (disposed) unlistenDetected();
-      else resolvedUnlisteners.push(unlistenDetected);
-
-      const unlistenRemoved = await listen<string>("removable-volume-removed", (event) => {
+      }).then(retainOrStopListener),
+      listen<string>("removable-volume-removed", (event) => {
         handleVolumeRemoved(event.payload);
+      }).then(retainOrStopListener),
+    ])
+      .then(() => {
+        if (!disposed) {
+          unlisten = stopResolvedListeners;
+        }
+      })
+      .finally(() => {
+        startingPromise = null;
       });
-      if (disposed) unlistenRemoved();
-      else resolvedUnlisteners.push(unlistenRemoved);
-
-      if (!disposed) {
-        unlisten = stopResolvedListeners;
-      }
-    })().finally(() => {
-      startingPromise = null;
-    });
 
     return startingPromise;
   }
