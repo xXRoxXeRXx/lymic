@@ -71,7 +71,7 @@ export function createWatchedFoldersController(
       if (mounted && generation === refreshGeneration) watchedFolders = nextFolders;
     } catch (error) {
       console.error("Failed to load folders", error);
-      if (mounted) options.reportError(error);
+      if (mounted && generation === refreshGeneration) options.reportError(error);
     }
   }
 

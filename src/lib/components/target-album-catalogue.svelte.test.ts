@@ -29,6 +29,23 @@ describe("Target Album catalogue", () => {
     expect(catalogue.isLoading).toBe(false);
   });
 
+  it("clears loaded and pending Target Albums", async () => {
+    const catalogue = createTargetAlbumCatalogue(createDesktopAdapter({
+      getAlbums: vi.fn()
+        .mockResolvedValueOnce([album("previous", "Previous account")])
+        .mockResolvedValueOnce([]),
+      createAlbum: vi.fn().mockResolvedValue(album("pending", "Pending album")),
+    }));
+
+    await catalogue.refresh();
+    await catalogue.create("Pending album");
+    catalogue.clear();
+
+    expect(catalogue.albums).toEqual([]);
+    expect(catalogue.nameFor("previous")).toBeUndefined();
+    expect(catalogue.nameFor("pending")).toBeUndefined();
+  });
+
   it("keeps the newest refresh when an older response arrives later", async () => {
     let resolveFirst: (albums: ReturnType<typeof album>[]) => void;
     const first = new Promise<ReturnType<typeof album>[]>((resolve) => { resolveFirst = resolve; });

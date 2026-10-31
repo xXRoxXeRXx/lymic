@@ -67,6 +67,24 @@ describe("watched folders controller", () => {
     expect(controller.folders.watchedFolders).toEqual([]);
   });
 
+  it("does not report an error from a refresh that predates cleared user state", async () => {
+    let rejectFolders: (error: Error) => void;
+    const pendingFolders = new Promise<Awaited<ReturnType<WatchedFoldersDesktopAdapter["getFolders"]>>>((_resolve, reject) => { rejectFolders = reject; });
+    const reportError = vi.fn();
+    const controller = createWatchedFoldersController({
+      adapter: createFoldersAdapter({ getFolders: vi.fn().mockReturnValue(pendingFolders) }),
+      reportError,
+      t: (key) => key,
+    });
+
+    const refresh = controller.refresh();
+    controller.clear();
+    rejectFolders!(new Error("Previous account unavailable"));
+    await refresh;
+
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
   it("refreshes watched folders and exposes folder view state", async () => {
     const adapter = createFoldersAdapter({
       getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }]),
