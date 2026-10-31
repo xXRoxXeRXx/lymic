@@ -49,10 +49,15 @@
     formatError: feedback.formatError,
     reportError: feedback.report,
     t: (key) => $t(key),
-    onLogin: sync.refreshFailedSyncs,
+    onLogin: async () => {
+      await Promise.all([sync.refreshFailedSyncs(), watchedFolders.refresh()]);
+    },
     onLogout: () => {
+      targetAlbumCatalogue.clear();
+      feedback.clear();
+      removable.clear();
       sync.clearUserState();
-      watchedFolders.targetAlbumDialog.cancel();
+      watchedFolders.clear();
       currentView = "dashboard";
     },
   });

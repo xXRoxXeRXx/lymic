@@ -17,6 +17,23 @@ vi.mock("@tauri-apps/plugin-notification", () => ({
 }));
 
 describe("removable volume controller", () => {
+  it("clears detected and dismissed volumes on logout", async () => {
+    const controller = createRemovableVolumeController({
+      isAppInBackground: () => false,
+      t: (key) => key,
+    });
+    await controller.startSubscriptions();
+    const card = { volumeId: "vol-1", mountPath: "E:\\", displayName: "EOS_DIGITAL" };
+    const handler = eventListeners.get("removable-volume-detected")!;
+    handler({ payload: card });
+    controller.dismiss(card.volumeId);
+
+    controller.clear();
+    handler({ payload: card });
+
+    expect(controller.detectedVolumes).toEqual([card]);
+  });
+
   let eventListeners: Map<string, (event: { payload: unknown }) => void>;
   let unlistenFn: ReturnType<typeof vi.fn>;
 

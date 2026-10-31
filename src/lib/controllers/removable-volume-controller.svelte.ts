@@ -76,6 +76,11 @@ export function createRemovableVolumeController(options: RemovableVolumeControll
     detectedVolumes = detectedVolumes.filter((v) => v.volumeId !== volumeId);
   }
 
+  function clear() {
+    detectedVolumes = [];
+    dismissedVolumeIds.clear();
+  }
+
   function destroy() {
     if (unlisten) {
       unlisten();
@@ -92,6 +97,7 @@ export function createRemovableVolumeController(options: RemovableVolumeControll
     },
     startSubscriptions,
     dismiss,
+    clear,
     destroy,
   };
 }

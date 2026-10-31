@@ -735,6 +735,18 @@ describe("activity log", () => {
 });
 
 describe("logout", () => {
+  it("returns to a clean login view after a confirmed logout", async () => {
+    renderAuthenticatedPage();
+    await screen.findByText("Synchronization", { selector: "h1" });
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("logout"));
+    expect(await screen.findByRole("heading", { name: "Login" })).toBeInTheDocument();
+    expect(screen.queryByText("Synchronization", { selector: "h1" })).not.toBeInTheDocument();
+  });
+
   it("does not log out when the confirmation is cancelled", async () => {
     renderAuthenticatedPage();
     await screen.findByText("Synchronization", { selector: "h1" });
@@ -1307,4 +1319,3 @@ describe("watched folder setup flow with target album", () => {
     expect(screen.queryByText("D:/Photos")).not.toBeInTheDocument();
   });
 });
-

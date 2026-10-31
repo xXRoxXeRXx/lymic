@@ -13,6 +13,22 @@ function createDesktopAdapter(overrides: Partial<AlbumsDesktopAdapter> = {}): Al
 }
 
 describe("Target Album catalogue", () => {
+  it("clears cached albums and ignores an in-flight refresh", async () => {
+    let resolveAlbums: (albums: ReturnType<typeof album>[]) => void;
+    const pendingAlbums = new Promise<ReturnType<typeof album>[]>((resolve) => { resolveAlbums = resolve; });
+    const catalogue = createTargetAlbumCatalogue(createDesktopAdapter({ getAlbums: vi.fn().mockReturnValue(pendingAlbums) }));
+
+    const refresh = catalogue.refresh();
+    catalogue.clear();
+    resolveAlbums!([album("previous-account", "Previous account")]);
+    await refresh;
+
+    expect(catalogue.albums).toEqual([]);
+    expect(catalogue.error).toBeNull();
+    expect(catalogue.hasRequested).toBe(false);
+    expect(catalogue.isLoading).toBe(false);
+  });
+
   it("keeps the newest refresh when an older response arrives later", async () => {
     let resolveFirst: (albums: ReturnType<typeof album>[]) => void;
     const first = new Promise<ReturnType<typeof album>[]>((resolve) => { resolveFirst = resolve; });

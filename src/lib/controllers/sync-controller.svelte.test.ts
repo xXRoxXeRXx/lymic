@@ -33,6 +33,18 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("sync controller", () => {
+  it("clears the last synchronization time with the remaining user state", async () => {
+    const controller = createController(createSyncAdapter());
+    controller.startLifecycle();
+
+    await controller.status.onSyncAction();
+    expect(controller.status.lastSync).not.toBeNull();
+
+    controller.clearUserState();
+
+    expect(controller.status.lastSync).toBeNull();
+  });
+
   it("clears the progress reset timer on disposal", async () => {
     vi.useFakeTimers();
     const adapter = createSyncAdapter();

@@ -64,6 +64,8 @@ describe("auth controller", () => {
       cloudflareClientId: "client-id",
       cloudflareClientSecret: "client-secret",
     });
+    expect(controller.apiKey).toBe("");
+    expect(controller.cloudflareClientSecret).toBe("");
   });
 
   it("rejects an incomplete Cloudflare Access pair before invoking Tauri", async () => {

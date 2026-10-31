@@ -7,6 +7,7 @@ export interface TargetAlbumCatalogue {
   readonly error: string | null;
   readonly hasRequested: boolean;
   refresh(): Promise<void>;
+  clear(): void;
   create(name: string): Promise<Album>;
   nameFor(id: string): string | undefined;
 }
@@ -54,12 +55,22 @@ export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): Targe
     return created;
   }
 
+  function clear() {
+    latestRequest += 1;
+    albums = [];
+    pendingCreated.clear();
+    error = null;
+    hasRequested = false;
+    isLoading = false;
+  }
+
   return {
     get albums() { return albums; },
     get isLoading() { return isLoading; },
     get error() { return error; },
     get hasRequested() { return hasRequested; },
     refresh,
+    clear,
     create,
     nameFor(id) { return albums.find((album) => album.id === id)?.albumName; },
   };

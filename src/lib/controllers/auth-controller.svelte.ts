@@ -63,6 +63,8 @@ export function createAuthController(options: {
         cloudflareClientId: normalizedCloudflareClientId || null,
         cloudflareClientSecret: normalizedCloudflareClientSecret || null,
       });
+      apiKey = "";
+      cloudflareClientSecret = "";
       isAuthenticated = true;
       await options.onLogin();
       await loadCurrentUser();

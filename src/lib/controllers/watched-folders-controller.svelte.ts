@@ -22,6 +22,7 @@ export interface WatchedFoldersController {
   readonly hasFolders: boolean;
   startLifecycle(): void;
   destroy(): void;
+  clear(): void;
   refresh(): Promise<void>;
   acceptRemovableFolder(volume: DetectedVolume): Promise<void>;
 }
@@ -47,6 +48,7 @@ export function createWatchedFoldersController(
   let watchedFolders = $state<WatchedFolder[]>([]);
   let pendingAddition = $state<PendingFolderAddition | null>(null);
   let mounted = true;
+  let refreshGeneration = 0;
 
   function startLifecycle() {
     mounted = true;
@@ -56,10 +58,17 @@ export function createWatchedFoldersController(
     mounted = false;
   }
 
+  function clear() {
+    refreshGeneration += 1;
+    watchedFolders = [];
+    pendingAddition = null;
+  }
+
   async function refresh() {
+    const generation = refreshGeneration;
     try {
       const nextFolders = await adapter.getFolders();
-      if (mounted) watchedFolders = nextFolders;
+      if (mounted && generation === refreshGeneration) watchedFolders = nextFolders;
     } catch (error) {
       console.error("Failed to load folders", error);
       if (mounted) options.reportError(error);
@@ -164,6 +173,7 @@ export function createWatchedFoldersController(
     },
     startLifecycle,
     destroy,
+    clear,
     refresh,
     acceptRemovableFolder,
   };

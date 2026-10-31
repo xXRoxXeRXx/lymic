@@ -36,6 +36,37 @@ beforeEach(() => {
 });
 
 describe("watched folders controller", () => {
+  it("clears loaded Watched Folders and a pending Target Album dialog", async () => {
+    const controller = createWatchedFoldersController({
+      adapter: createFoldersAdapter({ getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/Photos", recursive: true, target_album_id: null }]) }),
+      reportError: vi.fn(),
+      t: (key) => key,
+    });
+
+    await controller.refresh();
+    controller.clear();
+
+    expect(controller.folders.watchedFolders).toEqual([]);
+    expect(controller.targetAlbumDialog.isOpen).toBe(false);
+  });
+
+  it("ignores a refresh response that arrives after user state is cleared", async () => {
+    let resolveFolders: (folders: Awaited<ReturnType<WatchedFoldersDesktopAdapter["getFolders"]>>) => void;
+    const pendingFolders = new Promise<Awaited<ReturnType<WatchedFoldersDesktopAdapter["getFolders"]>>>((resolve) => { resolveFolders = resolve; });
+    const controller = createWatchedFoldersController({
+      adapter: createFoldersAdapter({ getFolders: vi.fn().mockReturnValue(pendingFolders) }),
+      reportError: vi.fn(),
+      t: (key) => key,
+    });
+
+    const refresh = controller.refresh();
+    controller.clear();
+    resolveFolders!([{ id: 1, path: "C:/Previous account", recursive: true, target_album_id: null }]);
+    await refresh;
+
+    expect(controller.folders.watchedFolders).toEqual([]);
+  });
+
   it("refreshes watched folders and exposes folder view state", async () => {
     const adapter = createFoldersAdapter({
       getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }]),
@@ -183,4 +214,3 @@ describe("watched folders controller", () => {
     expect(controller.hasFolders).toBe(false);
   });
 });
-

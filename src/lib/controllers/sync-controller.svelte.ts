@@ -262,6 +262,7 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
 
   function clearUserState() {
     syncStatus = "idle";
+    lastSync = null;
     progress = 0;
     processed = 0;
     syncTotal = 0;
