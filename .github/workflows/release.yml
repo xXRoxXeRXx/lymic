@@ -1,4 +1,4 @@
-﻿name: "publish"
+name: "publish"
 
 on:
   push:
@@ -101,4 +101,39 @@ jobs:
           if (Test-Path $msix) {
             gh release upload "v$ver" $msix --clobber
           }
+
+      - name: validate Snapcraft configuration (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: npx vitest run src/lib/release/snapcraft-validator.test.ts
+
+      - name: build Snap package (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: snapcore/action-build@v1
+        id: build-snap
+
+      - name: upload Snap artifact (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lymic-snap
+          path: ${{ steps.build-snap.outputs.snap }}
+
+      - name: attach Snap to release (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ver=$(node -p 'require("./package.json").version')
+          if [ -f "${{ steps.build-snap.outputs.snap }}" ]; then
+            gh release upload "v$ver" "${{ steps.build-snap.outputs.snap }}" --clobber
+          fi
+
+      - name: publish Snap to Snap Store (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04' && secrets.SNAPCRAFT_STORE_CREDENTIALS != ''
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.build-snap.outputs.snap }}
+          release: candidate,stable
 

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Lymic
+Comment=High-performance desktop sync client for Immich
+Exec=lymic %U
+Icon=lymic
+Terminal=false
+Type=Application
+Categories=Graphics;Photography;Utility;Network;
+StartupWMClass=Lymic
+

@@ -272,6 +272,16 @@ Lymic supports two Windows distribution channels via the build input `LYMIC_RELE
 
 Maintainers can configure this build input at build time via `LYMIC_RELEASE_CHANNEL=store` (or `VITE_LYMIC_RELEASE_CHANNEL=store` for frontend builds). At runtime, the active channel is exposed via the `get_release_channel` IPC command.
 
+### Canonical Snap Store (Linux)
+
+Lymic is packaged as a strictly confined Snap package for Ubuntu and other Snap-enabled distributions (`snap/snapcraft.yaml`). The Snap declares the following interface plugs:
+- `network`: Immich server API connectivity.
+- `home`: Reading and observing local user directories configured as Watched Folders.
+- `removable-media`: Accessing photos and videos on external or removable drives (ADR-0002).
+- `password-manager-service`: Linux Secret Service keyring access for storing Immich API keys securely.
+
+The release workflow builds the `.snap` package on Ubuntu releases, attaches it to the GitHub Release, and publishes to the Canonical Snap Store via `snapcore/action-publish` using the `SNAPCRAFT_STORE_CREDENTIALS` secret. Store details and maintainer registration runbooks are recorded in [`docs/store/snap-release-record.md`](store/snap-release-record.md).
+
 ## 12. Troubleshooting
 
 | Symptom | Check |

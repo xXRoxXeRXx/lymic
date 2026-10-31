@@ -1,0 +1,105 @@
+name: lymic
+base: core22
+version: '0.22.0'
+summary: High-performance desktop sync client for Immich
+description: |
+  Lymic is an unofficial desktop client for uploading and synchronizing local
+  media with an Immich server. It monitors selected folders, avoids uploading
+  duplicate assets, and synchronizes photos and videos efficiently.
+grade: stable
+confinement: strict
+
+# Layout mappings for WebKitGTK 4.1 under strict confinement
+layout:
+  /usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1:
+    bind: $SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1
+  /usr/libexec/webkit2gtk-4.1:
+    bind: $SNAP/usr/libexec/webkit2gtk-4.1
+
+apps:
+  lymic:
+    command: bin/lymic
+    desktop: snap/gui/lymic.desktop
+    extensions: [gnome]
+    plugs:
+      - network
+      - home
+      - removable-media
+      - password-manager-service
+
+parts:
+  lymic:
+    plugin: nil
+    source: .
+    build-snaps:
+      - node/22/stable
+      - rustup/latest/stable
+    build-packages:
+      - libwebkit2gtk-4.1-dev
+      - libgtk-3-dev
+      - libayatana-appindicator3-dev
+      - librsvg2-dev
+      - patchelf
+      - build-essential
+      - curl
+      - wget
+      - file
+      - libssl-dev
+      - dpkg
+    stage-packages:
+      - libwebkit2gtk-4.1-0
+      - libgtk-3-0
+      - libsoup-3.0-0
+      - libayatana-appindicator3-1
+      - librsvg2-common
+    override-build: |
+      set -eu
+
+      # Use pre-built debian package if available; otherwise build with Tauri
+      DEB=""
+      if ls src-tauri/target/release/bundle/deb/*.deb 1> /dev/null 2>&1; then
+        DEB=$(ls src-tauri/target/release/bundle/deb/*.deb | head -n 1)
+      elif ls target/release/bundle/deb/*.deb 1> /dev/null 2>&1; then
+        DEB=$(ls target/release/bundle/deb/*.deb | head -n 1)
+      else
+        echo "Building Lymic debian bundle with Tauri..."
+        if ! command -v rustup >/dev/null 2>&1; then
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . "$HOME/.cargo/env"
+        fi
+        rustup default stable
+        npm ci
+        npm run build
+        npm run tauri build -- --bundles deb
+        if ls src-tauri/target/release/bundle/deb/*.deb 1> /dev/null 2>&1; then
+          DEB=$(ls src-tauri/target/release/bundle/deb/*.deb | head -n 1)
+        elif ls target/release/bundle/deb/*.deb 1> /dev/null 2>&1; then
+          DEB=$(ls target/release/bundle/deb/*.deb | head -n 1)
+        fi
+      fi
+
+      if [ -z "$DEB" ] || [ ! -f "$DEB" ]; then
+        echo "Failed to find or build .deb bundle"
+        exit 1
+      fi
+
+      echo "Extracting debian bundle: $DEB"
+      dpkg -x "$DEB" "$SNAPCRAFT_PART_INSTALL/"
+
+      # Ensure bin/lymic exists and points to executable
+      mkdir -p "$SNAPCRAFT_PART_INSTALL/bin"
+      for candidate in "$SNAPCRAFT_PART_INSTALL/usr/bin/lymic" \
+                       "$SNAPCRAFT_PART_INSTALL/usr/bin/lymic-desktop" \
+                       "$SNAPCRAFT_PART_INSTALL/usr/bin/Lymic"; do
+        if [ -f "$candidate" ]; then
+          cp "$candidate" "$SNAPCRAFT_PART_INSTALL/bin/lymic"
+          chmod +x "$SNAPCRAFT_PART_INSTALL/bin/lymic"
+          break
+        fi
+      done
+
+      if [ ! -f "$SNAPCRAFT_PART_INSTALL/bin/lymic" ]; then
+        echo "Failed to locate installed binary candidate in extracted bundle"
+        exit 1
+      fi
+
