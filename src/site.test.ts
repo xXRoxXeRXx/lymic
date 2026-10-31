@@ -300,6 +300,12 @@ describe("landing page", () => {
     const storeStatus = storeCard?.textContent?.replace(/\s+/g, " ").trim();
     expectPlannedStoreChannel(storeStatus ?? "");
     expect(storeCard?.querySelector('a[href*="apps.microsoft.com"]')).toBeNull();
+
+    const snapBadgeLink = document.querySelector<HTMLAnchorElement>('a[href="https://snapcraft.io/lymic"]');
+    expect(snapBadgeLink).not.toBeNull();
+    const snapBadgeImg = snapBadgeLink?.querySelector<HTMLImageElement>("img");
+    expect(snapBadgeImg?.getAttribute("src")).toBe("assets/snap-store-badge.svg");
+    expect(snapBadgeImg?.getAttribute("alt")).toBe("Get it from the Snap Store");
   });
 
   it("adapts its responsive layout and colors to the viewport and system theme", () => {

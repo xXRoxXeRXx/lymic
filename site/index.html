@@ -662,6 +662,24 @@
         width: 100%;
       }
 
+      .snap-badge-wrap {
+        margin-top: 0.75rem;
+        display: flex;
+        justify-content: center;
+      }
+
+      .snap-badge {
+        height: 42px;
+        width: auto;
+        border-radius: var(--radius-sm);
+        transition: opacity var(--transition-fast), transform var(--transition-fast);
+      }
+
+      .snap-badge:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+      }
+
       .download-card p {
         margin: 0.85rem 0 0;
         font-size: 0.825rem;
@@ -999,12 +1017,12 @@
             <article class="platform-card" data-platform="Linux">
               <div class="platform-header">
                 <h3>Linux</h3>
-                <span class="platform-badge">Ubuntu / Debian</span>
+                <span class="platform-badge">Ubuntu / Debian / Snap</span>
               </div>
               <p>
-                Choose the x86_64 AppImage or DEB package from GitHub Releases. Closing the main
-                window leaves Lymic operating in the background through its system tray so
-                Watched Folders remain under observation.
+                Install directly via Canonical Snap or choose the x86_64 AppImage or DEB package from
+                GitHub Releases. Closing the main window leaves Lymic operating in the background
+                through its system tray so Watched Folders remain under observation.
               </p>
             </article>
           </div>
@@ -1107,8 +1125,22 @@
                 >
                   AppImage or DEB
                 </a>
+                <div class="snap-badge-wrap">
+                  <a
+                    href="https://snapcraft.io/lymic"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Get Lymic from the Snap Store"
+                  >
+                    <img
+                      src="assets/snap-store-badge.svg"
+                      alt="Get it from the Snap Store"
+                      class="snap-badge"
+                    />
+                  </a>
+                </div>
               </div>
-              <p>Standard standalone AppImage and Debian package for x86_64.</p>
+              <p>Canonical Snap Store (<code>snap install lymic</code>), or standalone AppImage and Debian package for x86_64.</p>
             </article>
           </div>
         </section>
