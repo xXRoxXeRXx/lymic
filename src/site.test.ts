@@ -2,6 +2,49 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
+describe("landing page", () => {
+  const root = resolve(process.cwd());
+  const landingPagePath = resolve(root, "site/index.html");
+  const content = readFileSync(landingPagePath, "utf-8");
+  const document = new DOMParser().parseFromString(content, "text/html");
+
+  it("provides document title and responsive viewport metadata", () => {
+    expect(document.title).toBe("Lymic - Open-Source Desktop Client for Immich");
+    expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toBe(
+      "width=device-width, initial-scale=1",
+    );
+  });
+
+  it("references existing landing-page assets", () => {
+    const localAssets = [
+      document.querySelector('link[rel="icon"]')?.getAttribute("href"),
+      document.querySelector("main img")?.getAttribute("src"),
+    ];
+
+    expect(localAssets).toEqual(["assets/favicon.png", "assets/logo.png"]);
+    for (const asset of localAssets) {
+      expect(existsSync(resolve(root, "site", asset!))).toBe(true);
+    }
+  });
+
+  it("presents the product value and primary calls to action", () => {
+    expect(document.querySelector("main h1")?.textContent).toMatch(/desktop client for Immich/i);
+    expect(document.querySelector("main")?.textContent).toMatch(/open.source/i);
+    expect(document.querySelector("main")?.textContent).toMatch(/synchroniz/i);
+
+    const links = Array.from(document.querySelectorAll("main a")).map((link) =>
+      link.getAttribute("href"),
+    );
+    expect(links).toContain("https://github.com/xXRoxXeRXx/lymic/releases");
+    expect(links).toContain("https://github.com/xXRoxXeRXx/lymic");
+  });
+
+  it("adapts its responsive layout and colors to the viewport and system theme", () => {
+    expect(content).toMatch(/@media\s*\([^)]*prefers-color-scheme:\s*dark[^)]*\)/i);
+    expect(content).toMatch(/@media\s*\([^)]*max-width:/i);
+  });
+});
+
 describe("public privacy and support pages", () => {
   const root = resolve(process.cwd());
   const privacyPath = resolve(root, "site/privacy/index.html");
@@ -100,4 +143,3 @@ describe("public privacy and support pages", () => {
     expect(releaseDoc).toMatch(/justification\.md/);
   });
 });
-

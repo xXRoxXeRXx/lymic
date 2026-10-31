@@ -1,139 +1,362 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lymic - Desktop Synchronization Client for Immich</title>
-  <meta name="description" content="Lymic is a high-performance cross-platform desktop synchronization client for self-hosted Immich servers.">
-  <style>
-    :root {
-      --bg: #0f172a;
-      --card-bg: #1e293b;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-      --primary: #38bdf8;
-      --border: #334155;
-      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
-    @media (prefers-color-scheme: light) {
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Lymic is the open-source desktop client that synchronizes local media to your self-hosted Immich server."
+    />
+    <link rel="icon" type="image/png" href="assets/favicon.png" />
+    <title>Lymic - Open-Source Desktop Client for Immich</title>
+    <style>
       :root {
-        --bg: #f8fafc;
-        --card-bg: #ffffff;
-        --text: #0f172a;
-        --text-muted: #64748b;
-        --primary: #0284c7;
-        --border: #e2e8f0;
+        color-scheme: light dark;
+        --background: #f6f8fc;
+        --surface: rgba(255, 255, 255, 0.82);
+        --surface-strong: #ffffff;
+        --text: #101828;
+        --text-muted: #475467;
+        --border: rgba(16, 24, 40, 0.1);
+        --accent: #1677d2;
+        --accent-hover: #0e5fae;
+        --glow-a: rgba(43, 183, 255, 0.22);
+        --glow-b: rgba(99, 58, 219, 0.16);
+        --shadow: 0 24px 64px rgba(29, 41, 57, 0.12);
+        --font: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: var(--font);
-      background-color: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      padding: 2rem 1rem;
-    }
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-    }
-    header {
-      margin-bottom: 2.5rem;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 1.5rem;
-    }
-    .badge {
-      display: inline-block;
-      font-size: 0.875rem;
-      font-weight: 600;
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      color: var(--primary);
-      margin-bottom: 1rem;
-    }
-    h1 {
-      font-size: 2.5rem;
-      font-weight: 700;
-      letter-spacing: -0.025em;
-      margin-bottom: 0.5rem;
-    }
-    p { margin-bottom: 1.25rem; color: var(--text-muted); }
-    .nav {
-      display: flex;
-      gap: 1.5rem;
-      margin-top: 1.5rem;
-    }
-    .nav a {
-      color: var(--primary);
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 1.05rem;
-    }
-    .nav a:hover { text-decoration: underline; }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.5rem;
-      margin: 2rem 0;
-    }
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 0.75rem;
-      padding: 1.5rem;
-      transition: border-color 0.2s;
-    }
-    .card:hover {
-      border-color: var(--primary);
-    }
-    .card h2 {
-      font-size: 1.25rem;
-      margin-bottom: 0.75rem;
-      color: var(--text);
-    }
-    footer {
-      margin-top: 3rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--border);
-      font-size: 0.875rem;
-      color: var(--text-muted);
-      text-align: center;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <span class="badge">Open Source Desktop Client</span>
-      <h1>Lymic</h1>
-      <p>High-performance desktop synchronization client for self-hosted Immich servers.</p>
-      <nav class="nav">
-        <a href="privacy/">Privacy Policy &rarr;</a>
-        <a href="support/">Support & Help &rarr;</a>
-        <a href="https://github.com/xXRoxXeRXx/lymic" target="_blank" rel="noopener">GitHub &rarr;</a>
-      </nav>
-    </header>
 
-    <main>
-      <div class="grid">
-        <div class="card">
-          <h2>Privacy Policy</h2>
-          <p>Read how Lymic protects your privacy: zero advertising, zero telemetry, local configuration, and direct uploads exclusively to your configured Immich server.</p>
-          <a href="privacy/" style="color: var(--primary); font-weight: 600; text-decoration: none;">Read Privacy Policy &rarr;</a>
-        </div>
-        <div class="card">
-          <h2>Support & Documentation</h2>
-          <p>Get help connecting your self-hosted server, setting up watched folders, managing removable media, or filing defect reports and feature requests.</p>
-          <a href="support/" style="color: var(--primary); font-weight: 600; text-decoration: none;">Get Support &rarr;</a>
-        </div>
-      </div>
-    </main>
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: #070b16;
+          --surface: rgba(18, 27, 48, 0.78);
+          --surface-strong: #121b30;
+          --text: #f5f8ff;
+          --text-muted: #a8b4c8;
+          --border: rgba(222, 231, 255, 0.12);
+          --accent: #50c7ff;
+          --accent-hover: #8bddff;
+          --glow-a: rgba(29, 180, 255, 0.2);
+          --glow-b: rgba(117, 70, 255, 0.2);
+          --shadow: 0 24px 72px rgba(0, 0, 0, 0.42);
+        }
+      }
 
-    <footer>
-      <p>&copy; 2026 Lymic Contributors. Distributed under the MIT License.</p>
-    </footer>
-  </div>
-</body>
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--background);
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        overflow-x: hidden;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 18% 8%, var(--glow-a), transparent 34rem),
+          radial-gradient(circle at 86% 42%, var(--glow-b), transparent 31rem), var(--background);
+        font-family: var(--font);
+        line-height: 1.6;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        width: min(1120px, calc(100% - 3rem));
+        margin: 0 auto;
+      }
+
+      .site-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 84px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.7rem;
+        color: var(--text);
+        font-size: 1.1rem;
+        font-weight: 750;
+        letter-spacing: -0.02em;
+        text-decoration: none;
+      }
+
+      .brand img {
+        width: 36px;
+        height: 36px;
+        object-fit: contain;
+      }
+
+      .site-header nav {
+        display: flex;
+        gap: 1.5rem;
+      }
+
+      .site-header nav a,
+      .footer-links a {
+        color: var(--text-muted);
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .site-header nav a:hover,
+      .footer-links a:hover {
+        color: var(--accent);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.92fr);
+        align-items: center;
+        gap: clamp(2rem, 7vw, 6rem);
+        min-height: calc(100vh - 168px);
+        padding: 5rem 0 7rem;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        margin: 0 0 1.5rem;
+        padding: 0.42rem 0.8rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--accent);
+        font-size: 0.82rem;
+        font-weight: 750;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 50%;
+        background: currentColor;
+        content: "";
+        box-shadow: 0 0 0 0.25rem color-mix(in srgb, currentColor 16%, transparent);
+      }
+
+      h1 {
+        max-width: 12ch;
+        margin: 0;
+        font-size: clamp(3rem, 7vw, 5.8rem);
+        font-weight: 820;
+        letter-spacing: -0.065em;
+        line-height: 0.98;
+      }
+
+      h1 span {
+        color: var(--accent);
+      }
+
+      .lede {
+        max-width: 39rem;
+        margin: 1.8rem 0 0;
+        color: var(--text-muted);
+        font-size: clamp(1.08rem, 2vw, 1.28rem);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.85rem;
+        margin-top: 2.35rem;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 50px;
+        padding: 0.75rem 1.25rem;
+        border: 1px solid var(--border);
+        border-radius: 0.8rem;
+        background: var(--surface-strong);
+        color: var(--text);
+        font-weight: 750;
+        text-decoration: none;
+        transition:
+          transform 160ms ease,
+          border-color 160ms ease,
+          background 160ms ease;
+      }
+
+      .button:hover {
+        transform: translateY(-2px);
+        border-color: var(--accent);
+      }
+
+      .button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #06101c;
+      }
+
+      .button.primary:hover {
+        border-color: var(--accent-hover);
+        background: var(--accent-hover);
+      }
+
+      .visual {
+        position: relative;
+        display: grid;
+        place-items: center;
+        min-height: 460px;
+        border: 1px solid var(--border);
+        border-radius: 2.25rem;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(20px);
+      }
+
+      .visual::before,
+      .visual::after {
+        position: absolute;
+        border-radius: 50%;
+        content: "";
+        filter: blur(1px);
+      }
+
+      .visual::before {
+        width: 55%;
+        aspect-ratio: 1;
+        background: var(--glow-a);
+      }
+
+      .visual::after {
+        right: 12%;
+        bottom: 12%;
+        width: 26%;
+        aspect-ratio: 1;
+        background: var(--glow-b);
+      }
+
+      .visual img {
+        position: relative;
+        z-index: 1;
+        width: min(78%, 360px);
+        height: auto;
+        filter: drop-shadow(0 28px 25px rgba(3, 9, 23, 0.24));
+      }
+
+      footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.5rem;
+        padding: 1.6rem 0 2.5rem;
+        border-top: 1px solid var(--border);
+        color: var(--text-muted);
+        font-size: 0.9rem;
+      }
+
+      .footer-links {
+        display: flex;
+        gap: 1.25rem;
+      }
+
+      @media (max-width: 760px) {
+        .shell {
+          width: min(100% - 2rem, 42rem);
+        }
+
+        .site-header nav a:first-child {
+          display: none;
+        }
+
+        .hero {
+          grid-template-columns: 1fr;
+          min-height: auto;
+          padding: 3.5rem 0 5rem;
+          text-align: center;
+        }
+
+        h1,
+        .lede {
+          margin-right: auto;
+          margin-left: auto;
+        }
+
+        .eyebrow,
+        .actions {
+          justify-content: center;
+        }
+
+        .visual {
+          grid-row: 1;
+          width: min(100%, 430px);
+          min-height: 330px;
+          margin: 0 auto;
+        }
+
+        footer {
+          flex-direction: column;
+          text-align: center;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .button {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="site-header">
+        <a class="brand" href="./" aria-label="Lymic home">
+          <img src="assets/logo.png" alt="" />
+          <span>Lymic</span>
+        </a>
+        <nav aria-label="Primary navigation">
+          <a href="support/">Support</a>
+          <a href="https://github.com/xXRoxXeRXx/lymic">GitHub</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="eyebrow">Open-source desktop client</p>
+            <h1 id="hero-title">Your desktop client for <span>Immich.</span></h1>
+            <p class="lede">
+              Synchronize local media to your self-hosted Immich server with a fast, private,
+              cross-platform app built for dependable uploads.
+            </p>
+            <div class="actions">
+              <a class="button primary" href="https://github.com/xXRoxXeRXx/lymic/releases">
+                Download Lymic
+              </a>
+              <a class="button" href="https://github.com/xXRoxXeRXx/lymic">View on GitHub</a>
+            </div>
+          </div>
+
+          <div class="visual" aria-label="Lymic application logo">
+            <img src="assets/logo.png" alt="Lymic cloud logo" />
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <span>&copy; 2026 Lymic contributors. Distributed under the MIT License.</span>
+        <nav class="footer-links" aria-label="Legal and support">
+          <a href="privacy/">Privacy</a>
+          <a href="support/">Support</a>
+        </nav>
+      </footer>
+    </div>
+  </body>
 </html>
