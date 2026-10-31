@@ -24,9 +24,9 @@ issues: https://github.com/xXRoxXeRXx/lymic/issues
 
 layout:
   /usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1:
-    bind: $SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1
+    bind: $SNAP/gnome-platform/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1
   /usr/libexec/webkit2gtk-4.1:
-    bind: $SNAP/usr/libexec/webkit2gtk-4.1
+    bind: $SNAP/gnome-platform/usr/libexec/webkit2gtk-4.1
 
 apps:
   lymic:

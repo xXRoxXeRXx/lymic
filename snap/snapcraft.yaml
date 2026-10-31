@@ -26,19 +26,27 @@ source-code: https://github.com/xXRoxXeRXx/lymic
 issues: https://github.com/xXRoxXeRXx/lymic/issues
 contact: https://github.com/xXRoxXeRXx/lymic/issues
 
-# Layout mappings for WebKitGTK 4.1 under strict confinement
+# Layout mappings for WebKitGTK 4.1 under strict confinement via GNOME extension platform
 layout:
   /usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1:
-    bind: $SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1
+    bind: $SNAP/gnome-platform/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1
   /usr/libexec/webkit2gtk-4.1:
-    bind: $SNAP/usr/libexec/webkit2gtk-4.1
+    bind: $SNAP/gnome-platform/usr/libexec/webkit2gtk-4.1
 
 apps:
   lymic:
     command: bin/lymic
     desktop: snap/gui/lymic.desktop
     extensions: [gnome]
+    environment:
+      WEBKIT_DISABLE_DMABUF_RENDERER: "1"
     plugs:
+      - desktop
+      - desktop-legacy
+      - wayland
+      - x11
+      - opengl
+      - gsettings
       - network
       - home
       - removable-media
@@ -64,11 +72,13 @@ parts:
       - libssl-dev
       - dpkg
     stage-packages:
-      - libwebkit2gtk-4.1-0
-      - libgtk-3-0
-      - libsoup-3.0-0
       - libayatana-appindicator3-1
       - librsvg2-common
+    prime:
+      - -usr/lib/*/libEGL*
+      - -usr/lib/*/libGL*
+      - -usr/lib/*/dri
+      - -usr/lib/*/libglapi*
     override-build: |
       set -eu
 
