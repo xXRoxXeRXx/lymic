@@ -89,6 +89,7 @@ describe("landing page", () => {
     expect(Object.keys(platforms)).toEqual(["Windows", "macOS", "Linux"]);
     expect(platforms.Windows).toMatch(/Virtual Library.*read-only.*on-demand hydration/i);
     expect(platforms.Windows).toMatch(/Windows Cloud Files API/i);
+    expect(platforms.Windows).toMatch(/planned.*not (?:included|available).*current GitHub build/i);
     expect(platforms.Windows).toMatch(/MSI.*Microsoft Store/i);
     expect(platforms.macOS).toMatch(/Apple Silicon.*Intel/i);
     expect(platforms.macOS).toMatch(/menu bar.*notifications.*DMG/i);
@@ -119,6 +120,13 @@ describe("landing page", () => {
       macOS: "https://github.com/xXRoxXeRXx/lymic/releases",
       Linux: "https://github.com/xXRoxXeRXx/lymic/releases",
     });
+
+    const storeLink = document.querySelector<HTMLAnchorElement>(
+      'a[data-download-platform="Windows Store"]',
+    );
+    expect(storeLink?.textContent).toMatch(/private.*pre-release.*Flight/i);
+    expect(storeLink?.textContent).not.toMatch(/get|download|install/i);
+    expect(storeLink?.closest("article")?.textContent).toMatch(/not a public download/i);
   });
 
   it("adapts its responsive layout and colors to the viewport and system theme", () => {
@@ -160,6 +168,12 @@ describe("public privacy and support pages", () => {
     // Must provide durable contact and support mechanisms
     expect(content).toMatch(/github\.com\/xXRoxXeRXx\/lymic/i);
     expect(content).toMatch(/issues|support/i);
+  });
+
+  it("describes the Microsoft Store channel as a private pre-release", () => {
+    const content = readFileSync(supportPath, "utf-8");
+
+    expect(content).toMatch(/Microsoft Store.*private.*Flight.*not.*public/i);
   });
 
   it("provides a complete Microsoft Store listing with localized descriptions, URLs, and screenshot assets", () => {
