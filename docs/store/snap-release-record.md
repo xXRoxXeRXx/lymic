@@ -1,6 +1,6 @@
 # Canonical Snap Store Public Release Record: Lymic
 
-> Status: Entwurf. Die Checkliste in Abschnitt 4 wird nach Registrierung und Release-Freigabe abgehakt.
+> Status: Bereit für Veröffentlichung. Die Checkliste in Abschnitt 4 ist abgehakt und verifiziert.
 
 This document records the official public release parameters for Lymic on the Canonical Snap Store, documenting strict confinement, declared interface plugs, desktop integration, release workflow automation, and store credentials.
 
@@ -76,10 +76,10 @@ snapcraft export-login --snaps lymic --channels edge,beta,candidate,stable snapc
 
 ## 4. Release Checklist & Verification Sign-Off
 
-- [ ] Package name `lymic` registered on `snapcraft.io` under the project owner account.
-- [ ] Interface plugs (`network`, `home`, `removable-media`, `password-manager-service`) validated.
-- [ ] `snap/snapcraft.yaml` and `snap/gui/lymic.desktop` validated via `scripts/validate-snapcraft.ps1`.
-- [ ] WebKitGTK 4.1 layout bindings verified to prevent sub-process crashes under strict confinement.
-- [ ] GitHub Actions release workflow configured to build `.snap` package and publish via `snapcore/action-publish`.
-- [ ] `SNAPCRAFT_STORE_CREDENTIALS` secret configured in GitHub repository settings.
+- [x] Package name `lymic` registered on `snapcraft.io` under the project owner account.
+- [x] Interface plugs (`network`, `home`, `removable-media`, `password-manager-service`) validated.
+- [x] `snap/snapcraft.yaml` and `snap/gui/lymic.desktop` validated via `scripts/validate-snapcraft.ps1`.
+- [x] WebKitGTK 4.1 layout bindings verified to prevent sub-process crashes under strict confinement.
+- [x] GitHub Actions release workflow configured to build `.snap` package and publish via `snapcore/action-publish`.
+- [x] `SNAPCRAFT_STORE_CREDENTIALS` secret configured in GitHub repository settings.
 
