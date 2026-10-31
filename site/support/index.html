@@ -5,139 +5,313 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Support & Help - Lymic</title>
   <meta name="description" content="Support and Help for Lymic, an independent desktop synchronization client for self-hosted Immich servers.">
+  <link rel="icon" type="image/png" href="../assets/favicon.png" />
   <style>
     :root {
-      --bg: #0f172a;
-      --card-bg: #1e293b;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-      --primary: #38bdf8;
-      --border: #334155;
-      --accent: #0ea5e9;
-      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color-scheme: light dark;
+      --bg: #ffffff;
+      --bg-subtle: #f8fafc;
+      --surface: #ffffff;
+      --surface-muted: #f1f5f9;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --border: #e2e8f0;
+      --border-hover: #cbd5e1;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-subtle: #eff6ff;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+      --shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     }
-    @media (prefers-color-scheme: light) {
+
+    @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #f8fafc;
-        --card-bg: #ffffff;
-        --text: #0f172a;
-        --text-muted: #64748b;
-        --primary: #0284c7;
-        --border: #e2e8f0;
-        --accent: #0369a1;
+        --bg: #0b0f17;
+        --bg-subtle: #0f1523;
+        --surface: #131c2e;
+        --surface-muted: #19243a;
+        --text: #f8fafc;
+        --text-muted: #94a3b8;
+        --border: rgba(255, 255, 255, 0.09);
+        --border-hover: rgba(255, 255, 255, 0.18);
+        --accent: #38bdf8;
+        --accent-hover: #7dd3fc;
+        --accent-subtle: rgba(56, 189, 248, 0.1);
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+        --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       }
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    * { box-sizing: border-box; }
+
     body {
-      font-family: var(--font);
+      min-height: 100vh;
+      margin: 0;
       background-color: var(--bg);
       color: var(--text);
+      font-family: var(--font);
       line-height: 1.6;
-      padding: 2rem 1rem;
+      -webkit-font-smoothing: antialiased;
     }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
     .container {
-      max-width: 800px;
+      width: min(840px, calc(100% - 3rem));
       margin: 0 auto;
+      padding: 0 0 4rem;
     }
-    header {
+
+    .site-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 76px;
       margin-bottom: 2.5rem;
       border-bottom: 1px solid var(--border);
-      padding-bottom: 1.5rem;
     }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      color: var(--text);
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      text-decoration: none;
+    }
+
+    .brand:hover {
+      text-decoration: none;
+    }
+
+    .brand img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+    }
+
     .nav {
       display: flex;
-      gap: 1rem;
-      margin-top: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1.5rem;
     }
+
     .nav a {
-      color: var(--primary);
-      text-decoration: none;
+      color: var(--text-muted);
+      font-size: 0.925rem;
       font-weight: 500;
+      text-decoration: none;
+      transition: color 150ms ease;
     }
-    .nav a:hover { text-decoration: underline; }
+
+    .nav a:hover {
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .page-title {
+      margin-bottom: 2rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.65rem;
+      margin-bottom: 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface-muted);
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
     h1 {
-      font-size: 2.25rem;
+      margin: 0 0 0.5rem;
+      font-size: clamp(2rem, 4vw, 2.75rem);
       font-weight: 700;
       letter-spacing: -0.025em;
-      margin-bottom: 0.5rem;
+      line-height: 1.2;
     }
-    .badge {
-      display: inline-block;
-      font-size: 0.875rem;
-      font-weight: 600;
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      color: var(--primary);
-      margin-bottom: 1rem;
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      margin-bottom: 2rem;
     }
+
     h2 {
+      margin: 2.25rem 0 0.85rem;
       font-size: 1.35rem;
       font-weight: 600;
-      margin-top: 2rem;
-      margin-bottom: 0.75rem;
+      letter-spacing: -0.015em;
       color: var(--text);
     }
-    p { margin-bottom: 1rem; color: var(--text-muted); }
-    ul { margin-bottom: 1rem; padding-left: 1.5rem; color: var(--text-muted); }
-    li { margin-bottom: 0.5rem; }
-    strong { color: var(--text); }
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 0.75rem;
-      padding: 1.5rem;
-      margin: 1.5rem 0;
+
+    p {
+      margin: 0 0 1rem;
+      color: var(--text-muted);
+      font-size: 0.975rem;
+      line-height: 1.65;
     }
-    .btn {
-      display: inline-block;
-      background: var(--primary);
-      color: #0f172a;
+
+    ul {
+      margin: 0 0 1.25rem;
+      padding-left: 1.35rem;
+      color: var(--text-muted);
+      font-size: 0.975rem;
+    }
+
+    li {
+      margin-bottom: 0.5rem;
+      line-height: 1.6;
+    }
+
+    strong {
+      color: var(--text);
       font-weight: 600;
-      padding: 0.5rem 1rem;
-      border-radius: 0.5rem;
-      text-decoration: none;
-      margin-right: 0.5rem;
-      margin-top: 0.5rem;
     }
-    .btn:hover { opacity: 0.9; }
-    .btn-secondary {
-      background: var(--card-bg);
-      color: var(--text);
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.875em;
+      padding: 0.2em 0.4em;
+      border-radius: var(--radius-sm);
+      background: var(--surface-muted);
       border: 1px solid var(--border);
     }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface-muted);
+      padding: 1.5rem 1.75rem;
+      margin: 1.75rem 0 2rem;
+    }
+
+    .card h2 {
+      margin-top: 0;
+      font-size: 1.25rem;
+    }
+
+    .card p:last-child {
+      margin-bottom: 0;
+    }
+
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0.55rem 1.15rem;
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-md);
+      background: var(--accent);
+      color: #ffffff;
+      font-size: 0.925rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background-color 150ms ease, border-color 150ms ease;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .btn {
+        color: #0b0f17;
+      }
+    }
+
+    .btn:hover {
+      border-color: var(--accent-hover);
+      background: var(--accent-hover);
+      text-decoration: none;
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: var(--surface-muted);
+      border-color: var(--border-hover);
+    }
+
     footer {
-      margin-top: 3rem;
-      padding-top: 1.5rem;
+      margin-top: 3.5rem;
+      padding-top: 2rem;
       border-top: 1px solid var(--border);
       font-size: 0.875rem;
       color: var(--text-muted);
       text-align: center;
     }
+
+    @media (max-width: 640px) {
+      .container {
+        width: min(100% - 2rem, 42rem);
+      }
+
+      .site-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 1.25rem 0;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <header>
-      <span class="badge">Lymic Support</span>
-      <h1>Support & Help for Lymic</h1>
-      <p>How to get help, report issues, or contribute to Lymic.</p>
-      <nav class="nav">
+    <header class="site-header">
+      <a class="brand" href="../" aria-label="Lymic home">
+        <img src="../assets/logo.png" alt="" />
+        <span>Lymic</span>
+      </a>
+      <nav class="nav" aria-label="Primary navigation">
         <a href="../">Home</a>
         <a href="../privacy/">Privacy Policy</a>
-        <a href="../support/">Support & Help</a>
+        <a href="../support/">Support &amp; Help</a>
         <a href="https://github.com/xXRoxXeRXx/lymic" target="_blank" rel="noopener">GitHub</a>
       </nav>
     </header>
 
     <main>
+      <div class="page-title">
+        <span class="badge">Lymic Support</span>
+        <h1>Support &amp; Help for Lymic</h1>
+        <p class="subtitle">How to get help, report issues, or contribute to Lymic.</p>
+      </div>
+
       <div class="card">
         <h2>Primary Support Channels</h2>
         <p>
           Lymic is developed as open-source software on GitHub. The most durable way to obtain assistance, report defects, or request enhancements is through our public issue tracker and community discussions.
         </p>
-        <div style="margin-top: 1rem;">
+        <div class="button-group">
           <a class="btn" href="https://github.com/xXRoxXeRXx/lymic/issues" target="_blank" rel="noopener">Report an Issue on GitHub</a>
           <a class="btn btn-secondary" href="https://github.com/xXRoxXeRXx/lymic/discussions" target="_blank" rel="noopener">Community Discussions</a>
         </div>
@@ -185,13 +359,13 @@
         For security vulnerability reports or questions not suitable for public GitHub issues, contact the project maintainer at:
       </p>
       <p>
-        <strong>Email:</strong> <a href="mailto:gh@grenzallee.eu" style="color: var(--primary);">gh@grenzallee.eu</a><br>
-        <strong>Project Repository:</strong> <a href="https://github.com/xXRoxXeRXx/lymic" target="_blank" rel="noopener" style="color: var(--primary);">https://github.com/xXRoxXeRXx/lymic</a>
+        <strong>Email:</strong> <a href="mailto:gh@grenzallee.eu">gh@grenzallee.eu</a><br>
+        <strong>Project Repository:</strong> <a href="https://github.com/xXRoxXeRXx/lymic" target="_blank" rel="noopener">https://github.com/xXRoxXeRXx/lymic</a>
       </p>
 
       <h2>5. Independent Project Notice</h2>
       <p>
-        Lymic is an independent client developed by the community. Immich is a separate project. For issues with the core Immich server itself, consult the official <a href="https://immich.app" target="_blank" rel="noopener" style="color: var(--primary);">Immich documentation</a>.
+        Lymic is an independent client developed by the community. Immich is a separate project. For issues with the core Immich server itself, consult the official <a href="https://immich.app" target="_blank" rel="noopener">Immich documentation</a>.
       </p>
     </main>
 

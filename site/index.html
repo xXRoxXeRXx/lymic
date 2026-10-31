@@ -91,33 +91,46 @@
     <style>
       :root {
         color-scheme: light dark;
-        --background: #f6f8fc;
-        --surface: rgba(255, 255, 255, 0.82);
-        --surface-strong: #ffffff;
-        --text: #101828;
-        --text-muted: #475467;
-        --border: rgba(16, 24, 40, 0.1);
-        --accent: #1677d2;
-        --accent-hover: #0e5fae;
-        --glow-a: rgba(43, 183, 255, 0.22);
-        --glow-b: rgba(99, 58, 219, 0.16);
-        --shadow: 0 24px 64px rgba(29, 41, 57, 0.12);
-        --font: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --bg: #ffffff;
+        --bg-subtle: #f8fafc;
+        --surface: #ffffff;
+        --surface-muted: #f1f5f9;
+        --text: #0f172a;
+        --text-muted: #475569;
+        --border: #e2e8f0;
+        --border-hover: #cbd5e1;
+        --accent: #2563eb;
+        --accent-hover: #1d4ed8;
+        --accent-subtle: #eff6ff;
+        --accent-text: #1d4ed8;
+        --radius-sm: 6px;
+        --radius-md: 10px;
+        --radius-lg: 14px;
+        --radius-xl: 16px;
+        --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+        --shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+        --shadow-lg: 0 10px 24px -3px rgba(15, 23, 42, 0.08), 0 4px 8px -2px rgba(15, 23, 42, 0.04);
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       }
 
       @media (prefers-color-scheme: dark) {
         :root {
-          --background: #070b16;
-          --surface: rgba(18, 27, 48, 0.78);
-          --surface-strong: #121b30;
-          --text: #f5f8ff;
-          --text-muted: #a8b4c8;
-          --border: rgba(222, 231, 255, 0.12);
-          --accent: #50c7ff;
-          --accent-hover: #8bddff;
-          --glow-a: rgba(29, 180, 255, 0.2);
-          --glow-b: rgba(117, 70, 255, 0.2);
-          --shadow: 0 24px 72px rgba(0, 0, 0, 0.42);
+          --bg: #0b0f17;
+          --bg-subtle: #0f1523;
+          --surface: #131c2e;
+          --surface-muted: #19243a;
+          --text: #f8fafc;
+          --text-muted: #94a3b8;
+          --border: rgba(255, 255, 255, 0.09);
+          --border-hover: rgba(255, 255, 255, 0.18);
+          --accent: #38bdf8;
+          --accent-hover: #7dd3fc;
+          --accent-subtle: rgba(56, 189, 248, 0.1);
+          --accent-text: #38bdf8;
+          --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+          --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+          --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.45);
         }
       }
 
@@ -127,7 +140,8 @@
 
       html {
         min-width: 320px;
-        background: var(--background);
+        background: var(--bg);
+        scroll-behavior: smooth;
       }
 
       body {
@@ -135,15 +149,16 @@
         margin: 0;
         overflow-x: hidden;
         color: var(--text);
-        background:
-          radial-gradient(circle at 18% 8%, var(--glow-a), transparent 34rem),
-          radial-gradient(circle at 86% 42%, var(--glow-b), transparent 31rem), var(--background);
+        background-color: var(--bg);
         font-family: var(--font);
         line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
 
       a {
         color: inherit;
+        text-decoration: none;
       }
 
       .shell {
@@ -151,91 +166,87 @@
         margin: 0 auto;
       }
 
+      /* Navigation */
       .site-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        min-height: 84px;
+        min-height: 76px;
+        border-bottom: 1px solid var(--border);
       }
 
       .brand {
         display: inline-flex;
         align-items: center;
-        gap: 0.7rem;
+        gap: 0.75rem;
         color: var(--text);
-        font-size: 1.1rem;
-        font-weight: 750;
-        letter-spacing: -0.02em;
-        text-decoration: none;
+        font-size: 1.15rem;
+        font-weight: 700;
+        letter-spacing: -0.015em;
       }
 
       .brand img {
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
         object-fit: contain;
       }
 
       .site-header nav {
         display: flex;
         flex-wrap: wrap;
-        justify-content: flex-end;
+        align-items: center;
         gap: 1.5rem;
       }
 
       .site-header nav a,
       .footer-links a {
         color: var(--text-muted);
-        font-size: 0.95rem;
-        font-weight: 600;
-        text-decoration: none;
+        font-size: 0.925rem;
+        font-weight: 500;
+        transition: color 150ms ease;
       }
 
       .site-header nav a:hover,
       .footer-links a:hover {
-        color: var(--accent);
+        color: var(--text);
       }
 
+      /* Hero */
       .hero {
         display: grid;
-        grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.92fr);
+        grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
         align-items: center;
-        gap: clamp(2rem, 7vw, 6rem);
-        min-height: calc(100vh - 168px);
-        padding: 5rem 0 7rem;
+        gap: clamp(2.5rem, 6vw, 4.5rem);
+        padding: clamp(3.5rem, 8vw, 6rem) 0 clamp(4rem, 9vw, 6.5rem);
       }
 
-      .eyebrow {
+      .status-badge {
         display: inline-flex;
         align-items: center;
-        gap: 0.55rem;
-        margin: 0 0 1.5rem;
-        padding: 0.42rem 0.8rem;
+        gap: 0.5rem;
+        margin-bottom: 1.25rem;
+        padding: 0.3rem 0.75rem;
         border: 1px solid var(--border);
-        border-radius: 999px;
-        background: var(--surface);
-        color: var(--accent);
-        font-size: 0.82rem;
-        font-weight: 750;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
+        border-radius: var(--radius-sm);
+        background: var(--surface-muted);
+        color: var(--text-muted);
+        font-size: 0.8125rem;
+        font-weight: 500;
       }
 
-      .eyebrow::before {
-        width: 0.45rem;
-        height: 0.45rem;
+      .status-badge .dot {
+        width: 6px;
+        height: 6px;
         border-radius: 50%;
-        background: currentColor;
-        content: "";
-        box-shadow: 0 0 0 0.25rem color-mix(in srgb, currentColor 16%, transparent);
+        background-color: #10b981;
       }
 
       h1 {
-        max-width: 12ch;
         margin: 0;
-        font-size: clamp(3rem, 7vw, 5.8rem);
-        font-weight: 820;
-        letter-spacing: -0.065em;
-        line-height: 0.98;
+        font-size: clamp(2.5rem, 5.5vw, 3.85rem);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1.12;
       }
 
       h1 span {
@@ -243,46 +254,55 @@
       }
 
       .lede {
-        max-width: 39rem;
-        margin: 1.8rem 0 0;
+        max-width: 36rem;
+        margin: 1.25rem 0 0;
         color: var(--text-muted);
-        font-size: clamp(1.08rem, 2vw, 1.28rem);
+        font-size: clamp(1.05rem, 1.8vw, 1.18rem);
+        line-height: 1.6;
       }
 
       .actions {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
         gap: 0.85rem;
-        margin-top: 2.35rem;
+        margin-top: 2rem;
       }
 
       .button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 50px;
-        padding: 0.75rem 1.25rem;
+        gap: 0.5rem;
+        min-height: 44px;
+        padding: 0.65rem 1.25rem;
         border: 1px solid var(--border);
-        border-radius: 0.8rem;
-        background: var(--surface-strong);
+        border-radius: var(--radius-md);
+        background: var(--surface);
         color: var(--text);
-        font-weight: 750;
-        text-decoration: none;
+        font-size: 0.9375rem;
+        font-weight: 600;
         transition:
-          transform 160ms ease,
-          border-color 160ms ease,
-          background 160ms ease;
+          background-color 150ms ease,
+          border-color 150ms ease,
+          color 150ms ease;
       }
 
       .button:hover {
-        transform: translateY(-2px);
-        border-color: var(--accent);
+        border-color: var(--border-hover);
+        background: var(--surface-muted);
       }
 
       .button.primary {
         border-color: var(--accent);
         background: var(--accent);
-        color: #06101c;
+        color: #ffffff;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .button.primary {
+          color: #0b0f17;
+        }
       }
 
       .button.primary:hover {
@@ -290,131 +310,238 @@
         background: var(--accent-hover);
       }
 
+      /* Hero Visual / Mock Window */
       .visual {
         position: relative;
-        display: grid;
-        place-items: center;
-        min-height: 460px;
         border: 1px solid var(--border);
-        border-radius: 2.25rem;
+        border-radius: var(--radius-xl);
         background: var(--surface);
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(20px);
+        box-shadow: var(--shadow-lg);
+        overflow: hidden;
       }
 
-      .visual::before,
-      .visual::after {
-        position: absolute;
+      .window-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface-muted);
+      }
+
+      .window-controls {
+        display: flex;
+        gap: 6px;
+      }
+
+      .window-controls span {
+        width: 10px;
+        height: 10px;
         border-radius: 50%;
-        content: "";
-        filter: blur(1px);
+        background-color: var(--border-hover);
       }
 
-      .visual::before {
-        width: 55%;
-        aspect-ratio: 1;
-        background: var(--glow-a);
+      .window-title {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
       }
 
-      .visual::after {
-        right: 12%;
-        bottom: 12%;
-        width: 26%;
-        aspect-ratio: 1;
-        background: var(--glow-b);
+      .hero-preview {
+        padding: 2.25rem 1.75rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
       }
 
       .visual img {
-        position: relative;
-        z-index: 1;
-        width: min(78%, 360px);
-        height: auto;
-        filter: drop-shadow(0 28px 25px rgba(3, 9, 23, 0.24));
+        width: 88px;
+        height: 88px;
+        object-fit: contain;
+        margin-bottom: 1.25rem;
       }
 
-      .features {
-        padding: 2rem 0 7rem;
+      .hero-preview-meta {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+        text-align: left;
+      }
+
+      .preview-stat {
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface-muted);
+      }
+
+      .preview-stat-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        font-weight: 600;
+      }
+
+      .preview-stat-value {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--text);
+        margin-top: 0.2rem;
+      }
+
+      /* Sections & Headings */
+      .features,
+      .platforms,
+      .requirements,
+      .faq {
+        padding: 4.5rem 0;
+        border-top: 1px solid var(--border);
       }
 
       .section-heading {
-        max-width: 44rem;
-        margin: 0 auto 5rem;
+        max-width: 42rem;
+        margin-bottom: 3.5rem;
+      }
+
+      .section-heading.center {
+        margin-left: auto;
+        margin-right: auto;
         text-align: center;
+      }
+
+      .section-tag {
+        display: inline-block;
+        margin-bottom: 0.75rem;
+        color: var(--accent-text);
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
       }
 
       .section-heading h2 {
         margin: 0;
-        font-size: clamp(2.2rem, 5vw, 3.7rem);
-        letter-spacing: -0.045em;
-        line-height: 1.05;
+        font-size: clamp(1.85rem, 3.5vw, 2.6rem);
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1.2;
       }
 
       .section-heading p {
-        margin: 1.25rem 0 0;
+        margin: 0.85rem 0 0;
         color: var(--text-muted);
-        font-size: 1.08rem;
+        font-size: 1.05rem;
+        line-height: 1.6;
       }
 
+      /* Feature Showcase */
       .feature {
         display: grid;
-        grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
         align-items: center;
-        gap: clamp(2rem, 7vw, 6rem);
-        margin-top: clamp(5rem, 10vw, 9rem);
+        gap: clamp(2rem, 5vw, 4rem);
+        margin-bottom: 5rem;
       }
 
-      .feature:first-of-type {
-        margin-top: 0;
-      }
-
-      .feature-copy-only {
-        grid-template-columns: minmax(0, 52rem);
-        justify-content: center;
-      }
-
-      .feature:nth-of-type(even) .feature-copy {
-        order: 2;
+      .feature:last-child {
+        margin-bottom: 0;
       }
 
       .feature-copy h3 {
         margin: 0;
-        font-size: clamp(1.8rem, 4vw, 2.8rem);
-        letter-spacing: -0.035em;
-        line-height: 1.12;
+        font-size: clamp(1.35rem, 2.2vw, 1.75rem);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
       }
 
       .feature-copy p {
-        margin: 1.1rem 0 0;
+        margin: 1rem 0 0;
         color: var(--text-muted);
+        font-size: 0.975rem;
+        line-height: 1.65;
       }
 
       .feature-copy strong {
         color: var(--text);
+        font-weight: 600;
       }
 
       .screenshot-frame {
         margin: 0;
-        padding: 0.65rem;
-        overflow: hidden;
         border: 1px solid var(--border);
-        border-radius: 1.35rem;
+        border-radius: var(--radius-lg);
         background: var(--surface);
         box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .screenshot-frame .frame-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0.6rem 0.85rem;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface-muted);
+      }
+
+      .screenshot-frame .frame-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: var(--border-hover);
       }
 
       .screenshot-frame img {
         display: block;
         width: 100%;
         height: auto;
-        border-radius: 0.85rem;
       }
 
-      .platforms,
-      .requirements,
-      .faq {
-        padding: 2rem 0 7rem;
+      /* Distinct Feature Callout for Dedup & Albums */
+      .feature-copy-only {
+        display: block;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--surface-muted);
+        padding: 2.25rem 2.5rem;
+        margin-bottom: 5rem;
       }
 
+      .feature-copy-only .feature-copy {
+        max-width: 48rem;
+      }
+
+      .feature-copy-only h3 {
+        color: var(--text);
+      }
+
+      .feature-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        margin-top: 1.25rem;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.65rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text-muted);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        font-family: var(--font-mono);
+      }
+
+      /* Platforms */
       .platform-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -422,44 +549,69 @@
       }
 
       .platform-card {
+        display: flex;
+        flex-direction: column;
         padding: 1.75rem;
         border: 1px solid var(--border);
-        border-radius: 1.35rem;
+        border-radius: var(--radius-lg);
         background: var(--surface);
-        box-shadow: var(--shadow);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .platform-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
       }
 
       .platform-card h3 {
         margin: 0;
-        font-size: 1.55rem;
-        letter-spacing: -0.025em;
+        font-size: 1.25rem;
+        font-weight: 600;
+        letter-spacing: -0.015em;
+      }
+
+      .platform-badge {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: var(--radius-sm);
+        background: var(--surface-muted);
+        color: var(--text-muted);
+        font-weight: 600;
+        font-family: var(--font-mono);
       }
 
       .platform-card p {
-        margin: 1rem 0 0;
+        margin: 0;
         color: var(--text-muted);
+        font-size: 0.925rem;
+        line-height: 1.6;
       }
 
       .platform-card strong {
         color: var(--text);
       }
 
+      /* Requirements */
       .requirements-table-wrap {
         overflow-x: auto;
         border: 1px solid var(--border);
-        border-radius: 1.35rem;
+        border-radius: var(--radius-lg);
         background: var(--surface);
+        box-shadow: var(--shadow-sm);
       }
 
       .requirements-table {
         width: 100%;
         border-collapse: collapse;
         text-align: left;
+        font-size: 0.9375rem;
       }
 
       .requirements-table th,
       .requirements-table td {
-        padding: 1rem 1.2rem;
+        padding: 1rem 1.35rem;
         border-bottom: 1px solid var(--border);
         vertical-align: top;
       }
@@ -471,151 +623,156 @@
 
       .requirements-table th {
         color: var(--text);
-        font-weight: 750;
+        font-weight: 600;
+        white-space: nowrap;
+        background: var(--surface-muted);
       }
 
       .requirements-table td {
         color: var(--text-muted);
+        line-height: 1.6;
       }
 
+      /* Downloads */
       .download-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 1.25rem;
-        margin-top: 1.5rem;
+        margin-top: 1.75rem;
       }
 
       .download-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
         padding: 1.5rem;
         border: 1px solid var(--border);
-        border-radius: 1.35rem;
+        border-radius: var(--radius-lg);
         background: var(--surface);
+        box-shadow: var(--shadow-sm);
       }
 
       .download-card h3 {
-        margin: 0 0 1rem;
+        margin: 0 0 0.85rem;
+        font-size: 1.15rem;
+        font-weight: 600;
       }
 
       .download-card .button {
         width: 100%;
-        margin-top: 0.7rem;
       }
 
+      .download-card p {
+        margin: 0.85rem 0 0;
+        font-size: 0.825rem;
+        color: var(--text-muted);
+        line-height: 1.5;
+      }
+
+      /* FAQ */
       .faq-grid {
         display: grid;
         gap: 1rem;
-        max-width: 52rem;
+        max-width: 48rem;
         margin: 0 auto;
       }
 
       .faq-item {
-        padding: 1.5rem;
+        padding: 1.5rem 1.75rem;
         border: 1px solid var(--border);
-        border-radius: 1.2rem;
+        border-radius: var(--radius-md);
         background: var(--surface);
+        box-shadow: var(--shadow-sm);
       }
 
       .faq-item h3 {
         margin: 0;
-        font-size: 1.25rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
       }
 
       .faq-item p {
-        margin: 0.75rem 0 0;
+        margin: 0.65rem 0 0;
         color: var(--text-muted);
+        font-size: 0.9375rem;
+        line-height: 1.6;
       }
 
+      /* Footer */
       footer {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 1.5rem;
-        padding: 1.6rem 0 2.5rem;
+        padding: 2.5rem 0 3.5rem;
         border-top: 1px solid var(--border);
         color: var(--text-muted);
-        font-size: 0.9rem;
+        font-size: 0.875rem;
       }
 
       .footer-links {
         display: flex;
+        flex-wrap: wrap;
         gap: 1.25rem;
       }
 
-      @media (max-width: 760px) {
+      /* Responsive Layout */
+      @media (max-width: 860px) {
+        .hero {
+          grid-template-columns: 1fr;
+          padding: 2.5rem 0 4rem;
+        }
+
+        .visual {
+          max-width: 480px;
+          margin: 0 auto;
+          width: 100%;
+        }
+
+        .feature {
+          grid-template-columns: 1fr;
+          gap: 1.75rem;
+        }
+
+        .platform-grid,
+        .download-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
         .shell {
           width: min(100% - 2rem, 42rem);
         }
 
         .site-header {
-          align-items: flex-start;
           flex-direction: column;
-          padding: 1rem 0;
+          align-items: flex-start;
+          gap: 1rem;
+          padding: 1.25rem 0;
         }
 
         .site-header nav {
-          justify-content: flex-start;
           gap: 0.75rem 1.25rem;
         }
 
-        .hero {
+        .hero-preview-meta {
           grid-template-columns: 1fr;
-          min-height: auto;
-          padding: 3.5rem 0 5rem;
-          text-align: center;
-        }
-
-        h1,
-        .lede {
-          margin-right: auto;
-          margin-left: auto;
-        }
-
-        .eyebrow,
-        .actions {
-          justify-content: center;
-        }
-
-        .visual {
-          grid-row: 1;
-          width: min(100%, 430px);
-          min-height: 330px;
-          margin: 0 auto;
-        }
-
-        .features {
-          padding-bottom: 5rem;
-        }
-
-        .section-heading {
-          margin-bottom: 4rem;
-        }
-
-        .feature {
-          grid-template-columns: 1fr;
-          gap: 2rem;
-        }
-
-        .platform-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .download-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .feature:nth-of-type(even) .feature-copy {
-          order: initial;
         }
 
         footer {
           flex-direction: column;
-          text-align: center;
+          align-items: flex-start;
+          gap: 1rem;
         }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .button {
+        .button,
+        html {
           transition: none;
+          scroll-behavior: auto;
         }
       }
     </style>
@@ -639,7 +796,10 @@
       <main>
         <section class="hero" aria-labelledby="hero-title">
           <div class="hero-copy">
-            <p class="eyebrow">Open-source desktop client</p>
+            <div class="status-badge">
+              <span class="dot" aria-hidden="true"></span>
+              <span>Open-source desktop client</span>
+            </div>
             <h1 id="hero-title">
               The desktop client for <span>Immich</span> on Windows, macOS, and Linux.
             </h1>
@@ -660,13 +820,32 @@
           </div>
 
           <div class="visual" aria-label="Lymic application logo">
-            <img src="assets/logo.png" alt="Lymic cloud logo" />
+            <div class="window-bar" aria-hidden="true">
+              <div class="window-controls">
+                <span></span><span></span><span></span>
+              </div>
+              <div class="window-title">lymic-desktop</div>
+            </div>
+            <div class="hero-preview">
+              <img src="assets/logo.png" alt="Lymic cloud logo" />
+              <div class="preview-stat-label">Independent Sync Client</div>
+              <div class="hero-preview-meta">
+                <div class="preview-stat">
+                  <div class="preview-stat-label">Connection</div>
+                  <div class="preview-stat-value">Direct HTTPS</div>
+                </div>
+                <div class="preview-stat">
+                  <div class="preview-stat-label">Credentials</div>
+                  <div class="preview-stat-value">Native OS Keyring</div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
         <section class="features" aria-labelledby="features-title">
           <div class="section-heading">
-            <p class="eyebrow">Built for your library</p>
+            <span class="section-tag">Core Architecture</span>
             <h2 id="features-title">A clear path from local media to Immich.</h2>
             <p>
               Dependable Synchronization, precise organization, and private local state—all in a
@@ -684,6 +863,11 @@
               </p>
             </div>
             <figure class="screenshot-frame">
+              <div class="frame-header" aria-hidden="true">
+                <span class="frame-dot"></span>
+                <span class="frame-dot"></span>
+                <span class="frame-dot"></span>
+              </div>
               <img
                 data-app-screenshot
                 src="assets/01_signin.png"
@@ -709,6 +893,11 @@
               </p>
             </div>
             <figure class="screenshot-frame">
+              <div class="frame-header" aria-hidden="true">
+                <span class="frame-dot"></span>
+                <span class="frame-dot"></span>
+                <span class="frame-dot"></span>
+              </div>
               <img
                 data-app-screenshot
                 src="assets/02_watched_folders.png"
@@ -732,6 +921,11 @@
                 Immich recognizes as an existing Remote Asset. A Duplicate is not uploaded again.
                 Lymic recognizes it with a SHA-1 checksum check.
               </p>
+              <div class="feature-chips" aria-label="Feature specifications">
+                <span class="chip">SHA-1 Deduplication</span>
+                <span class="chip">Target Album Sync</span>
+                <span class="chip">Zero Redundant Bandwidth</span>
+              </div>
             </div>
           </article>
 
@@ -746,6 +940,11 @@
               </p>
             </div>
             <figure class="screenshot-frame">
+              <div class="frame-header" aria-hidden="true">
+                <span class="frame-dot"></span>
+                <span class="frame-dot"></span>
+                <span class="frame-dot"></span>
+              </div>
               <img
                 data-app-screenshot
                 src="assets/04_settings.png"
@@ -761,7 +960,7 @@
 
         <section class="platforms" aria-labelledby="platforms-title">
           <div class="section-heading">
-            <p class="eyebrow">Made for your desktop</p>
+            <span class="section-tag">Cross-Platform</span>
             <h2 id="platforms-title">A native fit on every supported platform.</h2>
             <p>
               Choose the package for your operating system while keeping the same private,
@@ -771,7 +970,10 @@
 
           <div class="platform-grid">
             <article class="platform-card" data-platform="Windows">
-              <h3>Windows</h3>
+              <div class="platform-header">
+                <h3>Windows</h3>
+                <span class="platform-badge">x64</span>
+              </div>
               <p>
                 A planned optional <strong>Virtual Library</strong> will use the Windows Cloud Files
                 API to project your Immich Library as read-only placeholders with on-demand
@@ -782,7 +984,10 @@
             </article>
 
             <article class="platform-card" data-platform="macOS">
-              <h3>macOS</h3>
+              <div class="platform-header">
+                <h3>macOS</h3>
+                <span class="platform-badge">Apple Silicon</span>
+              </div>
               <p>
                 The native menu bar tray keeps Synchronization controls available in the
                 background, with desktop notifications for important outcomes. GitHub Releases
@@ -792,7 +997,10 @@
             </article>
 
             <article class="platform-card" data-platform="Linux">
-              <h3>Linux</h3>
+              <div class="platform-header">
+                <h3>Linux</h3>
+                <span class="platform-badge">Ubuntu / Debian</span>
+              </div>
               <p>
                 Choose the x86_64 AppImage or DEB package from GitHub Releases. Closing the main
                 window leaves Lymic operating in the background through its system tray so
@@ -804,7 +1012,7 @@
 
         <section class="requirements" aria-labelledby="requirements-title">
           <div class="section-heading">
-            <p class="eyebrow">Before you install</p>
+            <span class="section-tag">Compatibility & Releases</span>
             <h2 id="requirements-title">System requirements and downloads.</h2>
             <p>
               These requirements reflect the targets the project currently builds and publishes;
@@ -859,14 +1067,16 @@
 
           <div class="download-grid" aria-label="Platform downloads">
             <article class="download-card">
-              <h3>Windows downloads</h3>
-              <a
-                class="button primary"
-                data-download-platform="Windows GitHub"
-                href="https://github.com/xXRoxXeRXx/lymic/releases"
-              >
-                MSI or NSIS from GitHub
-              </a>
+              <div>
+                <h3>Windows downloads</h3>
+                <a
+                  class="button primary"
+                  data-download-platform="Windows GitHub"
+                  href="https://github.com/xXRoxXeRXx/lymic/releases"
+                >
+                  MSI or NSIS from GitHub
+                </a>
+              </div>
               <p data-store-channel-status>
                 A Microsoft Store channel and private Flight are planned. The package has not been
                 submitted, and the channel is not public.
@@ -874,32 +1084,38 @@
             </article>
 
             <article class="download-card">
-              <h3>macOS download</h3>
-              <a
-                class="button primary"
-                data-download-platform="macOS"
-                href="https://github.com/xXRoxXeRXx/lymic/releases"
-              >
-                Apple Silicon DMG
-              </a>
+              <div>
+                <h3>macOS download</h3>
+                <a
+                  class="button primary"
+                  data-download-platform="macOS"
+                  href="https://github.com/xXRoxXeRXx/lymic/releases"
+                >
+                  Apple Silicon DMG
+                </a>
+              </div>
+              <p>Signed universal disk image for macOS on Apple Silicon.</p>
             </article>
 
             <article class="download-card">
-              <h3>Linux downloads</h3>
-              <a
-                class="button primary"
-                data-download-platform="Linux"
-                href="https://github.com/xXRoxXeRXx/lymic/releases"
-              >
-                AppImage or DEB
-              </a>
+              <div>
+                <h3>Linux downloads</h3>
+                <a
+                  class="button primary"
+                  data-download-platform="Linux"
+                  href="https://github.com/xXRoxXeRXx/lymic/releases"
+                >
+                  AppImage or DEB
+                </a>
+              </div>
+              <p>Standard standalone AppImage and Debian package for x86_64.</p>
             </article>
           </div>
         </section>
 
         <section class="faq" aria-labelledby="faq-title">
-          <div class="section-heading">
-            <p class="eyebrow">Frequently asked questions</p>
+          <div class="section-heading center">
+            <span class="section-tag">Frequently Asked Questions</span>
             <h2 id="faq-title">What to know before you connect Lymic.</h2>
           </div>
 
