@@ -136,6 +136,21 @@ impl ImmichClient {
             .expect("validated base URL must support relative endpoint paths")
     }
 
+    pub(super) fn validate_path_segment(value: &str, name: &str) -> Result<(), String> {
+        if value.trim().is_empty()
+            || value.contains("..")
+            || value.chars().any(|character| {
+                matches!(character, '/' | '\\' | '?' | '#')
+                    || character.is_control()
+                    || character.is_whitespace()
+            })
+        {
+            return Err(format!("Invalid {name} for API path"));
+        }
+
+        Ok(())
+    }
+
     pub(crate) async fn validate_connection(&self) -> Result<(), String> {
         self.current_user_info().await.map(|_| ())
     }
@@ -187,6 +202,7 @@ impl ImmichClient {
         user_id: &str,
     ) -> Result<(Vec<u8>, Option<String>), String> {
         const MAX_PROFILE_IMAGE_BYTES: usize = 10 * 1024 * 1024;
+        Self::validate_path_segment(user_id, "user ID")?;
         let response = self
             .client
             .get(self.endpoint_url(&format!("users/{user_id}/profile-image")))
@@ -852,6 +868,25 @@ mod tests {
         let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
         assert!(request.starts_with("GET /api/users/user-uuid-123/profile-image HTTP/1.1"));
         assert!(request.contains("x-api-key: test-key"));
+    }
+
+    #[tokio::test]
+    async fn get_profile_image_rejects_unsafe_user_ids_before_requesting() {
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse("http://127.0.0.1:9999/api/").unwrap(),
+            api_key: "test-key".to_string(),
+        };
+
+        for user_id in [
+            "", "   ", "../other", "user..id", "user/id", "user\\id", "user?x", "user#x",
+            "user\tid",
+        ] {
+            assert_eq!(
+                client.get_profile_image(user_id).await.unwrap_err(),
+                "Invalid user ID for API path"
+            );
+        }
     }
 
     #[tokio::test]

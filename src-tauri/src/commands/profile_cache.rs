@@ -129,11 +129,8 @@ pub(crate) fn clear_profile_cache(cache_dir: &Path) {
     let _ = fs::remove_dir(cache_dir);
 }
 
-pub(crate) fn to_data_url(bytes: &[u8], content_type: Option<&str>) -> Option<String> {
-    let mime = match content_type.filter(|ct| ct.starts_with("image/")) {
-        Some(ct) => ct,
-        None => detect_mime_type(bytes)?,
-    };
+pub(crate) fn to_data_url(bytes: &[u8], _content_type: Option<&str>) -> Option<String> {
+    let mime = detect_mime_type(bytes)?;
     let encoded = general_purpose::STANDARD.encode(bytes);
     Some(format!("data:{mime};base64,{encoded}"))
 }
@@ -390,6 +387,17 @@ mod tests {
         );
         assert_eq!(detect_mime_type(b"GIF89a"), Some("image/gif"));
         assert_eq!(detect_mime_type(b"unknown bytes"), None);
+    }
+
+    #[test]
+    fn rejects_svg_payload_even_when_server_declares_an_image_content_type() {
+        assert_eq!(
+            to_data_url(
+                b"<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>",
+                Some("image/svg+xml")
+            ),
+            None
+        );
     }
 
     #[test]

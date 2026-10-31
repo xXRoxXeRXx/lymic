@@ -69,6 +69,7 @@ impl ImmichClient {
         album_id: &super::ids::AlbumId,
         asset_ids: &[super::ids::RemoteAssetId],
     ) -> Result<(), String> {
+        Self::validate_path_segment(album_id.as_str(), "album ID")?;
         if asset_ids.is_empty() {
             return Ok(());
         }
@@ -318,6 +319,36 @@ mod tests {
             .add_assets_to_album(&AlbumId::new("album-123"), &ids)
             .await
             .is_ok());
+    }
+
+    #[tokio::test]
+    async fn add_assets_to_album_rejects_unsafe_album_ids_before_requesting() {
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse("http://127.0.0.1:9999/api/").unwrap(),
+            api_key: "test-key".to_string(),
+        };
+        let asset_ids = vec![RemoteAssetId::new("asset-1")];
+
+        for album_id in [
+            "",
+            "   ",
+            "../other",
+            "album..id",
+            "album/id",
+            "album\\id",
+            "album?x",
+            "album#x",
+            "album\tid",
+        ] {
+            assert_eq!(
+                client
+                    .add_assets_to_album(&AlbumId::new(album_id), &asset_ids)
+                    .await
+                    .unwrap_err(),
+                "Invalid album ID for API path"
+            );
+        }
     }
 
     #[tokio::test]
