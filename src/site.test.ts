@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
+
+const expectPlannedStoreChannel = (content: string) => {
+  expect(content).toMatch(/planned|pending/i);
+  expect(content).toMatch(/has not been submitted/i);
+  expect(content).toMatch(/not public/i);
+  expect(content).not.toMatch(/currently.*private.*Flight|listing.*private Flight/i);
+};
 
 describe("landing page", () => {
   const root = resolve(process.cwd());
@@ -9,10 +17,27 @@ describe("landing page", () => {
   const document = new DOMParser().parseFromString(content, "text/html");
 
   it("provides document title and responsive viewport metadata", () => {
-    expect(document.title).toBe("Lymic - Open-Source Desktop Client for Immich");
+    expect(document.title).toBe(
+      "Lymic - Immich Desktop Client for Windows, macOS, and Linux",
+    );
     expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toBe(
       "width=device-width, initial-scale=1",
     );
+  });
+
+  it("covers core discovery keywords in the title, description, and primary heading", () => {
+    const description = document
+      .querySelector('meta[name="description"]')
+      ?.getAttribute("content");
+    const heading = document.querySelector("main h1")?.textContent;
+
+    for (const surface of [document.title, description, heading]) {
+      expect(surface).toMatch(/Immich/i);
+      expect(surface).toMatch(/desktop/i);
+      expect(surface).toMatch(/Windows/i);
+      expect(surface).toMatch(/macOS/i);
+      expect(surface).toMatch(/Linux/i);
+    }
   });
 
   it("publishes accurate SoftwareApplication structured data", () => {
@@ -112,11 +137,12 @@ describe("landing page", () => {
     });
   });
 
-  it("keeps accessible support, privacy, source, and license links in the header and footer", () => {
+  it("keeps accessible support, privacy, source, issue tracker, and license links in the header and footer", () => {
     const expectedLinks = {
       Privacy: "privacy/",
       Support: "support/",
       GitHub: "https://github.com/xXRoxXeRXx/lymic",
+      Issues: "https://github.com/xXRoxXeRXx/lymic/issues",
       "MIT License": "https://github.com/xXRoxXeRXx/lymic/blob/master/LICENSE",
     };
 
@@ -162,15 +188,36 @@ describe("landing page", () => {
     expect(screenshots.map((image) => image.getAttribute("src"))).toEqual([
       "assets/01_signin.png",
       "assets/02_watched_folders.png",
-      "assets/03_synchronization.png",
       "assets/04_settings.png",
     ]);
+
+    const hashes = screenshots.map((screenshot) => {
+      const source = screenshot.getAttribute("src")!;
+      return createHash("sha256")
+        .update(readFileSync(resolve(root, "site", source)))
+        .digest("hex");
+    });
+    expect(new Set(hashes).size).toBe(screenshots.length);
 
     for (const screenshot of screenshots) {
       const source = screenshot.getAttribute("src");
       expect(existsSync(resolve(root, "site", source!))).toBe(true);
       expect(screenshot.getAttribute("alt")?.trim().length).toBeGreaterThan(20);
     }
+
+    expect(screenshots.map((image) => image.getAttribute("alt"))).toEqual([
+      expect.stringMatching(/sign-in.*Immich Server/i),
+      expect.stringMatching(/Watched Folders/i),
+      expect.stringMatching(/settings/i),
+    ]);
+  });
+
+  it("makes a clear privacy promise on the landing page", () => {
+    const mainText = document.querySelector("main")?.textContent?.replace(/\s+/g, " ").trim();
+
+    expect(mainText).toMatch(/zero telemetry/i);
+    expect(mainText).toMatch(/zero advertising/i);
+    expect(mainText).toMatch(/connects directly.*Immich Server/i);
   });
 
   it("uses canonical domain language to explain the showcased features", () => {
@@ -251,11 +298,8 @@ describe("landing page", () => {
 
     const storeCard = document.querySelector<HTMLElement>("[data-store-channel-status]");
     const storeStatus = storeCard?.textContent?.replace(/\s+/g, " ").trim();
-    expect(storeStatus).toMatch(/planned|pending/i);
-    expect(storeStatus).toMatch(/has not been submitted/i);
-    expect(storeStatus).toMatch(/not public/i);
+    expectPlannedStoreChannel(storeStatus ?? "");
     expect(storeCard?.querySelector('a[href*="apps.microsoft.com"]')).toBeNull();
-    expect(storeStatus).not.toMatch(/currently.*private.*Flight|listing.*private Flight/i);
   });
 
   it("adapts its responsive layout and colors to the viewport and system theme", () => {
@@ -302,10 +346,8 @@ describe("public privacy and support pages", () => {
   it("describes the Microsoft Store channel as planned and not submitted", () => {
     const content = readFileSync(supportPath, "utf-8");
 
-    expect(content).toMatch(/Microsoft Store.*(?:planned|pending)/i);
-    expect(content).toMatch(/has not been submitted/i);
-    expect(content).toMatch(/not public/i);
-    expect(content).not.toMatch(/currently.*private.*Flight|listing.*private Flight/i);
+    expect(content).toMatch(/Microsoft Store/i);
+    expectPlannedStoreChannel(content);
   });
 
   it("provides a complete Microsoft Store listing with localized descriptions, URLs, and screenshot assets", () => {

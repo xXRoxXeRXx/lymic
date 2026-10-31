@@ -5,26 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Lymic is the open-source desktop client that synchronizes local media to your self-hosted Immich server."
+      content="Lymic is the open-source Immich desktop client for Windows, macOS, and Linux that synchronizes local media directly to your server."
     />
     <link rel="canonical" href="https://xxroxxerxx.github.io/lymic/" />
-    <meta property="og:title" content="Lymic - Open-Source Desktop Client for Immich" />
+    <meta
+      property="og:title"
+      content="Lymic - Immich Desktop Client for Windows, macOS, and Linux"
+    />
     <meta
       property="og:description"
-      content="Lymic is the open-source desktop client that synchronizes local media to your self-hosted Immich server."
+      content="Lymic is the open-source Immich desktop client for Windows, macOS, and Linux that synchronizes local media directly to your server."
     />
     <meta property="og:image" content="https://xxroxxerxx.github.io/lymic/assets/logo.png" />
     <meta property="og:url" content="https://xxroxxerxx.github.io/lymic/" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Lymic - Open-Source Desktop Client for Immich" />
+    <meta
+      name="twitter:title"
+      content="Lymic - Immich Desktop Client for Windows, macOS, and Linux"
+    />
     <meta
       name="twitter:description"
-      content="Lymic is the open-source desktop client that synchronizes local media to your self-hosted Immich server."
+      content="Lymic is the open-source Immich desktop client for Windows, macOS, and Linux that synchronizes local media directly to your server."
     />
     <meta name="twitter:image" content="https://xxroxxerxx.github.io/lymic/assets/logo.png" />
     <link rel="icon" type="image/png" href="assets/favicon.png" />
-    <title>Lymic - Open-Source Desktop Client for Immich</title>
+    <title>Lymic - Immich Desktop Client for Windows, macOS, and Linux</title>
     <script type="application/ld+json" data-schema="software-application">
       {
         "@context": "https://schema.org",
@@ -361,6 +367,11 @@
         margin-top: 0;
       }
 
+      .feature-copy-only {
+        grid-template-columns: minmax(0, 52rem);
+        justify-content: center;
+      }
+
       .feature:nth-of-type(even) .feature-copy {
         order: 2;
       }
@@ -620,6 +631,7 @@
           <a href="privacy/">Privacy</a>
           <a href="support/">Support</a>
           <a href="https://github.com/xXRoxXeRXx/lymic">GitHub</a>
+          <a href="https://github.com/xXRoxXeRXx/lymic/issues">Issues</a>
           <a href="https://github.com/xXRoxXeRXx/lymic/blob/master/LICENSE">MIT License</a>
         </nav>
       </header>
@@ -628,10 +640,16 @@
         <section class="hero" aria-labelledby="hero-title">
           <div class="hero-copy">
             <p class="eyebrow">Open-source desktop client</p>
-            <h1 id="hero-title">Your desktop client for <span>Immich.</span></h1>
+            <h1 id="hero-title">
+              The desktop client for <span>Immich</span> on Windows, macOS, and Linux.
+            </h1>
             <p class="lede">
               Synchronize local media to your self-hosted Immich server with a fast, private,
               cross-platform app built for dependable uploads.
+            </p>
+            <p class="lede">
+              Zero telemetry. Zero advertising. Lymic connects directly to the Immich Server you
+              configure.
             </p>
             <div class="actions">
               <a class="button primary" href="https://github.com/xXRoxXeRXx/lymic/releases">
@@ -703,7 +721,7 @@
             </figure>
           </article>
 
-          <article class="feature">
+          <article class="feature feature-copy-only">
             <div class="feature-copy">
               <h3>Organized automatically, without repeat uploads.</h3>
               <p>
@@ -715,17 +733,6 @@
                 Lymic recognizes it with a SHA-1 checksum check.
               </p>
             </div>
-            <figure class="screenshot-frame">
-              <img
-                data-app-screenshot
-                src="assets/03_synchronization.png"
-                width="1504"
-                height="1096"
-                alt="Lymic Synchronization screen showing media progress and upload activity"
-                loading="lazy"
-                decoding="async"
-              />
-            </figure>
           </article>
 
           <article class="feature">
@@ -932,6 +939,7 @@
           <a href="privacy/">Privacy</a>
           <a href="support/">Support</a>
           <a href="https://github.com/xXRoxXeRXx/lymic">GitHub</a>
+          <a href="https://github.com/xXRoxXeRXx/lymic/issues">Issues</a>
           <a href="https://github.com/xXRoxXeRXx/lymic/blob/master/LICENSE">MIT License</a>
         </nav>
       </footer>
