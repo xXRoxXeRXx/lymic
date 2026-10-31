@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Runtime};
 use tauri_plugin_notification::NotificationExt;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
@@ -38,8 +38,8 @@ pub(crate) fn log_to_ui_key(app: &AppHandle, level: &str, message: &str, key: &s
     log_to_ui_entry(app, level, message, Some(key.to_string()), None);
 }
 
-pub(crate) fn log_to_ui_keyed(
-    app: &AppHandle,
+pub(crate) fn log_to_ui_keyed<R: Runtime>(
+    app: &AppHandle<R>,
     level: &str,
     message: &str,
     key: &str,
@@ -92,12 +92,18 @@ pub(crate) fn log_to_ui_file_error(
     );
 }
 
-pub(crate) fn log_to_ui_error(app: &AppHandle, level: &str, message: &str, key: &str, error: &str) {
+pub(crate) fn log_to_ui_error<R: Runtime>(
+    app: &AppHandle<R>,
+    level: &str,
+    message: &str,
+    key: &str,
+    error: &str,
+) {
     log_to_ui_keyed(app, level, message, key, params_from(&[("error", error)]));
 }
 
-fn log_to_ui_entry(
-    app: &AppHandle,
+fn log_to_ui_entry<R: Runtime>(
+    app: &AppHandle<R>,
     level: &str,
     message: &str,
     key: Option<String>,

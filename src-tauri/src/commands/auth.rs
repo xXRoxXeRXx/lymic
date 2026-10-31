@@ -27,6 +27,18 @@ fn normalize_cloudflare_access_credentials(
     )
 }
 
+fn safe_profile_error(error: &str, credentials: &auth::AuthConfig) -> String {
+    audit_safe_error(
+        error,
+        &[
+            Some(&credentials.server_url),
+            Some(&credentials.api_key),
+            credentials.cloudflare_client_id.as_deref(),
+            credentials.cloudflare_client_secret.as_deref(),
+        ],
+    )
+}
+
 // (security): credential values are intentionally kept out of all log and error messages below.
 #[tauri::command]
 pub(crate) async fn login(
@@ -188,7 +200,10 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
     ) {
         Ok(c) => c,
         Err(err) => {
-            eprintln!("Failed to initialize Immich client: {err}");
+            eprintln!(
+                "Failed to initialize Immich client: {}",
+                safe_profile_error(&err, &credentials)
+            );
             return Ok(profile_cache::resolve_profile(
                 &cache_dir,
                 &account_id,
@@ -210,7 +225,10 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
                         }
                     }
                     Err(err) => {
-                        eprintln!("Failed to fetch profile image: {err}");
+                        eprintln!(
+                            "Failed to fetch profile image: {}",
+                            safe_profile_error(&err, &credentials)
+                        );
                         profile_cache::ProfileFetchOutcome::ImageFetchFailed {
                             user_id: user_info.id,
                             display_name: user_info.display_name,
@@ -225,7 +243,10 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
             }
         }
         Err(err) => {
-            eprintln!("Failed to refresh current user: {err}");
+            eprintln!(
+                "Failed to refresh current user: {}",
+                safe_profile_error(&err, &credentials)
+            );
             profile_cache::ProfileFetchOutcome::RefreshFailed
         }
     };
@@ -250,7 +271,32 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_cloudflare_access_credentials;
+    use super::{normalize_cloudflare_access_credentials, safe_profile_error};
+    use crate::auth::AuthConfig;
+
+    #[test]
+    fn redacts_all_profile_credentials_from_diagnostic_errors() {
+        let credentials = AuthConfig {
+            server_url: "https://immich.example.test".to_string(),
+            api_key: "api-key-secret".to_string(),
+            allow_local_http: false,
+            cloudflare_client_id: Some("cloudflare-client-id".to_string()),
+            cloudflare_client_secret: Some("cloudflare-client-secret".to_string()),
+        };
+        let safe_error = safe_profile_error(
+            "failed https://immich.example.test api-key-secret cloudflare-client-id cloudflare-client-secret",
+            &credentials,
+        );
+
+        for secret in [
+            "https://immich.example.test",
+            "api-key-secret",
+            "cloudflare-client-id",
+            "cloudflare-client-secret",
+        ] {
+            assert!(!safe_error.contains(secret));
+        }
+    }
 
     #[test]
     fn normalizes_whitespace_only_cloudflare_access_credentials_to_disabled() {
