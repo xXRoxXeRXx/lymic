@@ -7,6 +7,7 @@ import {
 } from "./snapcraft-validator";
 
 const SAMPLE_VALID_SNAPCRAFT = `name: lymic
+title: Lymic
 base: core22
 version: '0.22.0'
 summary: High-performance desktop sync client for Immich
@@ -15,6 +16,11 @@ description: |
   media with an Immich server.
 grade: stable
 confinement: strict
+license: MIT
+icon: snap/gui/icon.png
+website: https://xxroxxerxx.github.io/lymic/
+source-code: https://github.com/xXRoxXeRXx/lymic
+issues: https://github.com/xXRoxXeRXx/lymic/issues
 
 layout:
   /usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1:

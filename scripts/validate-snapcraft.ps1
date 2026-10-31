@@ -84,6 +84,20 @@ if ($yamlContent -notmatch '(?m)^layout:' -or $yamlContent -notmatch 'webkit2gtk
     $errors += "Missing required layout mapping for webkit2gtk-4.1"
 }
 
+# Validate store metadata (title, icon, license, website)
+if ($yamlContent -notmatch '(?m)^title:\s*[''"]?Lymic[''"]?') {
+    $errors += "Missing or invalid store title declaration: expected 'title: Lymic'"
+}
+if ($yamlContent -notmatch '(?m)^icon:\s*[''"]?[^''"\r\n]+[''"]?') {
+    $errors += "Missing store icon declaration: expected 'icon: snap/gui/icon.png'"
+}
+if ($yamlContent -notmatch '(?m)^license:\s*[''"]?MIT[''"]?') {
+    $errors += "Missing or invalid license declaration: expected 'license: MIT'"
+}
+if ($yamlContent -notmatch '(?m)^website:\s*https?://') {
+    $errors += "Missing store website URL"
+}
+
 # Validate desktop file exists
 $desktopPath = Join-Path $repoRoot "snap/gui/lymic.desktop"
 if (-not (Test-Path $desktopPath)) {

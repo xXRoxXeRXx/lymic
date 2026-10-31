@@ -68,6 +68,20 @@ export function validateSnapcraftConfig(
     errors.push("Missing required layout mapping for webkit2gtk-4.1");
   }
 
+  // Store metadata check
+  if (!/^title:\s*['"]?Lymic['"]?/m.test(yamlContent)) {
+    errors.push("Missing or invalid store title declaration: expected 'title: Lymic'");
+  }
+  if (!/^icon:\s*['"]?[^'"\r\n]+['"]?/m.test(yamlContent)) {
+    errors.push("Missing store icon declaration: expected 'icon: snap/gui/icon.png'");
+  }
+  if (!/^license:\s*['"]?MIT['"]?/m.test(yamlContent)) {
+    errors.push("Missing or invalid license declaration: expected 'license: MIT'");
+  }
+  if (!/^website:\s*https?:\/\//m.test(yamlContent)) {
+    errors.push("Missing store website URL");
+  }
+
   return {
     valid: errors.length === 0,
     errors,

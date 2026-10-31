@@ -1,13 +1,30 @@
 name: lymic
+title: Lymic
 base: core22
 version: '0.22.0'
 summary: High-performance desktop sync client for Immich
 description: |
-  Lymic is an unofficial desktop client for uploading and synchronizing local
-  media with an Immich server. It monitors selected folders, avoids uploading
-  duplicate assets, and synchronizes photos and videos efficiently.
+  Lymic is a fast, lightweight desktop synchronization client built specifically
+  for self-hosted Immich media servers. It automatically discovers, monitors,
+  and uploads photos and videos from your local folders and removable storage
+  volumes directly to your personal Immich instance.
+
+  Key Features:
+  - Watched Folders: Configure multiple local directories and external drives to continuously monitor for new or updated media assets.
+  - Removable Media Detection: Automatically detects connected SD cards and external drives, synchronizing media seamlessly when plugged in.
+  - Live Photo Support: Reliably pairs and uploads still photos and companion video clips together as unified Live Photos.
+  - Flexible Album Assignment: Map specific folders to existing Immich albums or create new albums on the fly.
+  - High-Performance Sync Engine: Concurrent, resilient uploads with automatic retries, deduplication, and low memory usage.
+  - Native Credential Security: Stores authentication tokens and API keys safely in Linux Secret Service / Keyring.
+  - Complete Privacy: No ads, no third-party telemetry, and no tracking. All data flows directly and exclusively between your computer and your configured Immich server.
 grade: stable
 confinement: strict
+license: MIT
+icon: snap/gui/icon.png
+website: https://xxroxxerxx.github.io/lymic/
+source-code: https://github.com/xXRoxXeRXx/lymic
+issues: https://github.com/xXRoxXeRXx/lymic/issues
+contact: https://github.com/xXRoxXeRXx/lymic/issues
 
 # Layout mappings for WebKitGTK 4.1 under strict confinement
 layout:
