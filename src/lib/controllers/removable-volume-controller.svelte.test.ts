@@ -153,4 +153,49 @@ describe("removable volume controller", () => {
 
     expect(unlistenFn).toHaveBeenCalled();
   });
+
+  it("unlistens subscriptions that resolve after destroy", async () => {
+    let resolveDetected!: (unlisten: () => void) => void;
+    let resolveRemoved!: (unlisten: () => void) => void;
+    const detectedUnlisten = vi.fn();
+    const removedUnlisten = vi.fn();
+
+    tauri.listen
+      .mockImplementationOnce(
+        () => new Promise<() => void>((resolve) => {
+          resolveDetected = resolve;
+        })
+      )
+      .mockImplementationOnce(
+        () => new Promise<() => void>((resolve) => {
+          resolveRemoved = resolve;
+        })
+      );
+
+    const controller = createRemovableVolumeController({
+      isAppInBackground: () => false,
+      t: (key) => key,
+    });
+    const starting = controller.startSubscriptions();
+    controller.destroy();
+
+    resolveDetected(detectedUnlisten);
+    await vi.waitFor(() => expect(tauri.listen).toHaveBeenCalledTimes(2));
+    resolveRemoved(removedUnlisten);
+    await starting;
+
+    expect(detectedUnlisten).toHaveBeenCalledOnce();
+    expect(removedUnlisten).toHaveBeenCalledOnce();
+  });
+
+  it("shares an in-flight subscription setup across concurrent starts", async () => {
+    const controller = createRemovableVolumeController({
+      isAppInBackground: () => false,
+      t: (key) => key,
+    });
+
+    await Promise.all([controller.startSubscriptions(), controller.startSubscriptions()]);
+
+    expect(tauri.listen).toHaveBeenCalledTimes(2);
+  });
 });

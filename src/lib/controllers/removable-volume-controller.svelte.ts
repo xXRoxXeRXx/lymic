@@ -11,6 +11,9 @@ export function createRemovableVolumeController(options: RemovableVolumeControll
   let detectedVolumes = $state<DetectedVolume[]>([]);
   const dismissedVolumeIds = new Set<string>();
   let unlisten: (() => void) | null = null;
+  let startingPromise: Promise<void> | null = null;
+  let disposed = false;
+  const resolvedUnlisteners: (() => void)[] = [];
 
   const currentPrompt = $derived(detectedVolumes.length > 0 ? detectedVolumes[0] : null);
 
@@ -57,18 +60,35 @@ export function createRemovableVolumeController(options: RemovableVolumeControll
     );
   }
 
-  async function startSubscriptions() {
-    if (unlisten) return;
-    const unlistenDetected = await listen<DetectedVolume>("removable-volume-detected", (event) => {
-      handleVolumeDetected(event.payload);
+  function stopResolvedListeners() {
+    resolvedUnlisteners.splice(0).forEach((stopListening) => stopListening());
+  }
+
+  function startSubscriptions(): Promise<void> {
+    if (disposed || unlisten) return Promise.resolve();
+    if (startingPromise) return startingPromise;
+
+    startingPromise = (async () => {
+      const unlistenDetected = await listen<DetectedVolume>("removable-volume-detected", (event) => {
+        handleVolumeDetected(event.payload);
+      });
+      if (disposed) unlistenDetected();
+      else resolvedUnlisteners.push(unlistenDetected);
+
+      const unlistenRemoved = await listen<string>("removable-volume-removed", (event) => {
+        handleVolumeRemoved(event.payload);
+      });
+      if (disposed) unlistenRemoved();
+      else resolvedUnlisteners.push(unlistenRemoved);
+
+      if (!disposed) {
+        unlisten = stopResolvedListeners;
+      }
+    })().finally(() => {
+      startingPromise = null;
     });
-    const unlistenRemoved = await listen<string>("removable-volume-removed", (event) => {
-      handleVolumeRemoved(event.payload);
-    });
-    unlisten = () => {
-      unlistenDetected();
-      unlistenRemoved();
-    };
+
+    return startingPromise;
   }
 
   function dismiss(volumeId: string) {
@@ -82,10 +102,10 @@ export function createRemovableVolumeController(options: RemovableVolumeControll
   }
 
   function destroy() {
-    if (unlisten) {
-      unlisten();
-      unlisten = null;
-    }
+    disposed = true;
+    const stopListening = unlisten ?? stopResolvedListeners;
+    unlisten = null;
+    stopListening();
   }
 
   return {
