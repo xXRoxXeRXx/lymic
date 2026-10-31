@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -129,10 +130,10 @@ jobs:
           fi
 
       - name: publish Snap to Snap Store (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04' && secrets.SNAPCRAFT_STORE_CREDENTIALS != ''
-        uses: snapcore/action-publish@v1
+        if: matrix.platform == 'ubuntu-22.04' && env.SNAPCRAFT_STORE_CREDENTIALS != ''
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        uses: snapcore/action-publish@v1
         with:
           snap: ${{ steps.build-snap.outputs.snap }}
           release: candidate,stable
