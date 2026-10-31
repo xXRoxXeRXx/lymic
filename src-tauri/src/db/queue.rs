@@ -236,10 +236,25 @@ pub async fn next_queued_upload_units(
     }
 
     let rows = sqlx::query_as::<_, Row>(
-        "SELECT COALESCE(upload_unit_id, local_path) AS upload_unit_id, is_primary, \
-                local_path, size, last_modified, target_album_id, remote_id FROM sync_queue \
-         WHERE job_id = 1 AND status = 'PENDING' ORDER BY sequence",
+        "WITH next_units AS ( \
+             SELECT COALESCE(upload_unit_id, local_path) AS unit_id, \
+                    MIN(sequence) AS unit_seq \
+             FROM sync_queue \
+             WHERE job_id = 1 AND status = 'PENDING' \
+             GROUP BY COALESCE(upload_unit_id, local_path) \
+             ORDER BY unit_seq \
+             LIMIT ?1 \
+         ) \
+         SELECT next_units.unit_id AS upload_unit_id, q.is_primary, \
+                q.local_path, q.size, q.last_modified, q.target_album_id, q.remote_id \
+         FROM next_units \
+         JOIN sync_queue q \
+           ON q.job_id = 1 \
+          AND q.status = 'PENDING' \
+          AND COALESCE(q.upload_unit_id, q.local_path) = next_units.unit_id \
+         ORDER BY next_units.unit_seq, next_units.unit_id, q.is_primary DESC, q.sequence",
     )
+    .bind(limit)
     .fetch_all(pool)
     .await?;
 

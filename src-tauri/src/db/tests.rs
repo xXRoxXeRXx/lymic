@@ -1551,6 +1551,86 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn out_of_order_live_photo_pairing_preserves_one_upload_unit() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let single_asset_unit = |path: &str| QueueUploadUnit {
+            image: QueueUploadAsset {
+                path: path.to_string(),
+                size: 100,
+                mtime: 10,
+                target_album_id: None,
+            },
+            live_photo_video: None,
+        };
+
+        enqueue_upload_units(&pool, &[single_asset_unit("live.jpg")], &[])
+            .await
+            .unwrap();
+        enqueue_upload_units(&pool, &[single_asset_unit("other.jpg")], &[])
+            .await
+            .unwrap();
+        enqueue_upload_units(
+            &pool,
+            &[QueueUploadUnit {
+                image: single_asset_unit("live.jpg").image,
+                live_photo_video: Some(QueueUploadAsset {
+                    path: "live.mov".to_string(),
+                    size: 200,
+                    mtime: 10,
+                    target_album_id: None,
+                }),
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+
+        let recovered = next_queued_upload_units(&pool, 10).await.unwrap();
+        assert_eq!(recovered.len(), 2);
+        assert_eq!(recovered[0].image.local_path, "live.jpg");
+        assert_eq!(
+            recovered[0]
+                .live_photo_video
+                .as_ref()
+                .map(|asset| asset.local_path.as_str()),
+            Some("live.mov")
+        );
+        assert_eq!(recovered[1].image.local_path, "other.jpg");
+        assert!(recovered[1].live_photo_video.is_none());
+    }
+
+    #[tokio::test]
+    async fn queued_upload_unit_limit_bounds_rows_fetched_from_sqlite() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let units = ["first.jpg", "outside-window.jpg"].map(|path| QueueUploadUnit {
+            image: QueueUploadAsset {
+                path: path.to_string(),
+                size: 100,
+                mtime: 10,
+                target_album_id: None,
+            },
+            live_photo_video: None,
+        });
+        enqueue_upload_units(&pool, &units, &[]).await.unwrap();
+
+        // SQLite's dynamic typing lets this later row act as a decoding sentinel. A query
+        // bounded to the first Upload Unit never reads it; an unbounded fetch fails to decode it.
+        sqlx::query("UPDATE sync_queue SET size = 'not-an-integer' WHERE local_path = ?")
+            .bind("outside-window.jpg")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let recovered = next_queued_upload_units(&pool, 1).await.unwrap();
+        assert_eq!(recovered.len(), 1);
+        assert_eq!(recovered[0].image.local_path, "first.jpg");
+    }
+
+    #[tokio::test]
     async fn target_album_id_is_immutable_on_queue_upsert_conflict() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
