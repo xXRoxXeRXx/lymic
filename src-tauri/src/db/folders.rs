@@ -28,13 +28,18 @@ pub async fn restore_folder(
     path: &str,
     recursive: bool,
     target_album_id: Option<&AlbumId>,
+    exclusion_patterns: &[String],
 ) -> Result<i64, sqlx::Error> {
+    let exclusion_patterns =
+        serde_json::to_string(exclusion_patterns).expect("exclusion patterns serialize");
     let result = sqlx::query(
-        "INSERT OR IGNORE INTO watched_folders (path, recursive, target_album_id) VALUES (?, ?, ?)",
+        "INSERT OR IGNORE INTO watched_folders \
+         (path, recursive, target_album_id, exclusion_patterns) VALUES (?, ?, ?, ?)",
     )
     .bind(path)
     .bind(recursive)
     .bind(target_album_id.map(|id| id.as_str()))
+    .bind(exclusion_patterns)
     .execute(pool)
     .await?;
     Ok(result.last_insert_rowid())

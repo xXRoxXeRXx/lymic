@@ -1,4 +1,6 @@
-use super::folders::{get_folders, restore_folder, WatchedFolder};
+use super::folders::{
+    bind_removable_folder, restore_folder, RemovableFolderBinding, WatchedFolder,
+};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
     Row, SqlitePool,
@@ -138,7 +140,74 @@ async fn verify_and_migrate(pool: &SqlitePool) -> Result<(), InitFailure> {
     Ok(())
 }
 
-async fn try_salvage_folders(db_path: &Path) -> Vec<WatchedFolder> {
+#[derive(Debug)]
+struct SalvagedFolder {
+    folder: WatchedFolder,
+    removable_binding: Option<RemovableFolderBinding>,
+}
+
+async fn get_watched_folders_for_salvage(
+    pool: &SqlitePool,
+) -> Result<Vec<WatchedFolder>, sqlx::Error> {
+    if let Ok(rows) = sqlx::query(
+        "SELECT id, path, recursive, target_album_id, exclusion_patterns FROM watched_folders",
+    )
+    .fetch_all(pool)
+    .await
+    {
+        return rows
+            .into_iter()
+            .map(|row| {
+                Ok(WatchedFolder {
+                    id: row.try_get("id")?,
+                    path: row.try_get("path")?,
+                    recursive: row.try_get("recursive")?,
+                    target_album_id: row.try_get("target_album_id")?,
+                    exclusion_patterns: serde_json::from_str(
+                        &row.try_get::<String, _>("exclusion_patterns")?,
+                    )
+                    .unwrap_or_default(),
+                })
+            })
+            .collect();
+    }
+
+    if let Ok(rows) =
+        sqlx::query("SELECT id, path, recursive, target_album_id FROM watched_folders")
+            .fetch_all(pool)
+            .await
+    {
+        return rows
+            .into_iter()
+            .map(|row| {
+                Ok(WatchedFolder {
+                    id: row.try_get("id")?,
+                    path: row.try_get("path")?,
+                    recursive: row.try_get("recursive")?,
+                    target_album_id: row.try_get("target_album_id")?,
+                    exclusion_patterns: Vec::new(),
+                })
+            })
+            .collect();
+    }
+
+    sqlx::query("SELECT id, path, recursive FROM watched_folders")
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|row| {
+            Ok(WatchedFolder {
+                id: row.try_get("id")?,
+                path: row.try_get("path")?,
+                recursive: row.try_get("recursive")?,
+                target_album_id: None,
+                exclusion_patterns: Vec::new(),
+            })
+        })
+        .collect()
+}
+
+async fn try_salvage_folders(db_path: &Path) -> Vec<SalvagedFolder> {
     let options = SqliteConnectOptions::new()
         .filename(db_path)
         .read_only(true)
@@ -155,9 +224,26 @@ async fn try_salvage_folders(db_path: &Path) -> Vec<WatchedFolder> {
         Err(_) => return Vec::new(),
     };
 
-    let folders = get_folders(&pool).await.unwrap_or_default();
+    let folders = get_watched_folders_for_salvage(&pool)
+        .await
+        .unwrap_or_default();
+    let removable_bindings = sqlx::query_as::<_, RemovableFolderBinding>(
+        "SELECT watched_folder_id, volume_id, relative_path FROM removable_watched_folders",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap_or_default();
     pool.close().await;
     folders
+        .into_iter()
+        .map(|folder| SalvagedFolder {
+            removable_binding: removable_bindings
+                .iter()
+                .find(|binding| binding.watched_folder_id == folder.id)
+                .cloned(),
+            folder,
+        })
+        .collect()
 }
 
 async fn move_or_copy_and_remove(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
@@ -236,17 +322,27 @@ async fn repair_unusable_db(
     }
 
     let mut restored_count = 0;
-    for folder in salvaged {
-        if restore_folder(
+    for salvaged_folder in salvaged {
+        let folder = salvaged_folder.folder;
+        if let Ok(restored_folder_id) = restore_folder(
             &new_pool,
             &folder.path,
             folder.recursive,
             folder.target_album_id.as_ref(),
+            &folder.exclusion_patterns,
         )
         .await
-        .is_ok()
         {
             restored_count += 1;
+            if let Some(binding) = salvaged_folder.removable_binding {
+                let _ = bind_removable_folder(
+                    &new_pool,
+                    restored_folder_id,
+                    &binding.volume_id,
+                    &binding.relative_path,
+                )
+                .await;
+            }
         }
     }
 

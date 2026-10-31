@@ -20,6 +20,172 @@ mod database_tests {
             .unwrap()
     }
 
+    async fn force_migration_checksum_mismatch(pool: &SqlitePool) {
+        sqlx::query("UPDATE _sqlx_migrations SET checksum = X'00' WHERE version = 1")
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn database_repair_preserves_folder_exclusions_and_removable_binding() {
+        let temp_dir = std::env::temp_dir().join(format!("lymic_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let db_path = temp_dir.join("unusable.db");
+
+        let initialized = init_at_path(&db_path).await.unwrap();
+        let folder_id = add_folder(&initialized.pool, "E:/DCIM", None)
+            .await
+            .unwrap();
+        let exclusions = ["**/thumbnails/**".to_string(), "*.tmp".to_string()];
+        update_exclusion_patterns(&initialized.pool, folder_id, &exclusions)
+            .await
+            .unwrap();
+        bind_removable_folder(&initialized.pool, folder_id, "volume-123", "DCIM")
+            .await
+            .unwrap();
+        force_migration_checksum_mismatch(&initialized.pool).await;
+        initialized.pool.close().await;
+
+        let repaired = init_at_path(&db_path).await.unwrap();
+
+        assert!(matches!(repaired.status, DatabaseStatus::Repaired { .. }));
+        let folders = get_folders(&repaired.pool).await.unwrap();
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].path, "E:/DCIM");
+        assert_eq!(folders[0].exclusion_patterns, exclusions);
+        assert_eq!(
+            get_removable_folder_binding(&repaired.pool, folders[0].id)
+                .await
+                .unwrap(),
+            Some(RemovableFolderBinding {
+                watched_folder_id: folders[0].id,
+                volume_id: "volume-123".to_string(),
+                relative_path: "DCIM".to_string(),
+            })
+        );
+
+        repaired.pool.close().await;
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn database_repair_salvages_watched_folders_before_target_albums_and_exclusions() {
+        let temp_dir = std::env::temp_dir().join(format!("lymic_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let db_path = temp_dir.join("legacy-unusable.db");
+        let options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true)
+            .foreign_keys(true);
+        let legacy_pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE watched_folders (\
+             id INTEGER PRIMARY KEY AUTOINCREMENT, \
+             path TEXT NOT NULL UNIQUE, \
+             recursive BOOLEAN NOT NULL DEFAULT 1\
+             )",
+        )
+        .execute(&legacy_pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE _sqlx_migrations (\
+             version BIGINT PRIMARY KEY, \
+             description TEXT NOT NULL, \
+             installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
+             success BOOLEAN NOT NULL, \
+             checksum BLOB NOT NULL, \
+             execution_time BIGINT NOT NULL\
+             )",
+        )
+        .execute(&legacy_pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO watched_folders (path, recursive) VALUES (?, ?)")
+            .bind("C:/legacy-photos")
+            .bind(false)
+            .execute(&legacy_pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO _sqlx_migrations \
+             (version, description, success, checksum, execution_time) \
+             VALUES (1, 'initial schema', TRUE, X'00', 0)",
+        )
+        .execute(&legacy_pool)
+        .await
+        .unwrap();
+        legacy_pool.close().await;
+
+        let repaired = init_at_path(&db_path).await.unwrap();
+
+        assert!(matches!(repaired.status, DatabaseStatus::Repaired { .. }));
+        let folders = get_folders(&repaired.pool).await.unwrap();
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].path, "C:/legacy-photos");
+        assert!(!folders[0].recursive);
+        assert_eq!(folders[0].target_album_id, None);
+        assert!(folders[0].exclusion_patterns.is_empty());
+
+        repaired.pool.close().await;
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn database_repair_salvages_watched_folders_before_exclusion_patterns() {
+        let temp_dir = std::env::temp_dir().join(format!("lymic_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let db_path = temp_dir.join("pre-exclusions-unusable.db");
+        let options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true)
+            .foreign_keys(true);
+        let legacy_pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
+        let migrations = sqlx::migrate!("./migrations")
+            .iter()
+            .filter(|migration| migration.version < 9)
+            .cloned()
+            .collect();
+        let legacy_migrator = sqlx::migrate::Migrator {
+            migrations: Cow::Owned(migrations),
+            ignore_missing: false,
+            locking: true,
+            no_tx: false,
+        };
+        legacy_migrator.run(&legacy_pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO watched_folders (path, recursive, target_album_id) VALUES (?, ?, ?)",
+        )
+        .bind("D:/camera")
+        .bind(true)
+        .bind("album-456")
+        .execute(&legacy_pool)
+        .await
+        .unwrap();
+        force_migration_checksum_mismatch(&legacy_pool).await;
+        legacy_pool.close().await;
+
+        let repaired = init_at_path(&db_path).await.unwrap();
+
+        let folders = get_folders(&repaired.pool).await.unwrap();
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].path, "D:/camera");
+        assert_eq!(folders[0].target_album_id.as_deref(), Some("album-456"));
+        assert!(folders[0].exclusion_patterns.is_empty());
+
+        repaired.pool.close().await;
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
     #[tokio::test]
     async fn upgrading_to_sync_job_failed_status_preserves_queued_upload_units() {
         let temp_dir = std::env::temp_dir().join(format!("lymic_test_{}", uuid::Uuid::new_v4()));
