@@ -251,6 +251,78 @@
         filter: drop-shadow(0 28px 25px rgba(3, 9, 23, 0.24));
       }
 
+      .features {
+        padding: 2rem 0 7rem;
+      }
+
+      .section-heading {
+        max-width: 44rem;
+        margin: 0 auto 5rem;
+        text-align: center;
+      }
+
+      .section-heading h2 {
+        margin: 0;
+        font-size: clamp(2.2rem, 5vw, 3.7rem);
+        letter-spacing: -0.045em;
+        line-height: 1.05;
+      }
+
+      .section-heading p {
+        margin: 1.25rem 0 0;
+        color: var(--text-muted);
+        font-size: 1.08rem;
+      }
+
+      .feature {
+        display: grid;
+        grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+        align-items: center;
+        gap: clamp(2rem, 7vw, 6rem);
+        margin-top: clamp(5rem, 10vw, 9rem);
+      }
+
+      .feature:first-of-type {
+        margin-top: 0;
+      }
+
+      .feature:nth-of-type(even) .feature-copy {
+        order: 2;
+      }
+
+      .feature-copy h3 {
+        margin: 0;
+        font-size: clamp(1.8rem, 4vw, 2.8rem);
+        letter-spacing: -0.035em;
+        line-height: 1.12;
+      }
+
+      .feature-copy p {
+        margin: 1.1rem 0 0;
+        color: var(--text-muted);
+      }
+
+      .feature-copy strong {
+        color: var(--text);
+      }
+
+      .screenshot-frame {
+        margin: 0;
+        padding: 0.65rem;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 1.35rem;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .screenshot-frame img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 0.85rem;
+      }
+
       footer {
         display: flex;
         align-items: center;
@@ -301,6 +373,23 @@
           margin: 0 auto;
         }
 
+        .features {
+          padding-bottom: 5rem;
+        }
+
+        .section-heading {
+          margin-bottom: 4rem;
+        }
+
+        .feature {
+          grid-template-columns: 1fr;
+          gap: 2rem;
+        }
+
+        .feature:nth-of-type(even) .feature-copy {
+          order: initial;
+        }
+
         footer {
           flex-direction: column;
           text-align: center;
@@ -347,6 +436,112 @@
           <div class="visual" aria-label="Lymic application logo">
             <img src="assets/logo.png" alt="Lymic cloud logo" />
           </div>
+        </section>
+
+        <section class="features" aria-labelledby="features-title">
+          <div class="section-heading">
+            <p class="eyebrow">Built for your library</p>
+            <h2 id="features-title">A clear path from local media to Immich.</h2>
+            <p>
+              Dependable Synchronization, precise organization, and private local state—all in a
+              focused desktop app.
+            </p>
+          </div>
+
+          <article class="feature">
+            <div class="feature-copy">
+              <h3>Connect securely to your Immich Server.</h3>
+              <p>
+                Sign in directly to the <strong>Immich Server</strong> that receives your media.
+                Lymic keeps settings and Synchronization progress in local SQLite storage, while
+                API credentials stay protected by the native OS keyring rather than the database.
+              </p>
+            </div>
+            <figure class="screenshot-frame">
+              <img
+                data-app-screenshot
+                src="assets/01_signin.png"
+                width="1200"
+                height="874"
+                alt="Lymic sign-in screen for connecting securely to an Immich Server"
+                loading="lazy"
+                decoding="async"
+              />
+            </figure>
+          </article>
+
+          <article class="feature">
+            <div class="feature-copy">
+              <h3>Folders that stay found.</h3>
+              <p>
+                A <strong>Watched Folder</strong> is a configured local directory whose supported
+                media Lymic discovers and keeps under observation. A
+                <strong>Removable Watched Folder</strong> is a Watched Folder located on removable
+                storage, bound to a <strong>Volume Identifier</strong> and relative path so Lymic can
+                follow mount point changes. This stable volume tracking also survives drive-letter
+                changes.
+              </p>
+            </div>
+            <figure class="screenshot-frame">
+              <img
+                data-app-screenshot
+                src="assets/02_watched_folders.png"
+                width="1504"
+                height="1096"
+                alt="Lymic Watched Folders screen showing configured local media sources"
+                loading="lazy"
+                decoding="async"
+              />
+            </figure>
+          </article>
+
+          <article class="feature">
+            <div class="feature-copy">
+              <h3>Organized automatically, without repeat uploads.</h3>
+              <p>
+                A <strong>Target Album</strong> is an optional album in the Immich Library associated
+                with one Watched Folder. Every asset discovered in that folder is intended to belong
+                to this album. Lymic performs <strong>Album Assignment</strong> for new uploads and
+                Duplicates. A <strong>Duplicate</strong> is a locally discovered Media Asset that
+                Immich recognizes as an existing Remote Asset. A Duplicate is not uploaded again.
+                Lymic recognizes it with a SHA-1 checksum check.
+              </p>
+            </div>
+            <figure class="screenshot-frame">
+              <img
+                data-app-screenshot
+                src="assets/03_synchronization.png"
+                width="1504"
+                height="1096"
+                alt="Lymic Synchronization screen showing media progress and upload activity"
+                loading="lazy"
+                decoding="async"
+              />
+            </figure>
+          </article>
+
+          <article class="feature">
+            <div class="feature-copy">
+              <h3>Your media details travel together.</h3>
+              <p>
+                Each <strong>Upload Unit</strong> is processed as one indivisible item: either one
+                Media Asset or an image with its matching <strong>Live Photo Video</strong>. Optional
+                <strong>XMP Sidecar</strong> metadata is supplied alongside its Media Asset when
+                supported, with preferences and durable progress kept locally.
+              </p>
+            </div>
+            <figure class="screenshot-frame">
+              <img
+                data-app-screenshot
+                src="assets/04_settings.png"
+                width="1504"
+                height="1096"
+                alt="Lymic settings screen for configuring synchronization and application preferences"
+                loading="lazy"
+                decoding="async"
+              />
+            </figure>
+          </article>
         </section>
       </main>
 

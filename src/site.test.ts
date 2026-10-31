@@ -27,6 +27,45 @@ describe("landing page", () => {
     }
   });
 
+  it("showcases every authentic application screenshot with useful alternative text", () => {
+    const screenshots = Array.from(document.querySelectorAll("main img[data-app-screenshot]"));
+
+    expect(screenshots.map((image) => image.getAttribute("src"))).toEqual([
+      "assets/01_signin.png",
+      "assets/02_watched_folders.png",
+      "assets/03_synchronization.png",
+      "assets/04_settings.png",
+    ]);
+
+    for (const screenshot of screenshots) {
+      const source = screenshot.getAttribute("src");
+      expect(existsSync(resolve(root, "site", source!))).toBe(true);
+      expect(screenshot.getAttribute("alt")?.trim().length).toBeGreaterThan(20);
+    }
+  });
+
+  it("uses canonical domain language to explain the showcased features", () => {
+    const mainText = document.querySelector("main")?.textContent?.replace(/\s+/g, " ").trim();
+
+    expect(mainText).toContain(
+      "A Watched Folder is a configured local directory whose supported media Lymic discovers and keeps under observation.",
+    );
+    expect(mainText).toContain(
+      "A Removable Watched Folder is a Watched Folder located on removable storage, bound to a Volume Identifier and relative path so Lymic can follow mount point changes.",
+    );
+    expect(mainText).toContain(
+      "A Target Album is an optional album in the Immich Library associated with one Watched Folder. Every asset discovered in that folder is intended to belong to this album.",
+    );
+    expect(mainText).toContain(
+      "A Duplicate is a locally discovered Media Asset that Immich recognizes as an existing Remote Asset. A Duplicate is not uploaded again.",
+    );
+    expect(mainText).toMatch(/SHA-1/);
+    expect(mainText).toMatch(/Live Photo Video/);
+    expect(mainText).toMatch(/XMP Sidecar/);
+    expect(mainText).toMatch(/local SQLite/);
+    expect(mainText).toMatch(/native OS keyring/);
+  });
+
   it("presents the product value and primary calls to action", () => {
     expect(document.querySelector("main h1")?.textContent).toMatch(/desktop client for Immich/i);
     expect(document.querySelector("main")?.textContent).toMatch(/open.source/i);
