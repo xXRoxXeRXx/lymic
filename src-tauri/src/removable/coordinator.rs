@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 
 pub trait VolumeEventEmitter: Send + Sync {
     fn emit_volume_detected(&self, volume: &VolumeInfo) -> Result<(), String>;
+    fn emit_volume_remounted(&self, volume: &VolumeInfo) -> Result<(), String>;
     fn emit_volume_removed(&self, volume_id: &str) -> Result<(), String>;
 
     fn reconcile_remount_watcher(
@@ -109,6 +110,11 @@ impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
                             .map_err(|e| e.to_string())?;
 
                             self.emitter.trigger_remount_scan(&norm_new_str).await?;
+
+                            // Event delivery must not prevent the path remap, watcher
+                            // reconciliation, or remount scan from completing. At this point
+                            // any error is reported by the background event consumer.
+                            self.emitter.emit_volume_remounted(&volume)?;
                         }
                     }
                 }

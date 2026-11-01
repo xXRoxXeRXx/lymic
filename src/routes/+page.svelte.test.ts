@@ -37,6 +37,7 @@ let syncProgressSnapshot: ((event: { payload: unknown }) => void) | undefined;
 let syncTransferStats: ((event: { payload: unknown }) => void) | undefined;
 let logMessage: ((event: { payload: unknown }) => void) | undefined;
 let removableVolumeDetected: ((event: { payload: unknown }) => void) | undefined;
+let removableVolumeRemounted: ((event: { payload: unknown }) => void) | undefined;
 let systemThemeIsDark = false;
 let colorSchemeListeners = new Set<(event: MediaQueryListEvent) => void>();
 
@@ -117,6 +118,7 @@ beforeEach(() => {
   syncTransferStats = undefined;
   logMessage = undefined;
   removableVolumeDetected = undefined;
+  removableVolumeRemounted = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
     if (event === "trigger-sync") triggerSync = handler;
     if (event === "sync-started") syncStarted = handler;
@@ -126,6 +128,7 @@ beforeEach(() => {
     if (event === "sync-transfer-stats") syncTransferStats = handler as (event: { payload: unknown }) => void;
     if (event === "log-message") logMessage = handler as (event: { payload: unknown }) => void;
     if (event === "removable-volume-detected") removableVolumeDetected = handler as (event: { payload: unknown }) => void;
+    if (event === "removable-volume-remounted") removableVolumeRemounted = handler as (event: { payload: unknown }) => void;
     return Promise.resolve(() => {});
   });
 
@@ -931,6 +934,25 @@ describe("theme preference", () => {
 });
 
 describe("removable volume setup flow", () => {
+  it("refreshes watched folders when a removable volume remounts", async () => {
+    watchedFolders = [{ id: 10, path: "E:/DCIM", recursive: true, target_album_id: null }];
+    renderAuthenticatedPage();
+
+    expect(await screen.findByText("E:/DCIM")).toBeInTheDocument();
+
+    watchedFolders = [{ id: 10, path: "F:/DCIM", recursive: true, target_album_id: null }];
+    removableVolumeRemounted!({
+      payload: {
+        volumeId: "vol-eos-123",
+        mountPath: "F:\\",
+        displayName: "EOS_DIGITAL",
+      },
+    });
+
+    expect(await screen.findByText("F:/DCIM")).toBeInTheDocument();
+    expect(screen.queryByText("E:/DCIM")).not.toBeInTheDocument();
+  });
+
   it("detects removable card, prompts user, opens picker with mount path, and invokes accept_removable_media_folder", async () => {
     tauri.open.mockResolvedValue("E:/DCIM");
     renderAuthenticatedPage();

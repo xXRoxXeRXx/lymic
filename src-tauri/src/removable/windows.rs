@@ -107,6 +107,18 @@ pub fn get_volume_info_for_drive(drive_letter: char) -> Option<VolumeInfo> {
 }
 
 #[cfg(target_os = "windows")]
+pub(crate) fn seed_mounted_removable_volumes<F>(tx: &Sender<VolumeEvent>, mut get_volume_info: F)
+where
+    F: FnMut(char) -> Option<VolumeInfo>,
+{
+    for drive_letter in (b'A'..=b'Z').map(char::from) {
+        if let Some(volume) = get_volume_info(drive_letter) {
+            let _ = tx.blocking_send(VolumeEvent::Arrival(volume));
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
 #[repr(C)]
 struct DevBroadcastHdr {
     dbch_size: u32,
@@ -235,6 +247,8 @@ unsafe extern "system" fn window_proc(
 #[cfg(target_os = "windows")]
 fn run_message_loop(tx: Sender<VolumeEvent>, is_running: Arc<AtomicBool>) {
     unsafe {
+        seed_mounted_removable_volumes(&tx, get_volume_info_for_drive);
+
         let h_instance = GetModuleHandleW(std::ptr::null());
         let class_name: Vec<u16> = OsStr::new("LymicDeviceMonitorWindow")
             .encode_wide()

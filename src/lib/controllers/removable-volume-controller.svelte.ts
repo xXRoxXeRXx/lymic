@@ -4,6 +4,7 @@ import type { DetectedVolume } from "../contracts";
 
 export interface RemovableVolumeControllerOptions {
   isAppInBackground?: () => boolean;
+  onVolumeRemounted?: () => void;
   t: (key: string, params?: Record<string, string>) => string;
 }
 
@@ -79,6 +80,9 @@ export function createRemovableVolumeController(options: RemovableVolumeControll
       }).then(retainOrStopListener),
       listen<string>("removable-volume-removed", (event) => {
         handleVolumeRemoved(event.payload);
+      }).then(retainOrStopListener),
+      listen<DetectedVolume>("removable-volume-remounted", () => {
+        options.onVolumeRemounted?.();
       }).then(retainOrStopListener),
     ])
       .then(() => {

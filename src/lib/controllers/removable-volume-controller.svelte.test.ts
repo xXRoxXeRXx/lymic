@@ -196,6 +196,6 @@ describe("removable volume controller", () => {
     await Promise.all([controller.startSubscriptions(), controller.startSubscriptions()]);
     controller.destroy();
 
-    expect(unlistenFn).toHaveBeenCalledTimes(2);
+    expect(unlistenFn).toHaveBeenCalledTimes(3);
   });
 });

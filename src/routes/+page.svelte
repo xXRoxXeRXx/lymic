@@ -28,6 +28,7 @@
   const targetAlbumCatalogue = createTargetAlbumCatalogue(desktop);
   const removable = createRemovableVolumeController({
     t: (key, params) => $t(key, params),
+    onVolumeRemounted: () => void watchedFolders.refresh(),
   });
   const watchedFolders = createWatchedFoldersController({
     adapter: desktop,

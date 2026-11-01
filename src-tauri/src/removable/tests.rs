@@ -22,6 +22,7 @@ async fn test_pool() -> SqlitePool {
 #[derive(Default, Clone)]
 struct MockEmitter {
     detected: Arc<Mutex<Vec<VolumeInfo>>>,
+    remounted: Arc<Mutex<Vec<VolumeInfo>>>,
     removed: Arc<Mutex<Vec<String>>>,
     reconciled: Arc<Mutex<Vec<(Option<String>, String)>>>,
     unwatched: Arc<Mutex<Vec<String>>>,
@@ -32,6 +33,11 @@ struct MockEmitter {
 impl VolumeEventEmitter for MockEmitter {
     fn emit_volume_detected(&self, volume: &VolumeInfo) -> Result<(), String> {
         self.detected.lock().unwrap().push(volume.clone());
+        Ok(())
+    }
+
+    fn emit_volume_remounted(&self, volume: &VolumeInfo) -> Result<(), String> {
+        self.remounted.lock().unwrap().push(volume.clone());
         Ok(())
     }
 
@@ -89,13 +95,18 @@ async fn unknown_volume_arrival_emits_removable_volume_detected() {
 }
 
 #[tokio::test]
-async fn known_volume_arrival_does_not_emit_removable_volume_detected() {
+async fn known_volume_remount_emits_remounted_without_a_detection_prompt() {
     let pool = test_pool().await;
     let emitter = MockEmitter::default();
     let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone());
 
     // Register a watched folder and bind it to the volume
-    let folder_id = crate::db::add_folder(&pool, "E:\\DCIM", None)
+    let initial_path = if cfg!(windows) {
+        "D:\\DCIM"
+    } else {
+        "E:\\DCIM"
+    };
+    let folder_id = crate::db::add_folder(&pool, initial_path, None)
         .await
         .unwrap();
     let volume_id = "{12345678-1234-1234-1234-123456789abc}";
@@ -110,12 +121,13 @@ async fn known_volume_arrival_does_not_emit_removable_volume_detected() {
     };
 
     coordinator
-        .handle_event(VolumeEvent::Arrival(volume))
+        .handle_event(VolumeEvent::Arrival(volume.clone()))
         .await
         .unwrap();
 
     let detected = emitter.detected.lock().unwrap().clone();
     assert_eq!(detected.len(), 0);
+    assert_eq!(emitter.remounted.lock().unwrap().as_slice(), &[volume]);
 }
 
 #[cfg(target_os = "windows")]
@@ -123,6 +135,24 @@ async fn known_volume_arrival_does_not_emit_removable_volume_detected() {
 fn windows_fixed_drive_is_not_treated_as_removable() {
     let result = windows::get_volume_info_for_drive('C');
     assert!(result.is_none());
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn windows_startup_seeds_currently_mounted_removable_volumes() {
+    let (tx, mut rx) = tokio::sync::mpsc::channel(26);
+    let mounted_volume = VolumeInfo {
+        volume_id: "{vol-startup}".to_string(),
+        mount_path: "E:\\".to_string(),
+        display_name: "STARTUP_SD".to_string(),
+    };
+
+    windows::seed_mounted_removable_volumes(&tx, |drive_letter| {
+        (drive_letter == 'E').then_some(mounted_volume.clone())
+    });
+
+    assert_eq!(rx.try_recv().unwrap(), VolumeEvent::Arrival(mounted_volume));
+    assert!(rx.try_recv().is_err());
 }
 
 #[tokio::test]

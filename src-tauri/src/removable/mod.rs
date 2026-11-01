@@ -26,6 +26,11 @@ impl VolumeEventEmitter for tauri::AppHandle {
             .map_err(|e| e.to_string())
     }
 
+    fn emit_volume_remounted(&self, volume: &VolumeInfo) -> Result<(), String> {
+        self.emit("removable-volume-remounted", volume)
+            .map_err(|e| e.to_string())
+    }
+
     fn emit_volume_removed(&self, volume_id: &str) -> Result<(), String> {
         self.emit("removable-volume-removed", volume_id)
             .map_err(|e| e.to_string())
