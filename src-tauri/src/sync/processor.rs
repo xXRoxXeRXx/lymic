@@ -34,6 +34,17 @@ pub(crate) struct SyncSummary {
 
 pub(crate) const BULK_CHECK_CHUNK_SIZE: usize = 100;
 
+enum BulkCheckOutcome {
+    Existing(Vec<crate::immich::BulkCheckDuplicate>),
+    Cancelled,
+}
+
+struct ChunkPartition {
+    upload_units: Vec<HashedUploadUnit>,
+    pending_album_units: Vec<PendingAlbumUnit>,
+    cancelled: bool,
+}
+
 /// Processes bounded queue blocks for one synchronization run.
 ///
 /// The run owns the collaborators that must stay consistent across blocks, while
@@ -87,12 +98,23 @@ impl RunProcessor {
                 break;
             }
 
-            let Some((upload_units, mut pending_album_units)) = self
+            let ChunkPartition {
+                upload_units,
+                mut pending_album_units,
+                cancelled,
+            } = self
                 .check_and_partition_chunk(chunk, &active_work, &mut queue_results, &mut uploaded)
-                .await?
-            else {
+                .await?;
+
+            if cancelled {
+                self.flush_pending_album_units(
+                    pending_album_units,
+                    &mut queue_results,
+                    &mut uploaded,
+                )
+                .await?;
                 continue;
-            };
+            }
 
             self.upload_missing_units(
                 upload_units,
@@ -103,18 +125,8 @@ impl RunProcessor {
             )
             .await?;
 
-            if can_start_work(&self.coordinator) {
-                flush_pending_album_units(
-                    &self.client,
-                    &self.pool,
-                    &self.app,
-                    &self.audit_context,
-                    pending_album_units,
-                    &mut queue_results,
-                    &mut uploaded,
-                )
+            self.flush_pending_album_units(pending_album_units, &mut queue_results, &mut uploaded)
                 .await?;
-            }
 
             if !can_start_work(&self.coordinator) {
                 break;
@@ -149,27 +161,15 @@ impl RunProcessor {
                 unit_work.cancellation(),
             ));
             if hashing.len() == 4 {
-                Self::collect_hash_outcome(
-                    hashing.next().await,
-                    &mut hashed_units,
-                    &mut queue_results,
-                );
+                if let Some(outcome) = hashing.next().await {
+                    Self::record_hash_outcome(outcome, &mut hashed_units, &mut queue_results);
+                }
             }
         }
         while let Some(outcome) = hashing.next().await {
             Self::record_hash_outcome(outcome, &mut hashed_units, &mut queue_results);
         }
         (hashed_units, queue_results)
-    }
-
-    fn collect_hash_outcome(
-        outcome: Option<HashOutcome>,
-        hashed_units: &mut Vec<HashedUploadUnit>,
-        queue_results: &mut Vec<(String, String)>,
-    ) {
-        if let Some(outcome) = outcome {
-            Self::record_hash_outcome(outcome, hashed_units, queue_results);
-        }
     }
 
     fn record_hash_outcome(
@@ -189,7 +189,7 @@ impl RunProcessor {
         active_work: &ProcessingContext,
         queue_results: &mut Vec<(String, String)>,
         uploaded: &mut usize,
-    ) -> Result<Option<(Vec<HashedUploadUnit>, Vec<PendingAlbumUnit>)>, String> {
+    ) -> Result<ChunkPartition, String> {
         let mut pending_album_units = Vec::new();
         let mut units_to_check = Vec::new();
         for unit in chunk {
@@ -200,7 +200,6 @@ impl RunProcessor {
                 self.complete_resolved_unit(
                     unit.clone(),
                     remote_id.clone(),
-                    0,
                     &mut pending_album_units,
                     queue_results,
                     uploaded,
@@ -211,24 +210,22 @@ impl RunProcessor {
             }
         }
 
-        let existing = self.bulk_check_units(&units_to_check, active_work).await?;
-        let Some(existing) = existing else {
-            if can_start_work(&self.coordinator) {
-                flush_pending_album_units(
-                    &self.client,
-                    &self.pool,
-                    &self.app,
-                    &self.audit_context,
+        let existing = match self.bulk_check_units(&units_to_check, active_work).await? {
+            BulkCheckOutcome::Existing(existing) => existing,
+            BulkCheckOutcome::Cancelled => {
+                return Ok(ChunkPartition {
+                    upload_units: Vec::new(),
                     pending_album_units,
-                    queue_results,
-                    uploaded,
-                )
-                .await?;
+                    cancelled: true,
+                });
             }
-            return Ok(None);
         };
         if !can_start_work(&self.coordinator) {
-            return Ok(Some((Vec::new(), pending_album_units)));
+            return Ok(ChunkPartition {
+                upload_units: Vec::new(),
+                pending_album_units,
+                cancelled: false,
+            });
         }
 
         let mut upload_units = Vec::new();
@@ -247,7 +244,6 @@ impl RunProcessor {
                         self.complete_resolved_unit(
                             unit,
                             remote_id,
-                            0,
                             &mut pending_album_units,
                             queue_results,
                             uploaded,
@@ -255,47 +251,28 @@ impl RunProcessor {
                         .await?;
                     }
                     Err(error_msg) => {
-                        log_to_ui_file_error(
-                            &self.app,
-                            "ERROR",
-                            &error_msg,
-                            "log_duplicate_resolve_failed",
-                            &unit.image.path,
-                            &error_msg,
-                        );
-                        audit_event(
-                            &self.app,
-                            self.audit_context.event(
-                                "album.duplicate.resolution.failed",
-                                audit::Outcome::Failure,
-                                audit::Severity::Error,
-                                "Failed to resolve duplicate asset remote ID for target album",
-                                json!({
-                                    "local_path": unit.image.path,
-                                    "failure_reason": self.audit_context.safe_error(&error_msg),
-                                }),
-                            ),
-                        );
-                        let failure =
-                            completion::fail_upload_unit(&self.pool, &unit, &error_msg).await?;
-                        queue_results.extend_from_slice(failure.queue_results());
-                        self.progress.advance(&self.app, unit.byte_size());
+                        self.fail_duplicate_resolution(unit, error_msg, queue_results)
+                            .await?;
                     }
                 }
             } else {
                 upload_units.push(unit);
             }
         }
-        Ok(Some((upload_units, pending_album_units)))
+        Ok(ChunkPartition {
+            upload_units,
+            pending_album_units,
+            cancelled: false,
+        })
     }
 
     async fn bulk_check_units(
         &self,
         units: &[HashedUploadUnit],
         active_work: &ProcessingContext,
-    ) -> Result<Option<Vec<crate::immich::BulkCheckDuplicate>>, String> {
+    ) -> Result<BulkCheckOutcome, String> {
         if units.is_empty() {
-            return Ok(Some(Vec::new()));
+            return Ok(BulkCheckOutcome::Existing(Vec::new()));
         }
         let hashes = units
             .iter()
@@ -314,11 +291,11 @@ impl RunProcessor {
         let bulk_check =
             check_assets_exist_with_backoff(&self.client, hashes, &self.app, &self.audit_context);
         if cancellations.is_empty() {
-            return bulk_check.await.map(Some);
+            return bulk_check.await.map(BulkCheckOutcome::Existing);
         }
         tokio::select! {
-            result = bulk_check => result.map(Some),
-            _ = wait_for_all_cancellations(cancellations) => Ok(None),
+            result = bulk_check => result.map(BulkCheckOutcome::Existing),
+            _ = wait_for_all_cancellations(cancellations) => Ok(BulkCheckOutcome::Cancelled),
         }
     }
 
@@ -326,7 +303,6 @@ impl RunProcessor {
         &self,
         unit: HashedUploadUnit,
         remote_id: crate::immich::RemoteAssetId,
-        uploaded_count: usize,
         pending_album_units: &mut Vec<PendingAlbumUnit>,
         queue_results: &mut Vec<(String, String)>,
         uploaded: &mut usize,
@@ -337,7 +313,7 @@ impl RunProcessor {
             &self.audit_context,
             unit.clone(),
             remote_id,
-            uploaded_count,
+            0,
         )
         .await?
         {
@@ -350,6 +326,39 @@ impl RunProcessor {
                 queue_results.extend_from_slice(completion.queue_results());
             }
         }
+        self.progress.advance(&self.app, unit.byte_size());
+        Ok(())
+    }
+
+    async fn fail_duplicate_resolution(
+        &self,
+        unit: HashedUploadUnit,
+        error_msg: String,
+        queue_results: &mut Vec<(String, String)>,
+    ) -> Result<(), String> {
+        log_to_ui_file_error(
+            &self.app,
+            "ERROR",
+            &error_msg,
+            "log_duplicate_resolve_failed",
+            &unit.image.path,
+            &error_msg,
+        );
+        audit_event(
+            &self.app,
+            self.audit_context.event(
+                "album.duplicate.resolution.failed",
+                audit::Outcome::Failure,
+                audit::Severity::Error,
+                "Failed to resolve duplicate asset remote ID for target album",
+                json!({
+                    "local_path": unit.image.path,
+                    "failure_reason": self.audit_context.safe_error(&error_msg),
+                }),
+            ),
+        );
+        let failure = completion::fail_upload_unit(&self.pool, &unit, &error_msg).await?;
+        queue_results.extend_from_slice(failure.queue_results());
         self.progress.advance(&self.app, unit.byte_size());
         Ok(())
     }
@@ -409,6 +418,27 @@ impl RunProcessor {
         }
         Ok(())
     }
+
+    async fn flush_pending_album_units(
+        &self,
+        pending_album_units: Vec<PendingAlbumUnit>,
+        queue_results: &mut Vec<(String, String)>,
+        uploaded: &mut usize,
+    ) -> Result<(), String> {
+        if pending_album_units.is_empty() || !can_start_work(&self.coordinator) {
+            return Ok(());
+        }
+        album_batch::assign_pending_album_units(
+            &self.client,
+            &self.pool,
+            &self.app,
+            &self.audit_context,
+            pending_album_units,
+            queue_results,
+            uploaded,
+        )
+        .await
+    }
 }
 
 fn summarize_block(queue_results: Vec<(String, String)>, uploaded: usize) -> SyncSummary {
@@ -442,30 +472,6 @@ fn next_active_upload_unit(
         let unit_work = active_work.for_hashed_upload_unit(&unit);
         (!unit_work.is_cancelled()).then(|| (unit, unit_work.cancellation()))
     })
-}
-
-async fn flush_pending_album_units(
-    client: &Arc<ImmichClient>,
-    pool: &sqlx::SqlitePool,
-    app: &tauri::AppHandle,
-    audit_context: &SyncAuditContext,
-    pending_album_units: Vec<PendingAlbumUnit>,
-    queue_results: &mut Vec<(String, String)>,
-    uploaded: &mut usize,
-) -> Result<(), String> {
-    if pending_album_units.is_empty() {
-        return Ok(());
-    }
-    album_batch::assign_pending_album_units(
-        client,
-        pool,
-        app,
-        audit_context,
-        pending_album_units,
-        queue_results,
-        uploaded,
-    )
-    .await
 }
 
 fn can_start_work(coordinator: &SyncCoordinatorInner) -> bool {
