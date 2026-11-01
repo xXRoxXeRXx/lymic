@@ -175,19 +175,35 @@ impl RunProcessor {
                             .map(|checksums| checksums.sha1_base64.clone())
                     })
                     .collect();
-                let mut cancellations = Vec::new();
-                for unit in &units_to_check {
-                    cancellations.push(active_work.for_hashed_upload_unit(unit).cancellation());
-                }
+                let cancellations: Vec<CancellationToken> = units_to_check
+                    .iter()
+                    .map(|unit| active_work.for_hashed_upload_unit(unit).cancellation())
+                    .collect();
                 let bulk_check =
                     check_assets_exist_with_backoff(client, hashes, app, audit_context);
                 let existing = if cancellations.is_empty() {
                     bulk_check.await?
                 } else {
-                    tokio::select! {
-                        result = bulk_check => result?,
-                        _ = wait_for_any_cancellation(cancellations) => continue,
-                    }
+                    let existing = tokio::select! {
+                        result = bulk_check => Some(result?),
+                        _ = wait_for_all_cancellations(cancellations) => None,
+                    };
+                    let Some(existing) = existing else {
+                        if can_start_work(coordinator) && !pending_album_units.is_empty() {
+                            album_batch::assign_pending_album_units(
+                                client,
+                                pool,
+                                app,
+                                audit_context,
+                                pending_album_units,
+                                &mut queue_results,
+                                &mut uploaded,
+                            )
+                            .await?;
+                        }
+                        continue;
+                    };
+                    existing
                 };
                 if !can_start_work(coordinator) {
                     break;
@@ -268,13 +284,11 @@ impl RunProcessor {
             let mut pending = upload_units.into_iter();
             let mut uploads = FuturesUnordered::new();
             while can_start_work(coordinator) && uploads.len() < upload_parallelism {
-                let Some(unit) = pending.next() else {
+                let Some((unit, cancellation)) =
+                    next_active_upload_unit(&mut pending, &active_work)
+                else {
                     break;
                 };
-                let unit_work = active_work.for_hashed_upload_unit(&unit);
-                if unit_work.is_cancelled() {
-                    continue;
-                }
                 uploads.push(upload_unit(
                     unit,
                     client.clone(),
@@ -282,7 +296,7 @@ impl RunProcessor {
                     app.clone(),
                     progress.clone(),
                     audit_context.clone(),
-                    unit_work.cancellation(),
+                    cancellation,
                     sidecar_cache.clone(),
                 ));
             }
@@ -294,11 +308,12 @@ impl RunProcessor {
                     pending_album_units.push(pending_album);
                 }
                 if can_start_work(coordinator) {
-                    if let Some(unit) = pending.next() {
-                        let unit_work = active_work.for_hashed_upload_unit(&unit);
-                        if unit_work.is_cancelled() {
-                            continue;
-                        }
+                    while can_start_work(coordinator) && uploads.len() < upload_parallelism {
+                        let Some((unit, cancellation)) =
+                            next_active_upload_unit(&mut pending, &active_work)
+                        else {
+                            break;
+                        };
                         uploads.push(upload_unit(
                             unit,
                             client.clone(),
@@ -306,7 +321,7 @@ impl RunProcessor {
                             app.clone(),
                             progress.clone(),
                             audit_context.clone(),
-                            unit_work.cancellation(),
+                            cancellation,
                             sidecar_cache.clone(),
                         ));
                     }
@@ -349,13 +364,23 @@ fn summarize_block(queue_results: Vec<(String, String)>, uploaded: usize) -> Syn
     }
 }
 
-async fn wait_for_any_cancellation(cancellations: Vec<CancellationToken>) {
-    future::select_all(
+async fn wait_for_all_cancellations(cancellations: Vec<CancellationToken>) {
+    future::join_all(
         cancellations
             .into_iter()
-            .map(|cancellation| Box::pin(async move { cancellation.cancelled().await })),
+            .map(|cancellation| async move { cancellation.cancelled().await }),
     )
     .await;
+}
+
+fn next_active_upload_unit(
+    pending: &mut impl Iterator<Item = HashedUploadUnit>,
+    active_work: &ProcessingContext,
+) -> Option<(HashedUploadUnit, CancellationToken)> {
+    pending.find_map(|unit| {
+        let unit_work = active_work.for_hashed_upload_unit(&unit);
+        (!unit_work.is_cancelled()).then(|| (unit, unit_work.cancellation()))
+    })
 }
 
 fn can_start_work(coordinator: &SyncCoordinatorInner) -> bool {
@@ -801,6 +826,33 @@ pub(crate) async fn load_upload_parallelism(pool: &sqlx::SqlitePool) -> Result<u
 mod tests {
     use super::*;
 
+    fn upload_unit(path: &str) -> UploadUnit {
+        UploadUnit {
+            image: crate::media::model::Asset {
+                path: path.to_string(),
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+                remote_id: None,
+            },
+            live_photo_video: None,
+        }
+    }
+
+    fn hashed_upload_unit(path: &str) -> HashedUploadUnit {
+        HashedUploadUnit {
+            image: crate::media::model::SyncAsset {
+                path: path.to_string(),
+                size: 1,
+                checksums: None,
+                mtime: 1,
+                target_album_id: None,
+                remote_id: None,
+            },
+            live_photo_video: None,
+        }
+    }
+
     #[test]
     fn block_summary_preserves_terminal_error_records() {
         let summary = summarize_block(
@@ -1074,12 +1126,58 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cancellation_during_bulk_check_leaves_no_terminal_queue_result() {
-        let cancellation = CancellationToken::new();
-        let bulk_check = tokio::spawn(wait_for_any_cancellation(vec![cancellation.clone()]));
+    async fn bulk_check_keeps_other_folder_work_when_one_folder_is_cancelled() {
+        let work = Arc::new(crate::sync::ActiveWork::new());
+        let cancelled_folder = upload_unit("C:/cancelled/photo.jpg");
+        let active_folder = upload_unit("C:/kept/photo.jpg");
+        let lease = work.acquire(&[cancelled_folder.clone(), active_folder.clone()]);
+        let active_work = lease.context();
+        let mut wait_for_all = Box::pin(tokio::spawn(wait_for_all_cancellations(vec![
+            active_work
+                .for_upload_unit(&cancelled_folder)
+                .cancellation(),
+            active_work.for_upload_unit(&active_folder).cancellation(),
+        ])));
 
-        cancellation.cancel();
-        bulk_check.await.unwrap();
+        work.cancel_work_in("C:/cancelled");
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), &mut wait_for_all)
+                .await
+                .is_err()
+        );
+
+        work.cancel_work_in("C:/kept");
+        wait_for_all.await.unwrap();
+    }
+
+    #[test]
+    fn upload_refill_skips_cancelled_folder_items_until_the_pool_is_full() {
+        let work = Arc::new(crate::sync::ActiveWork::new());
+        let cancelled_first = upload_unit("C:/cancelled/first.jpg");
+        let cancelled_second = upload_unit("C:/cancelled/second.jpg");
+        let kept_first = upload_unit("C:/kept/first.jpg");
+        let kept_second = upload_unit("C:/kept/second.jpg");
+        let lease = work.acquire(&[cancelled_first, cancelled_second, kept_first, kept_second]);
+        work.cancel_work_in("C:/cancelled");
+        let mut pending = vec![
+            hashed_upload_unit("C:/cancelled/first.jpg"),
+            hashed_upload_unit("C:/cancelled/second.jpg"),
+            hashed_upload_unit("C:/kept/first.jpg"),
+            hashed_upload_unit("C:/kept/second.jpg"),
+        ]
+        .into_iter();
+        let active_work = lease.context();
+        let mut scheduled_paths = Vec::new();
+        const UPLOAD_PARALLELISM: usize = 2;
+
+        while scheduled_paths.len() < UPLOAD_PARALLELISM {
+            let Some((unit, _)) = next_active_upload_unit(&mut pending, &active_work) else {
+                break;
+            };
+            scheduled_paths.push(unit.image.path);
+        }
+
+        assert_eq!(scheduled_paths, ["C:/kept/first.jpg", "C:/kept/second.jpg"]);
     }
 
     #[tokio::test]

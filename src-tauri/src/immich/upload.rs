@@ -3,8 +3,8 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
-use tokio::io::AsyncReadExt as _;
+use std::sync::{Arc, Mutex};
+use tokio::{io::AsyncReadExt as _, sync::OnceCell};
 use tokio_util::io::ReaderStream;
 
 use crate::sync::progress::TransferStatsTracker;
@@ -22,7 +22,7 @@ pub(crate) struct SidecarDirectoryCache {
 }
 
 type DirectoryIndexResult = Result<Arc<DirectorySidecarIndex>, String>;
-type DirectoryIndexSlot = OnceLock<DirectoryIndexResult>;
+type DirectoryIndexSlot = OnceCell<DirectoryIndexResult>;
 
 #[derive(Clone, Default)]
 struct DirectorySidecarIndex {
@@ -46,14 +46,10 @@ pub(super) async fn upload_form(
         .and_then(|name| name.to_str())
         .unwrap_or("file")
         .to_string();
-    let metadata_path = path_buf.clone();
-    let (metadata, sidecar_path) = tokio::task::spawn_blocking(move || {
-        let metadata = std::fs::metadata(&metadata_path).map_err(|error| error.to_string())?;
-        let sidecar_path = sidecar_cache.find_sidecar_path(&metadata_path)?;
-        Ok::<_, String>((metadata, sidecar_path))
-    })
-    .await
-    .map_err(|error| format!("Filesystem task failed while preparing {}: {}", path, error))??;
+    let metadata = tokio::fs::metadata(&path_buf)
+        .await
+        .map_err(|error| error.to_string())?;
+    let sidecar_path = sidecar_cache.find_sidecar_path(&path_buf).await?;
     let created_at = metadata
         .created()
         .or_else(|_| metadata.modified())
@@ -183,7 +179,7 @@ impl SidecarDirectoryCache {
         Self::default()
     }
 
-    fn find_sidecar_path(&self, asset_path: &Path) -> Result<Option<PathBuf>, String> {
+    async fn find_sidecar_path(&self, asset_path: &Path) -> Result<Option<PathBuf>, String> {
         let directory = asset_path
             .parent()
             .filter(|path| !path.as_os_str().is_empty())
@@ -199,15 +195,16 @@ impl SidecarDirectoryCache {
                 .clone()
         };
         let index = index_slot
-            .get_or_init(|| DirectorySidecarIndex::build(directory).map(Arc::new))
+            .get_or_init(|| async { DirectorySidecarIndex::build(directory).await.map(Arc::new) })
+            .await
             .clone()?;
         index.find(asset_path)
     }
 }
 
 impl DirectorySidecarIndex {
-    fn build(directory: &Path) -> Result<Self, String> {
-        let entries = std::fs::read_dir(directory).map_err(|error| {
+    async fn build(directory: &Path) -> Result<Self, String> {
+        let mut entries = tokio::fs::read_dir(directory).await.map_err(|error| {
             format!(
                 "Cannot scan directory {} for XMP sidecars: {}",
                 directory.display(),
@@ -215,14 +212,13 @@ impl DirectorySidecarIndex {
             )
         })?;
         let mut by_lowercase_name: HashMap<String, Vec<PathBuf>> = HashMap::new();
-        for entry in entries {
-            let entry = entry.map_err(|error| {
-                format!(
-                    "Cannot read directory entry in {} while indexing XMP sidecars: {}",
-                    directory.display(),
-                    error
-                )
-            })?;
+        while let Some(entry) = entries.next_entry().await.map_err(|error| {
+            format!(
+                "Cannot read directory entry in {} while indexing XMP sidecars: {}",
+                directory.display(),
+                error
+            )
+        })? {
             let entry_name = entry.file_name();
             let Some(entry_name) = entry_name.to_str() else {
                 continue;
@@ -231,7 +227,7 @@ impl DirectorySidecarIndex {
                 continue;
             }
             let path = entry.path();
-            let metadata = match std::fs::metadata(&path) {
+            let metadata = match tokio::fs::metadata(&path).await {
                 Ok(metadata) => metadata,
                 // A sidecar can disappear between read_dir and metadata. It was not part of
                 // this job's snapshot, so ignore it rather than failing every upload here.
@@ -340,8 +336,10 @@ mod tests {
         path
     }
 
-    fn find_sidecar_path(asset_path: &Path) -> Result<Option<PathBuf>, String> {
-        SidecarDirectoryCache::new().find_sidecar_path(asset_path)
+    async fn find_sidecar_path(asset_path: &Path) -> Result<Option<PathBuf>, String> {
+        SidecarDirectoryCache::new()
+            .find_sidecar_path(asset_path)
+            .await
     }
 
     #[tokio::test]
@@ -448,47 +446,51 @@ mod tests {
         );
     }
 
-    #[test]
-    fn finds_no_sidecar_or_either_exact_naming_scheme() {
+    #[tokio::test]
+    async fn finds_no_sidecar_or_either_exact_naming_scheme() {
         let directory = temporary_directory();
         let asset = create_file(&directory, "photo.jpg");
-        assert_eq!(find_sidecar_path(&asset).unwrap(), None);
+        assert_eq!(find_sidecar_path(&asset).await.unwrap(), None);
 
         let stem_sidecar = create_file(&directory, "photo.xmp");
         assert_eq!(
-            find_sidecar_path(&asset).unwrap(),
+            find_sidecar_path(&asset).await.unwrap(),
             Some(stem_sidecar.clone())
         );
         std::fs::remove_file(stem_sidecar).unwrap();
 
         let full_name_sidecar = create_file(&directory, "photo.jpg.xmp");
-        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(full_name_sidecar));
+        assert_eq!(
+            find_sidecar_path(&asset).await.unwrap(),
+            Some(full_name_sidecar)
+        );
         std::fs::remove_dir_all(directory).unwrap();
     }
 
-    #[test]
-    fn stem_sidecar_wins_over_full_name_sidecar() {
+    #[tokio::test]
+    async fn stem_sidecar_wins_over_full_name_sidecar() {
         let directory = temporary_directory();
         let asset = create_file(&directory, "photo.jpg");
         let stem_sidecar = create_file(&directory, "photo.xmp");
         create_file(&directory, "photo.jpg.xmp");
 
-        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(stem_sidecar));
+        assert_eq!(find_sidecar_path(&asset).await.unwrap(), Some(stem_sidecar));
         std::fs::remove_dir_all(directory).unwrap();
     }
 
-    #[test]
-    fn cache_keeps_a_directory_snapshot_until_the_next_sync_job() {
+    #[tokio::test]
+    async fn cache_keeps_a_directory_snapshot_until_the_next_sync_job() {
         let directory = temporary_directory();
         let asset = create_file(&directory, "photo.jpg");
         let cache = SidecarDirectoryCache::new();
 
-        assert_eq!(cache.find_sidecar_path(&asset).unwrap(), None);
+        assert_eq!(cache.find_sidecar_path(&asset).await.unwrap(), None);
         let sidecar = create_file(&directory, "photo.xmp");
-        assert_eq!(cache.find_sidecar_path(&asset).unwrap(), None);
+        assert_eq!(cache.find_sidecar_path(&asset).await.unwrap(), None);
         assert_eq!(
             SidecarDirectoryCache::new()
                 .find_sidecar_path(&asset)
+                .await
                 .unwrap(),
             Some(sidecar)
         );
@@ -496,57 +498,69 @@ mod tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 
-    #[test]
-    fn ignores_non_regular_sidecar_candidates() {
+    #[tokio::test]
+    async fn ignores_non_regular_sidecar_candidates() {
         let directory = temporary_directory();
         let asset = create_file(&directory, "photo.jpg");
         std::fs::create_dir(directory.join("photo.xmp")).unwrap();
         let full_name_sidecar = create_file(&directory, "photo.jpg.xmp");
 
-        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(full_name_sidecar));
+        assert_eq!(
+            find_sidecar_path(&asset).await.unwrap(),
+            Some(full_name_sidecar)
+        );
         std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[cfg(target_os = "linux")]
-    #[test]
-    fn finds_ascii_case_insensitive_sidecars_using_their_actual_names() {
+    #[tokio::test]
+    async fn finds_ascii_case_insensitive_sidecars_using_their_actual_names() {
         let directory = temporary_directory();
         let asset = create_file(&directory, "photo.jpg");
         let stem_sidecar = create_file(&directory, "photo.XMP");
-        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(stem_sidecar));
+        assert_eq!(find_sidecar_path(&asset).await.unwrap(), Some(stem_sidecar));
         std::fs::remove_file(directory.join("photo.XMP")).unwrap();
 
         let full_name_sidecar = create_file(&directory, "PHOTO.JPG.XmP");
-        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(full_name_sidecar));
+        assert_eq!(
+            find_sidecar_path(&asset).await.unwrap(),
+            Some(full_name_sidecar)
+        );
         std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[cfg(target_os = "linux")]
-    #[test]
-    fn ignores_non_regular_case_insensitive_matches() {
+    #[tokio::test]
+    async fn ignores_non_regular_case_insensitive_matches() {
         let directory = temporary_directory();
         let asset = create_file(&directory, "photo.jpg");
         std::fs::create_dir(directory.join("PHOTO.XMP")).unwrap();
         let full_name_sidecar = create_file(&directory, "PHOTO.JPG.XMP");
 
-        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(full_name_sidecar));
+        assert_eq!(
+            find_sidecar_path(&asset).await.unwrap(),
+            Some(full_name_sidecar)
+        );
         std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[cfg(target_os = "linux")]
-    #[test]
-    fn exact_case_wins_and_case_insensitive_matches_are_sorted() {
+    #[tokio::test]
+    async fn exact_case_wins_and_case_insensitive_matches_are_sorted() {
         let directory = temporary_directory();
         let asset = create_file(&directory, "photo.jpg");
         let exact_sidecar = create_file(&directory, "photo.xmp");
         create_file(&directory, "PHOTO.XMP");
-        assert_eq!(find_sidecar_path(&asset).unwrap(), Some(exact_sidecar));
+        assert_eq!(
+            find_sidecar_path(&asset).await.unwrap(),
+            Some(exact_sidecar)
+        );
         std::fs::remove_file(directory.join("photo.xmp")).unwrap();
 
         let first_sorted_sidecar = directory.join("PHOTO.XMP");
         create_file(&directory, "Photo.Xmp");
         assert_eq!(
-            find_sidecar_path(&asset).unwrap(),
+            find_sidecar_path(&asset).await.unwrap(),
             Some(first_sorted_sidecar)
         );
         std::fs::remove_dir_all(directory).unwrap();
