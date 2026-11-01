@@ -76,6 +76,12 @@ const SNAPSHOT_SELECT: &str = "SELECT status, total_count AS total, success_coun
          COALESCE((SELECT SUM(size) FROM sync_queue WHERE job_id = 1 AND status IN ('SYNCED', 'FAILED')), 0) AS completed_bytes \
   FROM sync_jobs WHERE id = 1";
 
+fn advance_sequence_for_new_row(next_sequence: &mut i64, assigned_sequence: i64) {
+    if assigned_sequence == *next_sequence {
+        *next_sequence += 1;
+    }
+}
+
 pub async fn recover_sync_job(pool: &SqlitePool) -> Result<SyncSnapshot, sqlx::Error> {
     // A process cannot safely know whether an in-flight HTTP upload completed. Recovery
     // therefore always requires explicit user confirmation before processing resumes.
@@ -174,9 +180,7 @@ pub async fn enqueue_upload_units(
         .bind(is_primary)
         .fetch_one(&mut *tx)
         .await?;
-            if assigned_sequence == next_sequence {
-                next_sequence += 1;
-            }
+            advance_sequence_for_new_row(&mut next_sequence, assigned_sequence);
         }
     }
     for (path, reason) in failures {
@@ -191,9 +195,7 @@ pub async fn enqueue_upload_units(
         .bind(reason)
         .fetch_one(&mut *tx)
         .await?;
-        if assigned_sequence == next_sequence {
-            next_sequence += 1;
-        }
+        advance_sequence_for_new_row(&mut next_sequence, assigned_sequence);
     }
     sqlx::query("UPDATE sync_jobs SET next_sequence = ? WHERE id = 1")
         .bind(next_sequence)
