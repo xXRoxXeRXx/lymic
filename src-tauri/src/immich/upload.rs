@@ -212,13 +212,17 @@ impl DirectorySidecarIndex {
             )
         })?;
         let mut by_lowercase_name: HashMap<String, Vec<PathBuf>> = HashMap::new();
-        while let Some(entry) = entries.next_entry().await.map_err(|error| {
-            format!(
-                "Cannot read directory entry in {} while indexing XMP sidecars: {}",
-                directory.display(),
-                error
-            )
-        })? {
+        loop {
+            let entry = entries.next_entry().await.map_err(|error| {
+                format!(
+                    "Cannot read directory entry in {} while indexing XMP sidecars: {}",
+                    directory.display(),
+                    error
+                )
+            })?;
+            let Some(entry) = entry else {
+                break;
+            };
             let entry_name = entry.file_name();
             let Some(entry_name) = entry_name.to_str() else {
                 continue;

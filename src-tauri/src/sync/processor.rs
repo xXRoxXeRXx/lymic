@@ -189,8 +189,8 @@ impl RunProcessor {
                         _ = wait_for_all_cancellations(cancellations) => None,
                     };
                     let Some(existing) = existing else {
-                        if can_start_work(coordinator) && !pending_album_units.is_empty() {
-                            album_batch::assign_pending_album_units(
+                        if can_start_work(coordinator) {
+                            flush_pending_album_units(
                                 client,
                                 pool,
                                 app,
@@ -328,8 +328,8 @@ impl RunProcessor {
                 }
             }
 
-            if can_start_work(coordinator) && !pending_album_units.is_empty() {
-                album_batch::assign_pending_album_units(
+            if can_start_work(coordinator) {
+                flush_pending_album_units(
                     client,
                     pool,
                     app,
@@ -381,6 +381,30 @@ fn next_active_upload_unit(
         let unit_work = active_work.for_hashed_upload_unit(&unit);
         (!unit_work.is_cancelled()).then(|| (unit, unit_work.cancellation()))
     })
+}
+
+async fn flush_pending_album_units(
+    client: &Arc<ImmichClient>,
+    pool: &sqlx::SqlitePool,
+    app: &tauri::AppHandle,
+    audit_context: &SyncAuditContext,
+    pending_album_units: Vec<PendingAlbumUnit>,
+    queue_results: &mut Vec<(String, String)>,
+    uploaded: &mut usize,
+) -> Result<(), String> {
+    if pending_album_units.is_empty() {
+        return Ok(());
+    }
+    album_batch::assign_pending_album_units(
+        client,
+        pool,
+        app,
+        audit_context,
+        pending_album_units,
+        queue_results,
+        uploaded,
+    )
+    .await
 }
 
 fn can_start_work(coordinator: &SyncCoordinatorInner) -> bool {
