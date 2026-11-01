@@ -436,7 +436,7 @@ pub async fn complete_sync_job_if_finished(
     let mut tx = pool.begin().await?;
     let result = sqlx::query(
         "UPDATE sync_jobs SET status = 'IDLE', current_path = NULL \
-         WHERE id = 1 AND status = 'RUNNING' \
+         WHERE id = 1 AND status = 'RUNNING' AND status != 'PAUSED' \
            AND NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING')",
     )
     .execute(&mut *tx)

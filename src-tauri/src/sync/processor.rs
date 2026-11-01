@@ -78,6 +78,7 @@ impl RunProcessor {
         units: Vec<UploadUnit>,
         active_work: ProcessingContext,
     ) -> Result<SyncSummary, String> {
+        wait_while_paused(&self.coordinator).await;
         let app = &self.app;
         let pool = &self.pool;
         let client = &self.client;
@@ -359,6 +360,18 @@ async fn wait_for_any_cancellation(cancellations: Vec<CancellationToken>) {
 
 fn can_start_work(coordinator: &SyncCoordinatorInner) -> bool {
     !coordinator.paused.load(Ordering::SeqCst)
+}
+
+async fn wait_while_paused(coordinator: &SyncCoordinatorInner) {
+    while coordinator.paused.load(Ordering::SeqCst) {
+        let notified = coordinator.resume.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        if !coordinator.paused.load(Ordering::SeqCst) {
+            break;
+        }
+        notified.await;
+    }
 }
 
 struct HashOutcome {
@@ -966,6 +979,22 @@ mod tests {
     fn pause_before_hashing_prevents_new_hashes() {
         let coordinator = SyncCoordinatorInner::new(true);
         assert!(!can_start_work(&coordinator));
+    }
+
+    #[tokio::test]
+    async fn paused_processor_observes_a_resume_notified_before_its_pause_check() {
+        let coordinator = Arc::new(SyncCoordinatorInner::new(true));
+        let waiting_coordinator = coordinator.clone();
+        let waiting = tokio::spawn(async move { wait_while_paused(&waiting_coordinator).await });
+        tokio::task::yield_now().await;
+
+        coordinator.paused.store(false, Ordering::SeqCst);
+        coordinator.resume.notify_waiters();
+
+        tokio::time::timeout(std::time::Duration::from_millis(50), waiting)
+            .await
+            .expect("the processor must not miss a concurrent resume")
+            .unwrap();
     }
 
     #[test]

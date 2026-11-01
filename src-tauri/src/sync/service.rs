@@ -79,6 +79,10 @@ impl<'a> SynchronizationLifecycle<'a> {
     }
 
     async fn start_or_join(&self) -> Result<LifecycleClaim, String> {
+        // A queue runner retains this lock until its drain handoff is complete.
+        // Serializing claims with that handoff means a producer can never join a
+        // runner after it released ownership but before it reclaims pending work.
+        let _runner_handoff_guard = self.coordinator.lock.lock().await;
         let current = self.status().await?;
         if current.status == "PAUSED" {
             return Ok(LifecycleClaim::Paused);
