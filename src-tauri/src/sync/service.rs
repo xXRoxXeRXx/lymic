@@ -79,10 +79,6 @@ impl<'a> SynchronizationLifecycle<'a> {
     }
 
     async fn start_or_join(&self) -> Result<LifecycleClaim, String> {
-        // A queue runner retains this lock until its drain handoff is complete.
-        // Serializing claims with that handoff means a producer can never join a
-        // runner after it released ownership but before it reclaims pending work.
-        let _runner_handoff_guard = self.coordinator.lock.lock().await;
         let current = self.status().await?;
         if current.status == "PAUSED" {
             return Ok(LifecycleClaim::Paused);
@@ -274,7 +270,6 @@ impl<'a> Synchronization<'a> {
                 audit_context,
             )
             .await;
-            lifecycle.finish();
             match result {
                 Ok(summary) => Ok(Some(summary)),
                 Err(error) => self.fail_run(source, &error).await,
@@ -295,10 +290,10 @@ impl<'a> Synchronization<'a> {
                     audit_context,
                 )
                 .await;
-                app.state::<crate::sync::SyncState>()
-                    .0
-                    .store(false, Ordering::SeqCst);
                 if let Err(error) = result {
+                    app.state::<crate::sync::SyncState>()
+                        .0
+                        .store(false, Ordering::SeqCst);
                     emit_sync_error(&app, &error);
                     if let Ok(snapshot) = db::set_sync_status(&pool, "FAILED").await {
                         crate::app::tray::update_sync_action(&app, &snapshot);

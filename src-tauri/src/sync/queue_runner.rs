@@ -151,9 +151,9 @@ pub(crate) async fn run_sync_pipeline(
                 notified.await;
             }
             if !coordinator.paused.load(Ordering::SeqCst) {
-                let snapshot = db::set_sync_status(&pool, "RUNNING")
+                let snapshot = db::get_sync_snapshot(&pool)
                     .await
-                    .map_err(|error| format!("Could not resume sync: {}", error))?;
+                    .map_err(|error| format!("Could not load resumed sync: {}", error))?;
                 crate::app::tray::update_sync_action(&app, &snapshot);
                 transfer_stats.sync_queue(
                     snapshot.total_bytes.max(0) as u64,
