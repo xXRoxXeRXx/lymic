@@ -137,6 +137,10 @@ pub async fn enqueue_upload_units(
             .execute(&mut *tx)
             .await?;
     }
+    let mut next_sequence: i64 =
+        sqlx::query_scalar("SELECT next_sequence FROM sync_jobs WHERE id = 1")
+            .fetch_one(&mut *tx)
+            .await?;
     for unit in units {
         let existing_unit_id: Option<String> = sqlx::query_scalar(
             "SELECT upload_unit_id FROM sync_queue \
@@ -151,61 +155,50 @@ pub async fn enqueue_upload_units(
         for (asset, is_primary) in std::iter::once((&unit.image, true))
             .chain(unit.live_photo_video.as_ref().map(|asset| (asset, false)))
         {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND local_path = ?)",
-            )
-            .bind(&asset.path)
-            .fetch_one(&mut *tx)
-            .await?;
-            let next: i64 = sqlx::query_scalar("SELECT next_sequence FROM sync_jobs WHERE id = 1")
-                .fetch_one(&mut *tx)
-                .await?;
-            sqlx::query(
+            let assigned_sequence: i64 = sqlx::query_scalar(
             "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, target_album_id, upload_unit_id, is_primary)
              VALUES (1, ?, ?, ?, ?, 'PENDING', ?, ?, ?)
              ON CONFLICT(job_id, local_path) DO UPDATE SET
                size = excluded.size, last_modified = excluded.last_modified,
                upload_unit_id = excluded.upload_unit_id, is_primary = excluded.is_primary,
                status = CASE WHEN sync_queue.status = 'SYNCED' THEN 'SYNCED' ELSE 'PENDING' END,
-               failure_reason = NULL",
+               failure_reason = NULL
+             RETURNING sequence",
         )
-        .bind(next)
+        .bind(next_sequence)
         .bind(&asset.path)
         .bind(asset.size)
         .bind(asset.mtime)
         .bind(asset.target_album_id.as_ref().map(|id| id.as_str()))
         .bind(&unit_id)
         .bind(is_primary)
-        .execute(&mut *tx)
+        .fetch_one(&mut *tx)
         .await?;
-            if !exists {
-                sqlx::query("UPDATE sync_jobs SET next_sequence = next_sequence + 1 WHERE id = 1")
-                    .execute(&mut *tx)
-                    .await?;
+            if assigned_sequence == next_sequence {
+                next_sequence += 1;
             }
         }
     }
     for (path, reason) in failures {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND local_path = ?)",
-        )
-        .bind(path)
-        .fetch_one(&mut *tx)
-        .await?;
-        let next: i64 = sqlx::query_scalar("SELECT next_sequence FROM sync_jobs WHERE id = 1")
-            .fetch_one(&mut *tx)
-            .await?;
-        sqlx::query(
+        let assigned_sequence: i64 = sqlx::query_scalar(
             "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, failure_reason)
              VALUES (1, ?, ?, 0, 0, 'FAILED', ?)
-             ON CONFLICT(job_id, local_path) DO UPDATE SET status = 'FAILED', failure_reason = excluded.failure_reason",
-        ).bind(next).bind(path).bind(reason).execute(&mut *tx).await?;
-        if !exists {
-            sqlx::query("UPDATE sync_jobs SET next_sequence = next_sequence + 1 WHERE id = 1")
-                .execute(&mut *tx)
-                .await?;
+             ON CONFLICT(job_id, local_path) DO UPDATE SET status = 'FAILED', failure_reason = excluded.failure_reason
+             RETURNING sequence",
+        )
+        .bind(next_sequence)
+        .bind(path)
+        .bind(reason)
+        .fetch_one(&mut *tx)
+        .await?;
+        if assigned_sequence == next_sequence {
+            next_sequence += 1;
         }
     }
+    sqlx::query("UPDATE sync_jobs SET next_sequence = ? WHERE id = 1")
+        .bind(next_sequence)
+        .execute(&mut *tx)
+        .await?;
     update_counts_and_snapshot(tx, true, None).await
 }
 

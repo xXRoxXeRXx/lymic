@@ -362,6 +362,64 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn queue_allocates_sequences_only_for_new_rows() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let original = [QueueAsset {
+            path: "existing.jpg",
+            size: 1,
+            mtime: 1,
+            target_album_id: None,
+        }];
+        enqueue_sync_assets(&pool, &original, &[]).await.unwrap();
+
+        let batch = [
+            QueueAsset {
+                path: "existing.jpg",
+                size: 2,
+                mtime: 2,
+                target_album_id: None,
+            },
+            QueueAsset {
+                path: "new.jpg",
+                size: 3,
+                mtime: 3,
+                target_album_id: None,
+            },
+        ];
+        enqueue_sync_assets(
+            &pool,
+            &batch,
+            &[("failed.jpg".to_string(), "unreadable".to_string())],
+        )
+        .await
+        .unwrap();
+
+        let rows: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT local_path, sequence FROM sync_queue WHERE job_id = 1 ORDER BY sequence",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let next_sequence: i64 =
+            sqlx::query_scalar("SELECT next_sequence FROM sync_jobs WHERE id = 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(
+            rows,
+            vec![
+                ("existing.jpg".to_string(), 1),
+                ("new.jpg".to_string(), 2),
+                ("failed.jpg".to_string(), 3),
+            ]
+        );
+        assert_eq!(next_sequence, 4);
+    }
+
+    #[tokio::test]
     async fn queue_pages_after_the_first_window_is_finalized() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
