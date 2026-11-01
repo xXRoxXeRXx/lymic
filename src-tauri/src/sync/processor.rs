@@ -79,19 +79,61 @@ impl RunProcessor {
         active_work: ProcessingContext,
     ) -> Result<SyncSummary, String> {
         wait_while_paused(&self.coordinator).await;
-        let app = &self.app;
-        let pool = &self.pool;
-        let client = &self.client;
-        let audit_context = &self.audit_context;
-        let progress = &self.progress;
-        let coordinator = &self.coordinator;
-        let sidecar_cache = &self.sidecar_cache;
-        let upload_parallelism = self.upload_parallelism;
+        let (hashed_units, mut queue_results) = self.hash_units(units, &active_work).await;
+
+        let mut uploaded = 0;
+        for chunk in hashed_units.chunks(BULK_CHECK_CHUNK_SIZE) {
+            if !can_start_work(&self.coordinator) {
+                break;
+            }
+
+            let Some((upload_units, mut pending_album_units)) = self
+                .check_and_partition_chunk(chunk, &active_work, &mut queue_results, &mut uploaded)
+                .await?
+            else {
+                continue;
+            };
+
+            self.upload_missing_units(
+                upload_units,
+                &active_work,
+                &mut pending_album_units,
+                &mut queue_results,
+                &mut uploaded,
+            )
+            .await?;
+
+            if can_start_work(&self.coordinator) {
+                flush_pending_album_units(
+                    &self.client,
+                    &self.pool,
+                    &self.app,
+                    &self.audit_context,
+                    pending_album_units,
+                    &mut queue_results,
+                    &mut uploaded,
+                )
+                .await?;
+            }
+
+            if !can_start_work(&self.coordinator) {
+                break;
+            }
+        }
+
+        Ok(summarize_block(queue_results, uploaded))
+    }
+
+    async fn hash_units(
+        &self,
+        units: Vec<UploadUnit>,
+        active_work: &ProcessingContext,
+    ) -> (Vec<HashedUploadUnit>, Vec<(String, String)>) {
         let mut queue_results = Vec::new();
         let mut hashed_units = Vec::new();
         let mut hashing = FuturesUnordered::new();
         for unit in units {
-            if !can_start_work(coordinator) {
+            if !can_start_work(&self.coordinator) {
                 break;
             }
             let unit_work = active_work.for_upload_unit(&unit);
@@ -100,253 +142,272 @@ impl RunProcessor {
             }
             hashing.push(hash_unit_or_cancellation(
                 unit,
-                pool.clone(),
-                app.clone(),
-                progress.clone(),
-                audit_context.clone(),
+                self.pool.clone(),
+                self.app.clone(),
+                self.progress.clone(),
+                self.audit_context.clone(),
                 unit_work.cancellation(),
             ));
             if hashing.len() == 4 {
-                if let Some(outcome) = hashing.next().await {
-                    queue_results.extend(outcome.queue_results);
-                    if let Some(unit) = outcome.unit {
-                        hashed_units.push(unit);
-                    }
-                }
+                Self::collect_hash_outcome(
+                    hashing.next().await,
+                    &mut hashed_units,
+                    &mut queue_results,
+                );
             }
         }
         while let Some(outcome) = hashing.next().await {
-            queue_results.extend(outcome.queue_results);
-            if let Some(unit) = outcome.unit {
-                hashed_units.push(unit);
+            Self::record_hash_outcome(outcome, &mut hashed_units, &mut queue_results);
+        }
+        (hashed_units, queue_results)
+    }
+
+    fn collect_hash_outcome(
+        outcome: Option<HashOutcome>,
+        hashed_units: &mut Vec<HashedUploadUnit>,
+        queue_results: &mut Vec<(String, String)>,
+    ) {
+        if let Some(outcome) = outcome {
+            Self::record_hash_outcome(outcome, hashed_units, queue_results);
+        }
+    }
+
+    fn record_hash_outcome(
+        outcome: HashOutcome,
+        hashed_units: &mut Vec<HashedUploadUnit>,
+        queue_results: &mut Vec<(String, String)>,
+    ) {
+        queue_results.extend(outcome.queue_results);
+        if let Some(unit) = outcome.unit {
+            hashed_units.push(unit);
+        }
+    }
+
+    async fn check_and_partition_chunk(
+        &self,
+        chunk: &[HashedUploadUnit],
+        active_work: &ProcessingContext,
+        queue_results: &mut Vec<(String, String)>,
+        uploaded: &mut usize,
+    ) -> Result<Option<(Vec<HashedUploadUnit>, Vec<PendingAlbumUnit>)>, String> {
+        let mut pending_album_units = Vec::new();
+        let mut units_to_check = Vec::new();
+        for unit in chunk {
+            if active_work.for_hashed_upload_unit(unit).is_cancelled() {
+                continue;
+            }
+            if let Some(remote_id) = &unit.image.remote_id {
+                self.complete_resolved_unit(
+                    unit.clone(),
+                    remote_id.clone(),
+                    0,
+                    &mut pending_album_units,
+                    queue_results,
+                    uploaded,
+                )
+                .await?;
+            } else {
+                units_to_check.push(unit.clone());
             }
         }
 
-        let mut uploaded = 0;
-        for chunk in hashed_units.chunks(BULK_CHECK_CHUNK_SIZE) {
-            if !can_start_work(coordinator) {
-                break;
-            }
-
-            let mut pending_album_units: Vec<PendingAlbumUnit> = Vec::new();
-            let mut units_to_check: Vec<HashedUploadUnit> = Vec::new();
-
-            for unit in chunk {
-                if active_work.for_hashed_upload_unit(unit).is_cancelled() {
-                    continue;
-                }
-
-                if let Some(remote_id) = &unit.image.remote_id {
-                    match begin_upload_unit_completion_or_fail(
-                        pool,
-                        app,
-                        audit_context,
-                        unit.clone(),
-                        remote_id.clone(),
-                        0,
-                    )
-                    .await?
-                    {
-                        UploadUnitCompletion::PendingAlbum(pending) => {
-                            pending_album_units.push(*pending)
-                        }
-                        UploadUnitCompletion::Complete(completion) => {
-                            queue_results.extend_from_slice(completion.queue_results());
-                            uploaded += completion.uploaded_count();
-                        }
-                        UploadUnitCompletion::Failed { completion, .. } => {
-                            queue_results.extend_from_slice(completion.queue_results());
-                        }
-                    }
-                    progress.advance(app, unit.byte_size());
-                } else {
-                    units_to_check.push(unit.clone());
-                }
-            }
-
-            let existing = if !units_to_check.is_empty() {
-                let hashes = units_to_check
-                    .iter()
-                    .flat_map(|unit| unit.assets())
-                    .filter_map(|asset| {
-                        asset
-                            .checksums
-                            .as_ref()
-                            .map(|checksums| checksums.sha1_base64.clone())
-                    })
-                    .collect();
-                let cancellations: Vec<CancellationToken> = units_to_check
-                    .iter()
-                    .map(|unit| active_work.for_hashed_upload_unit(unit).cancellation())
-                    .collect();
-                let bulk_check =
-                    check_assets_exist_with_backoff(client, hashes, app, audit_context);
-                let existing = if cancellations.is_empty() {
-                    bulk_check.await?
-                } else {
-                    let existing = tokio::select! {
-                        result = bulk_check => Some(result?),
-                        _ = wait_for_all_cancellations(cancellations) => None,
-                    };
-                    let Some(existing) = existing else {
-                        if can_start_work(coordinator) {
-                            flush_pending_album_units(
-                                client,
-                                pool,
-                                app,
-                                audit_context,
-                                pending_album_units,
-                                &mut queue_results,
-                                &mut uploaded,
-                            )
-                            .await?;
-                        }
-                        continue;
-                    };
-                    existing
-                };
-                if !can_start_work(coordinator) {
-                    break;
-                }
-                existing
-            } else {
-                Vec::new()
-            };
-
-            let mut upload_units = Vec::new();
-            for unit in units_to_check {
-                if active_work.for_hashed_upload_unit(&unit).is_cancelled() {
-                    continue;
-                }
-
-                let image_hash = &unit.image.checksums.as_ref().unwrap().sha1_base64;
-                let is_duplicate = existing.iter().any(|d| &d.hash == image_hash);
-
-                if is_duplicate {
-                    match album_batch::resolve_duplicate_remote_id(client, &unit, &existing).await {
-                        Ok(remote_id) => {
-                            match begin_upload_unit_completion_or_fail(
-                                pool,
-                                app,
-                                audit_context,
-                                unit.clone(),
-                                remote_id,
-                                0,
-                            )
-                            .await?
-                            {
-                                UploadUnitCompletion::PendingAlbum(pending) => {
-                                    pending_album_units.push(*pending)
-                                }
-                                UploadUnitCompletion::Complete(completion) => {
-                                    queue_results.extend_from_slice(completion.queue_results());
-                                    uploaded += completion.uploaded_count();
-                                }
-                                UploadUnitCompletion::Failed { completion, .. } => {
-                                    queue_results.extend_from_slice(completion.queue_results());
-                                }
-                            }
-                            progress.advance(app, unit.byte_size());
-                        }
-                        Err(error_msg) => {
-                            log_to_ui_file_error(
-                                app,
-                                "ERROR",
-                                &error_msg,
-                                "log_duplicate_resolve_failed",
-                                &unit.image.path,
-                                &error_msg,
-                            );
-                            audit_event(
-                                app,
-                                audit_context.event(
-                                    "album.duplicate.resolution.failed",
-                                    audit::Outcome::Failure,
-                                    audit::Severity::Error,
-                                    "Failed to resolve duplicate asset remote ID for target album",
-                                    json!({
-                                        "local_path": unit.image.path,
-                                    "failure_reason": audit_context.safe_error(&error_msg),
-                                    }),
-                                ),
-                            );
-                            let failure =
-                                completion::fail_upload_unit(pool, &unit, &error_msg).await?;
-                            queue_results.extend_from_slice(failure.queue_results());
-                            progress.advance(app, unit.byte_size());
-                        }
-                    }
-                } else {
-                    upload_units.push(unit);
-                }
-            }
-
-            let mut pending = upload_units.into_iter();
-            let mut uploads = FuturesUnordered::new();
-            while can_start_work(coordinator) && uploads.len() < upload_parallelism {
-                let Some((unit, cancellation)) =
-                    next_active_upload_unit(&mut pending, &active_work)
-                else {
-                    break;
-                };
-                uploads.push(upload_unit(
-                    unit,
-                    client.clone(),
-                    pool.clone(),
-                    app.clone(),
-                    progress.clone(),
-                    audit_context.clone(),
-                    cancellation,
-                    sidecar_cache.clone(),
-                ));
-            }
-            while let Some(outcome) = uploads.next().await {
-                let outcome = outcome?;
-                uploaded += outcome.uploaded;
-                queue_results.extend(outcome.queue_results);
-                if let Some(pending_album) = outcome.pending_album_unit {
-                    pending_album_units.push(pending_album);
-                }
-                if can_start_work(coordinator) {
-                    while can_start_work(coordinator) && uploads.len() < upload_parallelism {
-                        let Some((unit, cancellation)) =
-                            next_active_upload_unit(&mut pending, &active_work)
-                        else {
-                            break;
-                        };
-                        uploads.push(upload_unit(
-                            unit,
-                            client.clone(),
-                            pool.clone(),
-                            app.clone(),
-                            progress.clone(),
-                            audit_context.clone(),
-                            cancellation,
-                            sidecar_cache.clone(),
-                        ));
-                    }
-                }
-            }
-
-            if can_start_work(coordinator) {
+        let existing = self.bulk_check_units(&units_to_check, active_work).await?;
+        let Some(existing) = existing else {
+            if can_start_work(&self.coordinator) {
                 flush_pending_album_units(
-                    client,
-                    pool,
-                    app,
-                    audit_context,
+                    &self.client,
+                    &self.pool,
+                    &self.app,
+                    &self.audit_context,
                     pending_album_units,
-                    &mut queue_results,
-                    &mut uploaded,
+                    queue_results,
+                    uploaded,
                 )
                 .await?;
             }
-
-            if !can_start_work(coordinator) {
-                break;
-            }
+            return Ok(None);
+        };
+        if !can_start_work(&self.coordinator) {
+            return Ok(Some((Vec::new(), pending_album_units)));
         }
 
-        Ok(summarize_block(queue_results, uploaded))
+        let mut upload_units = Vec::new();
+        for unit in units_to_check {
+            if active_work.for_hashed_upload_unit(&unit).is_cancelled() {
+                continue;
+            }
+            let image_hash = &unit.image.checksums.as_ref().unwrap().sha1_base64;
+            if existing
+                .iter()
+                .any(|duplicate| &duplicate.hash == image_hash)
+            {
+                match album_batch::resolve_duplicate_remote_id(&self.client, &unit, &existing).await
+                {
+                    Ok(remote_id) => {
+                        self.complete_resolved_unit(
+                            unit,
+                            remote_id,
+                            0,
+                            &mut pending_album_units,
+                            queue_results,
+                            uploaded,
+                        )
+                        .await?;
+                    }
+                    Err(error_msg) => {
+                        log_to_ui_file_error(
+                            &self.app,
+                            "ERROR",
+                            &error_msg,
+                            "log_duplicate_resolve_failed",
+                            &unit.image.path,
+                            &error_msg,
+                        );
+                        audit_event(
+                            &self.app,
+                            self.audit_context.event(
+                                "album.duplicate.resolution.failed",
+                                audit::Outcome::Failure,
+                                audit::Severity::Error,
+                                "Failed to resolve duplicate asset remote ID for target album",
+                                json!({
+                                    "local_path": unit.image.path,
+                                    "failure_reason": self.audit_context.safe_error(&error_msg),
+                                }),
+                            ),
+                        );
+                        let failure =
+                            completion::fail_upload_unit(&self.pool, &unit, &error_msg).await?;
+                        queue_results.extend_from_slice(failure.queue_results());
+                        self.progress.advance(&self.app, unit.byte_size());
+                    }
+                }
+            } else {
+                upload_units.push(unit);
+            }
+        }
+        Ok(Some((upload_units, pending_album_units)))
+    }
+
+    async fn bulk_check_units(
+        &self,
+        units: &[HashedUploadUnit],
+        active_work: &ProcessingContext,
+    ) -> Result<Option<Vec<crate::immich::BulkCheckDuplicate>>, String> {
+        if units.is_empty() {
+            return Ok(Some(Vec::new()));
+        }
+        let hashes = units
+            .iter()
+            .flat_map(|unit| unit.assets())
+            .filter_map(|asset| {
+                asset
+                    .checksums
+                    .as_ref()
+                    .map(|checksums| checksums.sha1_base64.clone())
+            })
+            .collect();
+        let cancellations: Vec<CancellationToken> = units
+            .iter()
+            .map(|unit| active_work.for_hashed_upload_unit(unit).cancellation())
+            .collect();
+        let bulk_check =
+            check_assets_exist_with_backoff(&self.client, hashes, &self.app, &self.audit_context);
+        if cancellations.is_empty() {
+            return bulk_check.await.map(Some);
+        }
+        tokio::select! {
+            result = bulk_check => result.map(Some),
+            _ = wait_for_all_cancellations(cancellations) => Ok(None),
+        }
+    }
+
+    async fn complete_resolved_unit(
+        &self,
+        unit: HashedUploadUnit,
+        remote_id: crate::immich::RemoteAssetId,
+        uploaded_count: usize,
+        pending_album_units: &mut Vec<PendingAlbumUnit>,
+        queue_results: &mut Vec<(String, String)>,
+        uploaded: &mut usize,
+    ) -> Result<(), String> {
+        match begin_upload_unit_completion_or_fail(
+            &self.pool,
+            &self.app,
+            &self.audit_context,
+            unit.clone(),
+            remote_id,
+            uploaded_count,
+        )
+        .await?
+        {
+            UploadUnitCompletion::PendingAlbum(pending) => pending_album_units.push(*pending),
+            UploadUnitCompletion::Complete(completion) => {
+                queue_results.extend_from_slice(completion.queue_results());
+                *uploaded += completion.uploaded_count();
+            }
+            UploadUnitCompletion::Failed { completion, .. } => {
+                queue_results.extend_from_slice(completion.queue_results());
+            }
+        }
+        self.progress.advance(&self.app, unit.byte_size());
+        Ok(())
+    }
+
+    async fn upload_missing_units(
+        &self,
+        upload_units: Vec<HashedUploadUnit>,
+        active_work: &ProcessingContext,
+        pending_album_units: &mut Vec<PendingAlbumUnit>,
+        queue_results: &mut Vec<(String, String)>,
+        uploaded: &mut usize,
+    ) -> Result<(), String> {
+        let mut pending = upload_units.into_iter();
+        let mut uploads = FuturesUnordered::new();
+        while can_start_work(&self.coordinator) && uploads.len() < self.upload_parallelism {
+            let Some((unit, cancellation)) = next_active_upload_unit(&mut pending, active_work)
+            else {
+                break;
+            };
+            uploads.push(upload_unit(
+                unit,
+                self.client.clone(),
+                self.pool.clone(),
+                self.app.clone(),
+                self.progress.clone(),
+                self.audit_context.clone(),
+                cancellation,
+                self.sidecar_cache.clone(),
+            ));
+        }
+        while let Some(outcome) = uploads.next().await {
+            let outcome = outcome?;
+            *uploaded += outcome.uploaded;
+            queue_results.extend(outcome.queue_results);
+            if let Some(pending_album) = outcome.pending_album_unit {
+                pending_album_units.push(pending_album);
+            }
+            if can_start_work(&self.coordinator) {
+                while can_start_work(&self.coordinator) && uploads.len() < self.upload_parallelism {
+                    let Some((unit, cancellation)) =
+                        next_active_upload_unit(&mut pending, active_work)
+                    else {
+                        break;
+                    };
+                    uploads.push(upload_unit(
+                        unit,
+                        self.client.clone(),
+                        self.pool.clone(),
+                        self.app.clone(),
+                        self.progress.clone(),
+                        self.audit_context.clone(),
+                        cancellation,
+                        self.sidecar_cache.clone(),
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -573,46 +634,6 @@ struct UploadOutcome {
     uploaded: usize,
     queue_results: Vec<(String, String)>,
     pending_album_unit: Option<PendingAlbumUnit>,
-}
-
-#[cfg(test)]
-async fn persist_with_reconciliation<Persist, PersistFuture, Check, CheckFuture>(
-    hashes: &[String],
-    mut persist: Persist,
-    mut check: Check,
-) -> Result<bool, String>
-where
-    Persist: FnMut() -> PersistFuture,
-    PersistFuture: std::future::Future<Output = Result<(), String>>,
-    Check: FnMut(Vec<String>) -> CheckFuture,
-    CheckFuture:
-        std::future::Future<Output = Result<Vec<crate::immich::BulkCheckDuplicate>, String>>,
-{
-    let initial_error = match persist().await {
-        Ok(()) => return Ok(false),
-        Err(error) => error,
-    };
-    let existing = check(hashes.to_vec()).await.map_err(|error| {
-        format!(
-            "Remote upload succeeded but local state persistence could not be reconciled (initial persistence error: {}; remote check error: {}).",
-            initial_error, error
-        )
-    })?;
-    if !hashes
-        .iter()
-        .all(|hash| existing.iter().any(|d| &d.hash == hash))
-    {
-        return Err(format!(
-            "Remote upload succeeded but local state persistence could not be reconciled (initial persistence error: {}; not every upload-unit asset was found remotely).",
-            initial_error
-        ));
-    }
-    persist().await.map(|()| true).map_err(|error| {
-        format!(
-            "Remote upload succeeded but local state persistence could not be reconciled (initial persistence error: {}; retry persistence error: {}).",
-            initial_error, error
-        )
-    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -949,106 +970,6 @@ mod tests {
     #[test]
     fn bulk_check_chunk_size_is_bounded_to_100() {
         assert_eq!(BULK_CHECK_CHUNK_SIZE, 100);
-    }
-
-    #[tokio::test]
-    async fn reconciliation_retries_persistence_without_another_upload() {
-        let persistence_attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let bulk_checks = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let upload_requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(1));
-        let hashes = vec!["image-hash".to_string(), "video-hash".to_string()];
-        let attempts = persistence_attempts.clone();
-        let checks = bulk_checks.clone();
-        let uploads = upload_requests.clone();
-
-        let reconciled = persist_with_reconciliation(
-            &hashes,
-            move || {
-                let attempt = attempts.fetch_add(1, Ordering::SeqCst);
-                async move {
-                    if attempt == 0 {
-                        Err("injected first persistence failure".to_string())
-                    } else {
-                        Ok(())
-                    }
-                }
-            },
-            move |requested_hashes| {
-                checks.fetch_add(1, Ordering::SeqCst);
-                async move {
-                    Ok(requested_hashes
-                        .into_iter()
-                        .map(|hash| crate::immich::BulkCheckDuplicate {
-                            hash,
-                            asset_id: None,
-                        })
-                        .collect())
-                }
-            },
-        )
-        .await;
-
-        assert_eq!(reconciled, Ok(true));
-        assert_eq!(persistence_attempts.load(Ordering::SeqCst), 2);
-        assert_eq!(bulk_checks.load(Ordering::SeqCst), 1);
-        assert_eq!(uploads.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn incomplete_reconciliation_aborts_without_retry_or_terminal_result() {
-        let persistence_attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let hashes = vec!["image-hash".to_string(), "video-hash".to_string()];
-        let attempts = persistence_attempts.clone();
-        let queue_results: Vec<(String, String)> = Vec::new();
-
-        let result = persist_with_reconciliation(
-            &hashes,
-            move || {
-                attempts.fetch_add(1, Ordering::SeqCst);
-                async { Err("injected persistence failure".to_string()) }
-            },
-            |_| async {
-                Ok(vec![crate::immich::BulkCheckDuplicate {
-                    hash: "image-hash".to_string(),
-                    asset_id: None,
-                }])
-            },
-        )
-        .await;
-
-        assert!(result.unwrap_err().contains("not every upload-unit asset"));
-        assert_eq!(persistence_attempts.load(Ordering::SeqCst), 1);
-        assert!(queue_results.is_empty());
-    }
-
-    #[tokio::test]
-    async fn failed_reconciliation_retry_aborts_without_terminal_result() {
-        let persistence_attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let hashes = vec!["image-hash".to_string(), "video-hash".to_string()];
-        let attempts = persistence_attempts.clone();
-        let queue_results: Vec<(String, String)> = Vec::new();
-
-        let result = persist_with_reconciliation(
-            &hashes,
-            move || {
-                attempts.fetch_add(1, Ordering::SeqCst);
-                async { Err("injected persistence failure".to_string()) }
-            },
-            |requested_hashes| async move {
-                Ok(requested_hashes
-                    .into_iter()
-                    .map(|hash| crate::immich::BulkCheckDuplicate {
-                        hash,
-                        asset_id: None,
-                    })
-                    .collect())
-            },
-        )
-        .await;
-
-        assert!(result.unwrap_err().contains("retry persistence error"));
-        assert_eq!(persistence_attempts.load(Ordering::SeqCst), 2);
-        assert!(queue_results.is_empty());
     }
 
     #[test]

@@ -75,8 +75,8 @@ pub(crate) fn log_to_ui_folder_error(
     );
 }
 
-pub(crate) fn log_to_ui_file_error(
-    app: &AppHandle,
+pub(crate) fn log_to_ui_file_error<R: Runtime>(
+    app: &AppHandle<R>,
     level: &str,
     message: &str,
     key: &str,

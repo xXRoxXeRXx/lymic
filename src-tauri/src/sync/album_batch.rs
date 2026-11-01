@@ -52,10 +52,10 @@ pub(crate) async fn resolve_duplicate_remote_id(
 
 /// Batches all pending units by `AlbumId`, invokes Immich's `add_assets_to_album` API,
 /// updates database sync states, emits audit logs and UI events, and tracks results.
-pub(crate) async fn assign_pending_album_units(
+pub(crate) async fn assign_pending_album_units<R: tauri::Runtime>(
     client: &Arc<ImmichClient>,
     pool: &SqlitePool,
-    app: &tauri::AppHandle,
+    app: &tauri::AppHandle<R>,
     audit_context: &SyncAuditContext,
     pending_units: Vec<PendingAlbumUnit>,
     queue_results: &mut Vec<(String, String)>,
@@ -182,4 +182,138 @@ async fn mark_pending_unit_failed(
     let failure = crate::sync::completion::fail_upload_unit(pool, &item.unit, reason).await?;
     queue_results.extend_from_slice(failure.queue_results());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        auth::AuthConfig,
+        db::{self, QueueAsset},
+        media::model::{Checksums, SyncAsset},
+        sync::completion::begin_upload_unit_completion,
+    };
+    use sqlx::{sqlite::SqlitePoolOptions, Row};
+    use tokio::{io::AsyncWriteExt, net::TcpListener};
+
+    async fn test_pool() -> SqlitePool {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    }
+
+    fn upload_unit(album_id: AlbumId) -> HashedUploadUnit {
+        HashedUploadUnit {
+            image: SyncAsset {
+                path: "photo.jpg".to_string(),
+                size: 123,
+                checksums: Some(Checksums {
+                    sha1_base64: "photo-hash".to_string(),
+                }),
+                mtime: 42,
+                target_album_id: Some(album_id),
+                remote_id: None,
+            },
+            live_photo_video: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn assigns_a_pending_album_unit_then_records_its_terminal_completion() {
+        let pool = test_pool().await;
+        let album_id = AlbumId::new("album-1");
+        db::enqueue_sync_assets(
+            &pool,
+            &[QueueAsset {
+                path: "photo.jpg",
+                size: 123,
+                mtime: 42,
+                target_album_id: Some(&album_id),
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        let pending = begin_upload_unit_completion(
+            &pool,
+            upload_unit(album_id.clone()),
+            RemoteAssetId::new("remote-photo"),
+            1,
+        )
+        .await
+        .unwrap()
+        .into_pending_album()
+        .unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let response = r#"[{"id":"remote-photo","success":true}]"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        response.len(),
+                        response
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+        });
+        let server_url = format!("http://{address}");
+        let client = Arc::new(
+            ImmichClient::new(server_url.clone(), "test-key".to_string(), true, None, None)
+                .unwrap(),
+        );
+        let app = tauri::test::mock_app();
+        let audit_context = SyncAuditContext::from_credentials(
+            &AuthConfig {
+                server_url,
+                api_key: "test-key".to_string(),
+                allow_local_http: true,
+                cloudflare_client_id: None,
+                cloudflare_client_secret: None,
+            },
+            "manual_sync",
+        );
+        let mut queue_results = Vec::new();
+        let mut uploaded = 0;
+
+        assign_pending_album_units(
+            &client,
+            &pool,
+            app.handle(),
+            &audit_context,
+            vec![pending],
+            &mut queue_results,
+            &mut uploaded,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            queue_results,
+            [("photo.jpg".to_string(), "SYNCED".to_string())]
+        );
+        assert_eq!(uploaded, 1);
+        let state =
+            sqlx::query("SELECT status, remote_id FROM sync_state WHERE local_path = 'photo.jpg'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(state.get::<String, _>("status"), "SYNCED");
+        assert_eq!(
+            state.get::<Option<String>, _>("remote_id").as_deref(),
+            Some("remote-photo")
+        );
+    }
 }
