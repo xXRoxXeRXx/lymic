@@ -96,8 +96,8 @@ if ($manifestXml -notmatch 'Name="runFullTrust"') {
     $errors += "Missing required restricted capability: 'runFullTrust'"
 }
 
-if ($manifestXml -notmatch 'Name="broadFileSystemAccess"') {
-    $errors += "Missing required restricted capability: 'broadFileSystemAccess'"
+if ($manifestXml -match 'Name="broadFileSystemAccess"') {
+    $errors += "Disallowed restricted capability found: 'broadFileSystemAccess' is not needed for FullTrust Win32 apps and causes Store certification rejections"
 }
 
 if ($errors.Count -gt 0) {
