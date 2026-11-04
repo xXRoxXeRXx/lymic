@@ -33,6 +33,35 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("sync controller", () => {
+  it("reports a backend synchronization error reason", async () => {
+    events.listen.mockResolvedValue(vi.fn());
+    const reportError = vi.fn();
+    const controller = createController(createSyncAdapter(), { reportError });
+    controller.startLifecycle();
+    controller.startSubscriptions();
+    await Promise.resolve();
+
+    const syncErrorListener = events.listen.mock.calls.find(([event]) => event === "sync-error")?.[1];
+    syncErrorListener?.({ payload: "Immich is unavailable" });
+
+    expect(reportError).toHaveBeenCalledWith("Immich is unavailable");
+    expect(controller.status.syncStatus).toBe("error");
+  });
+
+  it("reports an error when starting synchronization fails", async () => {
+    const error = new Error("Immich is unavailable");
+    const reportError = vi.fn();
+    const controller = createController(createSyncAdapter({
+      startSync: vi.fn().mockRejectedValue(error),
+    }), { reportError });
+    controller.startLifecycle();
+
+    await controller.status.onSyncAction();
+
+    expect(reportError).toHaveBeenCalledWith(error);
+    expect(controller.status.syncStatus).toBe("error");
+  });
+
   it("clears the last synchronization time with the remaining user state", async () => {
     const controller = createController(createSyncAdapter());
     controller.startLifecycle();

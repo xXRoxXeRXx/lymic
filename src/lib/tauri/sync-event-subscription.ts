@@ -7,7 +7,7 @@ export interface SyncEventHandlers {
   onSnapshot(snapshot: SyncSnapshot): void;
   onStarted(): void;
   onTransferStats(stats: TransferStatsEvent): void;
-  onError(): void;
+  onError(reason?: string): void;
   onTriggerSync(): void;
   onLog(message: UiLogMessage): void;
   onIdle(): void;
@@ -33,7 +33,7 @@ export function subscribeToSyncEvents(handlers: SyncEventHandlers, isActive: () 
   add("sync-progress-snapshot", (event) => handlers.onSnapshot(event.payload as SyncSnapshot));
   add("sync-paused", (event) => handlers.onSnapshot(event.payload as SyncSnapshot));
   add("sync-resumed", (event) => handlers.onSnapshot(event.payload as SyncSnapshot));
-  add("sync-error", () => handlers.onError());
+  add("sync-error", (event) => handlers.onError(typeof event.payload === "string" ? event.payload : undefined));
   add("trigger-sync", () => handlers.onTriggerSync());
   add("log-message", (event) => handlers.onLog(event.payload as UiLogMessage));
   add("sync-idle", () => handlers.onIdle());

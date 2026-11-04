@@ -181,6 +181,7 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
       await finishSync(await adapter.startSync());
     } catch (error) {
       console.error("Sync failed", error);
+      options.reportError(error);
       syncStatus = "error";
     }
   }
@@ -243,10 +244,11 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
         estimatedSecondsRemaining = stats.estimatedSecondsRemaining;
       },
       onSnapshot: applySyncSnapshot,
-      onError() {
+      onError(reason) {
         if (!mounted) return;
         syncStatus = "error";
         progress = 0;
+        if (reason?.trim()) options.reportError(reason);
       },
       onTriggerSync: startSync,
       onLog: addLog,

@@ -12,6 +12,19 @@ function handlers(): SyncEventHandlers {
 }
 
 describe("subscribeToSyncEvents", () => {
+  it("forwards a sync error reason to its handler", async () => {
+    tauri.listen.mockResolvedValue(vi.fn());
+    const eventHandlers = handlers();
+
+    subscribeToSyncEvents(eventHandlers, () => true);
+    await Promise.resolve();
+
+    const syncErrorListener = tauri.listen.mock.calls.find(([event]) => event === "sync-error")?.[1];
+    syncErrorListener?.({ payload: "Immich is unavailable" });
+
+    expect(eventHandlers.onError).toHaveBeenCalledWith("Immich is unavailable");
+  });
+
   it("unlistens registrations that resolve after disposal", async () => {
     let resolve!: (unlisten: () => void) => void;
     const unlisten = vi.fn();
