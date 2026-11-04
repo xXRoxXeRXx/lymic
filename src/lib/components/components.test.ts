@@ -394,6 +394,32 @@ describe("FolderList and ActivityLog", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("locks exclusion-pattern controls until a pending save finishes", async () => {
+    let resolveSave!: (result: boolean) => void;
+    const onSave = vi.fn(() => new Promise<boolean>((resolve) => { resolveSave = resolve; }));
+    render(ExclusionPatternsModal, {
+      folder: { id: 1, path: "C:/photos", recursive: true, target_album_id: null, exclusion_patterns: ["*.mp4"] },
+      onSave,
+      onClose: vi.fn(),
+    });
+
+    const save = screen.getByRole("button", { name: "Save exclusions" });
+    await fireEvent.click(save);
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+
+    expect(save).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close exclusion settings" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove exclusion: *.mp4" })).toBeDisabled();
+
+    await fireEvent.click(save);
+    expect(onSave).toHaveBeenCalledOnce();
+
+    resolveSave(false);
+    await vi.waitFor(() => expect(save).toBeEnabled());
+  });
+
   it("loads the name when a folder is assigned an album created after mount", async () => {
     tauri.invoke
       .mockResolvedValueOnce([])
