@@ -3,9 +3,6 @@ type: security architecture
 title: Authentication and Credential Safety
 description: How Lymic validates Immich login details, constrains server URLs, stores credentials in the native keyring, and prevents credential values from entering audit diagnostics.
 tags: [security, authentication, credentials, keyring, immich]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-19T15:10:01.321Z
 sources:
   - id: openwiki-source-23775c3de52f3ab95a13cb8b
     resource: repo://README.md

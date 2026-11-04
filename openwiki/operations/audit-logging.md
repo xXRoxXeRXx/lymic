@@ -1,11 +1,11 @@
 ---
 type: operational guide
 title: Audit Logging and Operational Signals
-description: Structured local audit events and UI signals expose startup, watched-folder, synchronization, and shutdown behavior for troubleshooting. This guide explains event safety, bounded persistence, failure reporting, notifications, and transfer telemetry.
+description: Structured local audit records and UI operational signals make startup, watched-folder, synchronization, and shutdown behavior diagnosable. Covers safe event contents, bounded asynchronous persistence, failure reporting, notifications, and transfer telemetry.
 tags: [audit, operations, diagnostics, logging, synchronization]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-25T12:52:45.890Z
+    at: 2026-11-04T15:53:48.838Z
 sources:
   - id: openwiki-source-3638749eb6f61a23896edb4d
     resource: repo://src-tauri/src/app/background.rs
@@ -27,7 +27,9 @@ sources:
     resource: repo://src-tauri/src/sync/processor.rs
   - id: openwiki-source-b2f629aa0dbd7cd17fa4902e
     resource: repo://src-tauri/src/sync/queue_runner.rs
-generated: { by: "openwiki/0.7.2", at: "2026-10-25T12:52:45.890Z" }
+  - id: openwiki-source-d86d6ce7cb2c85ce2672a18b
+    resource: repo://src-tauri/src/sync/service.rs
+generated: { by: "openwiki/0.7.2", at: "2026-11-04T15:53:48.838Z" }
 ---
 
 # Audit Logging and Operational Signals
@@ -86,6 +88,8 @@ A repaired database has two signals: a `database.repaired` warning audit event c
 The synchronization service creates `SyncAuditContext` only after it has credentials and has claimed a runner. Its source label distinguishes manual, retry, watcher, startup, deferred-folder, folder-change, removable-media, and recovery runs. The runner emits context-correlated `sync.started`, `sync.paused`, `sync.resumed`, and terminal `sync.completed` events. Its completion detail contains processed, uploaded, and failed counts; a failed count makes the completion outcome `failure` with warning severity.
 
 Login emits `auth.login` started and terminal records under one operation ID. Upload processing emits per-file started and terminal records with a separate `file_operation_id` embedded in the upload details, while retaining the sync context for the surrounding run. This supports following a login or run and then diagnosing an individual transfer.
+
+The service persists producer output to the durable sync queue before it claims or joins a runner. It creates the credential-derived `SyncAuditContext` only for a newly claimed run after credentials are available. A pre-run failure (for example, no credentials or invalid server configuration) transitions the durable job to `FAILED` and emits a `sync.aborted` failure audit event with the source label and a sanitized reason. An unexpected failure from an asynchronously spawned automatic runner instead emits the `sync-error` UI event and attempts to mark the job `FAILED`; operators should consult that UI signal and durable job state because this path does not itself add a terminal runner audit record.
 
 The runner also drives live, non-audit telemetry: it emits `sync-started`, `sync-paused`, `sync-resumed`, progress snapshots, and `sync-transfer-stats` Tauri events, while updating tray status. Transfer statistics are emitted immediately at run start, periodically only when the tracker says they changed, and once more inactive when the runner exits through its cleanup guard. They are UI/status telemetry rather than durable audit evidence.
 

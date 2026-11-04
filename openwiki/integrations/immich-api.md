@@ -3,12 +3,11 @@ type: integration
 title: Immich API Integration
 description: The authenticated, typed boundary between Lymic and Immich, covering URL and credential safeguards, duplicate detection, streamed uploads, album API calls, and the handoff to local synchronization state.
 tags: [immich, api, authentication, uploads, albums, synchronization]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-25T12:52:45.890Z
 sources:
   - id: openwiki-source-d0aa70773e481ea79113c4ad
     resource: repo://src-tauri/src/auth.rs
+  - id: openwiki-source-5c8cfd03344143eaad8d7595
+    resource: repo://src-tauri/src/commands/albums.rs
   - id: openwiki-source-0fc5ba992451ba2dccaef07f
     resource: repo://src-tauri/src/commands/auth.rs
   - id: openwiki-source-de913ff9671222dd064e7bf7
@@ -29,7 +28,12 @@ sources:
     resource: repo://src-tauri/src/sync/completion.rs
   - id: openwiki-source-bcad6545247450f4a447e642
     resource: repo://src-tauri/src/sync/processor.rs
-generated: { by: "openwiki/0.7.2", at: "2026-10-25T12:52:45.890Z" }
+  - id: openwiki-source-fd5e4aa90e3b24f760c796f0
+    resource: repo://src-tauri/src/sync/retry.rs
+generated: { by: "openwiki/0.7.2", at: "2026-11-04T15:53:48.838Z" }
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-11-04T15:53:48.838Z
 ---
 
 # Immich API Integration
@@ -120,7 +124,15 @@ This is local queue and completion control flow; grouping and failure marking ar
 
 ## Failure behavior and change boundaries
 
-The processor honors pause and per-path cancellation before starting further hashes, checks, uploads, or album assignment; cancellation of an in-flight upload produces no terminal queue result. New uploads are executed with configured upload parallelism, while the batch check remains bounded at 100 units. Remote upload failure marks every asset in the upload unit failed locally. If a successful upload cannot be durably completed in local state, the production processor reports the completion failure and marks the unit failed; it does not recheck the remote hashes or retry persistence in that path. A `persist_with_reconciliation` helper exists only under `#[cfg(test)]`, so it is not a production duplicate-upload safeguard.
+The processor honors pause and per-path cancellation before starting further hashes, checks, uploads, or album assignment; cancellation of an in-flight upload produces no terminal queue result. New uploads are executed with configured upload parallelism, while the batch check remains bounded at 100 units. Remote upload failure marks every asset in the upload unit failed locally. If a successful upload cannot be durably completed in local state, the production processor reports the completion failure and marks the unit failed; it does not recheck remote hashes or retry persistence in that path.
+
+### Bulk-check retries
+
+Only duplicate checks receive an explicit retry policy. `check_assets_exist_with_backoff` makes at most three attempts. Retryable failures wait one second after the first failed attempt and two seconds after the second; a third failure aborts the sync. `401 Unauthorized` and `403 Forbidden` are classified as non-retryable and abort immediately. The retry layer emits a warning UI event and a `file.bulk_check.failed` audit event for each scheduled retry; terminal or non-retryable failures are emitted as errors. It passes errors through the audit context's safe-error transformation before putting them in UI or audit payloads, so server responses cannot expose the configured server URL or credentials through those reporting paths.
+
+### UI album entrypoints
+
+The `get_albums` and `create_album` Tauri commands are thin authenticated entrypoints. Each loads the stored credentials, rejects an unauthenticated caller, constructs `ImmichClient` with the transport settings, and delegates to the matching album method. `create_album` additionally rejects a blank name before loading credentials; the client repeats the trimmed-name validation, retaining the boundary invariant for non-UI callers.
 
 When extending this integration, keep the split explicit:
 

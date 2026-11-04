@@ -1,11 +1,11 @@
 ---
 type: persistence
-title: Local State and Durable Queue
-description: SQLite-backed local state, schema evolution, watched-folder settings, and the durable synchronization queue with recovery and completion semantics.
+title: Local Persistence and Recovery
+description: SQLite-backed watched-folder configuration, synchronization queue and cache records, schema recovery, and the invariants that make synchronization resumable.
 tags: [persistence, sqlite, synchronization, recovery]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-25T12:52:45.890Z
+    at: 2026-11-04T15:53:48.838Z
 sources:
   - id: openwiki-source-941c10286ffa11a6881678ef
     resource: repo://src-tauri/migrations/0004_sync_queue.sql
@@ -23,8 +23,6 @@ sources:
     resource: repo://src-tauri/src/db/folders.rs
   - id: openwiki-source-c33d47a5d8372d5284fcc388
     resource: repo://src-tauri/src/db/init.rs
-  - id: openwiki-source-6a1ed5462a7a105651214937
-    resource: repo://src-tauri/src/db/mod.rs
   - id: openwiki-source-341e376f65355ac7aab7d324
     resource: repo://src-tauri/src/db/queue.rs
   - id: openwiki-source-39664d4d2a3ed38418925c30
@@ -37,10 +35,10 @@ sources:
     resource: repo://src-tauri/src/sync/queue_runner.rs
   - id: openwiki-source-d86d6ce7cb2c85ce2672a18b
     resource: repo://src-tauri/src/sync/service.rs
-generated: { by: "openwiki/0.7.2", at: "2026-10-25T12:52:45.890Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-04T15:53:48.838Z" }
 ---
 
-# Local State and Durable Queue
+# Local Persistence and Recovery
 
 Lymic stores operational state in `immich_sync.db` in the application data directory. SQLite is the durable boundary for watched-folder configuration, synchronization work and outcomes, the upload-concurrency preference, and the local hash cache. Credentials are held separately in the platform keyring; see [Authentication and Credential Security](../security/authentication.md).
 
@@ -140,7 +138,7 @@ At startup, `recover_sync_job` converts a persisted `RUNNING` job to `PAUSED` be
 
 Removing a folder configuration deletes its `watched_folders` row, but synchronization data is explicitly managed. Folder-work checks and folder discard normalize paths and use component-aware containment, avoiding a false match such as `drive2` beneath `drive`. Folder-scoped discard deletes matching queue rows and only non-`SYNCED` `sync_state` rows. Synced state is retained so hash and duplicate knowledge survive folder removal. The same transaction recomputes the snapshot and makes the job idle when no pending work remains.
 
-Discarding selected failed paths intentionally deletes the selected paths from both `sync_state` and `sync_queue`, then recomputes counts in the same transaction. Changing exclusions discards only pending queue paths supplied by the caller; materialized work is outside that operation. Retrying failures within a folder targets that folder and descendants, clears failure reasons, restores matching queue and state rows to `PENDING`, and moves an idle job to `RUNNING` if it reset queue work.
+Discarding selected failed paths intentionally deletes the selected paths from both `sync_state` and `sync_queue`, then recomputes counts in the same transaction. Changing exclusions discards only pending queue paths supplied by the caller; materialized work is outside that operation. Retrying failures within a folder targets that folder and descendants, clears failure reasons, and restores matching queue and state rows to `PENDING`. If queue work was reset, it changes an `IDLE` or `FAILED` job to `RUNNING`; an already-running job retains its current path while counts are refreshed.
 
 For a removable volume whose mount path changes, `remap_watched_folder_path` transactionally updates the watched-folder path plus matching descendant paths in `sync_state`, `sync_queue.local_path`, `sync_queue.upload_unit_id`, and `sync_jobs.current_path`. This is a coordinated persistent-state change rather than a watched-folder-only update.
 
@@ -152,10 +150,10 @@ Repair is intentionally narrow. SQLite corruption (`SQLITE_CORRUPT` primary code
 
 1. Attempts a short read-only folder query to salvage watched folders.
 2. Moves the database to a collision-free timestamped `.corrupted.*` name, retrying rename and falling back to copy then removal; matching `-wal` and `-shm` files move with it.
-3. Creates and migrates a fresh database, then restores each salvageable folder's path, recursion, and target album.
+3. Creates and migrates a fresh database, then restores each salvageable folder's settings and, where available, its removable-volume binding.
 4. Presents a repair notice and records the `database.repaired` audit event with the backup path, reason, and restored-folder count.
 
-Only those three watched-folder fields are restored. Settings, queue history, hash/cache state, removable bindings, and exclusion patterns are not restored. If the fresh database cannot be initialized, startup fails rather than reporting repair success. After initialization, startup reloads watched folders and attempts to register each watcher; unavailable folders are deferred and failures are reported without stopping registration of remaining folders.
+Repair salvages a watched folder's path, recursive flag, target album, and exclusion patterns. It also attempts to restore that folder's removable-volume binding (volume ID and relative path) after the new folder row is created; failure to restore an individual folder or binding does not abort recovery. Settings, queue history, and hash/cache state are not restored. If the fresh database cannot be initialized, startup fails rather than reporting repair success. After initialization, startup reloads watched folders and attempts to register each watcher; unavailable folders are deferred and failures are reported without stopping registration of remaining folders.
 
 ```mermaid
 flowchart TD
@@ -178,7 +176,7 @@ flowchart TD
 
 - Preserve the singleton constraint, composite queue identity, sequence ordering, upload-unit reconstruction, and the conditional no-pending completion check when changing queue storage.
 - Keep related queue and state mutations transactional, especially for upload units, count snapshots, folder discard, retry, and path remapping.
-- Extend both read-only salvage and `restore_folder` if a new watched-folder field must survive database repair; current recovery intentionally preserves only path, recursion, and target album.
+- Extend both read-only salvage and restoration if a new watched-folder field or binding must survive database repair. Current recovery preserves path, recursion, target album, exclusion patterns, and removable-volume bindings, but not settings, queue history, or cache state.
 - Test a new migration against both a new database and an existing one. The database and runner tests cover ordering and deduplication, pause preservation, terminal bytes and completion, settings validation, nanosecond cache invalidation, upload-unit atomicity, folder deletion/remapping, retry isolation, partial processor outcomes, exclusion filtering at the queue boundary, recovery, WAL/SHM quarantine, checksum mismatch, and failures that must not trigger repair.
 
 ## Related pages
