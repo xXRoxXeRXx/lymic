@@ -4,21 +4,11 @@
   import { waitLocale } from "svelte-i18n";
   import { onMount } from "svelte";
   import { setupBrowserInteractions } from "#lib/prevent-browser-defaults.js";
+  import { initializeThemeFromStorage } from "#lib/controllers/preferences-controller.svelte.js";
 
-  if (typeof window !== "undefined") {
-    const savedTheme = localStorage.getItem("lymic-theme");
-    const themePreference = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system"
-      ? savedTheme
-      : "system";
-    const effectiveTheme = themePreference === "system"
-      ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-      : themePreference;
-    document.documentElement.dataset.theme = effectiveTheme;
+  let { children } = $props();
 
-    if (savedTheme && savedTheme !== themePreference) {
-      localStorage.removeItem("lymic-theme");
-    }
-  }
+  initializeThemeFromStorage();
 
   onMount(() => {
     return setupBrowserInteractions();
@@ -30,5 +20,5 @@
     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
   </div>
 {:then}
-  <slot />
+  {@render children?.()}
 {/await}

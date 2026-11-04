@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPreferencesController } from "./preferences-controller.svelte";
+import {
+  createPreferencesController,
+  initializeThemeFromStorage,
+} from "./preferences-controller.svelte";
 import { localeCatalog } from "../i18n/locale-catalog";
 import type { PreferencesDesktopAdapter } from "../tauri/desktop-adapter";
 
@@ -17,6 +20,24 @@ function createDesktopAdapter(overrides: Partial<PreferencesDesktopAdapter> = {}
 }
 
 describe("preferences controller", () => {
+  it("initializes a valid stored theme and applies it to the document", () => {
+    localStorage.setItem("lymic-theme", "dark");
+
+    expect(initializeThemeFromStorage()).toBe("dark");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("clears an invalid stored theme and applies the system theme", () => {
+    localStorage.setItem("lymic-theme", "sepia");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: false }));
+
+    expect(initializeThemeFromStorage()).toBe("system");
+    expect(localStorage.getItem("lymic-theme")).toBeNull();
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+
+    vi.unstubAllGlobals();
+  });
+
   it("restores the select value when upload parallelism persistence fails", async () => {
     const adapter = createDesktopAdapter({ setUploadParallelism: vi.fn().mockRejectedValue(new Error("Database unavailable")) });
     const reportError = vi.fn();

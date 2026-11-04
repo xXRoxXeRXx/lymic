@@ -3,6 +3,32 @@ import { isSupportedLocale } from "../i18n";
 import { localeCatalog, type LocaleCatalogEntry } from "../i18n/locale-catalog";
 import type { PreferencesDesktopAdapter } from "../tauri/desktop-adapter";
 
+const themeStorageKey = "lymic-theme";
+
+function applyThemePreference(themePreference: ThemePreference) {
+  if (typeof window === "undefined") return;
+  document.documentElement.dataset.theme = themePreference === "system"
+    ? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : themePreference;
+}
+
+export function initializeThemeFromStorage(): ThemePreference {
+  if (typeof window === "undefined") return "system";
+
+  const savedTheme = localStorage.getItem(themeStorageKey);
+  const themePreference: ThemePreference = savedTheme === "system" || savedTheme === "light" || savedTheme === "dark"
+    ? savedTheme
+    : "system";
+
+  if (savedTheme && savedTheme !== themePreference) {
+    localStorage.removeItem(themeStorageKey);
+  }
+
+  applyThemePreference(themePreference);
+
+  return themePreference;
+}
+
 export function createPreferencesController(options: {
   reportError(error: unknown): void;
   addLog(message: UiLogMessage): void;
@@ -11,11 +37,7 @@ export function createPreferencesController(options: {
   adapter: PreferencesDesktopAdapter;
 }) {
   const { adapter } = options;
-  const themeStorageKey = "lymic-theme";
-  const savedTheme = typeof localStorage === "undefined" ? null : localStorage.getItem(themeStorageKey);
-  const initialTheme: ThemePreference = savedTheme === "system" || savedTheme === "light" || savedTheme === "dark"
-    ? savedTheme
-    : "system";
+  const initialTheme = initializeThemeFromStorage();
   let themePreference = $state<ThemePreference>(initialTheme);
   let isAutostartEnabled = $state(false);
   let uploadParallelism = $state(3);
@@ -24,15 +46,8 @@ export function createPreferencesController(options: {
   let listener: (() => void) | undefined;
   let locales = $state<readonly LocaleCatalogEntry[]>(localeCatalog);
 
-  if (savedTheme && savedTheme !== initialTheme && typeof localStorage !== "undefined") {
-    localStorage.removeItem(themeStorageKey);
-  }
-
   function applyTheme() {
-    if (typeof window === "undefined") return;
-    document.documentElement.dataset.theme = themePreference === "system"
-      ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-      : themePreference;
+    applyThemePreference(themePreference);
   }
 
   function setThemePreference(value: ThemePreference) {
