@@ -48,7 +48,10 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (folder && event.key === "Escape") onClose();
+    if (folder && event.key === "Escape" && !saving) {
+      event.preventDefault();
+      onClose();
+    }
   }
 
   $effect(() => {
@@ -65,7 +68,8 @@
 
 {#if folder}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in" role="presentation" onclick={handleBackdropClick}>
-    <dialog open class="static m-0 w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900 text-slate-900 dark:text-slate-100 space-y-5" aria-labelledby="exclusion-patterns-dialog-title" aria-modal="true">
+    <!-- svelte-ignore a11y_no_redundant_roles The issue requires an explicit dialog role. -->
+    <dialog open role="dialog" class="static m-0 w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900 text-slate-900 dark:text-slate-100 space-y-5" aria-labelledby="exclusion-patterns-dialog-title" aria-modal="true">
       <div class="flex items-start justify-between gap-4">
         <div class="flex items-center gap-3 min-w-0">
           <div class="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-sky-400 shrink-0"><Folder class="w-5 h-5" /></div>

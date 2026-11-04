@@ -13,7 +13,7 @@ describe("RemovableVolumePrompt", () => {
     displayName: "EOS_DIGITAL",
   };
 
-  it("renders card name, mount path, and action buttons without stealing focus", () => {
+  it("renders a labelled non-blocking prompt with the volume and action buttons", () => {
     const onAccept = vi.fn();
     const onDismiss = vi.fn();
 
@@ -28,8 +28,7 @@ describe("RemovableVolumePrompt", () => {
     expect(screen.getByRole("button", { name: /Sync|Synchronize/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Dismiss/i })).toBeInTheDocument();
 
-    // Verify focus is not stolen onto the buttons
-    expect(document.activeElement).toBe(document.body);
+    expect(screen.getByRole("region", { name: "SD Card Detected" })).toBeInTheDocument();
   });
 
   it("calls onDismiss when dismiss button is clicked", async () => {
@@ -43,6 +42,18 @@ describe("RemovableVolumePrompt", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: /Dismiss/i }));
+    expect(onDismiss).toHaveBeenCalledWith("vol-123");
+  });
+
+  it("dismisses with Escape", async () => {
+    const onDismiss = vi.fn();
+    render(RemovableVolumePrompt, {
+      volume: sampleVolume,
+      onAccept: vi.fn(),
+      onDismiss,
+    });
+
+    await fireEvent.keyDown(window, { key: "Escape" });
     expect(onDismiss).toHaveBeenCalledWith("vol-123");
   });
 

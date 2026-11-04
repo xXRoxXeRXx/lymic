@@ -5,13 +5,14 @@ import "../i18n";
 import ActivityLog from "./ActivityLog.svelte";
 import DashboardView from "./DashboardView.svelte";
 import ExclusionPatternsModal from "./ExclusionPatternsModal.svelte";
-import FailedSyncsModal from "./FailedSyncsModal.svelte";
+import FailedSyncsPanel from "./FailedSyncsPanel.svelte";
 import FolderList from "./FolderList.svelte";
 import LoginView from "./LoginView.svelte";
 import SettingsView from "./SettingsView.svelte";
 import InfoView from "./InfoView.svelte";
 import { localeCatalog } from "../i18n/locale-catalog";
 import TargetAlbumModal from "./TargetAlbumModal.svelte";
+import UpdateDialog from "./UpdateDialog.svelte";
 import { createTargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 import type { SyncStatusViewState } from "../controllers/sync-controller.svelte";
 import type { WatchedFoldersViewState } from "../controllers/watched-folders-controller.svelte";
@@ -281,10 +282,10 @@ describe("DashboardView", () => {
   });
 });
 
-describe("FailedSyncsModal", () => {
+describe("FailedSyncsPanel", () => {
   it("toggles details and retries failures", async () => {
     const onRetry = vi.fn();
-    render(FailedSyncsModal, { failedSyncs: [{ localPath: "C:/failed.jpg", failureReason: "Rejected" }], syncStatus: "error", onRetry });
+    render(FailedSyncsPanel, { failedSyncs: [{ localPath: "C:/failed.jpg", failureReason: "Rejected" }], syncStatus: "error", onRetry });
     await fireEvent.click(screen.getByRole("button", { name: "1 failed file(s)" }));
     expect(screen.getByText("C:/failed.jpg")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Retry failed files" }));
@@ -337,6 +338,23 @@ describe("FolderList and ActivityLog", () => {
     expect(screen.getByText("*.mp4")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Save exclusions" }));
     expect(onSave).toHaveBeenCalledWith(1, ["*.mp4"]);
+  });
+
+  it("exposes dialog semantics and closes with Escape when not saving", async () => {
+    const onClose = vi.fn();
+    render(ExclusionPatternsModal, {
+      folder: { id: 1, path: "C:/photos", recursive: true, target_album_id: null },
+      onSave: vi.fn(),
+      onClose,
+    });
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAttribute("role", "dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAttribute("aria-labelledby", "exclusion-patterns-dialog-title");
+
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("rejects a single backslash inline before saving exclusion patterns", async () => {
@@ -668,6 +686,45 @@ describe("TargetAlbumModal", () => {
 
     await fireEvent.keyDown(window, { key: "Escape" });
     expect(onCancel).toHaveBeenCalledTimes(2);
+  });
+
+  it("exposes dialog semantics", async () => {
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "D:/Photos",
+      onConfirm: vi.fn(),
+      onCancel: vi.fn(),
+      catalogue: createCatalogue(),
+    });
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAttribute("role", "dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAttribute("aria-labelledby", "target-album-dialog-title");
+  });
+});
+
+describe("UpdateDialog", () => {
+  it("exposes dialog semantics and closes with Escape when not installing", async () => {
+    const onLater = vi.fn();
+    render(UpdateDialog, {
+      version: "1.2.3",
+      notes: "",
+      isSyncActive: false,
+      installState: "idle",
+      downloadedBytes: 0,
+      contentLength: null,
+      onLater,
+      onInstall: vi.fn(),
+    });
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAttribute("role", "dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAttribute("aria-labelledby", "update-dialog-title");
+
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(onLater).toHaveBeenCalledOnce();
   });
 });
 

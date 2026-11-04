@@ -51,7 +51,7 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (!isOpen) return;
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && !isCreating) {
       event.preventDefault();
       onCancel();
     }
@@ -83,8 +83,10 @@
     role="presentation"
     onclick={handleBackdropClick}
   >
+    <!-- svelte-ignore a11y_no_redundant_roles The issue requires an explicit dialog role. -->
     <dialog
       open
+      role="dialog"
       class="static m-0 w-full max-w-lg rounded-xl border border-slate-200 dark:border-zinc-800 bg-white p-6 shadow-xl dark:bg-zinc-900 text-slate-900 dark:text-slate-100 space-y-5"
       aria-labelledby="target-album-dialog-title"
       aria-modal="true"

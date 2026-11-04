@@ -12,7 +12,16 @@
     onAccept: (volume: DetectedVolume) => void;
     onDismiss: (volumeId: string) => void;
   } = $props();
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onDismiss(volume.volumeId);
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div
   role="region"

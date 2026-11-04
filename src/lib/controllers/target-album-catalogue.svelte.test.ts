@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AlbumsDesktopAdapter } from "../tauri/desktop-adapter";
-import { createTargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
+import { createTargetAlbumCatalogue } from "./target-album-catalogue.svelte";
 
 const album = (id: string, albumName: string) => ({ id, albumName });
 

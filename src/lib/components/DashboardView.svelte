@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t, locale } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
-  import FailedSyncsModal from "./FailedSyncsModal.svelte";
+  import FailedSyncsPanel from "./FailedSyncsPanel.svelte";
   import FolderList from "./FolderList.svelte";
   import ExclusionPatternsModal from "./ExclusionPatternsModal.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
@@ -107,7 +107,7 @@
       </div>
     {/if}
 
-    <FailedSyncsModal failedSyncs={status.failedSyncs} syncStatus={status.syncStatus} onRetry={status.onRetryFailedSyncs} />
+    <FailedSyncsPanel failedSyncs={status.failedSyncs} syncStatus={status.syncStatus} onRetry={status.onRetryFailedSyncs} />
   </section>
 
   <!-- Bottom: Folder List -->

@@ -28,11 +28,22 @@
   const progress = $derived(contentLength && contentLength > 0
     ? Math.min(100, Math.round((downloadedBytes / contentLength) * 100))
     : null);
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" && !isInstalling) {
+      event.preventDefault();
+      onLater();
+    }
+  }
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in" role="presentation">
+  <!-- svelte-ignore a11y_no_redundant_roles The issue requires an explicit dialog role. -->
   <dialog
     open
+    role="dialog"
     class="static m-0 w-full max-w-lg rounded-xl border border-slate-200 dark:border-zinc-800 bg-white p-6 shadow-xl dark:bg-zinc-900 text-slate-900 dark:text-slate-100 space-y-5"
     aria-labelledby="update-dialog-title"
     aria-modal="true"
