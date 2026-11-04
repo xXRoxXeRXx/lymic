@@ -1,4 +1,3 @@
-import { confirm, open } from "@tauri-apps/plugin-dialog";
 import type { DetectedVolume, WatchedFolder } from "../contracts";
 import type { WatchedFoldersDesktopAdapter } from "../tauri/desktop-adapter";
 import type { TargetAlbumCatalogue } from "./target-album-catalogue.svelte";
@@ -86,7 +85,7 @@ export function createWatchedFoldersController(
 
   async function promptForFolder(volume: DetectedVolume | null, logMessage: string) {
     try {
-      const selected = await open({
+      const selected = await adapter.openFolderDialog({
         directory: true,
         multiple: false,
         ...(volume ? { defaultPath: volume.mountPath } : {}),
@@ -137,7 +136,7 @@ export function createWatchedFoldersController(
       const warningMessage = result?.requiresSyncCancellation
         ? options.t("remove_folder_sync_warning")
         : options.t("remove_folder_confirmation");
-      const confirmed = await confirm(warningMessage, {
+      const confirmed = await adapter.confirm(warningMessage, {
         title: options.t("remove_folder"),
         kind: "warning",
       });

@@ -1,29 +1,24 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { UpdateDesktopAdapter } from "../tauri/desktop-adapter";
 import { createUpdateController } from "./update-controller.svelte";
-
-const tauri = vi.hoisted(() => ({ getVersion: vi.fn(), check: vi.fn(), relaunch: vi.fn() }));
-vi.mock("@tauri-apps/api/app", () => ({ getVersion: tauri.getVersion }));
-vi.mock("@tauri-apps/plugin-updater", () => ({ check: tauri.check }));
-vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: tauri.relaunch }));
 
 function createDesktopAdapter(overrides: Partial<UpdateDesktopAdapter> = {}): UpdateDesktopAdapter {
   return {
     recordWebviewStartupPhaseProbe: vi.fn(),
     getReleaseChannel: vi.fn().mockResolvedValue("github"),
+    getAppVersion: vi.fn().mockResolvedValue("1.0.0"),
+    checkForUpdate: vi.fn().mockResolvedValue(null),
+    downloadAndInstallUpdate: vi.fn(),
+    relaunchApp: vi.fn(),
+    openExternalUrl: vi.fn(),
     ...overrides,
   };
 }
 
 describe("update controller", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
 
   it("records startup phases through the desktop adapter", async () => {
     const adapter = createDesktopAdapter();
-    tauri.check.mockResolvedValue(null);
-    tauri.getVersion.mockResolvedValue("1.0.0");
     const controller = createUpdateController(() => false, adapter);
     controller.startLifecycle();
 
@@ -38,22 +33,22 @@ describe("update controller", () => {
   });
 
   it("does not install an available update while sync is active", async () => {
-    const downloadAndInstall = vi.fn();
-    tauri.check.mockResolvedValue({ version: "1.0.0", body: "", downloadAndInstall });
-    const controller = createUpdateController(() => true, createDesktopAdapter());
+    const adapter = createDesktopAdapter({
+      checkForUpdate: vi.fn().mockResolvedValue({ version: "1.0.0", body: "" }),
+      downloadAndInstallUpdate: vi.fn(),
+    });
+    const controller = createUpdateController(() => true, adapter);
     controller.startLifecycle();
 
     await controller.checkForUpdates();
     await controller.installUpdate();
 
-    expect(downloadAndInstall).not.toHaveBeenCalled();
-    expect(tauri.relaunch).not.toHaveBeenCalled();
+    expect(adapter.downloadAndInstallUpdate).not.toHaveBeenCalled();
+    expect(adapter.relaunchApp).not.toHaveBeenCalled();
   });
 
   it("in Store channel, does not contact updater endpoint and disables in-app update checks", async () => {
     const adapter = createDesktopAdapter({ getReleaseChannel: vi.fn().mockResolvedValue("store") });
-    tauri.check.mockResolvedValue(null);
-    tauri.getVersion.mockResolvedValue("1.0.0");
     const controller = createUpdateController(() => false, adapter, "store");
     controller.startLifecycle();
 
@@ -63,17 +58,16 @@ describe("update controller", () => {
     controller.startup();
 
     await vi.waitFor(() => expect(controller.appVersion).toBe("1.0.0"));
-    expect(tauri.check).not.toHaveBeenCalled();
+    expect(adapter.checkForUpdate).not.toHaveBeenCalled();
     expect(adapter.recordWebviewStartupPhaseProbe).not.toHaveBeenCalledWith("update_check_started");
     expect(adapter.recordWebviewStartupPhaseProbe).not.toHaveBeenCalledWith("update_check_complete");
 
     await controller.checkForUpdates();
-    expect(tauri.check).not.toHaveBeenCalled();
+    expect(adapter.checkForUpdate).not.toHaveBeenCalled();
     expect(controller.availableUpdate).toBeNull();
     expect(controller.isUpdateDialogOpen).toBe(false);
 
     await controller.installUpdate();
-    expect(tauri.relaunch).not.toHaveBeenCalled();
+    expect(adapter.relaunchApp).not.toHaveBeenCalled();
   });
 });
-

@@ -1,4 +1,3 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
 import type { CurrentUser } from "../contracts";
 import type { AuthDesktopAdapter } from "../tauri/desktop-adapter";
 
@@ -82,7 +81,7 @@ export function createAuthController(options: {
   }
 
   async function logout() {
-    const shouldLogout = await confirm(options.t("logout_confirmation"), {
+    const shouldLogout = await adapter.confirm(options.t("logout_confirmation"), {
       title: options.t("logout"),
       kind: "warning",
     });

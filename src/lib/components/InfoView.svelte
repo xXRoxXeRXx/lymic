@@ -2,18 +2,18 @@
   import { Info, ExternalLink } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import logo from "#lib/assets/logo.png";
-  import { openUrl } from "@tauri-apps/plugin-opener";
 
   interface Props {
     appVersion?: string | null;
+    onOpenExternalUrl(url: string): Promise<void>;
   }
 
-  let { appVersion }: Props = $props();
+  let { appVersion, onOpenExternalUrl }: Props = $props();
 
   async function openExternal(event: MouseEvent, url: string) {
     event.preventDefault();
     try {
-      await openUrl(url);
+      await onOpenExternalUrl(url);
     } catch (error) {
       console.error("Failed to open URL", error);
     }

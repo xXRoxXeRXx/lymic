@@ -1,4 +1,3 @@
-import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { ThemePreference, UiLogMessage } from "../contracts";
 import { isSupportedLocale } from "../i18n";
 import { localeCatalog, type LocaleCatalogEntry } from "../i18n/locale-catalog";
@@ -51,7 +50,7 @@ export function createPreferencesController(options: {
     }
 
     try {
-      isAutostartEnabled = await isEnabled();
+      isAutostartEnabled = await adapter.isAutostartEnabled();
     } catch (error) {
       options.reportError(error);
     }
@@ -95,9 +94,8 @@ export function createPreferencesController(options: {
 
   async function toggleAutostart() {
     try {
-      if (isAutostartEnabled) await disable();
-      else await enable();
-      isAutostartEnabled = await isEnabled();
+      await adapter.setAutostartEnabled(!isAutostartEnabled);
+      isAutostartEnabled = await adapter.isAutostartEnabled();
     } catch (error) {
       console.error("Failed to update autostart", error);
       options.reportError(error);

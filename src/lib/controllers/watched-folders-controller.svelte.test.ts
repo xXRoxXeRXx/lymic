@@ -1,11 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WatchedFoldersDesktopAdapter } from "../tauri/desktop-adapter";
 import type { TargetAlbumCatalogue } from "./target-album-catalogue.svelte";
 import { isValidExclusionPattern } from "../exclusion-patterns";
 import { createWatchedFoldersController } from "./watched-folders-controller.svelte";
-
-const dialog = vi.hoisted(() => ({ confirm: vi.fn(), open: vi.fn() }));
-vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 
 function createFoldersAdapter(
   overrides: Partial<WatchedFoldersDesktopAdapter> = {},
@@ -16,6 +13,8 @@ function createFoldersAdapter(
     getFolders: vi.fn().mockResolvedValue([]),
     updateFolderExclusionPatterns: vi.fn().mockResolvedValue(undefined),
     removeFolder: vi.fn().mockResolvedValue({ requiresSyncCancellation: false }),
+    openFolderDialog: vi.fn().mockResolvedValue(null),
+    confirm: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
@@ -47,11 +46,6 @@ function createTargetAlbumCatalogue(
     ...overrides,
   };
 }
-
-beforeEach(() => {
-  dialog.confirm.mockClear();
-  dialog.open.mockClear();
-});
 
 describe("watched folders controller", () => {
   it("clears loaded Watched Folders and a pending Target Album dialog", async () => {
@@ -175,7 +169,7 @@ describe("watched folders controller", () => {
 
   it("opens the target album dialog when a folder is selected and cancels cleanly", async () => {
     const adapter = createFoldersAdapter();
-    dialog.open.mockResolvedValue("C:/media/photos");
+    adapter.openFolderDialog = vi.fn().mockResolvedValue("C:/media/photos");
     const controller = createController(adapter);
 
     await controller.folders.onAddFolder();
@@ -194,7 +188,7 @@ describe("watched folders controller", () => {
     const adapter = createFoldersAdapter({
       getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/media/photos", recursive: true, target_album_id: "alb-99" }]),
     });
-    dialog.open.mockResolvedValue("C:/media/photos");
+    adapter.openFolderDialog = vi.fn().mockResolvedValue("C:/media/photos");
     const controller = createController(adapter);
 
     await controller.folders.onAddFolder();
@@ -211,7 +205,7 @@ describe("watched folders controller", () => {
     const adapter = createFoldersAdapter({
       getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "E:/DCIM", recursive: true, target_album_id: "alb-vacation" }]),
     });
-    dialog.open.mockResolvedValue("E:/DCIM");
+    adapter.openFolderDialog = vi.fn().mockResolvedValue("E:/DCIM");
     const onRemovableVolumeAccepted = vi.fn();
     const controller = createController(adapter, { onRemovableVolumeAccepted });
 
@@ -231,7 +225,7 @@ describe("watched folders controller", () => {
     const adapter = createFoldersAdapter({
       acceptRemovableMediaFolder: vi.fn().mockRejectedValue(error),
     });
-    dialog.open.mockResolvedValue("C:/Photos");
+    adapter.openFolderDialog = vi.fn().mockResolvedValue("C:/Photos");
     const reportError = vi.fn();
     const controller = createController(adapter, { reportError });
 
@@ -249,13 +243,13 @@ describe("watched folders controller", () => {
     const adapter = createFoldersAdapter({
       removeFolder: vi.fn().mockResolvedValue({ requiresSyncCancellation: true }),
     });
-    dialog.confirm.mockResolvedValue(true);
+    adapter.confirm = vi.fn().mockResolvedValue(true);
     const onFolderRemoved = vi.fn();
     const controller = createController(adapter, { onFolderRemoved });
 
     await controller.folders.onRemoveFolder(4);
 
-    expect(dialog.confirm).toHaveBeenCalledWith("remove_folder_sync_warning", {
+    expect(adapter.confirm).toHaveBeenCalledWith("remove_folder_sync_warning", {
       title: "remove_folder",
       kind: "warning",
     });
@@ -266,7 +260,7 @@ describe("watched folders controller", () => {
 
   it("does not remove a folder after a declined confirmation", async () => {
     const adapter = createFoldersAdapter();
-    dialog.confirm.mockResolvedValue(false);
+    adapter.confirm = vi.fn().mockResolvedValue(false);
     const onFolderRemoved = vi.fn();
     const controller = createController(adapter, { onFolderRemoved });
 

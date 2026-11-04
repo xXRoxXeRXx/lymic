@@ -17,9 +17,8 @@ import type { SyncStatusViewState } from "../controllers/sync-controller.svelte"
 import type { WatchedFoldersViewState } from "../controllers/watched-folders-controller.svelte";
 import type { Album } from "../contracts";
 
-const tauri = vi.hoisted(() => ({ invoke: vi.fn(), openUrl: vi.fn() }));
+const tauri = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: tauri.openUrl }));
 
 beforeEach(() => tauri.invoke.mockResolvedValue([]));
 afterEach(cleanup);
@@ -673,25 +672,25 @@ describe("TargetAlbumModal", () => {
 });
 
 describe("InfoView", () => {
-  it("renders app name, version, license, and opens links via openUrl", async () => {
-    tauri.openUrl.mockResolvedValue(undefined);
-    render(InfoView, { appVersion: "1.0.0" });
+  it("renders app name, version, license, and opens links via its callback", async () => {
+    const onOpenExternalUrl = vi.fn().mockResolvedValue(undefined);
+    render(InfoView, { appVersion: "1.0.0", onOpenExternalUrl });
     expect(screen.getByText("Lymic (Unofficial Immich Desktop Client)")).toBeInTheDocument();
     expect(screen.getByText("v1.0.0")).toBeInTheDocument();
     expect(screen.getByText("MIT")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "https://github.com/xXRoxXeRXx/lymic/" });
     expect(link).toHaveAttribute("href", "https://github.com/xXRoxXeRXx/lymic/");
     await fireEvent.click(link);
-    expect(tauri.openUrl).toHaveBeenCalledWith("https://github.com/xXRoxXeRXx/lymic/");
+    expect(onOpenExternalUrl).toHaveBeenCalledWith("https://github.com/xXRoxXeRXx/lymic/");
 
     const issueLink = screen.getByRole("link", { name: "https://github.com/xXRoxXeRXx/lymic/issues" });
     expect(issueLink).toHaveAttribute("href", "https://github.com/xXRoxXeRXx/lymic/issues");
     await fireEvent.click(issueLink);
-    expect(tauri.openUrl).toHaveBeenCalledWith("https://github.com/xXRoxXeRXx/lymic/issues");
+    expect(onOpenExternalUrl).toHaveBeenCalledWith("https://github.com/xXRoxXeRXx/lymic/issues");
   });
 
   it("handles missing version gracefully", () => {
-    render(InfoView, { appVersion: null });
+    render(InfoView, { appVersion: null, onOpenExternalUrl: vi.fn() });
     expect(screen.getByText("-")).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { RemovableVolumeDesktopAdapter } from "../tauri/desktop-adapter";
 import { createRemovableVolumeController } from "./removable-volume-controller.svelte";
 
 const tauri = vi.hoisted(() => ({
@@ -7,32 +8,39 @@ const tauri = vi.hoisted(() => ({
   isPermissionGranted: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/event", () => ({
-  listen: tauri.listen,
-}));
+let eventListeners: Map<string, (event: { payload: unknown }) => void>;
+let unlistenFn: () => void;
 
-vi.mock("@tauri-apps/plugin-notification", () => ({
-  sendNotification: tauri.sendNotification,
-  isPermissionGranted: tauri.isPermissionGranted,
-}));
+function createDesktopAdapter(): RemovableVolumeDesktopAdapter {
+  return {
+    subscribeToRemovableVolumeDetected: (listener) => {
+      eventListeners.set("removable-volume-detected", (event) => listener(event.payload as { volumeId: string; mountPath: string; displayName: string }));
+      return Promise.resolve(unlistenFn);
+    },
+    subscribeToRemovableVolumeRemoved: (listener) => {
+      eventListeners.set("removable-volume-removed", (event) => listener(event.payload as string));
+      return Promise.resolve(unlistenFn);
+    },
+    subscribeToRemovableVolumeRemounted: (listener) => {
+      eventListeners.set("removable-volume-remounted", () => listener());
+      return Promise.resolve(unlistenFn);
+    },
+    isDesktopNotificationPermissionGranted: tauri.isPermissionGranted,
+    sendDesktopNotification: tauri.sendNotification,
+  };
+}
 
 describe("removable volume controller", () => {
-  let eventListeners: Map<string, (event: { payload: unknown }) => void>;
-  let unlistenFn: ReturnType<typeof vi.fn>;
-
   beforeEach(() => {
     vi.clearAllMocks();
     eventListeners = new Map();
     unlistenFn = vi.fn();
-    tauri.listen.mockImplementation((event: string, handler: (event: { payload: unknown }) => void) => {
-      eventListeners.set(event, handler);
-      return Promise.resolve(unlistenFn);
-    });
     tauri.isPermissionGranted.mockResolvedValue(true);
   });
 
   it("clears detected and dismissed volumes on logout", async () => {
     const controller = createRemovableVolumeController({
+      adapter: createDesktopAdapter(),
       isAppInBackground: () => false,
       t: (key) => key,
     });
@@ -51,6 +59,7 @@ describe("removable volume controller", () => {
 
   it("queues detected volumes in FIFO order and exposes the current prompt", async () => {
     const controller = createRemovableVolumeController({
+      adapter: createDesktopAdapter(),
       isAppInBackground: () => false,
       t: (key) => key,
     });
@@ -71,6 +80,7 @@ describe("removable volume controller", () => {
 
   it("dismisses prompt, moves to next in FIFO queue, and ignores repeated events for dismissed volume in session", async () => {
     const controller = createRemovableVolumeController({
+      adapter: createDesktopAdapter(),
       isAppInBackground: () => false,
       t: (key) => key,
     });
@@ -98,6 +108,7 @@ describe("removable volume controller", () => {
 
   it("sends a desktop notification when a card arrives while app is in background", async () => {
     const controller = createRemovableVolumeController({
+      adapter: createDesktopAdapter(),
       isAppInBackground: () => true,
       t: (key, params) => `${key}:${params?.name ?? ""}`,
     });
@@ -119,6 +130,7 @@ describe("removable volume controller", () => {
 
   it("clears pending detection prompt when a volume is removed", async () => {
     const controller = createRemovableVolumeController({
+      adapter: createDesktopAdapter(),
       isAppInBackground: () => false,
       t: (key) => key,
     });
@@ -145,6 +157,7 @@ describe("removable volume controller", () => {
 
   it("cleans up event subscription on destroy", async () => {
     const controller = createRemovableVolumeController({
+      adapter: createDesktopAdapter(),
       isAppInBackground: () => false,
       t: (key) => key,
     });
@@ -160,19 +173,12 @@ describe("removable volume controller", () => {
     const detectedUnlisten = vi.fn();
     const removedUnlisten = vi.fn();
 
-    tauri.listen
-      .mockImplementationOnce(
-        () => new Promise<() => void>((resolve) => {
-          resolveDetected = resolve;
-        })
-      )
-      .mockImplementationOnce(
-        () => new Promise<() => void>((resolve) => {
-          resolveRemoved = resolve;
-        })
-      );
+    const adapter = createDesktopAdapter();
+    adapter.subscribeToRemovableVolumeDetected = () => new Promise<() => void>((resolve) => { resolveDetected = resolve; });
+    adapter.subscribeToRemovableVolumeRemoved = () => new Promise<() => void>((resolve) => { resolveRemoved = resolve; });
 
     const controller = createRemovableVolumeController({
+      adapter,
       isAppInBackground: () => false,
       t: (key) => key,
     });
@@ -189,6 +195,7 @@ describe("removable volume controller", () => {
 
   it("tears down one listener for each removable-volume event after concurrent starts", async () => {
     const controller = createRemovableVolumeController({
+      adapter: createDesktopAdapter(),
       isAppInBackground: () => false,
       t: (key) => key,
     });

@@ -3,9 +3,6 @@ import { createPreferencesController } from "./preferences-controller.svelte";
 import { localeCatalog } from "../i18n/locale-catalog";
 import type { PreferencesDesktopAdapter } from "../tauri/desktop-adapter";
 
-const tauri = vi.hoisted(() => ({ enable: vi.fn(), disable: vi.fn(), isEnabled: vi.fn() }));
-vi.mock("@tauri-apps/plugin-autostart", () => tauri);
-
 function createDesktopAdapter(overrides: Partial<PreferencesDesktopAdapter> = {}): PreferencesDesktopAdapter {
   return {
     getUploadParallelism: vi.fn().mockResolvedValue(3),
@@ -13,6 +10,8 @@ function createDesktopAdapter(overrides: Partial<PreferencesDesktopAdapter> = {}
     getLocaleCatalog: vi.fn().mockResolvedValue(localeCatalog),
     updateLocale: vi.fn(),
     getDatabaseRecoveryNotice: vi.fn().mockResolvedValue(null),
+    isAutostartEnabled: vi.fn().mockResolvedValue(false),
+    setAutostartEnabled: vi.fn(),
     ...overrides,
   };
 }

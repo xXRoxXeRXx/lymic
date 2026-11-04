@@ -27,6 +27,7 @@
   const feedback = createFeedbackController(() => $t("unknown_error"));
   const targetAlbumCatalogue = createTargetAlbumCatalogue(desktop);
   const removable = createRemovableVolumeController({
+    adapter: desktop,
     t: (key, params) => $t(key, params),
     onVolumeRemounted: () => void watchedFolders.refresh(),
   });
@@ -297,6 +298,7 @@
         {:else if currentView === "info"}
           <InfoView
             appVersion={updater.appVersion}
+            onOpenExternalUrl={desktop.openExternalUrl}
           />
         {/if}
       </main>

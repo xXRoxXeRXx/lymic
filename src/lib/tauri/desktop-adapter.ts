@@ -1,4 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
+import { listen } from "@tauri-apps/api/event";
+import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
+import { isPermissionGranted, sendNotification } from "@tauri-apps/plugin-notification";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import type {
   Album,
   CurrentUser,
@@ -9,6 +17,7 @@ import type {
   RemoveFolderResult,
   SyncSnapshot,
   SyncSummary,
+  DetectedVolume,
   WatchedFolder,
 } from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
@@ -19,6 +28,7 @@ export interface AuthDesktopAdapter {
   getCurrentUser(): Promise<CurrentUser>;
   login(request: LoginRequest): Promise<void>;
   logout(): Promise<void>;
+  confirm(message: string, options: { title: string; kind: "warning" }): Promise<boolean>;
 }
 
 export interface SyncDesktopAdapter {
@@ -36,6 +46,8 @@ export interface WatchedFoldersDesktopAdapter {
   getFolders(): Promise<WatchedFolder[]>;
   updateFolderExclusionPatterns(id: number, exclusionPatterns: string[]): Promise<void>;
   removeFolder(id: number, confirmCancellation?: boolean): Promise<RemoveFolderResult>;
+  openFolderDialog(options: { directory: true; multiple: false; defaultPath?: string; title: string }): Promise<string | string[] | null>;
+  confirm(message: string, options: { title: string; kind: "warning" }): Promise<boolean>;
 }
 
 export interface AlbumsDesktopAdapter {
@@ -49,11 +61,33 @@ export interface PreferencesDesktopAdapter {
   getLocaleCatalog(): Promise<LocaleCatalogEntry[]>;
   updateLocale(locale: string): Promise<void>;
   getDatabaseRecoveryNotice(): Promise<DatabaseRecoveryNotice | null>;
+  isAutostartEnabled(): Promise<boolean>;
+  setAutostartEnabled(enabled: boolean): Promise<void>;
 }
 
 export interface UpdateDesktopAdapter {
   recordWebviewStartupPhaseProbe(phase: string): Promise<void>;
   getReleaseChannel(): Promise<ReleaseChannel>;
+  getAppVersion(): Promise<string>;
+  checkForUpdate(): Promise<AvailableUpdate | null>;
+  downloadAndInstallUpdate(onEvent: (event: UpdateDownloadEvent) => void): Promise<void>;
+  relaunchApp(): Promise<void>;
+  openExternalUrl(url: string): Promise<void>;
+}
+
+export interface AvailableUpdate {
+  version: string;
+  body?: string;
+}
+
+export type UpdateDownloadEvent = DownloadEvent;
+
+export interface RemovableVolumeDesktopAdapter {
+  subscribeToRemovableVolumeDetected(listener: (volume: DetectedVolume) => void): Promise<() => void>;
+  subscribeToRemovableVolumeRemoved(listener: (volumeIdOrPath: string) => void): Promise<() => void>;
+  subscribeToRemovableVolumeRemounted(listener: () => void): Promise<() => void>;
+  isDesktopNotificationPermissionGranted(): Promise<boolean>;
+  sendDesktopNotification(notification: { title: string; body: string }): void;
 }
 
 /** The complete frontend contract for Tauri commands registered by Lymic. */
@@ -63,7 +97,8 @@ export interface DesktopAdapter
     WatchedFoldersDesktopAdapter,
     AlbumsDesktopAdapter,
     PreferencesDesktopAdapter,
-    UpdateDesktopAdapter {}
+    UpdateDesktopAdapter,
+    RemovableVolumeDesktopAdapter {}
 
 export const tauriDesktopAdapter: DesktopAdapter = {
   startSync: () => invoke<SyncSummary>("start_sync"),
@@ -83,6 +118,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
     "remove_folder",
     confirmCancellation === undefined ? { id } : { id, confirmCancellation },
   ),
+  openFolderDialog: open,
 
   getAuthStatus: () => invoke<boolean>("get_auth_status"),
   getServerUrl: () => invoke<string>("get_server_url"),
@@ -95,6 +131,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
     cloudflareClientSecret: request.cloudflareClientSecret,
   }),
   logout: () => invoke<void>("logout"),
+  confirm,
 
   getAlbums: () => invoke<Album[]>("get_albums"),
   createAlbum: (name) => invoke<Album>("create_album", { name }),
@@ -102,6 +139,32 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),
   getDatabaseRecoveryNotice: () => invoke<DatabaseRecoveryNotice | null>("get_database_recovery_notice"),
+  isAutostartEnabled: () => isEnabled(),
+  setAutostartEnabled: (enabled) => enabled ? enable() : disable(),
   recordWebviewStartupPhaseProbe: (phase) => invoke<void>("record_webview_startup_phase_probe", { phase }),
   getReleaseChannel: () => invoke<ReleaseChannel>("get_release_channel"),
+  getAppVersion: getVersion,
+  checkForUpdate: async () => {
+    pendingUpdate = await check();
+    return pendingUpdate && { version: pendingUpdate.version, body: pendingUpdate.body };
+  },
+  downloadAndInstallUpdate: (onEvent) => {
+    if (!pendingUpdate) throw new Error("No update is available to install");
+    return pendingUpdate.downloadAndInstall(onEvent);
+  },
+  relaunchApp: relaunch,
+  openExternalUrl: openUrl,
+  subscribeToRemovableVolumeDetected: (listener) => listen<DetectedVolume>(
+    "removable-volume-detected",
+    (event) => listener(event.payload),
+  ),
+  subscribeToRemovableVolumeRemoved: (listener) => listen<string>(
+    "removable-volume-removed",
+    (event) => listener(event.payload),
+  ),
+  subscribeToRemovableVolumeRemounted: (listener) => listen("removable-volume-remounted", listener),
+  isDesktopNotificationPermissionGranted: () => isPermissionGranted(),
+  sendDesktopNotification: (notification) => sendNotification(notification),
 };
+
+let pendingUpdate: Update | null = null;

@@ -1,8 +1,5 @@
-import { getVersion } from "@tauri-apps/api/app";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { check, type Update } from "@tauri-apps/plugin-updater";
 import type { ReleaseChannel } from "../contracts";
-import type { UpdateDesktopAdapter } from "../tauri/desktop-adapter";
+import type { AvailableUpdate, UpdateDesktopAdapter } from "../tauri/desktop-adapter";
 import { getEffectiveReleaseChannel } from "../release-channel";
 
 export function createUpdateController(
@@ -12,7 +9,7 @@ export function createUpdateController(
 ) {
   let releaseChannel = $state<ReleaseChannel>(initialChannel);
   let appVersion = $state<string | undefined>();
-  let availableUpdate = $state<Update | null>(null);
+  let availableUpdate = $state<AvailableUpdate | null>(null);
   let isUpdateDialogOpen = $state(false);
   let updateStatus = $state<"unknown" | "current" | "available">("unknown");
   let isCheckingForUpdates = $state(false);
@@ -34,7 +31,7 @@ export function createUpdateController(
     if (isCheckingForUpdates) return;
     isCheckingForUpdates = true;
     try {
-      const update = await check();
+      const update = await adapter.checkForUpdate();
       if (!mounted) return;
       availableUpdate = update;
       updateStatus = update ? "available" : "current";
@@ -69,7 +66,7 @@ export function createUpdateController(
     void (async () => {
       void record("version_load_started");
       try {
-        const version = await getVersion();
+        const version = await adapter.getAppVersion();
         if (mounted) appVersion = version;
       } catch (error) {
         console.warn("Failed to load app version", error);
@@ -85,13 +82,13 @@ export function createUpdateController(
     updateContentLength = null;
     updateInstallState = "downloading";
     try {
-      await availableUpdate.downloadAndInstall((event) => {
+      await adapter.downloadAndInstallUpdate((event) => {
         if (!mounted) return;
         if (event.event === "Started") updateContentLength = event.data.contentLength ?? null;
         if (event.event === "Progress") downloadedUpdateBytes += event.data.chunkLength;
         if (event.event === "Finished") updateInstallState = "installing";
       });
-      await relaunch();
+      await adapter.relaunchApp();
     } catch (error) {
       console.error("Failed to install update", error);
       if (mounted) updateInstallState = "error";

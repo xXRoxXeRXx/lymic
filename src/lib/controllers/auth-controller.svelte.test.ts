@@ -1,9 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AuthDesktopAdapter } from "../tauri/desktop-adapter";
 import { createAuthController } from "./auth-controller.svelte";
-
-const tauri = vi.hoisted(() => ({ confirm: vi.fn() }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm: tauri.confirm }));
 
 function createDesktopAdapter(overrides: Partial<AuthDesktopAdapter> = {}): AuthDesktopAdapter {
   return {
@@ -12,14 +9,12 @@ function createDesktopAdapter(overrides: Partial<AuthDesktopAdapter> = {}): Auth
     getCurrentUser: vi.fn(),
     login: vi.fn(),
     logout: vi.fn(),
+    confirm: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
 
 describe("auth controller", () => {
-  beforeEach(() => {
-    tauri.confirm.mockReset();
-  });
 
   it("retains successful authentication when the optional account lookup fails", async () => {
     const adapter = createDesktopAdapter({ getCurrentUser: vi.fn().mockRejectedValue(new Error("Profile unavailable")) });
@@ -117,7 +112,7 @@ describe("auth controller", () => {
 
   it("forwards the local HTTP opt-in to Tauri and resets it on logout", async () => {
     const adapter = createDesktopAdapter({ getCurrentUser: vi.fn().mockResolvedValue({ displayName: "User", profileImage: null }) });
-    tauri.confirm.mockResolvedValue(true);
+    adapter.confirm = vi.fn().mockResolvedValue(true);
     const controller = createAuthController({
       formatError: String,
       onLogin: vi.fn(),
@@ -213,7 +208,7 @@ describe("auth controller", () => {
           profileImage: "data:image/jpeg;base64,dGVzdA==",
       }),
     });
-    tauri.confirm.mockResolvedValue(true);
+    adapter.confirm = vi.fn().mockResolvedValue(true);
     const controller = createAuthController({
       formatError: String,
       onLogin: vi.fn(),

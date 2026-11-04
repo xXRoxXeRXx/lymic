@@ -1,8 +1,8 @@
-import { listen } from "@tauri-apps/api/event";
-import { isPermissionGranted, sendNotification } from "@tauri-apps/plugin-notification";
 import type { DetectedVolume } from "../contracts";
+import type { RemovableVolumeDesktopAdapter } from "../tauri/desktop-adapter";
 
 export interface RemovableVolumeControllerOptions {
+  adapter: RemovableVolumeDesktopAdapter;
   isAppInBackground?: () => boolean;
   onVolumeRemounted?: () => void;
   t: (key: string, params?: Record<string, string>) => string;
@@ -29,9 +29,9 @@ export function createRemovableVolumeController(options: RemovableVolumeControll
     if (!isAppInBackground()) return;
 
     try {
-      const hasPermission = await isPermissionGranted();
+      const hasPermission = await options.adapter.isDesktopNotificationPermissionGranted();
       if (hasPermission) {
-        sendNotification({
+        options.adapter.sendDesktopNotification({
           title: options.t("removable_card_detected_title", { name: volume.displayName }),
           body: options.t("removable_card_detected_body", {
             name: volume.displayName,
@@ -75,13 +75,9 @@ export function createRemovableVolumeController(options: RemovableVolumeControll
     if (startingPromise) return startingPromise;
 
     startingPromise = Promise.all([
-      listen<DetectedVolume>("removable-volume-detected", (event) => {
-        handleVolumeDetected(event.payload);
-      }).then(retainOrStopListener),
-      listen<string>("removable-volume-removed", (event) => {
-        handleVolumeRemoved(event.payload);
-      }).then(retainOrStopListener),
-      listen<DetectedVolume>("removable-volume-remounted", () => {
+      options.adapter.subscribeToRemovableVolumeDetected(handleVolumeDetected).then(retainOrStopListener),
+      options.adapter.subscribeToRemovableVolumeRemoved(handleVolumeRemoved).then(retainOrStopListener),
+      options.adapter.subscribeToRemovableVolumeRemounted(() => {
         options.onVolumeRemounted?.();
       }).then(retainOrStopListener),
     ])
