@@ -21,8 +21,6 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
 <div
   role="region"
   aria-label={$t("removable_card_detected_title")}
@@ -53,6 +51,7 @@
       class="text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800 px-3 py-2 rounded-lg transition-colors cursor-pointer"
       aria-label={$t("removable_prompt_dismiss")}
       onclick={() => onDismiss(volume.volumeId)}
+      onkeydown={handleKeydown}
     >
       {$t("removable_prompt_dismiss")}
     </button>
@@ -61,6 +60,7 @@
       class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3.5 py-2 rounded-lg shadow-sm transition-colors cursor-pointer"
       aria-label={$t("removable_prompt_sync")}
       onclick={() => onAccept(volume)}
+      onkeydown={handleKeydown}
     >
       <span>{$t("removable_prompt_sync")}</span>
       <ArrowRight class="w-3.5 h-3.5" />

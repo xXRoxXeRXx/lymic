@@ -439,6 +439,22 @@ describe("FolderList and ActivityLog", () => {
     await vi.waitFor(() => expect(save).toBeEnabled());
   });
 
+  it("does not close exclusion settings with Escape while saving", async () => {
+    const onClose = vi.fn();
+    const onSave = vi.fn(() => new Promise<boolean>(() => {}));
+    render(ExclusionPatternsModal, {
+      folder: { id: 1, path: "C:/photos", recursive: true, target_album_id: null },
+      onSave,
+      onClose,
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Save exclusions" }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    await fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("renders the empty folder state", () => {
     render(FolderList, { watchedFolders: [], onAddFolder: vi.fn(), onRemoveFolder: vi.fn(), catalogue: createCatalogue() });
     expect(screen.getByText("No folders added yet.")).toBeInTheDocument();
@@ -702,6 +718,29 @@ describe("TargetAlbumModal", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAttribute("aria-labelledby", "target-album-dialog-title");
   });
+
+  it("does not cancel album creation with Escape while creating", async () => {
+    tauri.invoke.mockImplementation((command: string) => {
+      if (command === "get_albums") return Promise.resolve([]);
+      if (command === "create_album") return new Promise(() => {});
+      return Promise.resolve();
+    });
+    const onCancel = vi.fn();
+    render(TargetAlbumModal, {
+      isOpen: true,
+      folderPath: "D:/Photos",
+      onConfirm: vi.fn(),
+      onCancel,
+      catalogue: createCatalogue(),
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Create new album" }));
+    await fireEvent.input(screen.getByPlaceholderText("Album name..."), { target: { value: "Roadtrip" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(onCancel).not.toHaveBeenCalled();
+  });
 });
 
 describe("UpdateDialog", () => {
@@ -725,6 +764,23 @@ describe("UpdateDialog", () => {
 
     await fireEvent.keyDown(window, { key: "Escape" });
     expect(onLater).toHaveBeenCalledOnce();
+  });
+
+  it("does not close with Escape while installing", async () => {
+    const onLater = vi.fn();
+    render(UpdateDialog, {
+      version: "1.2.3",
+      notes: "",
+      isSyncActive: false,
+      installState: "installing",
+      downloadedBytes: 0,
+      contentLength: null,
+      onLater,
+      onInstall: vi.fn(),
+    });
+
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(onLater).not.toHaveBeenCalled();
   });
 });
 

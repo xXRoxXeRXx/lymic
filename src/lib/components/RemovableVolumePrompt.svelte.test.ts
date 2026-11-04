@@ -45,7 +45,19 @@ describe("RemovableVolumePrompt", () => {
     expect(onDismiss).toHaveBeenCalledWith("vol-123");
   });
 
-  it("dismisses with Escape", async () => {
+  it("dismisses with Escape from a prompt control", async () => {
+    const onDismiss = vi.fn();
+    render(RemovableVolumePrompt, {
+      volume: sampleVolume,
+      onAccept: vi.fn(),
+      onDismiss,
+    });
+
+    await fireEvent.keyDown(screen.getByRole("button", { name: /Dismiss/i }), { key: "Escape" });
+    expect(onDismiss).toHaveBeenCalledWith("vol-123");
+  });
+
+  it("does not dismiss when Escape is pressed outside the prompt", async () => {
     const onDismiss = vi.fn();
     render(RemovableVolumePrompt, {
       volume: sampleVolume,
@@ -54,7 +66,7 @@ describe("RemovableVolumePrompt", () => {
     });
 
     await fireEvent.keyDown(window, { key: "Escape" });
-    expect(onDismiss).toHaveBeenCalledWith("vol-123");
+    expect(onDismiss).not.toHaveBeenCalled();
   });
 
   it("calls onAccept when sync button is clicked", async () => {
