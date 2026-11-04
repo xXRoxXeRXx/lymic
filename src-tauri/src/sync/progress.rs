@@ -227,6 +227,10 @@ pub(crate) struct CurrentFileProgress {
 
 impl CurrentFileProgress {
     pub(crate) fn emit<R: Runtime>(&self, app: &tauri::AppHandle<R>, path: &str) {
+        self.emit_at(app, path, Instant::now());
+    }
+
+    fn emit_at<R: Runtime>(&self, app: &tauri::AppHandle<R>, path: &str, now: Instant) {
         if path.is_empty() {
             self.last_emission
                 .lock()
@@ -236,7 +240,7 @@ impl CurrentFileProgress {
             return;
         }
 
-        if self.should_emit_at(Instant::now()) {
+        if self.should_emit_at(now) {
             let _ = app.emit("sync-progress", path);
         }
     }
@@ -416,11 +420,15 @@ mod tests {
         let progress = CurrentFileProgress::default();
         let start = Instant::now();
 
-        assert!(progress.should_emit_at(start));
-        assert!(!progress.should_emit_at(start + CURRENT_FILE_THROTTLE - Duration::from_millis(1)));
-        progress.emit(app.handle(), "");
+        progress.emit_at(app.handle(), "first.jpg", start);
+        progress.emit_at(
+            app.handle(),
+            "second.jpg",
+            start + CURRENT_FILE_THROTTLE - Duration::from_millis(1),
+        );
+        progress.emit_at(app.handle(), "", start + Duration::from_millis(1));
 
-        assert_eq!(*files.lock().unwrap(), vec![""]);
+        assert_eq!(*files.lock().unwrap(), vec!["first.jpg", ""]);
         assert!(progress.should_emit_at(start + Duration::from_millis(1)));
     }
 
