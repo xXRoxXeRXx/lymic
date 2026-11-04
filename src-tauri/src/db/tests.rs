@@ -2076,4 +2076,40 @@ mod database_tests {
         assert_eq!(sibling_state.1, "FAILED");
         assert_eq!(sibling_state.2, Some("sibling failure".to_string()));
     }
+
+    #[tokio::test]
+    async fn reset_failed_queue_items_for_folder_restarts_failed_job_and_recomputes_counts() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, upload_unit_id, is_primary, failure_reason) \
+             VALUES \
+             (1, 1, 'E:/DCIM/1.jpg', 100, 1, 'FAILED', 'E:/DCIM/1.jpg', 1, 'timeout'), \
+             (1, 2, 'E:/DCIM_Backup/2.jpg', 200, 2, 'FAILED', 'E:/DCIM_Backup/2.jpg', 1, 'io error'), \
+             (1, 3, 'E:/DCIM/3.jpg', 300, 3, 'SYNCED', 'E:/DCIM/3.jpg', 1, NULL)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE sync_jobs SET status = 'FAILED', total_count = 3, success_count = 1, failure_count = 2 WHERE id = 1",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let affected = reset_failed_queue_items_for_folder(&pool, "E:/DCIM")
+            .await
+            .unwrap();
+
+        assert_eq!(affected, 1);
+        let job: (String, i64, i64, i64) = sqlx::query_as(
+            "SELECT status, total_count, success_count, failure_count FROM sync_jobs WHERE id = 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(job, ("RUNNING".to_string(), 3, 1, 1));
+    }
 }

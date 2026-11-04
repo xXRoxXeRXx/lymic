@@ -487,9 +487,11 @@ pub async fn reset_failed_queue_items_for_folder(
 
     if queue_res.rows_affected() > 0 {
         let job_sql = format!(
-            "UPDATE sync_jobs SET status = 'RUNNING' WHERE id = {SINGLETON_SYNC_JOB_ID} AND status = 'IDLE'"
+            "UPDATE sync_jobs SET status = 'RUNNING' WHERE id = {SINGLETON_SYNC_JOB_ID} AND status IN ('IDLE', 'FAILED')"
         );
         sqlx::query(&job_sql).execute(&mut *tx).await?;
+        update_counts_and_snapshot(tx, false, None).await?;
+        return Ok(queue_res.rows_affected());
     }
 
     tx.commit().await?;
