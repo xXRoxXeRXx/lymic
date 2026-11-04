@@ -1,4 +1,4 @@
-import type { ReleaseChannel } from "../contracts";
+import type { ReleaseChannel, WebviewStartupPhase } from "../contracts";
 import type { AvailableUpdate, UpdateDesktopAdapter } from "../tauri/desktop-adapter";
 import { getEffectiveReleaseChannel } from "../release-channel";
 
@@ -18,7 +18,7 @@ export function createUpdateController(
   let updateContentLength = $state<number | null>(null);
   let mounted = false;
 
-  async function record(phase: string) {
+  async function record(phase: WebviewStartupPhase) {
     try {
       await adapter.recordWebviewStartupPhaseProbe(phase);
     } catch (error) {

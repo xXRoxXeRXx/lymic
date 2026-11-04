@@ -1,4 +1,10 @@
-export type SyncJobStatus = "RUNNING" | "PAUSED" | "IDLE" | "FAILED";
+export type SyncJobStatus = "RUNNING" | "PAUSED" | "IDLE";
+export type SyncSnapshotStatus = SyncJobStatus | "FAILED";
+export type WebviewStartupPhase =
+  | "update_check_started"
+  | "update_check_complete"
+  | "version_load_started"
+  | "version_load_complete";
 
 export type SyncStatus = "idle" | "syncing" | "paused" | "error";
 
@@ -46,7 +52,7 @@ export interface SyncSummary {
 }
 
 export interface SyncSnapshot {
-  status: SyncJobStatus;
+  status: SyncSnapshotStatus;
   total: number;
   succeeded: number;
   failed: number;
@@ -60,6 +66,8 @@ export interface TransferStatsEvent {
   transferRateBytesPerSecond: number;
   estimatedSecondsRemaining: number | null;
   status: SyncJobStatus;
+  totalBytes: number;
+  completedBytes: number;
 }
 
 export interface RemoveFolderResult {
@@ -94,4 +102,3 @@ export interface LoginRequest {
 }
 
 export type ReleaseChannel = "github" | "store";
-

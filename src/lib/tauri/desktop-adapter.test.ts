@@ -85,7 +85,7 @@ describe("tauriDesktopAdapter", () => {
     await preferencesAdapter.isAutostartEnabled();
     await preferencesAdapter.setAutostartEnabled(true);
     await preferencesAdapter.setAutostartEnabled(false);
-    await updateAdapter.recordWebviewStartupPhaseProbe("on_mount_started");
+    await updateAdapter.recordWebviewStartupPhaseProbe("update_check_started");
     await updateAdapter.getReleaseChannel();
     await updateAdapter.getAppVersion();
     await updateAdapter.checkForUpdate();
@@ -130,7 +130,7 @@ describe("tauriDesktopAdapter", () => {
       ["get_locale_catalog"],
       ["update_locale", { locale: "de" }],
       ["get_database_recovery_notice"],
-      ["record_webview_startup_phase_probe", { phase: "on_mount_started" }],
+      ["record_webview_startup_phase_probe", { phase: "update_check_started" }],
       ["get_release_channel"],
     ]);
     expect(confirm).toHaveBeenCalledWith("Log out?", { title: "Log out", kind: "warning" });

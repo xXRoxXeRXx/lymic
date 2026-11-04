@@ -8,20 +8,10 @@ use serde_json::json;
 use tauri::{menu::MenuItemKind, Manager};
 
 const WEBVIEW_STARTUP_PHASES: &[&str] = &[
-    "locale_update_started",
-    "locale_update_complete",
-    "on_mount_started",
     "update_check_started",
     "update_check_complete",
     "version_load_started",
     "version_load_complete",
-    "auth_status_started",
-    "auth_status_complete",
-    "folders_load_complete",
-    "sync_status_complete",
-    "autostart_status_complete",
-    "upload_parallelism_complete",
-    "listeners_complete",
 ];
 
 #[tauri::command]
@@ -128,6 +118,19 @@ mod tests {
         assert_eq!(resolve_release_channel(Some("unknown")), "github");
         assert_eq!(resolve_release_channel(Some("github")), "github");
         assert_eq!(resolve_release_channel(Some("store")), "store");
+    }
+
+    #[test]
+    fn accepts_only_startup_phases_emitted_by_the_webview() {
+        assert_eq!(
+            WEBVIEW_STARTUP_PHASES,
+            [
+                "update_check_started",
+                "update_check_complete",
+                "version_load_started",
+                "version_load_complete",
+            ]
+        );
     }
 
     #[test]

@@ -17,6 +17,7 @@ import type {
   RemoveFolderResult,
   SyncSnapshot,
   SyncSummary,
+  WebviewStartupPhase,
   DetectedVolume,
   WatchedFolder,
 } from "../contracts";
@@ -66,7 +67,7 @@ export interface PreferencesDesktopAdapter {
 }
 
 export interface UpdateDesktopAdapter {
-  recordWebviewStartupPhaseProbe(phase: string): Promise<void>;
+  recordWebviewStartupPhaseProbe(phase: WebviewStartupPhase): Promise<void>;
   getReleaseChannel(): Promise<ReleaseChannel>;
   getAppVersion(): Promise<string>;
   checkForUpdate(): Promise<AvailableUpdate | null>;

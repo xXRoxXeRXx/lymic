@@ -251,7 +251,6 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
         progress = 0;
         if (reason?.trim()) options.reportError(reason);
       },
-      onTriggerSync: startSync,
       onLog: addLog,
       onIdle() {
         void finishSync();

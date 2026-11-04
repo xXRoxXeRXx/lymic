@@ -77,7 +77,7 @@ The durable queue is the recovery boundary: `RUNNING`, `PAUSED`, and `IDLE` live
 
 Commands are registered in `app/mod.rs`; implementations live in `commands/`. The command groups are `auth`, `albums`, `folders`, `sync`, and `settings`. Shared frontend IPC contracts live in `src/lib/contracts.ts`, and domain-specific adapter interfaces live in `src/lib/tauri/desktop-adapter.ts`. When changing a command, update its contract, domain adapter interface, controller caller, and tests in the same change.
 
-The backend emits `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `trigger-sync`, `log-message`, and `sync-idle`. Keep event names and serialized payloads backward-compatible within the application release.
+The backend emits `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `log-message`, and `sync-idle`. Keep event names and serialized payloads backward-compatible within the application release.
 
 ### Immich
 

@@ -29,7 +29,6 @@ type FailedSyncEntry = {
 let watchedFolders: WatchedFolder[] = [];
 let failedSyncs: FailedSyncEntry[] = [];
 let uploadParallelism = 3;
-let triggerSync: (() => void) | undefined;
 let syncStarted: (() => void) | undefined;
 let syncPaused: ((event: { payload: unknown }) => void) | undefined;
 let syncResumed: ((event: { payload: unknown }) => void) | undefined;
@@ -110,7 +109,6 @@ beforeEach(() => {
   watchedFolders = [];
   failedSyncs = [];
   uploadParallelism = 3;
-  triggerSync = undefined;
   syncStarted = undefined;
   syncPaused = undefined;
   syncResumed = undefined;
@@ -120,7 +118,6 @@ beforeEach(() => {
   removableVolumeDetected = undefined;
   removableVolumeRemounted = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
-    if (event === "trigger-sync") triggerSync = handler;
     if (event === "sync-started") syncStarted = handler;
     if (event === "sync-paused") syncPaused = handler as (event: { payload: unknown }) => void;
     if (event === "sync-resumed") syncResumed = handler as (event: { payload: unknown }) => void;
@@ -308,29 +305,6 @@ describe("sync dashboard", () => {
     expect(tauri.invoke).not.toHaveBeenCalledWith("start_sync");
   });
 
-  it("ignores the legacy tray start event while a queue is paused", async () => {
-    watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
-    tauri.invoke.mockImplementation((command: string) => {
-      if (command === "get_sync_status") {
-        return Promise.resolve({ status: "PAUSED", total: 1, succeeded: 0, failed: 0, currentPath: null });
-      }
-      if (command === "get_auth_status") return Promise.resolve(true);
-      if (command === "get_server_url") return Promise.resolve("https://immich.example");
-      if (command === "get_current_user") return Promise.resolve({ displayName: "Meyer", profileImage: null });
-      if (command === "get_folders") return Promise.resolve(watchedFolders);
-      if (command === "get_failed_syncs") return Promise.resolve([]);
-      if (command === "get_upload_parallelism") return Promise.resolve(3);
-      return Promise.resolve();
-    });
-    render(Page);
-
-    await screen.findByRole("button", { name: "Resume" });
-    await waitFor(() => expect(triggerSync).toBeTypeOf("function"));
-    triggerSync?.();
-
-    expect(tauri.invoke).not.toHaveBeenCalledWith("start_sync");
-  });
-
   it("computes progress preferentially from totalBytes and completedBytes", async () => {
     watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     tauri.invoke.mockImplementation((command: string) => {
@@ -452,9 +426,6 @@ describe("sync dashboard", () => {
     expect(syncButton).toBeDisabled();
 
     await fireEvent.click(syncButton);
-    await waitFor(() => expect(triggerSync).toBeTypeOf("function"));
-    triggerSync?.();
-
     expect(tauri.invoke).not.toHaveBeenCalledWith("start_sync");
   });
 

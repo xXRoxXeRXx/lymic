@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: tauri.listen }));
 function handlers(): SyncEventHandlers {
   return {
     onProgress: vi.fn(), onProgressPercent: vi.fn(), onSnapshot: vi.fn(), onStarted: vi.fn(),
-    onTransferStats: vi.fn(), onError: vi.fn(), onTriggerSync: vi.fn(), onLog: vi.fn(), onIdle: vi.fn(),
+    onTransferStats: vi.fn(), onError: vi.fn(), onLog: vi.fn(), onIdle: vi.fn(),
   };
 }
 
@@ -44,6 +44,37 @@ describe("subscribeToSyncEvents", () => {
     expect(eventHandlers.onError).toHaveBeenCalledWith(undefined);
   });
 
+  it("forwards complete transfer statistics without subscribing to the retired trigger-sync event", async () => {
+    tauri.listen.mockResolvedValue(vi.fn());
+    const eventHandlers = handlers();
+
+    subscribeToSyncEvents(eventHandlers, () => true);
+    await Promise.resolve();
+
+    const transferStatsListener = tauri.listen.mock.calls.find(([event]) => event === "sync-transfer-stats")?.[1];
+    expect(transferStatsListener).toBeTypeOf("function");
+    transferStatsListener!({
+      payload: {
+        transferredBytes: 42,
+        transferRateBytesPerSecond: 7,
+        estimatedSecondsRemaining: 12,
+        status: "RUNNING",
+        totalBytes: 100,
+        completedBytes: 42,
+      },
+    });
+
+    expect(eventHandlers.onTransferStats).toHaveBeenCalledWith({
+      transferredBytes: 42,
+      transferRateBytesPerSecond: 7,
+      estimatedSecondsRemaining: 12,
+      status: "RUNNING",
+      totalBytes: 100,
+      completedBytes: 42,
+    });
+    expect(tauri.listen).not.toHaveBeenCalledWith("trigger-sync", expect.any(Function));
+  });
+
   it("unlistens registrations that resolve after disposal", async () => {
     let resolve!: (unlisten: () => void) => void;
     const unlisten = vi.fn();
@@ -54,7 +85,7 @@ describe("subscribeToSyncEvents", () => {
     resolve(unlisten);
     await Promise.resolve();
 
-    expect(unlisten).toHaveBeenCalledTimes(11);
+    expect(unlisten).toHaveBeenCalledTimes(10);
   });
 
   it("reports failed listener registrations", async () => {
