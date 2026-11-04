@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { subscribeToSyncEvents, type SyncEventHandlers } from "./sync-event-subscription";
 
 const tauri = vi.hoisted(() => ({ listen: vi.fn() }));
@@ -11,6 +11,10 @@ function handlers(): SyncEventHandlers {
   };
 }
 
+beforeEach(() => {
+  tauri.listen.mockClear();
+});
+
 describe("subscribeToSyncEvents", () => {
   it("forwards a sync error reason to its handler", async () => {
     tauri.listen.mockResolvedValue(vi.fn());
@@ -20,9 +24,24 @@ describe("subscribeToSyncEvents", () => {
     await Promise.resolve();
 
     const syncErrorListener = tauri.listen.mock.calls.find(([event]) => event === "sync-error")?.[1];
-    syncErrorListener?.({ payload: "Immich is unavailable" });
+    expect(syncErrorListener).toBeTypeOf("function");
+    syncErrorListener!({ payload: "Immich is unavailable" });
 
     expect(eventHandlers.onError).toHaveBeenCalledWith("Immich is unavailable");
+  });
+
+  it("forwards undefined for a non-string sync error payload", async () => {
+    tauri.listen.mockResolvedValue(vi.fn());
+    const eventHandlers = handlers();
+
+    subscribeToSyncEvents(eventHandlers, () => true);
+    await Promise.resolve();
+
+    const syncErrorListener = tauri.listen.mock.calls.find(([event]) => event === "sync-error")?.[1];
+    expect(syncErrorListener).toBeTypeOf("function");
+    syncErrorListener!({ payload: { message: "Immich is unavailable" } });
+
+    expect(eventHandlers.onError).toHaveBeenCalledWith(undefined);
   });
 
   it("unlistens registrations that resolve after disposal", async () => {

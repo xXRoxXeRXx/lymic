@@ -42,9 +42,26 @@ describe("sync controller", () => {
     await Promise.resolve();
 
     const syncErrorListener = events.listen.mock.calls.find(([event]) => event === "sync-error")?.[1];
-    syncErrorListener?.({ payload: "Immich is unavailable" });
+    expect(syncErrorListener).toBeTypeOf("function");
+    syncErrorListener!({ payload: "Immich is unavailable" });
 
     expect(reportError).toHaveBeenCalledWith("Immich is unavailable");
+    expect(controller.status.syncStatus).toBe("error");
+  });
+
+  it("does not report a whitespace-only backend synchronization error reason", async () => {
+    events.listen.mockResolvedValue(vi.fn());
+    const reportError = vi.fn();
+    const controller = createController(createSyncAdapter(), { reportError });
+    controller.startLifecycle();
+    controller.startSubscriptions();
+    await Promise.resolve();
+
+    const syncErrorListener = events.listen.mock.calls.find(([event]) => event === "sync-error")?.[1];
+    expect(syncErrorListener).toBeTypeOf("function");
+    syncErrorListener!({ payload: "   " });
+
+    expect(reportError).not.toHaveBeenCalled();
     expect(controller.status.syncStatus).toBe("error");
   });
 
