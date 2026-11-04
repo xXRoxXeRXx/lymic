@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { locale } from 'svelte-i18n';
 import { localeCatalog } from './locale-catalog';
-import { isSupportedLocale, locales, supportedLocales } from './index';
+import { isSupportedLocale, locales, supportedLocales, toBcp47Locale } from './index';
 import de from './de.json';
 import en from './en.json';
 import zh from './zh.json';
@@ -33,18 +33,24 @@ describe('i18n catalogs', () => {
 
     await locale.set('en');
     expect(document.documentElement.lang).toBe('en-US');
+
+    expect(toBcp47Locale(null)).toBe('en-US');
   });
 
   it('translates every backend log message emitted to the UI', () => {
-    const backendLogKeys = [
-      'log_duplicate_resolve_failed',
-      'log_upload_completion_persist_failed',
-      'log_removable_volume_error',
-    ];
+    const backendLogKeys = {
+      log_duplicate_resolve_failed: ['{file}', '{error}'],
+      log_upload_completion_persist_failed: ['{file}', '{error}'],
+      log_removable_volume_error: ['{error}'],
+    };
 
     for (const [localeCode, translations] of Object.entries(catalog)) {
-      for (const key of backendLogKeys) {
+      for (const [key, placeholders] of Object.entries(backendLogKeys)) {
         expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        const translation = (translations as Record<string, string>)[key];
+        for (const placeholder of placeholders) {
+          expect(translation, `Locale ${localeCode} is missing ${placeholder} in ${key}`).toContain(placeholder);
+        }
       }
     }
   });
