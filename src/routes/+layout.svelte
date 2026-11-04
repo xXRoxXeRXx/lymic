@@ -4,7 +4,7 @@
   import { waitLocale } from "svelte-i18n";
   import { onMount } from "svelte";
   import { setupBrowserInteractions } from "#lib/prevent-browser-defaults.js";
-  import { initializeThemeFromStorage } from "#lib/controllers/preferences-controller.svelte.js";
+  import { initializeThemeFromStorage } from "#lib/theme.js";
 
   let { children } = $props();
 
