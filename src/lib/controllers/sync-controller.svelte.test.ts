@@ -129,6 +129,26 @@ describe("sync controller", () => {
     expect("onAddFolder" in controller.status).toBe(false);
   });
 
+  it("keeps a stable reactive status view while hydration updates its properties", async () => {
+    const controller = createController(createSyncAdapter({
+      getSyncStatus: vi.fn().mockResolvedValue({
+        status: "PAUSED",
+        total: 4,
+        succeeded: 1,
+        failed: 0,
+        currentPath: "C:/photos/two.jpg",
+      }),
+    }));
+    controller.startLifecycle();
+    const status = controller.status;
+
+    await controller.hydrate();
+
+    expect(controller.status).toBe(status);
+    expect(status.syncStatus).toBe("paused");
+    expect(status.progress).toBe(25);
+  });
+
   it("shows a durable failed synchronization even without failed queue entries", async () => {
     const adapter = createSyncAdapter({
       getSyncStatus: vi.fn().mockResolvedValue({

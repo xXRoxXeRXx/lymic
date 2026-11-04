@@ -1,6 +1,7 @@
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import type { DetectedVolume, WatchedFolder } from "../contracts";
 import type { WatchedFoldersDesktopAdapter } from "../tauri/desktop-adapter";
+import type { TargetAlbumCatalogue } from "./target-album-catalogue.svelte";
 
 export interface WatchedFoldersViewState {
   readonly watchedFolders: WatchedFolder[];
@@ -33,6 +34,7 @@ export interface WatchedFoldersControllerOptions {
   t(key: string): string;
   onRemovableVolumeAccepted?(volumeId: string): void;
   onFolderRemoved?(): Promise<void> | void;
+  targetAlbumCatalogue?: Pick<TargetAlbumCatalogue, "nameFor" | "refresh">;
 }
 
 interface PendingFolderAddition {
@@ -68,7 +70,12 @@ export function createWatchedFoldersController(
     const generation = refreshGeneration;
     try {
       const nextFolders = await adapter.getFolders();
-      if (mounted && generation === refreshGeneration) watchedFolders = nextFolders;
+      if (mounted && generation === refreshGeneration) {
+        watchedFolders = nextFolders;
+        if (nextFolders.some((folder) => folder.target_album_id && !options.targetAlbumCatalogue?.nameFor(folder.target_album_id))) {
+          await options.targetAlbumCatalogue?.refresh();
+        }
+      }
     } catch (error) {
       console.error("Failed to load folders", error);
       if (mounted && generation === refreshGeneration) options.reportError(error);

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WatchedFoldersDesktopAdapter } from "../tauri/desktop-adapter";
+import type { TargetAlbumCatalogue } from "./target-album-catalogue.svelte";
 import { isValidExclusionPattern } from "../exclusion-patterns";
 import { createWatchedFoldersController } from "./watched-folders-controller.svelte";
 
@@ -29,6 +30,22 @@ function createController(
     t: (key: string) => key,
     ...overrides,
   });
+}
+
+function createTargetAlbumCatalogue(
+  overrides: Partial<TargetAlbumCatalogue> = {},
+): TargetAlbumCatalogue {
+  return {
+    albums: [],
+    isLoading: false,
+    error: null,
+    hasRequested: true,
+    refresh: vi.fn().mockResolvedValue(undefined),
+    clear: vi.fn(),
+    create: vi.fn(),
+    nameFor: vi.fn().mockReturnValue(undefined),
+    ...overrides,
+  };
 }
 
 beforeEach(() => {
@@ -99,6 +116,19 @@ describe("watched folders controller", () => {
     expect(controller.folders.watchedFolders).toEqual([
       { id: 1, path: "C:/photos", recursive: true, target_album_id: null },
     ]);
+  });
+
+  it("refreshes the Target Album catalogue when loaded Watched Folders reference an unknown Target Album", async () => {
+    const targetAlbumCatalogue = createTargetAlbumCatalogue();
+    const controller = createController(createFoldersAdapter({
+      getFolders: vi.fn().mockResolvedValue([
+        { id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" },
+      ]),
+    }), { targetAlbumCatalogue });
+
+    await controller.refresh();
+
+    expect(targetAlbumCatalogue.refresh).toHaveBeenCalledOnce();
   });
 
   it("opens the target album dialog when a folder is selected and cancels cleanly", async () => {

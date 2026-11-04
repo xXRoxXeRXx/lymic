@@ -298,8 +298,10 @@ describe("FolderList and ActivityLog", () => {
     const onAddFolder = vi.fn();
     const onRemoveFolder = vi.fn();
     tauri.invoke.mockResolvedValue([{ id: "album-1", albumName: "Summer holidays" }]);
-    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder, catalogue: createCatalogue() });
-    expect(await screen.findByText("Target Album: Summer holidays")).toBeInTheDocument();
+    const catalogue = createCatalogue();
+    await catalogue.refresh();
+    render(FolderList, { watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" }], onAddFolder, onRemoveFolder, catalogue });
+    expect(screen.getByText("Target Album: Summer holidays")).toBeInTheDocument();
     await fireEvent.click(screen.getAllByRole("button")[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Remove folder: C:/photos" }));
     expect(onAddFolder).toHaveBeenCalledOnce();
@@ -418,27 +420,6 @@ describe("FolderList and ActivityLog", () => {
 
     resolveSave(false);
     await vi.waitFor(() => expect(save).toBeEnabled());
-  });
-
-  it("loads the name when a folder is assigned an album created after mount", async () => {
-    tauri.invoke
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ id: "new-album", albumName: "Roadtrip" }]);
-    const { rerender } = render(FolderList, {
-      watchedFolders: [],
-      onAddFolder: vi.fn(),
-      onRemoveFolder: vi.fn(),
-      catalogue: createCatalogue(),
-    });
-
-    await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("get_albums"));
-    rerender({
-      watchedFolders: [{ id: 1, path: "C:/photos", recursive: true, target_album_id: "new-album" }],
-      onAddFolder: vi.fn(),
-      onRemoveFolder: vi.fn(),
-    });
-
-    expect(await screen.findByText("Target Album: Roadtrip")).toBeInTheDocument();
   });
 
   it("renders the empty folder state", () => {

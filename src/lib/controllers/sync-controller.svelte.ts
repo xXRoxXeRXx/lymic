@@ -285,25 +285,25 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
     stopEvents = undefined;
   }
 
+  const status: SyncStatusViewState = {
+    get syncStatus() { return syncStatus; },
+    get canStartSync() { return canStartSync(); },
+    get lastSync() { return lastSync; },
+    get progress() { return progress; },
+    get processed() { return processed; },
+    get syncTotal() { return syncTotal; },
+    get currentFile() { return currentFile; },
+    get transferredBytes() { return transferredBytes; },
+    get transferRateBytesPerSecond() { return transferRateBytesPerSecond; },
+    get estimatedSecondsRemaining() { return estimatedSecondsRemaining; },
+    get failedSyncs() { return failedSyncs; },
+    get isSyncActionPending() { return isSyncActionPending; },
+    onSyncAction: syncAction,
+    onRetryFailedSyncs: retryFailedSyncs,
+  };
+
   return {
-    get status(): SyncStatusViewState {
-      return {
-        syncStatus,
-        canStartSync: canStartSync(),
-        lastSync,
-        progress,
-        processed,
-        syncTotal,
-        currentFile,
-        transferredBytes,
-        transferRateBytesPerSecond,
-        estimatedSecondsRemaining,
-        failedSyncs,
-        isSyncActionPending,
-        onSyncAction: syncAction,
-        onRetryFailedSyncs: retryFailedSyncs,
-      };
-    },
+    status,
     get isActive() { return isSyncActive(); },
     get logs() { return logs; },
     startLifecycle,

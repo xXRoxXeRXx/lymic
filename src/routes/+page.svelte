@@ -34,6 +34,7 @@
     adapter: desktop,
     reportError: feedback.report,
     t: (key) => $t(key),
+    targetAlbumCatalogue,
     onRemovableVolumeAccepted: (volumeId) => removable.dismiss(volumeId),
     onFolderRemoved: () => sync.refreshFailedSyncs(),
   });

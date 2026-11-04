@@ -13,19 +13,6 @@
   }
 
   let { watchedFolders, onAddFolder, onRemoveFolder, onOpenExclusionSettings = () => {}, catalogue }: Props = $props();
-  let targetAlbumIds = new Set<string>();
-
-  $effect(() => {
-    const nextTargetAlbumIds = new Set(
-      watchedFolders.flatMap((folder) => folder.target_album_id ? [folder.target_album_id] : [])
-    );
-    const hasNewTargetAlbum = [...nextTargetAlbumIds].some((id) => !targetAlbumIds.has(id));
-    targetAlbumIds = nextTargetAlbumIds;
-
-    if (hasNewTargetAlbum || !catalogue.hasRequested) {
-      void catalogue.refresh();
-    }
-  });
 </script>
 
 <div class="space-y-4 animate-in">
