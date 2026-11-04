@@ -458,6 +458,12 @@ pub async fn reset_failed_queue_items_for_folder(
 ) -> Result<u64, sqlx::Error> {
     let clean_path = folder_path.trim_end_matches(['/', '\\']);
     let mut tx = pool.begin().await?;
+    let running_current_path: Option<String> = sqlx::query_scalar(
+        "SELECT current_path FROM sync_jobs WHERE id = 1 AND status = 'RUNNING'",
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .flatten();
 
     let path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
 
@@ -490,7 +496,7 @@ pub async fn reset_failed_queue_items_for_folder(
             "UPDATE sync_jobs SET status = 'RUNNING' WHERE id = {SINGLETON_SYNC_JOB_ID} AND status IN ('IDLE', 'FAILED')"
         );
         sqlx::query(&job_sql).execute(&mut *tx).await?;
-        update_counts_and_snapshot(tx, false, None).await?;
+        update_counts_and_snapshot(tx, false, running_current_path.as_deref()).await?;
         return Ok(queue_res.rows_affected());
     }
 

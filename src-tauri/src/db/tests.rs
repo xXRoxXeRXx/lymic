@@ -2112,4 +2112,41 @@ mod database_tests {
         .unwrap();
         assert_eq!(job, ("RUNNING".to_string(), 3, 1, 1));
     }
+
+    #[tokio::test]
+    async fn reset_failed_queue_items_for_folder_preserves_running_job_current_path() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, upload_unit_id, is_primary, failure_reason) \
+             VALUES (1, 1, 'E:/DCIM/1.jpg', 100, 1, 'FAILED', 'E:/DCIM/1.jpg', 1, 'timeout')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE sync_jobs SET status = 'RUNNING', current_path = 'E:/DCIM/in-progress.jpg', total_count = 1, failure_count = 1 WHERE id = 1",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        reset_failed_queue_items_for_folder(&pool, "E:/DCIM")
+            .await
+            .unwrap();
+
+        let job: (String, Option<String>) =
+            sqlx::query_as("SELECT status, current_path FROM sync_jobs WHERE id = 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            job,
+            (
+                "RUNNING".to_string(),
+                Some("E:/DCIM/in-progress.jpg".to_string())
+            )
+        );
+    }
 }
