@@ -1,3 +1,4 @@
+import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SyncDesktopAdapter } from "../tauri/desktop-adapter";
 import { createSyncController } from "./sync-controller.svelte";
@@ -147,6 +148,32 @@ describe("sync controller", () => {
     expect(controller.status).toBe(status);
     expect(status.syncStatus).toBe("paused");
     expect(status.progress).toBe(25);
+  });
+
+  it("reactively tracks status properties through the stable view", async () => {
+    const controller = createController(createSyncAdapter({
+      getSyncStatus: vi.fn().mockResolvedValue({
+        status: "PAUSED",
+        total: 4,
+        succeeded: 1,
+        failed: 0,
+        currentPath: null,
+      }),
+    }));
+    controller.startLifecycle();
+    const observedStatuses: string[] = [];
+    const stop = $effect.root(() => {
+      $effect(() => {
+        observedStatuses.push(controller.status.syncStatus);
+      });
+    });
+
+    flushSync();
+    await controller.hydrate();
+    flushSync();
+    stop();
+
+    expect(observedStatuses).toEqual(["idle", "paused"]);
   });
 
   it("shows a durable failed synchronization even without failed queue entries", async () => {

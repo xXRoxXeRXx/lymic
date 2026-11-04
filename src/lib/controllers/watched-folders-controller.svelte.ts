@@ -66,15 +66,17 @@ export function createWatchedFoldersController(
     pendingAddition = null;
   }
 
+  function referencesUnknownTargetAlbum(folders: WatchedFolder[]) {
+    return folders.some((folder) => folder.target_album_id && !options.targetAlbumCatalogue?.nameFor(folder.target_album_id));
+  }
+
   async function refresh() {
     const generation = refreshGeneration;
     try {
       const nextFolders = await adapter.getFolders();
       if (mounted && generation === refreshGeneration) {
         watchedFolders = nextFolders;
-        if (nextFolders.some((folder) => folder.target_album_id && !options.targetAlbumCatalogue?.nameFor(folder.target_album_id))) {
-          await options.targetAlbumCatalogue?.refresh();
-        }
+        if (referencesUnknownTargetAlbum(nextFolders)) void options.targetAlbumCatalogue?.refresh();
       }
     } catch (error) {
       console.error("Failed to load folders", error);
@@ -160,15 +162,15 @@ export function createWatchedFoldersController(
     }
   }
 
+  const folders: WatchedFoldersViewState = {
+    get watchedFolders() { return watchedFolders; },
+    onAddFolder: addFolder,
+    onRemoveFolder: removeFolder,
+    onUpdateFolderExclusionPatterns: updateFolderExclusionPatterns,
+  };
+
   return {
-    get folders(): WatchedFoldersViewState {
-      return {
-        watchedFolders,
-        onAddFolder: addFolder,
-        onRemoveFolder: removeFolder,
-        onUpdateFolderExclusionPatterns: updateFolderExclusionPatterns,
-      };
-    },
+    folders,
     get targetAlbumDialog(): TargetAlbumDialogState {
       return {
         isOpen: pendingAddition !== null,

@@ -118,6 +118,20 @@ describe("watched folders controller", () => {
     ]);
   });
 
+  it("keeps a stable folder view while refresh updates its Watched Folders", async () => {
+    const controller = createController(createFoldersAdapter({
+      getFolders: vi.fn().mockResolvedValue([{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }]),
+    }));
+    const folders = controller.folders;
+
+    await controller.refresh();
+
+    expect(controller.folders).toBe(folders);
+    expect(folders.watchedFolders).toEqual([
+      { id: 1, path: "C:/photos", recursive: true, target_album_id: null },
+    ]);
+  });
+
   it("refreshes the Target Album catalogue when loaded Watched Folders reference an unknown Target Album", async () => {
     const targetAlbumCatalogue = createTargetAlbumCatalogue();
     const controller = createController(createFoldersAdapter({
@@ -129,6 +143,34 @@ describe("watched folders controller", () => {
     await controller.refresh();
 
     expect(targetAlbumCatalogue.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("does not refresh the Target Album catalogue when every loaded Target Album is known", async () => {
+    const targetAlbumCatalogue = createTargetAlbumCatalogue({
+      nameFor: vi.fn().mockReturnValue("Summer holidays"),
+    });
+    const controller = createController(createFoldersAdapter({
+      getFolders: vi.fn().mockResolvedValue([
+        { id: 1, path: "C:/photos", recursive: true, target_album_id: "album-1" },
+      ]),
+    }), { targetAlbumCatalogue });
+
+    await controller.refresh();
+
+    expect(targetAlbumCatalogue.refresh).not.toHaveBeenCalled();
+  });
+
+  it("does not refresh the Target Album catalogue when loaded Watched Folders have no Target Album", async () => {
+    const targetAlbumCatalogue = createTargetAlbumCatalogue();
+    const controller = createController(createFoldersAdapter({
+      getFolders: vi.fn().mockResolvedValue([
+        { id: 1, path: "C:/photos", recursive: true, target_album_id: null },
+      ]),
+    }), { targetAlbumCatalogue });
+
+    await controller.refresh();
+
+    expect(targetAlbumCatalogue.refresh).not.toHaveBeenCalled();
   });
 
   it("opens the target album dialog when a folder is selected and cancels cleanly", async () => {
