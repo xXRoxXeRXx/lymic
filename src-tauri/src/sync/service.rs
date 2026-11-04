@@ -8,7 +8,7 @@ use crate::{
     sync::{queue_runner::run_sync_pipeline, SyncCoordinator},
 };
 use std::sync::{atomic::Ordering, Arc};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, Runtime};
 
 /// Identifies the producer submitting Synchronization work.
 ///
@@ -275,53 +275,29 @@ impl<'a> Synchronization<'a> {
                 Err(error) => self.fail_run(source, &error).await,
             }
         } else {
-            let app = self.app.clone();
-            let pool = self.pool.clone();
-            let coordinator = self.coordinator.clone();
-            let running = self.app.state::<crate::sync::SyncState>().0.clone();
-            tauri::async_runtime::spawn(async move {
-                let result = run_sync_pipeline(
-                    app.clone(),
-                    pool.clone(),
-                    client,
-                    source,
-                    coordinator,
-                    running,
-                    audit_context,
-                )
-                .await;
-                if let Err(error) = result {
-                    app.state::<crate::sync::SyncState>()
-                        .0
-                        .store(false, Ordering::SeqCst);
-                    emit_sync_error(&app, &error);
-                    if let Ok(snapshot) = db::set_sync_status(&pool, "FAILED").await {
-                        crate::app::tray::update_sync_action(&app, &snapshot);
-                    }
-                }
-            });
+            spawn_sync_runner(
+                self.app.clone(),
+                self.pool.clone(),
+                client,
+                source,
+                self.coordinator.clone(),
+                self.app.state::<crate::sync::SyncState>().0.clone(),
+                audit_context,
+            );
             Ok(None)
         }
     }
 
     async fn fail_run<T>(&self, source: SyncSource, error: &str) -> Result<T, String> {
-        if let Ok(snapshot) = self.lifecycle().fail().await {
-            crate::app::tray::update_sync_action(self.app, &snapshot);
-            let _ = self.app.emit("sync-progress-snapshot", &snapshot);
-        }
-        crate::audit::audit_event(
+        fail_sync_run(
             self.app,
-            crate::audit::AuditEvent::new(
-                crate::audit::AuditEvent::operation_id(),
-                "sync.aborted",
-                crate::audit::Outcome::Failure,
-                crate::audit::Severity::Error,
-                None,
-                source.audit_label(),
-                "Synchronization aborted",
-                serde_json::json!({ "failure_reason": crate::audit::audit_safe_error(error, &[]) }),
-            ),
-        );
+            self.pool,
+            self.running,
+            self.coordinator.clone(),
+            source,
+            error,
+        )
+        .await;
         Err(error.to_string())
     }
 
@@ -388,39 +364,80 @@ impl<'a> Synchronization<'a> {
                 serde_json::json!({}),
             ),
         );
-        let app = self.app.clone();
-        let pool = self.pool.clone();
-        let cleanup_pool = self.pool.clone();
-        let coordinator = self.coordinator.clone();
-        let running = self.app.state::<crate::sync::SyncState>().0.clone();
         self.running.store(true, Ordering::SeqCst);
-        tauri::async_runtime::spawn(async move {
-            let result = crate::sync::queue_runner::run_sync_pipeline(
-                app.clone(),
-                pool,
-                client,
-                SyncSource::Recovery,
-                coordinator,
-                running,
-                audit_context,
-            )
-            .await;
-            app.state::<crate::sync::SyncState>()
-                .0
-                .store(false, Ordering::SeqCst);
-            if let Err(error) = result {
-                emit_sync_error(&app, &error);
-                if let Ok(snapshot) = db::set_sync_status(&cleanup_pool, "FAILED").await {
-                    crate::app::tray::update_sync_action(&app, &snapshot);
-                }
-            }
-        });
+        spawn_sync_runner(
+            self.app.clone(),
+            self.pool.clone(),
+            client,
+            SyncSource::Recovery,
+            self.coordinator.clone(),
+            self.app.state::<crate::sync::SyncState>().0.clone(),
+            audit_context,
+        );
         Ok(snapshot.clone())
     }
 
     pub(crate) async fn status(&self) -> Result<db::SyncSnapshot, String> {
         self.lifecycle().status().await
     }
+}
+
+fn spawn_sync_runner(
+    app: tauri::AppHandle,
+    pool: sqlx::SqlitePool,
+    client: Arc<ImmichClient>,
+    source: SyncSource,
+    coordinator: Arc<crate::sync::SyncCoordinatorInner>,
+    running: Arc<std::sync::atomic::AtomicBool>,
+    audit_context: SyncAuditContext,
+) {
+    tauri::async_runtime::spawn(async move {
+        let result = run_sync_pipeline(
+            app.clone(),
+            pool.clone(),
+            client,
+            source,
+            coordinator.clone(),
+            running.clone(),
+            audit_context,
+        )
+        .await;
+        if let Err(error) = result {
+            fail_sync_run(&app, &pool, &running, coordinator, source, &error).await;
+            emit_sync_error(&app, &error);
+        }
+    });
+}
+
+async fn fail_sync_run<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    pool: &sqlx::SqlitePool,
+    running: &std::sync::atomic::AtomicBool,
+    coordinator: Arc<crate::sync::SyncCoordinatorInner>,
+    source: SyncSource,
+    error: &str,
+) {
+    if let Ok(snapshot) = SynchronizationLifecycle::new(pool, running, coordinator)
+        .fail()
+        .await
+    {
+        crate::app::tray::update_sync_action(app, &snapshot);
+        let _ = app.emit("sync-progress-snapshot", &snapshot);
+    }
+    crate::audit::audit_event(app, sync_aborted_audit_event(source, error));
+}
+
+fn sync_aborted_audit_event(source: SyncSource, error: &str) -> crate::audit::AuditEvent {
+    crate::audit::AuditEvent::new(
+        crate::audit::AuditEvent::operation_id(),
+        "sync.aborted",
+        crate::audit::Outcome::Failure,
+        crate::audit::Severity::Error,
+        None,
+        source.audit_label(),
+        "Synchronization aborted",
+        serde_json::json!({ "failure_reason": crate::audit::audit_safe_error(error, &[]) }),
+    )
 }
 
 /// Queue a producer result while copying its Watched Folder's current Target
@@ -560,6 +577,7 @@ pub(crate) async fn admit_and_run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tauri::Listener;
 
     #[tokio::test]
     async fn lifecycle_persists_pause_and_resume_without_a_desktop_runtime() {
@@ -674,6 +692,101 @@ mod tests {
             "removable_media_reconnect"
         );
         assert_eq!(SyncSource::Recovery.audit_label(), "resume_sync");
+    }
+
+    #[test]
+    fn manual_and_background_failures_use_the_same_aborted_sync_audit_event() {
+        let manual = serde_json::to_value(sync_aborted_audit_event(
+            SyncSource::Manual,
+            "connection lost",
+        ))
+        .unwrap();
+        let background = serde_json::to_value(sync_aborted_audit_event(
+            SyncSource::Watcher,
+            "connection lost",
+        ))
+        .unwrap();
+
+        assert_eq!(manual["event_type"], "sync.aborted");
+        assert_eq!(background["event_type"], "sync.aborted");
+        assert_eq!(manual["outcome"], "failure");
+        assert_eq!(background["outcome"], "failure");
+        assert_eq!(manual["source"], "manual_sync");
+        assert_eq!(background["source"], "watcher_sync");
+        assert_eq!(
+            manual["details"]["failure_reason"],
+            serde_json::Value::String("connection lost".to_string())
+        );
+        assert_eq!(manual["details"], background["details"]);
+    }
+
+    #[tokio::test]
+    async fn shared_failure_cleanup_persists_failed_state_and_emits_a_snapshot_for_manual_and_background_sources(
+    ) {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let app = tauri::test::mock_app();
+        let audit_logger =
+            std::sync::Arc::new(crate::audit::AuditLogger::initialize(app.handle()).unwrap());
+        app.manage(audit_logger.clone());
+        let snapshots = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured_snapshots = snapshots.clone();
+        app.handle().listen("sync-progress-snapshot", move |event| {
+            captured_snapshots
+                .lock()
+                .unwrap()
+                .push(serde_json::from_str::<serde_json::Value>(event.payload()).unwrap());
+        });
+        let running = std::sync::atomic::AtomicBool::new(true);
+        let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+
+        for source in [SyncSource::Manual, SyncSource::Watcher] {
+            running.store(true, Ordering::SeqCst);
+            fail_sync_run(
+                app.handle(),
+                &pool,
+                &running,
+                coordinator.clone(),
+                source,
+                "connection lost",
+            )
+            .await;
+
+            assert_eq!(db::get_sync_snapshot(&pool).await.unwrap().status, "FAILED");
+            assert!(!running.load(Ordering::SeqCst));
+        }
+
+        let snapshots = snapshots.lock().unwrap();
+        assert_eq!(snapshots.len(), 2);
+        for snapshot in snapshots.iter() {
+            assert_eq!(snapshot["status"], "FAILED");
+        }
+
+        audit_logger.flush().unwrap();
+        let audit_log = std::fs::read_to_string(
+            app.handle()
+                .path()
+                .app_data_dir()
+                .unwrap()
+                .join("logs")
+                .join("audit-0.jsonl"),
+        )
+        .unwrap();
+        let aborted_sources = audit_log
+            .lines()
+            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+            .filter(|event| event["event_type"] == "sync.aborted")
+            .map(|event| event["source"].as_str().unwrap().to_string())
+            .collect::<Vec<_>>();
+        assert!(aborted_sources.contains(&"manual_sync".to_string()));
+        assert!(aborted_sources.contains(&"watcher_sync".to_string()));
     }
 
     #[tokio::test]

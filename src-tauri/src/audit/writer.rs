@@ -8,7 +8,7 @@ use std::sync::{
     mpsc, Arc, Mutex,
 };
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
 pub const MAX_AUDIT_FILES: usize = 5;
 pub const MAX_AUDIT_FILE_BYTES: u64 = 5 * 1024 * 1024;
@@ -64,7 +64,7 @@ pub struct AuditWriter {
 }
 
 impl AuditWriter {
-    fn initialize(app: &AppHandle) -> Result<Self, AuditError> {
+    fn initialize<R: Runtime>(app: &AppHandle<R>) -> Result<Self, AuditError> {
         let app_data = app
             .path()
             .app_data_dir()
@@ -224,7 +224,7 @@ impl OverflowState {
 }
 
 impl AuditLogger {
-    pub fn initialize(app: &AppHandle) -> Result<Self, AuditError> {
+    pub fn initialize<R: Runtime>(app: &AppHandle<R>) -> Result<Self, AuditError> {
         let writer = AuditWriter::initialize(app)?;
         let app = app.clone();
         Self::from_writer(writer, move |message| {

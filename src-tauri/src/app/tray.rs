@@ -20,7 +20,10 @@ pub(crate) fn set_sync_enabled(app: &tauri::AppHandle, enabled: bool) {
     }
 }
 
-pub(crate) fn update_sync_action(app: &tauri::AppHandle, snapshot: &db::SyncSnapshot) {
+pub(crate) fn update_sync_action<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    snapshot: &db::SyncSnapshot,
+) {
     if let Some(state) = app.try_state::<TraySyncStatus>() {
         *state.0.lock().expect("tray sync status lock poisoned") = snapshot.status.clone();
     }
@@ -39,7 +42,7 @@ pub(crate) fn refresh_sync_action(app: &tauri::AppHandle) {
     apply_sync_action(app, &status);
 }
 
-fn apply_sync_action(app: &tauri::AppHandle, status: &str) {
+fn apply_sync_action<R: tauri::Runtime>(app: &tauri::AppHandle<R>, status: &str) {
     let Some(tray_menu) = app.try_state::<TrayMenuState>() else {
         return;
     };
@@ -50,7 +53,7 @@ fn apply_sync_action(app: &tauri::AppHandle, status: &str) {
     let _ = item.set_text(sync_action_text(status, backend_translations(&locale)));
 }
 
-fn current_locale(app: &tauri::AppHandle) -> String {
+fn current_locale<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {
     app.try_state::<LocaleState>()
         .and_then(|state| state.0.lock().ok().map(|locale| locale.clone()))
         .unwrap_or_else(|| "en".to_string())
