@@ -1,6 +1,6 @@
 {
   "name": "lymic",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "description": "High-performance desktop sync client for Immich",
   "keywords": [
     "immich",
@@ -37,7 +37,7 @@
     "@tauri-apps/plugin-notification": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2.7.2",
     "@tauri-apps/plugin-process": "^2.3.1",
-    "@tauri-apps/plugin-updater": "^2.9.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "lucide-svelte": "^1.0.1",
     "svelte-i18n": "^4.0.1"
   },

@@ -252,20 +252,31 @@ async fn move_or_copy_and_remove(src: &Path, dst: &Path) -> Result<(), std::io::
     }
 
     let mut last_err = None;
-    for _ in 0..5 {
+    for _ in 0..30 {
         match fs::rename(src, dst) {
             Ok(()) => return Ok(()),
             Err(e) => {
                 last_err = Some(e);
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
     }
 
-    // Fallback: copy then remove
+    // Fallback: copy then remove with retry for Windows file handle release
     fs::copy(src, dst).map_err(|e| last_err.unwrap_or(e))?;
-    fs::remove_file(src)?;
-    Ok(())
+    let mut remove_err = None;
+    for _ in 0..30 {
+        match fs::remove_file(src) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => {
+                remove_err = Some(e);
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    }
+    Err(remove_err
+        .unwrap_or_else(|| std::io::Error::other("Failed to remove source file after copy")))
 }
 
 pub(crate) async fn quarantine_unusable_db(db_path: &Path) -> Result<PathBuf, std::io::Error> {

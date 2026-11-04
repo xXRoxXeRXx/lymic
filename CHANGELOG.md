@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0] - 2026-11-04
+
+### Added
+- **Canonical Snap Store distribution**:
+  - Packages Lymic for Linux via Canonical Snap Store (`lymic`) under strict confinement using `core22` and the GNOME extension.
+  - Declares interface plugs for network access, home directory access, external/removable storage, and password manager services (Secret Service API).
+  - Configures WebKitGTK 4.1 layout bindings to prevent sandboxed runtime crashes.
+  - Integrates automated Snapcraft configuration validation in TypeScript tests and PowerShell scripts.
+  - Automates Snap package building, testing, and store publishing in GitHub Actions release workflow.
+- **Product showcase and landing page**:
+  - Adds responsive web landing page presenting key features, screenshots, system requirements, and platform download options for Windows and Linux.
+  - Includes structured SEO metadata and FAQ schema.
+
+### Changed
+- **Modular architecture and desktop adapter separation**:
+  - Splits the typed `DesktopAdapter` into dedicated domain adapters (`AuthAdapter`, `FoldersAdapter`, `SyncAdapter`, `SettingsAdapter`, `LoggingAdapter`, `UpdaterAdapter`).
+  - Routes all Tauri plugins through desktop adapter seams for clean testing and boundary isolation.
+  - Decouples Watched Folder registration behind a dedicated `WatchedFolderRegistration` application module.
+  - Separates active synchronization status cards from Watched Folder management in the UI.
+  - Decomposes synchronization processor stages and clarifies stage outcome contracts (`Completed`, `Failed`, `Cancelled`, `Skipped`).
+  - Cleans up unused backend helpers, legacy font assets, obsolete CSS selectors, and unused locale keys.
+
+### Fixed
+- **Removable media and remount recovery**:
+  - Preserves sync progress and restarts failed sync jobs automatically upon removable volume reconnection.
+  - Improves removable volume listener concurrency and guards volume event subscriptions.
+  - Resolves Escape key handling on removable volume prompt dialogs.
+- **Database integrity and queue performance**:
+  - Bounds durable queue windows and optimizes queue sequence allocation and indexing.
+  - Ensures folder settings and queue records survive database migrations and salvages.
+  - Safely discards SQLite connections when foreign key restoration fails.
+- **Synchronization and IPC stability**:
+  - Throttles progress IPC event emissions to reduce UI update pressure during rapid file transfers.
+  - Isolates folder cancellations during active synchronization to avoid aborting unaffected folders.
+  - Prevents race conditions during synchronization pause, queue drain, and runner handoff.
+  - Unifies error reporting across sync runners and surfaces clear error states in the frontend.
+  - Normalizes and validates Immich path segments and timestamps (h23 format).
+- **User interface and accessibility**:
+  - Enhances modal dialog accessibility with proper focus trapping and ARIA attributes.
+  - Retains folder exclusion rule drafts when saving fails.
+  - Redacts sensitive credentials from UI error and retry logs.
+  - Resets frontend user session state completely upon logout.
+- **Store certification & security dependencies**:
+  - Aligns Microsoft Store MSIX manifest by removing redundant `broadFileSystemAccess` capability.
+  - Updates `zip` crate to 9.3.0 and `tauri-plugin-updater` to 2.14.1 (mitigating CVE-2026-115904, CVE-2026-115905, CVE-2026-115906).
+  - Updates `rustls` to 0.23.46 and overrides `esbuild` for `svelte-i18n` security advisories.
+
 ## [0.22.0] - 2026-10-25
 
 ### Added

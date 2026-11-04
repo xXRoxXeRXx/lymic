@@ -256,6 +256,8 @@ mod tests {
         let address = listener.local_addr().unwrap();
         tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = tokio::io::AsyncReadExt::read(&mut stream, &mut buf).await;
             let response = r#"[{"id":"remote-photo","success":true}]"#;
             stream
                 .write_all(

@@ -126,7 +126,10 @@ mod tests {
     use crate::{audit::SyncAuditContext, auth::AuthConfig, immich::ImmichClient};
     use std::sync::{Arc, Mutex};
     use tauri::Listener;
-    use tokio::{io::AsyncWriteExt, net::TcpListener};
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
 
     #[tokio::test]
     async fn redacts_credentials_from_non_retryable_bulk_check_ui_log() {
@@ -141,6 +144,8 @@ mod tests {
         );
         tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf).await;
             stream
                 .write_all(
                     format!(
@@ -219,6 +224,8 @@ mod tests {
         tokio::spawn(async move {
             for _ in 0..3 {
                 let (mut stream, _) = listener.accept().await.unwrap();
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf).await;
                 stream
                     .write_all(
                         format!(
