@@ -41,6 +41,7 @@ Rust application services
 | Tauri surface | `src-tauri/src/commands/`, `src-tauri/src/app/mod.rs` | Command inputs, responses, and registration. |
 | Sync orchestration | `src-tauri/src/sync/` | Scan results, durable queue, pause/resume, retries, upload processing, progress. |
 | Watched Folder registration | `src-tauri/src/watched_folders/` | Watched Folder validation, watcher registration, persistence with compensation, and initial sync trigger. |
+| Removable-volume monitoring | `src-tauri/src/removable/` | Windows uses `WindowsRemovableMediaMonitor` and `WM_DEVICECHANGE` to detect removable volumes. `MacOsRemovableMediaMonitor` and `LinuxRemovableMediaMonitor` are currently no-op stubs, so removable-volume arrival and remount reconciliation are not active on macOS or Linux. |
 | File discovery | `src-tauri/src/media/` | Supported extensions, pairing, sidecars, path handling, and scanning. |
 | Filesystem watching | `src-tauri/src/watcher/` | Recursive watcher lifecycle, debouncing, overflow recovery, unavailable-folder handling. |
 | Immich integration | `src-tauri/src/immich/` | Authenticated client, endpoint calls, streaming multipart uploads, album calls. |

@@ -13,5 +13,5 @@ Watched folders located on removable storage (such as SD cards) are bound to a s
 
 - Database schema migration `0006_removable_watched_folders.sql` adds `removable_watched_folders` linked to `watched_folders.id`.
 - Changing mount paths triggers an atomic database transaction that updates `watched_folders.path` alongside descendant paths in `sync_state.local_path` and `sync_queue.local_path`.
-- Volume monitoring relies on platform-native mechanisms (Windows `WM_DEVICECHANGE`, macOS Disk Arbitration, Linux udev).
+- Volume monitoring is currently implemented only on Windows through `WindowsRemovableMediaMonitor` and `WM_DEVICECHANGE`. `MacOsRemovableMediaMonitor` and `LinuxRemovableMediaMonitor` are no-op stubs; macOS Disk Arbitration and Linux udev integration have not yet been implemented, so removable-volume arrival and remount reconciliation are unavailable on those platforms.
 - Removable watched folders support optional target albums through `target_album_id` just like standard watched folders.
