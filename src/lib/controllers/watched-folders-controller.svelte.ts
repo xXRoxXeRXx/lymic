@@ -6,7 +6,7 @@ export interface WatchedFoldersViewState {
   readonly watchedFolders: WatchedFolder[];
   onAddFolder(): Promise<void>;
   onRemoveFolder(id: number): Promise<void>;
-  onUpdateFolderExclusionPatterns(id: number, exclusionPatterns: string[]): Promise<void>;
+  onUpdateFolderExclusionPatterns(id: number, exclusionPatterns: string[]): Promise<boolean>;
 }
 
 export interface TargetAlbumDialogState {
@@ -146,8 +146,10 @@ export function createWatchedFoldersController(
     try {
       await adapter.updateFolderExclusionPatterns(id, exclusionPatterns);
       await refresh();
+      return true;
     } catch (error) {
       if (mounted) options.reportError(error);
+      return false;
     }
   }
 

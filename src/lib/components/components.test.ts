@@ -355,7 +355,7 @@ describe("FolderList and ActivityLog", () => {
   });
 
   it("clears a saved exclusion draft and warns for broad patterns", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onSave = vi.fn().mockResolvedValue(true);
     const props = {
       folder: { id: 1, path: "C:/photos", recursive: true, target_album_id: null },
       onSave,
@@ -372,6 +372,26 @@ describe("FolderList and ActivityLog", () => {
     rerender({ ...props, folder: { ...props.folder, exclusion_patterns: ["**/exports/**"] } });
     expect(screen.getByText("**/exports/**")).toBeInTheDocument();
     expect(screen.queryByText("*.*")).not.toBeInTheDocument();
+  });
+
+  it("keeps the exclusion-pattern dialog and draft open when saving fails", async () => {
+    const onSave = vi.fn().mockResolvedValue(false);
+    const onClose = vi.fn();
+    render(ExclusionPatternsModal, {
+      folder: { id: 1, path: "C:/photos", recursive: true, target_album_id: null },
+      onSave,
+      onClose,
+    });
+
+    const input = screen.getByPlaceholderText("e.g. **/exports/** or *.mp4");
+    await fireEvent.input(input, { target: { value: "*.mp4" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Save exclusions" }));
+
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledWith(1, ["*.mp4"]));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("*.mp4")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("loads the name when a folder is assigned an album created after mount", async () => {

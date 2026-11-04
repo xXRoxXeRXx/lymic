@@ -1,4 +1,5 @@
 import type { Album } from "../contracts";
+import { formatError } from "./feedback-controller.svelte";
 import type { AlbumsDesktopAdapter } from "../tauri/desktop-adapter";
 
 export interface TargetAlbumCatalogue {
@@ -10,10 +11,6 @@ export interface TargetAlbumCatalogue {
   clear(): void;
   create(name: string): Promise<Album>;
   nameFor(id: string): string | undefined;
-}
-
-function errorMessage(error: unknown) {
-  return typeof error === "string" ? error : (error as Error)?.message || "Failed to load albums";
 }
 
 function sorted(albums: Album[]) {
@@ -41,7 +38,7 @@ export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): Targe
         albums = sorted([...loadedAlbums, ...[...pendingCreated.values()].filter((album) => !loadedAlbums.some((loaded) => loaded.id === album.id))]);
       }
     } catch (caught) {
-      if (request === latestRequest) error = errorMessage(caught);
+      if (request === latestRequest) error = formatError(caught, "Failed to load albums");
     } finally {
       if (request === latestRequest) isLoading = false;
     }

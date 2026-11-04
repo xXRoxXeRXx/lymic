@@ -2,10 +2,11 @@
   import { AlertCircle, Folder, Plus, X } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import type { WatchedFolder } from "../contracts";
+  import { isValidExclusionPattern } from "../exclusion-patterns";
 
   interface Props {
     folder: WatchedFolder | null;
-    onSave: (id: number, patterns: string[]) => Promise<void>;
+    onSave: (id: number, patterns: string[]) => Promise<boolean>;
     onClose: () => void;
   }
 
@@ -13,11 +14,7 @@
   let patterns = $state<string[]>([]);
   let newPattern = $state("");
   let validationError = $state("");
-
-  function isValidPattern(pattern: string) {
-    return pattern.length > 0 && !pattern.includes("\\") && !pattern.startsWith("/")
-      && !pattern.includes("..") && !/[?\[\]{}!]/.test(pattern);
-  }
+  let saving = $state(false);
 
   function excludesAllMedia() {
     return patterns.some((pattern) => ["*", "*.*", "**", "**/*"].includes(pattern));
@@ -25,7 +22,7 @@
 
   function addPattern() {
     const pattern = newPattern.trim();
-    if (!isValidPattern(pattern)) {
+    if (!isValidExclusionPattern(pattern)) {
       validationError = $t("folder_exclusions_invalid_pattern");
       return;
     }
@@ -37,9 +34,13 @@
   }
 
   async function save() {
-    if (!folder) return;
-    await onSave(folder.id, patterns);
-    onClose();
+    if (!folder || saving) return;
+    saving = true;
+    try {
+      if (await onSave(folder.id, patterns)) onClose();
+    } finally {
+      saving = false;
+    }
   }
 
   function handleBackdropClick(event: MouseEvent) {
@@ -55,6 +56,7 @@
       patterns = folder.exclusion_patterns ?? [];
       newPattern = "";
       validationError = "";
+      saving = false;
     }
   });
 </script>
@@ -69,18 +71,18 @@
           <div class="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-sky-400 shrink-0"><Folder class="w-5 h-5" /></div>
           <div class="min-w-0"><h2 id="exclusion-patterns-dialog-title" class="text-base font-bold truncate">{$t("folder_exclusions")}</h2><p class="mt-0.5 text-xs text-slate-500 dark:text-zinc-400 truncate">{folder.path}</p></div>
         </div>
-        <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-800" aria-label={$t("folder_exclusions_close")} onclick={onClose}><X class="w-4 h-4" /></button>
+        <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-zinc-800" aria-label={$t("folder_exclusions_close")} onclick={onClose} disabled={saving}><X class="w-4 h-4" /></button>
       </div>
       <div class="space-y-2">
         <p class="text-xs text-slate-500 dark:text-zinc-400">{$t("folder_exclusions_help")}</p>
-        <div class="flex gap-2"><input class="glass-input !py-2 text-xs flex-1" placeholder={$t("folder_exclusions_example")} bind:value={newPattern} oninput={() => validationError = ""} onkeydown={(event) => { if (event.key === "Enter") { event.preventDefault(); addPattern(); } }} /><button type="button" class="rounded-lg border px-3 text-xs font-semibold" onclick={addPattern}><Plus class="w-3.5 h-3.5 inline" /> {$t("folder_exclusions_add")}</button></div>
+        <div class="flex gap-2"><input class="glass-input !py-2 text-xs flex-1" placeholder={$t("folder_exclusions_example")} bind:value={newPattern} oninput={() => validationError = ""} onkeydown={(event) => { if (event.key === "Enter") { event.preventDefault(); addPattern(); } }} disabled={saving} /><button type="button" class="rounded-lg border px-3 text-xs font-semibold disabled:opacity-50" onclick={addPattern} disabled={saving}><Plus class="w-3.5 h-3.5 inline" /> {$t("folder_exclusions_add")}</button></div>
         {#if validationError}<p class="text-xs text-red-600 dark:text-red-400" role="alert">{validationError}</p>{/if}
       </div>
       <ul class="max-h-48 overflow-y-auto space-y-1.5">
-        {#each patterns as pattern}<li class="flex items-center justify-between gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs dark:bg-zinc-800"><code>{pattern}</code><button type="button" class="text-slate-500 hover:text-red-600" aria-label={`${$t("folder_exclusions_remove")}: ${pattern}`} onclick={() => patterns = patterns.filter((candidate) => candidate !== pattern)}><X class="w-4 h-4" /></button></li>{/each}
+        {#each patterns as pattern}<li class="flex items-center justify-between gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs dark:bg-zinc-800"><code>{pattern}</code><button type="button" class="text-slate-500 hover:text-red-600 disabled:opacity-50" aria-label={`${$t("folder_exclusions_remove")}: ${pattern}`} onclick={() => patterns = patterns.filter((candidate) => candidate !== pattern)} disabled={saving}><X class="w-4 h-4" /></button></li>{/each}
       </ul>
       {#if excludesAllMedia()}<div class="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"><AlertCircle class="w-4 h-4 shrink-0" /><p>{$t("folder_exclusions_all_warning")}</p></div>{/if}
-      <div class="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-zinc-800"><button type="button" class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800" onclick={onClose}>{$t("folder_exclusions_cancel")}</button><button type="button" class="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm font-semibold text-white" onclick={save}>{$t("folder_exclusions_save")}</button></div>
+      <div class="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-zinc-800"><button type="button" class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-zinc-800" onclick={onClose} disabled={saving}>{$t("folder_exclusions_cancel")}</button><button type="button" class="rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 text-sm font-semibold text-white" onclick={save} disabled={saving}>{$t("folder_exclusions_save")}</button></div>
     </dialog>
   </div>
 {/if}

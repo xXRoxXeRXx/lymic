@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Album, AlertCircle, Check, Folder, Loader2, Plus, RefreshCw, Search, X } from "lucide-svelte";
   import { t } from "svelte-i18n";
+  import { formatError } from "../controllers/feedback-controller.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
   interface Props {
@@ -42,7 +43,7 @@
       newAlbumName = "";
       isCreatingOpen = false;
     } catch (error) {
-      createError = typeof error === "string" ? error : (error as Error)?.message || "Failed to create album";
+      createError = formatError(error, "Failed to create album");
     } finally {
       isCreating = false;
     }

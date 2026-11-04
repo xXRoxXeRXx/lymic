@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WatchedFoldersDesktopAdapter } from "../tauri/desktop-adapter";
+import { isValidExclusionPattern } from "../exclusion-patterns";
 import { createWatchedFoldersController } from "./watched-folders-controller.svelte";
 
 const dialog = vi.hoisted(() => ({ confirm: vi.fn(), open: vi.fn() }));
@@ -204,7 +205,7 @@ describe("watched folders controller", () => {
     expect(onFolderRemoved).not.toHaveBeenCalled();
   });
 
-  it("updates folder exclusion patterns and refreshes folders", async () => {
+  it("updates folder exclusion patterns, refreshes folders, and reports success", async () => {
     const adapter = createFoldersAdapter({
       getFolders: vi.fn().mockResolvedValue([
         { id: 1, path: "C:/photos", recursive: true, target_album_id: null, exclusion_patterns: ["*.mp4"] },
@@ -212,12 +213,33 @@ describe("watched folders controller", () => {
     });
     const controller = createController(adapter);
 
-    await controller.folders.onUpdateFolderExclusionPatterns(1, ["*.mp4"]);
+    await expect(controller.folders.onUpdateFolderExclusionPatterns(1, ["*.mp4"])).resolves.toBe(true);
 
     expect(adapter.updateFolderExclusionPatterns).toHaveBeenCalledWith(1, ["*.mp4"]);
     expect(controller.folders.watchedFolders).toEqual([
       { id: 1, path: "C:/photos", recursive: true, target_album_id: null, exclusion_patterns: ["*.mp4"] },
     ]);
+  });
+
+  it("reports a failed exclusion-pattern update without reporting success", async () => {
+    const error = new Error("Pattern rejected");
+    const adapter = createFoldersAdapter({
+      updateFolderExclusionPatterns: vi.fn().mockRejectedValue(error),
+    });
+    const reportError = vi.fn();
+    const controller = createController(adapter, { reportError });
+
+    await expect(controller.folders.onUpdateFolderExclusionPatterns(1, ["*.mp4"])).resolves.toBe(false);
+
+    expect(reportError).toHaveBeenCalledWith(error);
+  });
+
+  it("validates Exclusion Patterns with the backend's allowed glob syntax", () => {
+    expect(isValidExclusionPattern("Screenshots/**")).toBe(true);
+    expect(isValidExclusionPattern("*.mp4")).toBe(true);
+    expect(isValidExclusionPattern("../private/**")).toBe(false);
+    expect(isValidExclusionPattern("Screenshots\\**")).toBe(false);
+    expect(isValidExclusionPattern("*.{jpg,png}")).toBe(false);
   });
 
   it("ignores folder updates after destroy", async () => {
