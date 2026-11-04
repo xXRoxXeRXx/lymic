@@ -8,14 +8,8 @@ pub use folders::{
     add_folder, bind_removable_folder, get_folders, remap_watched_folder_path, remove_folder,
     update_exclusion_patterns, WatchedFolder,
 };
-#[allow(unused_imports)]
-pub use folders::{
-    get_removable_folder_binding, get_removable_folders_by_volume, unbind_removable_folder,
-    RemovableFolderBinding,
-};
+pub use folders::{get_removable_folders_by_volume, RemovableFolderBinding};
 pub use init::{init, DatabaseStatus};
-#[allow(unused_imports)]
-pub use queue::SINGLETON_SYNC_JOB_ID;
 pub use queue::{
     complete_sync_job_if_finished, discard_pending_sync_paths, enqueue_upload_units,
     finalize_queued_block, get_sync_snapshot, has_pending_sync_queue_items,
@@ -55,6 +49,8 @@ pub use sync_state::{
     FailedSyncEntry, UploadedAssetState,
 };
 
+#[cfg(test)]
+pub use folders::{get_removable_folder_binding, unbind_removable_folder};
 #[cfg(test)]
 pub use init::init_at_path;
 #[cfg(test)]

@@ -114,8 +114,8 @@ impl AuditWriter {
         })
     }
 
-    #[allow(dead_code)]
-    pub fn append(&self, event: &AuditEvent) -> Result<(), AuditError> {
+    #[cfg(test)]
+    fn append(&self, event: &AuditEvent) -> Result<(), AuditError> {
         let mut line = serde_json::to_vec(event).map_err(AuditError::Serialize)?;
         line.push(b'\n');
         if line.len() as u64 > MAX_AUDIT_FILE_BYTES {

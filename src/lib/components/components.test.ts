@@ -463,7 +463,7 @@ describe("FolderList and ActivityLog", () => {
   it("renders empty and populated logs", () => {
     const { rerender } = render(ActivityLog, { logs: [] });
     expect(screen.getByText("No recent activity.")).toBeInTheDocument();
-    rerender({ logs: [{ id: 1, time: "10:00", level: "info", message: "Synced" }] });
+    rerender({ logs: [{ id: 1, time: "10:00", message: "Synced" }] });
     expect(screen.getByText("Synced")).toBeInTheDocument();
   });
 
@@ -473,11 +473,11 @@ describe("FolderList and ActivityLog", () => {
       await locale.set("de");
       const { rerender } = render(ActivityLog, {
         logs: [
-          { id: 1, time: "10:00", level: "info", message: "Starting manual synchronization...", key: "log_starting_sync" },
-          { id: 2, time: "10:01", level: "info", message: "Scanning folder: D:/Fotos", key: "log_scanning_folder", params: { folder: "D:/Fotos" } },
-          { id: 3, time: "10:02", level: "info", message: "Sync queued, waiting for running synchronization.", key: "log_sync_queued_waiting" },
-          { id: 4, time: "10:03", level: "warn", message: "Database notice", key: "log_database_repaired_notice", params: { reason: "corruption", backup: "C:/backup.db", count: "3" } },
-          { id: 5, time: "10:04", level: "error", message: "File scan failed", key: "log_file_scan_failed", params: { file: "photo.jpg", error: "I/O error" } },
+          { id: 1, time: "10:00", message: "Starting manual synchronization...", key: "log_starting_sync" },
+          { id: 2, time: "10:01", message: "Scanning folder: D:/Fotos", key: "log_scanning_folder", params: { folder: "D:/Fotos" } },
+          { id: 3, time: "10:02", message: "Sync queued, waiting for running synchronization.", key: "log_sync_queued_waiting" },
+          { id: 4, time: "10:03", message: "Database notice", key: "log_database_repaired_notice", params: { reason: "corruption", backup: "C:/backup.db", count: "3" } },
+          { id: 5, time: "10:04", message: "File scan failed", key: "log_file_scan_failed", params: { file: "photo.jpg", error: "I/O error" } },
         ],
       });
       expect(screen.getByRole("heading", { name: "Aktivitätsverlauf" })).toBeInTheDocument();
@@ -490,11 +490,11 @@ describe("FolderList and ActivityLog", () => {
       await locale.set("en");
       rerender({
         logs: [
-          { id: 1, time: "10:00", level: "info", message: "Starting manual synchronization...", key: "log_starting_sync" },
-          { id: 2, time: "10:01", level: "info", message: "Scanning folder: D:/Fotos", key: "log_scanning_folder", params: { folder: "D:/Fotos" } },
-          { id: 3, time: "10:02", level: "info", message: "Sync queued, waiting for running synchronization.", key: "log_sync_queued_waiting" },
-          { id: 4, time: "10:03", level: "warn", message: "Database notice", key: "log_database_repaired_notice", params: { reason: "corruption", backup: "C:/backup.db", count: "3" } },
-          { id: 5, time: "10:04", level: "error", message: "File scan failed", key: "log_file_scan_failed", params: { file: "photo.jpg", error: "I/O error" } },
+          { id: 1, time: "10:00", message: "Starting manual synchronization...", key: "log_starting_sync" },
+          { id: 2, time: "10:01", message: "Scanning folder: D:/Fotos", key: "log_scanning_folder", params: { folder: "D:/Fotos" } },
+          { id: 3, time: "10:02", message: "Sync queued, waiting for running synchronization.", key: "log_sync_queued_waiting" },
+          { id: 4, time: "10:03", message: "Database notice", key: "log_database_repaired_notice", params: { reason: "corruption", backup: "C:/backup.db", count: "3" } },
+          { id: 5, time: "10:04", message: "File scan failed", key: "log_file_scan_failed", params: { file: "photo.jpg", error: "I/O error" } },
         ],
       });
       expect(screen.getByRole("heading", { name: "Activity Log" })).toBeInTheDocument();

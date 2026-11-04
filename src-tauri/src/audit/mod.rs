@@ -6,11 +6,8 @@ use tauri::{AppHandle, Manager, Runtime};
 pub use event::{
     actor_id, audit_safe_error, upload_details, AuditEvent, Outcome, Severity, SyncAuditContext,
 };
-#[allow(unused_imports)]
-pub use writer::{
-    report_audit, AuditError, AuditLogger, AuditWriter, AUDIT_QUEUE_BYTE_CAPACITY,
-    AUDIT_QUEUE_CAPACITY, MAX_AUDIT_FILES, MAX_AUDIT_FILE_BYTES,
-};
+use writer::report_audit;
+pub use writer::AuditLogger;
 
 fn emit_audit_failure<R: Runtime>(app: &AppHandle<R>, message: &str) {
     let mut params = std::collections::HashMap::new();

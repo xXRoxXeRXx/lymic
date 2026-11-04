@@ -95,7 +95,6 @@ pub async fn remove_folder(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
-#[allow(dead_code)]
 pub struct RemovableFolderBinding {
     pub watched_folder_id: i64,
     pub volume_id: String,
@@ -121,7 +120,7 @@ pub async fn bind_removable_folder(
     Ok(())
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub async fn get_removable_folder_binding(
     pool: &SqlitePool,
     watched_folder_id: i64,
@@ -134,7 +133,6 @@ pub async fn get_removable_folder_binding(
     .await
 }
 
-#[allow(dead_code)]
 pub async fn get_removable_folders_by_volume(
     pool: &SqlitePool,
     volume_id: &str,
@@ -147,7 +145,7 @@ pub async fn get_removable_folders_by_volume(
     .await
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub async fn unbind_removable_folder(
     pool: &SqlitePool,
     watched_folder_id: i64,

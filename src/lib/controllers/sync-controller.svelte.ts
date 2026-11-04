@@ -81,11 +81,6 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
   }
 
   function addLog(payload: UiLogMessage) {
-    let level: LogEntry["level"] = "info";
-    if (payload.level === "ERROR") level = "error";
-    if (payload.level === "SUCCESS") level = "success";
-    if (payload.level === "WARN") level = "warn";
-
     const timestamp = typeof payload.timestamp === "number" && Number.isFinite(payload.timestamp)
       ? payload.timestamp
       : Date.now();
@@ -97,7 +92,6 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
     logs = [{
       id: ++logCounter,
       time,
-      level,
       message: payload.message ?? "",
       key: payload.key,
       params: payload.params,
