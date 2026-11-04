@@ -3,9 +3,6 @@ type: operations guide
 title: Development, Validation, and Test Boundaries
 description: Local development and validation guidance for the SvelteKit and Rust desktop application. Explains test-layer limits, IPC contract coverage, durable synchronization tests, and release gates.
 tags: [development, validation, testing, tauri, operations]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-25T12:52:45.890Z
 sources:
   - id: openwiki-source-4d1d392666be6dfdd7a91a2e
     resource: repo://.github/workflows/release.yml

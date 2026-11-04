@@ -5,7 +5,7 @@ description: Tauri process composition, recovery-first startup, managed Rust ser
 tags: [architecture, tauri, svelte, runtime]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-10-25T12:52:45.890Z
+    at: 2026-11-04T15:53:48.838Z
 sources:
   - id: openwiki-source-3638749eb6f61a23896edb4d
     resource: repo://src-tauri/src/app/background.rs
@@ -27,7 +27,7 @@ sources:
     resource: repo://src/lib/tauri/sync-event-subscription.ts
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
-generated: { by: "openwiki/0.7.2", at: "2026-10-25T12:52:45.890Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-04T15:53:48.838Z" }
 ---
 
 # Desktop Runtime Architecture
@@ -101,13 +101,13 @@ The watcher channel is bounded by design. On overflow, the watcher requests a re
 
 ## Webview bootstrapping and IPC
 
-The root route creates feedback, target-album, removable-volume, synchronization, authentication, preferences, and update controllers once. On mount it starts the sync, updater, and preference lifecycles, begins removable-volume subscriptions, then independently hydrates authentication, synchronization, and preferences. Synchronization event subscriptions are installed only after `sync.hydrate()` resolves; authentication hydration refreshes failed uploads only for an authenticated user. Updater startup also records webview update and version phase probes through a command.
+The root route creates feedback, target-album, removable-volume, watched-folder, synchronization, authentication, preferences, and update controllers once. On mount it starts the synchronization, watched-folder, updater, and preference lifecycles; begins removable-volume subscriptions; then independently hydrates authentication, watched folders, synchronization, and preferences. Synchronization event subscriptions are installed only after `sync.hydrate()` resolves; authentication hydration refreshes failed uploads only for an authenticated user. Updater startup also records webview update and version phase probes through a command.
 
-The route renders login when unauthenticated and dashboard or settings when authenticated. It passes controller state and callbacks to views, keeping direct Rust invocation out of leaf presentation components. On teardown it destroys sync, updater, preferences, and removable-volume lifecycles. Sync destruction clears its timer, marks itself unmounted, and invokes the event disposer; the subscription helper also unregisters a listener that resolves after disposal or after the lifecycle becomes inactive.
+The route renders login when unauthenticated and dashboard or settings when authenticated. It passes controller state and callbacks to views, keeping direct Rust invocation out of leaf presentation components. On teardown it destroys synchronization, watched-folder, updater, preferences, and removable-volume lifecycles. Sync destruction clears its timer, marks itself unmounted, and invokes the event disposer; the subscription helper also unregisters a listener that resolves after disposal or after the lifecycle becomes inactive.
 
 ### Hydrate with commands, then follow events
 
-The frontend is not the durable-state authority. Sync hydration requests folders and sync status, maps host `RUNNING` and `PAUSED` snapshots to UI state, and only then subscribes to changes. User actions invoke commands such as `start_sync`, `pause_sync`, `resume_sync`, folder management, retry, and settings updates; controllers send actionable failures to feedback.
+The frontend is not the durable-state authority. Sync hydration requests the sync status and maps host `RUNNING` and `PAUSED` snapshots to UI state; watched-folder refresh is a separate request. Only after sync hydration does the route subscribe to changes. User actions invoke commands such as `start_sync`, `pause_sync`, `resume_sync`, folder management, retry, and settings updates; controllers send actionable failures to feedback.
 
 ```mermaid
 sequenceDiagram
@@ -131,7 +131,7 @@ sequenceDiagram
 
 This shell and event flow distinguishes commands used to hydrate or request work from best-effort host events used to update an already-hydrated webview.
 
-Events include `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `sync-idle`, and `log-message`. The frontend subscription also retains a `trigger-sync` listener, but the current Rust tray implementation starts synchronization directly rather than emitting that event. Event emission and native-notification failures are deliberately ignored by the helpers, so command hydration is the recovery path after reload or a missed update. Event names and payload shapes are a compatibility boundary: change the Rust producer, TypeScript subscription and controller, payload types, and tests together. See [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md).
+The frontend subscription listens for `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `log-message`, and `sync-idle`. The tray starts synchronization directly in Rust rather than asking a live webview to do so. Event emission and native-notification failures are deliberately ignored by the helpers, so command hydration is the recovery path after reload or a missed update. Event names and payload shapes are a compatibility boundary: change the Rust producer, TypeScript subscription and controller, payload types, and tests together. See [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md).
 
 ## Native tray control surface
 

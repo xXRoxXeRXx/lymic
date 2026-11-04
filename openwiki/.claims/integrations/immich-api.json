@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:de5f7020bc00165275b55786a204cdd5e8654ab2a0e9b2e5eee5390d015acf95",
+  "pageVersion": "sha256:670d523332eba92ea8765debbffccb1b6cdcb601f236a20e3b648fe78befbc15",
   "claims": [
     {
       "id": "claim_5986f8a42bb040b58fd6602e16258dae",
@@ -17,8 +17,12 @@
       "statement": "Upload payload construction streams asset, live-photo, and optional XMP sidecar files from disk and rejects a sidecar larger than 10 MiB.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/immich/upload.rs",
-          "version": "repo-file-v1:sha256:6e00ee1e67adcd0e067261627bd9dacf3c61cb5a8eb39f62dfbc5dafe062470b"
+          "resource": "repo://src-tauri/src/immich/upload.rs#L282-L303",
+          "version": "repo-lines-v1:sha256:1b090f84bfd8fe9be1a2d97ff69cde7b96a089875c322aed19e585dc352ab919:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjViM2MwMGE4MjNlMWFmMzE0Nzc5NjZiNzgwY2I5MGJhMWJhOTdlMDliMWUyY2MwYmQwMGRhMzI5YTNlNDQxYjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3MDQ0NGU5NGRlNWU2MWQ4YTkxYzUxZmY2ZmI5M2UyODYxM2QxYjI3ZDdmZTNhYTM0NmNmZGRiZjlmMDA3MGIifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/immich/upload.rs#L37-L175",
+          "version": "repo-lines-v1:sha256:f88f2bf72b9505d4c53d7e0dbfc8f3c5a2880a3635974ad888850682f1f55bb2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiYjBjZDAyYjllN2FkZmYxMTdhODBhOWMxOWQ3NmE4MjBlNzEzNzIzMmY5NzM0YmQ3NmJlYjk4ZTQ2NzZiYjEyIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIwYzgxZWI3OTQ3ODdiOTdhNTE2ZTg2NjkwZGQ3YWUzODg3ZDIyNTYxNGUwYmFiZDQ3NDMyMmRhYjUwM2FjNGUwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI2Y2EyOTE1ZTQwYjA5N2MwZjE1NGViODlhNDM2Yzk4NTViMGYyMmY2ZDhlMGZkNjU1M2E3OWEwOTAzOWQ5YTY2In0"
         }
       ]
     },
@@ -27,8 +31,12 @@
       "statement": "Target-album assignment batches pending units by album and marks affected queue work failed when the album operation fails.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/sync/album_batch.rs",
-          "version": "repo-file-v1:sha256:e5ffc8eca9a3f7f1c89aad4fd349806fb4e59bdfae2c7044a6686d90406685bf"
+          "resource": "repo://src-tauri/src/sync/album_batch.rs#L136-L184",
+          "version": "repo-lines-v1:sha256:c6ea1b634d2f447f44dfbd472aa3f67f51b9c2e4c6fec8b72e41df2a994b3f57:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM4NjhiYTRiN2E2ZmVhNDQzNDhjM2VmYmFjOGQwOThjOGNkODljOWIxODgyNjFiZjVlNTM4MzZhZjIzNGUzZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4OTc3MWZlMWI2NjI4ODc1YWEyM2U3ZGJlNGFhNzE0NjFkMDBjZGZiNjZkZGYxMWI5ZDgyMGFjNTg5N2ZkZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImExNDI2ZmY5ZGQyYjM5ODRiNWJlZjdmMzc3M2EwNDgzMjY0ODE3OTE1Yzk4NjZiNDMzZjI5M2ZkMWE3YzU4MmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/album_batch.rs#L53-L79",
+          "version": "repo-lines-v1:sha256:cd5adee7ff3461c104bf16853c998c7abb4e11e7d7ca35ed4dc0345a1c5dff1c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY4MWUwY2Q0ZTM1MzRlZTlkYTc2YzQyNjE2YTkwYmY1YjkzMzA1NjFiOTllY2U4MDA2MTgwZTg5MzExMzFiNWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzNmZkMjFmOTU5M2U2YmQ0ZTAxYTc1NjVlMDZlNjkyMTI0OTNkNmQ2N2YwYWEwNGMwZTA2OWFmZmU5ODg0ZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2NzExMzE0NWIxNjAxZTU2MjBhOWZhNGMzMjUxYWJkYTY5NDA4NzNhYmJkODkxMmM2ZTU4NDExMWYwZGYzMzUifQ"
         }
       ]
     },
@@ -45,7 +53,7 @@
           "version": "repo-lines-v1:sha256:8cdcca7a9a1b0d6e157b1342c1da75544587a0494440beab29129be872aa2c55:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiMzE1MjhmOGE0YWZhNTNkMDdjMTQzODc1YTZmMTkzMDg1NDJiNmQ4M2I0N2ZiNjE3Y2Y2YjU5NDIyODk3OGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNlN2QwY2FhYWM2YzI0NTk2Nzc1NzdhZTMxMTBlMTU0MTgzNjZmMmZjMWZmZTQ4ZTgwZjA2ZjZhODQwYTBiNTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQyNWZmNDUzMDM5NGUyNjI5ZGU4MDY2MTRhZWUxMGI4MjY3NzMzYjRkY2E3NDE0Mzg4ZGU2YzE0ZTRhNzA4YjMifQ"
         },
         {
-          "resource": "repo://src-tauri/src/commands/auth.rs#L32-L86",
+          "resource": "repo://src-tauri/src/commands/auth.rs#L44-L98",
           "version": "repo-lines-v1:sha256:f10036fb325684ad3d53f6cda6cc31decfd47c0e5c0589bae9df3daa355070e3:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlNGY4OWNmOWQ0ZDdhNTdmMDZiOGE1OGJhYmIwMGMxNWE0ZDIyZDQ2ODI4NmI5MmUzYWNiNjQyYjM3M2JhZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlNmRjMTUwZmIwZjg2NzVkM2U2YTVlNTdjNTlhODM5NWIyMjQ1NDJhMTExMWJhZDBmMDZmNTlhMDA5ZGJhZWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3YmJiYzcyYzgxYmRlZWIwOTcyMjNiYzkzMzgzOTc3NGVkMTEwODc2NGNmZjZkMDI2NzU5ZmQyMzJhMzE2YjMifQ"
         }
       ]
@@ -65,15 +73,15 @@
       "statement": "The bulk-check, upload, and album methods cap successfully parsed response bodies at 1 MiB, while error diagnostics are capped at 8 KiB, normalized to one line, and marked when truncated; current-user JSON is decoded directly, and profile-image retrieval separately rejects declared or received payloads over 10 MiB.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/immich/album.rs#L15-L147",
-          "version": "repo-lines-v1:sha256:096da3327d69c25f9781fee3b931a62e7f6d76db27cee40aaf712d95054ae498:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmNTlmYzQwMDFiYWQzYmU4OTQxMjZjMmRmZDc1MTZiNmVlNWE0NDA4Njg0MzRkNjUxZGJhYmU3ODBiMzg1NWI4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0ODkzZjQwZTM3ODFlYjg5NmM4MmQwNDZhMDgwNjdhMTFlMzVjZGYyZjFkZmFmMjZmZWE5MGI4ZGI2Njc2NDEzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI2YmMzMjQxNDA5MTJhNDJhZTUxZDc1MWYzZWMxYzg5MjFiMzAyMjZkZDcwNDJkNzQxYTkwYzhkOWI3NmE3ZTA1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNTIxNjA0YjM1ZmM0MGFmMDBjYmE0ZWVhMmZkNWUyYzNhZjE4NjNiMzkxMTg1ZDdiZjRiYjA5ZTcyZDBjOGIzIn0"
+          "resource": "repo://src-tauri/src/immich/album.rs#L15-L148",
+          "version": "repo-lines-v1:sha256:4dfcb2788826055d693994513d6c66f4464eb5193dd117e6b404af3df7392c1f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmNTlmYzQwMDFiYWQzYmU4OTQxMjZjMmRmZDc1MTZiNmVlNWE0NDA4Njg0MzRkNjUxZGJhYmU3ODBiMzg1NWI4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0ODkzZjQwZTM3ODFlYjg5NmM4MmQwNDZhMDgwNjdhMTFlMzVjZGYyZjFkZmFmMjZmZWE5MGI4ZGI2Njc2NDEzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI2YmMzMjQxNDA5MTJhNDJhZTUxZDc1MWYzZWMxYzg5MjFiMzAyMjZkZDcwNDJkNzQxYTkwYzhkOWI3NmE3ZTA1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNTIxNjA0YjM1ZmM0MGFmMDBjYmE0ZWVhMmZkNWUyYzNhZjE4NjNiMzkxMTg1ZDdiZjRiYjA5ZTcyZDBjOGIzIn0"
         },
         {
-          "resource": "repo://src-tauri/src/immich/client.rs#L147-L223",
-          "version": "repo-lines-v1:sha256:9d2a75033a244f8f527e0784cdc4930839139fc982588581c067cfcccdac8712:eyJzZWxlY3RlZExpbmVDb3VudCI6NzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyNmQ4NjI3NGJhMDIyNzliNmIyM2RiNjE0Y2UzZTYzNmNiNGI0MDQzODA1ZGQyZWJiMDlkZTgyMmRhNDUxMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIwNWUwYTczYmQyYjAwYThhYjczOWJiNjdkMDc3OThmYmVmZDg3NWM3MWU5MzlhNTk4NTJhMTU0ZWY3YWY2OWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRjYmVlYjVmYzNkMTI2ODQ5ODUxNmZjMTgwOTQzNjlmN2M1NGNiN2VmYzYyYjM1NGE1ZTU5MmQ3YzQwODJkMWEifQ"
+          "resource": "repo://src-tauri/src/immich/client.rs#L162-L239",
+          "version": "repo-lines-v1:sha256:c61a5b898a6496d6388fbcc53f6eb6b2e935473ca89759f7a719c95f487592af:eyJzZWxlY3RlZExpbmVDb3VudCI6NzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyNmQ4NjI3NGJhMDIyNzliNmIyM2RiNjE0Y2UzZTYzNmNiNGI0MDQzODA1ZGQyZWJiMDlkZTgyMmRhNDUxMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIwNWUwYTczYmQyYjAwYThhYjczOWJiNjdkMDc3OThmYmVmZDg3NWM3MWU5MzlhNTk4NTJhMTU0ZWY3YWY2OWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRjYmVlYjVmYzNkMTI2ODQ5ODUxNmZjMTgwOTQzNjlmN2M1NGNiN2VmYzYyYjM1NGE1ZTU5MmQ3YzQwODJkMWEifQ"
         },
         {
-          "resource": "repo://src-tauri/src/immich/client.rs#L225-L303",
+          "resource": "repo://src-tauri/src/immich/client.rs#L241-L319",
           "version": "repo-lines-v1:sha256:652bb99720ccf6bec72a2a1cb842f8aeb4f9a3991cc9232294bf927ed4ef784f:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjNTczMGIyOTVkOTBiYTIwZTkwODE3NDk1Nzg4OWI4MmI3ZDAyOTYzNDE0ODY2OTYwZGM2ODFlNmM4ZjFhY2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY0Y2FmMDkxOWY1MGE0YTRlZTYzZWIwZjlkNjQ4Mjk0ZjFjODBiNWY5Y2QzZjQwZDg5YWFjMGM5YTUxMjdhYTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2MTMxMjI5MDE2ZGQzMGJkMWM1YjBjNGE1NzQ0NzZlYTBmYTdmNmUyMzdlZDljOTlkMDM1NmY1NDA3NmEzYmYifQ"
         },
         {
@@ -87,8 +95,8 @@
       "statement": "The album client lists albums sorted case-insensitively, creates only nonblank trimmed names, and sends grouped asset IDs to `PUT albums/{albumId}/assets`; client-level success for assignment is any successful HTTP status because its response body is not parsed.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/immich/album.rs#L15-L94",
-          "version": "repo-lines-v1:sha256:cc0b5204f0ce13112d0a0f5080e65dc2e2f519b2f74db8d03ccc4f83eae2c229:eyJzZWxlY3RlZExpbmVDb3VudCI6ODAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1OWZjNDAwMWJhZDNiZTg5NDEyNmMyZGZkNzUxNmI2ZWU1YTQ0MDg2ODQzNGQ2NTFkYmFiZTc4MGIzODU1YjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZiYzMyNDE0MDkxMmE0MmFlNTFkNzUxZjNlYzFjODkyMWIzMDIyNmRkNzA0MmQ3NDFhOTBjOGQ5Yjc2YTdlMDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5YjA0ZGZkMmZmY2VlYzJhOTJkYWU3MWViYTVhYzE5NzUxOWYzNGUwY2QxZDliOWY2MDUzOTY2ZTFhZDQxZGEifQ"
+          "resource": "repo://src-tauri/src/immich/album.rs#L15-L95",
+          "version": "repo-lines-v1:sha256:67155448f8e421d32cc4fa7e79796fcf0cb89081d59e2f251790705dd335cb3d:eyJzZWxlY3RlZExpbmVDb3VudCI6ODEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1OWZjNDAwMWJhZDNiZTg5NDEyNmMyZGZkNzUxNmI2ZWU1YTQ0MDg2ODQzNGQ2NTFkYmFiZTc4MGIzODU1YjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZiYzMyNDE0MDkxMmE0MmFlNTFkNzUxZjNlYzFjODkyMWIzMDIyNmRkNzA0MmQ3NDFhOTBjOGQ5Yjc2YTdlMDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5YjA0ZGZkMmZmY2VlYzJhOTJkYWU3MWViYTVhYzE5NzUxOWYzNGUwY2QxZDliOWY2MDUzOTY2ZTFhZDQxZGEifQ"
         }
       ]
     },
@@ -97,7 +105,7 @@
       "statement": "A duplicate lacking an asset ID is resolved through checksum search only when exactly one remote asset matches; zero or multiple matches prevent target-album assignment.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/immich/album.rs#L96-L147",
+          "resource": "repo://src-tauri/src/immich/album.rs#L97-L148",
           "version": "repo-lines-v1:sha256:d98599dcf51823220a63b6446d5f8b28a94f320b421484cd43b254d17cc01a70:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlZTFiMDZmZmEyMTE5NzVmYmM2MDBjYWExZGQ3ZmZiOWM1NzIzZmExZGU5NzNjNWExOWMzM2MzMjYwZDgyNzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2MmVlNTdlNDFhOGMyMGFlMDE2NGRmMjYxNDM5ZGNjNDk5ZDM1MjA4MzQxNTE1MTZkMDQ3ZThkZWFlOGE0NjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
         },
         {
@@ -126,23 +134,23 @@
     },
     {
       "id": "claim_6b618002fa1d4903b0cad3f387b1769e",
-      "statement": "The processor bulk-checks hashed units in chunks of at most 100 and starts uploads only up to configured parallelism; when remote upload succeeds but durable local completion fails, the production path marks the unit failed rather than reconciling remote hashes and retrying persistence, because the reconciliation helper is test-only.",
+      "statement": "The processor bulk-checks hashed units in chunks of at most 100 and starts uploads only up to configured parallelism; when remote upload succeeds but durable local completion fails, the production path marks the unit failed without retrying persistence or rechecking remote hashes.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/sync/processor.rs#L124-L326",
-          "version": "repo-lines-v1:sha256:6db59ef65d7f76d5eb86b4e3160d7f8d337db5f2e43261a2ba626ab4e8e5cb86:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwNTM2MDYyMWE2YzRlNzFmMTk0NDJjY2JmZGJmYTIxNDY4OTliMGRjZTAxODE2NjVmNjI0NmVhZDVlYzFjYTdlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI1NTIyYzQyY2QxOWM2ZDAzZDgwOGM0NTI3MjA1NTI4MjViN2VhMWM1YjQ5MWIyMTg1MTFjYWM3NDE1Y2Y5ZDliIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkYTlmODZkMjhlNzg0ZjlmZDMxZmI3MmQxNWY2MGNiY2VhYWZkZDY2OWNiZDViNmRhNzg4OGEwMjMzMjFlYmI5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI5ZjNkODA1Yzg3ZTEwODllOWIwNzJhNmE5NWM4OGVjNTI0YWFiNjVhMmEyM2Q1Y2FjOGVkZjc2NWNhNzI0MTliIn0"
+          "resource": "repo://src-tauri/src/sync/processor.rs#L34-L35",
+          "version": "repo-lines-v1:sha256:e730efae6db8cac8b1140c06cb2e37f060726a0894a63a19e2f279dded0e3cfc:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTUxMmNmZDNhYWI3ZmI2NjI0ODJlY2E2Nzk0NWVjNzc0YjllOWI0YmQxZTUzMGM4NjA5MDcwNzFjM2M2MmRkMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWE1ZjRiMzc5NDZkOTNjM2JhN2FhYzU3MzhjMTI3ZjlmYzRiYmNjYTcyZGNlNmU5OTM4ZTNmMDIyYmI3NjIwNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjljNjlkMzEyM2E2MTZhZWRkNjQ2NGQ0ZjdjMWI5ZjkzMzAwMjEzOGNiN2Y0NDU0NDI0NDE0M2UwOTYwZGZiMiJ9"
         },
         {
-          "resource": "repo://src-tauri/src/sync/processor.rs#L35-L35",
-          "version": "repo-lines-v1:sha256:5512cfd3aab7fb662482eca67945ec774b9e9b4bd1e530c860907071c3c62dd3:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTUxMmNmZDNhYWI3ZmI2NjI0ODJlY2E2Nzk0NWVjNzc0YjllOWI0YmQxZTUzMGM4NjA5MDcwNzFjM2M2MmRkMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTUxMmNmZDNhYWI3ZmI2NjI0ODJlY2E2Nzk0NWVjNzc0YjllOWI0YmQxZTUzMGM4NjA5MDcwNzFjM2M2MmRkMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWE1ZjRiMzc5NDZkOTNjM2JhN2FhYzU3MzhjMTI3ZjlmYzRiYmNjYTcyZGNlNmU5OTM4ZTNmMDIyYmI3NjIwNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjY1OGU2ZTAxNjFkYTNmNjhmMjEyYTdkYTVhN2E3MmY2ZjY2ODRlNGMxYTAwNGQyYTA2ZTQxNjAyNzYxZWFlNCJ9"
+          "resource": "repo://src-tauri/src/sync/processor.rs#L368-L445",
+          "version": "repo-lines-v1:sha256:e683e3033e2eefd6cfa22b435718d9b9973b793604bcdfe682bedc7288c26c82:eyJzZWxlY3RlZExpbmVDb3VudCI6NzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZjODdiYWZhNjVjZGU4ZDkzYTk0YWU0NjllNmFlNzM2M2E2MGU5ODQwYzdkNzJlMTZkZDMzYzFlNjYxMGNiMmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2MmVlNTdlNDFhOGMyMGFlMDE2NGRmMjYxNDM5ZGNjNDk5ZDM1MjA4MzQxNTE1MTZkMDQ3ZThkZWFlOGE0NjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYyZTlhNjBkZTlmNDkxZWViZTc1MDY2MmM5YWM2ZWExZjVmNDhkZmM3MjIxYzZjMDY0ODBiMjRmMmVhMzBlZDUifQ"
         },
         {
-          "resource": "repo://src-tauri/src/sync/processor.rs#L516-L554",
-          "version": "repo-lines-v1:sha256:97f70e9cb01ea1c97ee15ba9bdcc768ee100639d58cc09ca07f244596c20df69:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1Y2Y1ZmMyM2YyYTZkMjNjM2VhNTFlNzJmNWU4OTZjNzU1NWZiYWEwNWNkNWIxZWExODJiZjk2MThhOGU4MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNjM2YyYzRjNTkzNjcwMTQ0N2ZiYjI5NDYwYjRkNTFlMjg2YmU3ZTRiYzUwNjIzNjkwZWMxNTRjMzMzZmE0MWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzNTViYjFlNDZjY2JmOThkOTM5MzI0YTIwNmNlNjFhMjMwNmU2YTM0YjE1ZjRjYTA0YWExNGJjMTliYmE3NmIifQ"
+          "resource": "repo://src-tauri/src/sync/processor.rs#L811-L861",
+          "version": "repo-lines-v1:sha256:5f8c144bf00fbb974a4aaaf58b6940fe5a2981853f5363cc7f3733013617d213:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhNmNiNzdhOThmNmMyZGIzYTgzNDhlZGViM2QzNjQyZjI1M2U1ZjFhYTZmMzVhMDY1ZDMxM2Y4ZWMwYWYzZjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwNjNjNGQxYWY4Y2Q4OWJiMGJkZDc2NTdmZmNiZjY4MDZhNjEwZDc5ZDZjOGQ0YzMwN2MyNDFkZjM5MDA1MjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg1OTk1YTZiNmQxYjAzNDc1ZDFkYzU5ZTRkZjc3YjJlMDNkNzAwNjY0MDEzMWVmMjViMDMxOTNjODcxYmE4ZjgifQ"
         },
         {
-          "resource": "repo://src-tauri/src/sync/processor.rs#L598-L768",
-          "version": "repo-lines-v1:sha256:61b6cd3c156a81a3c9c192c094c973528e6ce8e784a7dcd748bb2af93e8cdede:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI4NWUyMTc1NjQ2OTc3M2YzZjgzZTc2ZGY2YmY5N2FkMzk2ZDE2ZWU4N2M2MGUxZTVlNmQwNzdiZjI4ZmI1MjY1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiZjRmYTEyNDE3YWI5N2E4OTYwYTFkZGM5MDVmMmJlMzUxYTJkMTM5ODQ1M2Q0YjU5NjcwOTVlN2I3ZTUwOTIxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIxNzExZjA5YzE2MGE3M2ZmNDczMjQ2OTdkMzUzNDViY2Y5NmIwNjE0NWE0NjliOTg4ZjYzYjY0ZDMyNzJiYjZhIn0"
+          "resource": "repo://src-tauri/src/sync/processor.rs#L89-L139",
+          "version": "repo-lines-v1:sha256:e96cae84495b2a7a5aa34c2deab11f5f99a17c64ba13e5fa45be9e1c8913bf7c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2ZTIwNzNmYjczMTUwZDNhMmNhYjFiOGU4MzBkNWUwNDgxMTc3NzM5OWZhOWEzODFmNzg1NWY3MDMxNjhlMzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViOWEwOGJjMjlmNmViZWJlOWE1ZjAxOTAzZDk4NDVkYmNiNTg0MmE0NTVmMDdkNWY0MDAyZGFjMzJhNWM2MDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3ODUxOTVlNGMxYjllZGM4YTNlYTdlZTJhZjM2YzcxYjI1MTI0NmNhZjAzYmYwMmE4ZThkMTE2MmM5YjhhNzUifQ"
         }
       ]
     },
@@ -151,12 +159,12 @@
       "statement": "`get_current_user` obtains the stored account credentials, fetches `users/me`, conditionally fetches the advertised profile image, and passes successful and refresh-failure outcomes to the profile-cache resolver; profile-image failures retain the fetched user ID and display name.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/commands/auth.rs#L171-L230",
-          "version": "repo-lines-v1:sha256:ca09571a6290300018d7d37c71b598a20974f203f66b13847e979f1ee0416887:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllMWVlMzNlZTk1ZmFlZTFjMTBlOWViZjNkM2RlNDFiYjE5MjUxNWNhZDc3Y2RhMjA1ZTU0NmRhMTcwMDFhNjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjA0NDkxNDY5NzIyZTgzNjNhOTRlNDA0NDUzOGUwMTNhMmEyMTdlMzZiMWU1NjhiYTYwYWNiN2I0YzhmMmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlMGVjMjViMmRiZDhhNzg3NjA1YmE1MGQwNjIzMTU5ZTZlMmZlODRkYmY4YmVlYTRmNDNhMGQ5Mjk5YjQ0MWYifQ"
+          "resource": "repo://src-tauri/src/commands/auth.rs#L184-L269",
+          "version": "repo-lines-v1:sha256:efdc66344ff0e8f33f5ce46170b146d9ebd01c337a9abe20c6bb824776e67590:eyJzZWxlY3RlZExpbmVDb3VudCI6ODYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkMWUwMzFhN2QyMzg5NGJkNjFjNzVkY2NkOTc3ZWJiYmVlMGFhNWVlZjNmY2Y0MDA4NDRiYjM4ZjMzM2ZmYWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4MzEyMzNkMjhkOTUzNWQ3YjM3NjFkMjFhM2U5YWU0M2Q4MTYwZmQ1MTAzNWExNTM3ZDAxODJlODY4OGY4OWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJlYzA5YTk5MGFhODBmMjE3YWJhYjE0YWZkYTcxZjc5Yzk0OTc3ZmI3MjZjYjMzZjcwZGZkMzczNWFmNjAwODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
         },
         {
-          "resource": "repo://src-tauri/src/immich/client.rs#L147-L223",
-          "version": "repo-lines-v1:sha256:9d2a75033a244f8f527e0784cdc4930839139fc982588581c067cfcccdac8712:eyJzZWxlY3RlZExpbmVDb3VudCI6NzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyNmQ4NjI3NGJhMDIyNzliNmIyM2RiNjE0Y2UzZTYzNmNiNGI0MDQzODA1ZGQyZWJiMDlkZTgyMmRhNDUxMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIwNWUwYTczYmQyYjAwYThhYjczOWJiNjdkMDc3OThmYmVmZDg3NWM3MWU5MzlhNTk4NTJhMTU0ZWY3YWY2OWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRjYmVlYjVmYzNkMTI2ODQ5ODUxNmZjMTgwOTQzNjlmN2M1NGNiN2VmYzYyYjM1NGE1ZTU5MmQ3YzQwODJkMWEifQ"
+          "resource": "repo://src-tauri/src/immich/client.rs#L162-L239",
+          "version": "repo-lines-v1:sha256:c61a5b898a6496d6388fbcc53f6eb6b2e935473ca89759f7a719c95f487592af:eyJzZWxlY3RlZExpbmVDb3VudCI6NzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyNmQ4NjI3NGJhMDIyNzliNmIyM2RiNjE0Y2UzZTYzNmNiNGI0MDQzODA1ZGQyZWJiMDlkZTgyMmRhNDUxMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIwNWUwYTczYmQyYjAwYThhYjczOWJiNjdkMDc3OThmYmVmZDg3NWM3MWU5MzlhNTk4NTJhMTU0ZWY3YWY2OWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRjYmVlYjVmYzNkMTI2ODQ5ODUxNmZjMTgwOTQzNjlmN2M1NGNiN2VmYzYyYjM1NGE1ZTU5MmQ3YzQwODJkMWEifQ"
         }
       ]
     },
@@ -165,7 +173,7 @@
       "statement": "Before resolving a refreshed profile, `get_current_user` rereads credentials and compares the derived account ID, returning an error when the session changed during the asynchronous fetch to prevent a logout or account-switch cache race.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/commands/auth.rs#L233-L248",
+          "resource": "repo://src-tauri/src/commands/auth.rs#L254-L269",
           "version": "repo-lines-v1:sha256:4e7e536c2787ad6778a407c05f34d586cc526b9b9362cdaac82be8e2e168e69d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhZWYyZjY2NWU1NWQyODNhNWZhMTcxOGIwYjZhZjcyNTlmMWZmZTk1MzVmN2RkNDE0NTU5M2Q1ZWU3N2M0N2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4MzEyMzNkMjhkOTUzNWQ3YjM3NjFkMjFhM2U5YWU0M2Q4MTYwZmQ1MTAzNWExNTM3ZDAxODJlODY4OGY4OWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEzN2U3NGE3NDZmM2U0ZmE5OGQ3Y2I5OGRiMDdkMzBiZmY2NWNlZjY3NmYxN2FiMWVhNDkzYWM0ODQ5MDY4MTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
         }
       ]
@@ -180,17 +188,41 @@
         },
         {
           "resource": "repo://src-tauri/src/sync/album_batch.rs#L53-L79",
-          "version": "repo-lines-v1:sha256:b58d4cf8069feb02bca006f5a880f2b11a3f0946bb6c391c1a0f4e50f1ce59cd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY4MWUwY2Q0ZTM1MzRlZTlkYTc2YzQyNjE2YTkwYmY1YjkzMzA1NjFiOTllY2U4MDA2MTgwZTg5MzExMzFiNWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzNmZkMjFmOTU5M2U2YmQ0ZTAxYTc1NjVlMDZlNjkyMTI0OTNkNmQ2N2YwYWEwNGMwZTA2OWFmZmU5ODg0ZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2NzExMzE0NWIxNjAxZTU2MjBhOWZhNGMzMjUxYWJkYTY5NDA4NzNhYmJkODkxMmM2ZTU4NDExMWYwZGYzMzUifQ"
+          "version": "repo-lines-v1:sha256:cd5adee7ff3461c104bf16853c998c7abb4e11e7d7ca35ed4dc0345a1c5dff1c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY4MWUwY2Q0ZTM1MzRlZTlkYTc2YzQyNjE2YTkwYmY1YjkzMzA1NjFiOTllY2U4MDA2MTgwZTg5MzExMzFiNWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzNmZkMjFmOTU5M2U2YmQ0ZTAxYTc1NjVlMDZlNjkyMTI0OTNkNmQ2N2YwYWEwNGMwZTA2OWFmZmU5ODg0ZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2NzExMzE0NWIxNjAxZTU2MjBhOWZhNGMzMjUxYWJkYTY5NDA4NzNhYmJkODkxMmM2ZTU4NDExMWYwZGYzMzUifQ"
         },
         {
           "resource": "repo://src-tauri/src/sync/completion.rs#L52-L106",
           "version": "repo-lines-v1:sha256:e6545a1bd8fc75622c2d38a8467d620e3ec39f40bd2e1c4af4f39b2453bbbc1c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwN2RlNzNjMjY2MmNjZjJhZTU0NmE3N2Y3ZjIyNDk2ZTcwYmUzYjkzNTI5ZDY0NWYzNzI2YzIzNTE1MmYzNWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVmZjNjNjM3MWNmMDA5MjM1NDAyNmI0ZGVhNTM1MWViNmRhZmI3NjZjMzg5Mzg3Y2ExZjk4M2FkMGE5NmE3ZTYifQ"
         }
       ]
+    },
+    {
+      "id": "claim_8c80bb45a3674682868e0100287717f2",
+      "statement": "Bulk duplicate checks are retried at most three times with one- then two-second exponential backoff for retryable errors; 401 and 403 stop immediately, and retry and terminal reporting uses safe-error values in UI and audit events.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/immich/bulk_check.rs#L26-L53",
+          "version": "repo-lines-v1:sha256:fa178d4ee7bb3cf3fb2e97944123e8f13463ad792139261ad3b740ff377decf4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjczYmYzYWI5MTMwMDllNjZjMjJlMjUxZjVjNjNiNWZiYjcxMTA4MWI5Mzc0YjVjYWMzZGU3ZmE1ZTE4NjcyOWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzMWZhOGMwMGFhMWM2ZjlmZWY4N2Q3YmY5NzQ0OTNkMjYzOGFhMTNmZDE4YTNjNWE1Y2M2MGE5ZGZlNWIyOTgifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/retry.rs#L10-L119",
+          "version": "repo-lines-v1:sha256:bc84957a2b187377d5c112e3dec7220b3d96e02b3cec4fe0cbab78f1704d7771:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiMGViYzljMDAzMGQzNWExODgzYmYwYjBlZTJmNWZlMWEyMDI1MjkxMDc0YzJhMTUzNjRmNmZlNzIyZjNlMTZlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI3ZTQzNmNjZmQ1ZWYyZDUzZmI0MTZkN2NiODMxNzU3OGYyNjI4YzVlYTAzODcyYzY0ODdkY2Y5ZGZkYzA0MGI3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIyOTI4Yzg2OWEwYjMyNWUzNDIwMTBlYjcyNzRlYjNhMTUzMWVkYzgxZWJmZGI5MGFiNGU4ZTM0YTRiYzEwNmYxIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_db85c967fff04023b4067e57a7361552",
+      "statement": "The get_albums and create_album Tauri commands require stored credentials, construct ImmichClient from those transport settings, and delegate to the album client; create_album rejects blank names before that credential lookup.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/commands/albums.rs#L4-L41",
+          "version": "repo-lines-v1:sha256:93aaa0319ea0ef345392b5b7ac4ad081a39037cb48bae6005bd5ce1eba676e8e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllMWVlMzNlZTk1ZmFlZTFjMTBlOWViZjNkM2RlNDFiYjE5MjUxNWNhZDc3Y2RhMjA1ZTU0NmRhMTcwMDFhNjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQxMzA2OTdjYmYyYTkxYWE2M2Q4MjY2MTc5MGI3MjczODQ3NjVkODg4MjUwMTU0MWU0ODM0MWJjOTVjOTAxZWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-25T12:52:45.890Z"
+    "at": "2026-11-04T15:53:48.838Z"
   }
 }

@@ -3,9 +3,6 @@ type: operations guide
 title: Release Channels and Distribution
 description: How version tags publish signed cross-platform releases, how the GitHub and Microsoft Store channels are selected, and how the Store MSIX package is built and validated.
 tags: [releases, distribution, updater, github, microsoft-store, msix]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-10-25T12:52:45.890Z
 sources:
   - id: openwiki-source-4d1d392666be6dfdd7a91a2e
     resource: repo://.github/workflows/release.yml
