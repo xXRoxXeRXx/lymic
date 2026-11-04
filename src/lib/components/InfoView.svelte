@@ -23,10 +23,10 @@
 <div class="max-w-2xl w-full space-y-6 animate-in pb-10">
   <!-- Brand / Header Card -->
   <div class="settings-card flex items-center gap-4 !p-5">
-    <img src={logo} alt="Lymic Logo" class="w-12 h-12 object-contain shrink-0" />
+    <img src={logo} alt={$t('lymic_logo')} class="w-12 h-12 object-contain shrink-0" />
     <div class="space-y-0.5">
       <h2 class="text-base font-bold text-slate-900 dark:text-slate-100">Lymic</h2>
-      <p class="text-xs text-slate-500 dark:text-slate-400">Unofficial Immich Desktop Client</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400">{$t('unofficial_immich_desktop_client')}</p>
     </div>
   </div>
 
@@ -42,7 +42,7 @@
       <div class="flex items-center justify-between p-4 gap-4">
         <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">{$t('app_name_label')}</span>
         <span class="text-xs font-medium text-slate-900 dark:text-slate-100 text-right">
-          Lymic (Unofficial Immich Desktop Client)
+          Lymic ({$t('unofficial_immich_desktop_client')})
         </span>
       </div>
 

@@ -186,5 +186,19 @@
   "folder_exclusions_all_warning": "This rule set excludes all media in this Watched Folder.",
   "folder_exclusions_save": "Save exclusions",
   "folder_exclusions_close": "Close exclusion settings",
-  "folder_exclusions_cancel": "Cancel"
+  "folder_exclusions_cancel": "Cancel",
+  "desktop_client": "डेस्कटॉप क्लाइंट",
+  "user_profile": "उपयोगकर्ता प्रोफ़ाइल",
+  "connected": "कनेक्टेड",
+  "unofficial_immich_desktop_client": "अनौपचारिक Immich डेस्कटॉप क्लाइंट",
+  "show_api_key": "API कुंजी दिखाएँ",
+  "hide_api_key": "API कुंजी छिपाएँ",
+  "show_secret": "गुप्त कुंजी दिखाएँ",
+  "hide_secret": "गुप्त कुंजी छिपाएँ",
+  "log_duplicate_resolve_failed": "डुप्लिकेट {file} हल नहीं किया जा सका: {error}",
+  "log_upload_completion_persist_failed": "{file} का सिंक्रनाइज़ेशन पूरा नहीं किया जा सका: {error}",
+  "log_removable_volume_error": "हटाने योग्य वॉल्यूम ईवेंट को संभालने में त्रुटि: {error}"
+  ,"hero_landscape": "मुख्य परिदृश्य"
+  ,"lymic_logo": "Lymic लोगो"
+  ,"main_navigation": "मुख्य नेविगेशन"
 }

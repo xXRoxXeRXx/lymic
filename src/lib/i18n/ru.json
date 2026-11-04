@@ -186,5 +186,19 @@
   "folder_exclusions_all_warning": "This rule set excludes all media in this Watched Folder.",
   "folder_exclusions_save": "Save exclusions",
   "folder_exclusions_close": "Close exclusion settings",
-  "folder_exclusions_cancel": "Cancel"
+  "folder_exclusions_cancel": "Cancel",
+  "desktop_client": "Клиент для компьютера",
+  "user_profile": "Профиль пользователя",
+  "connected": "Подключено",
+  "unofficial_immich_desktop_client": "Неофициальный клиент Immich для компьютера",
+  "show_api_key": "Показать API-ключ",
+  "hide_api_key": "Скрыть API-ключ",
+  "show_secret": "Показать секрет",
+  "hide_secret": "Скрыть секрет",
+  "log_duplicate_resolve_failed": "Не удалось обработать дубликат {file}: {error}",
+  "log_upload_completion_persist_failed": "Не удалось завершить синхронизацию {file}: {error}",
+  "log_removable_volume_error": "Ошибка обработки события съёмного носителя: {error}"
+  ,"hero_landscape": "Пейзаж на заставке"
+  ,"lymic_logo": "Логотип Lymic"
+  ,"main_navigation": "Основная навигация"
 }

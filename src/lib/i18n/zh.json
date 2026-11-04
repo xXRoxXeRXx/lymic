@@ -186,5 +186,19 @@
   "folder_exclusions_all_warning": "This rule set excludes all media in this Watched Folder.",
   "folder_exclusions_save": "Save exclusions",
   "folder_exclusions_close": "Close exclusion settings",
-  "folder_exclusions_cancel": "Cancel"
+  "folder_exclusions_cancel": "Cancel",
+  "desktop_client": "桌面客户端",
+  "user_profile": "用户资料",
+  "connected": "已连接",
+  "unofficial_immich_desktop_client": "非官方 Immich 桌面客户端",
+  "show_api_key": "显示 API 密钥",
+  "hide_api_key": "隐藏 API 密钥",
+  "show_secret": "显示密钥",
+  "hide_secret": "隐藏密钥",
+  "log_duplicate_resolve_failed": "无法处理重复项 {file}: {error}",
+  "log_upload_completion_persist_failed": "无法完成 {file} 的同步: {error}",
+  "log_removable_volume_error": "处理可移动存储设备事件时出错: {error}"
+  ,"hero_landscape": "主视觉风景"
+  ,"lymic_logo": "Lymic 徽标"
+  ,"main_navigation": "主导航"
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { locale } from 'svelte-i18n';
 import { localeCatalog } from './locale-catalog';
 import { isSupportedLocale, locales, supportedLocales } from './index';
 import de from './de.json';
@@ -26,6 +27,28 @@ const catalog = {
 } as const;
 
 describe('i18n catalogs', () => {
+  it('updates the document language when the active locale changes', async () => {
+    await locale.set('de');
+    expect(document.documentElement.lang).toBe('de-DE');
+
+    await locale.set('en');
+    expect(document.documentElement.lang).toBe('en-US');
+  });
+
+  it('translates every backend log message emitted to the UI', () => {
+    const backendLogKeys = [
+      'log_duplicate_resolve_failed',
+      'log_upload_completion_persist_failed',
+      'log_removable_volume_error',
+    ];
+
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of backendLogKeys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+      }
+    }
+  });
+
   it('defines each locale once with its display name, BCP-47 tag, and translation source', () => {
     expect(localeCatalog).toEqual([
       { code: 'en', name: 'English', bcp47: 'en-US', translationSource: 'en.json' },

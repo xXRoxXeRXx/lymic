@@ -186,5 +186,19 @@
   "folder_exclusions_all_warning": "Diese Regeln schließen alle Medien in diesem überwachten Ordner aus.",
   "folder_exclusions_save": "Ausschlüsse speichern",
   "folder_exclusions_close": "Ausschluss-Einstellungen schließen",
-  "folder_exclusions_cancel": "Abbrechen"
+  "folder_exclusions_cancel": "Abbrechen",
+  "desktop_client": "Desktop-Client",
+  "user_profile": "Benutzerprofil",
+  "connected": "Verbunden",
+  "unofficial_immich_desktop_client": "Inoffizieller Immich-Desktop-Client",
+  "show_api_key": "API-Schlüssel anzeigen",
+  "hide_api_key": "API-Schlüssel ausblenden",
+  "show_secret": "Geheimnis anzeigen",
+  "hide_secret": "Geheimnis ausblenden",
+  "log_duplicate_resolve_failed": "Duplikat {file} konnte nicht aufgelöst werden: {error}",
+  "log_upload_completion_persist_failed": "Synchronisierung für {file} konnte nicht abgeschlossen werden: {error}",
+  "log_removable_volume_error": "Fehler bei der Verarbeitung des Wechseldatenträgerereignisses: {error}"
+  ,"hero_landscape": "Titelbild-Landschaft"
+  ,"lymic_logo": "Lymic-Logo"
+  ,"main_navigation": "Hauptnavigation"
 }

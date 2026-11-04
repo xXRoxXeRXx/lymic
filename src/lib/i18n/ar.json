@@ -186,5 +186,19 @@
   "folder_exclusions_all_warning": "This rule set excludes all media in this Watched Folder.",
   "folder_exclusions_save": "Save exclusions",
   "folder_exclusions_close": "Close exclusion settings",
-  "folder_exclusions_cancel": "Cancel"
+  "folder_exclusions_cancel": "Cancel",
+  "desktop_client": "عميل سطح المكتب",
+  "user_profile": "ملف المستخدم",
+  "connected": "متصل",
+  "unofficial_immich_desktop_client": "عميل Immich غير رسمي لسطح المكتب",
+  "show_api_key": "إظهار مفتاح API",
+  "hide_api_key": "إخفاء مفتاح API",
+  "show_secret": "إظهار السر",
+  "hide_secret": "إخفاء السر",
+  "log_duplicate_resolve_failed": "تعذر حل النسخة المكررة {file}: {error}",
+  "log_upload_completion_persist_failed": "تعذر إكمال مزامنة {file}: {error}",
+  "log_removable_volume_error": "خطأ في معالجة حدث وحدة التخزين القابلة للإزالة: {error}"
+  ,"hero_landscape": "منظر رئيسي"
+  ,"lymic_logo": "شعار Lymic"
+  ,"main_navigation": "التنقل الرئيسي"
 }

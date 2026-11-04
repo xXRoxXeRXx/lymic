@@ -118,7 +118,7 @@
             type="button"
             class="absolute right-2.5 p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
             onclick={() => showApiKey = !showApiKey}
-            aria-label={showApiKey ? "Hide API key" : "Show API key"}
+            aria-label={showApiKey ? $t('hide_api_key') : $t('show_api_key')}
             tabindex="-1"
           >
             {#if showApiKey}
@@ -177,7 +177,7 @@
                   type="button"
                   class="absolute right-2.5 p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
                   onclick={() => showCloudflareSecret = !showCloudflareSecret}
-                  aria-label={showCloudflareSecret ? "Hide secret" : "Show secret"}
+                  aria-label={showCloudflareSecret ? $t('hide_secret') : $t('show_secret')}
                   tabindex="-1"
                 >
                   {#if showCloudflareSecret}

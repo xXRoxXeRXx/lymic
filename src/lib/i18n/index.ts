@@ -1,4 +1,4 @@
-import { getLocaleFromNavigator, init, register } from 'svelte-i18n';
+import { getLocaleFromNavigator, init, locale, register } from 'svelte-i18n';
 import { localeCatalog } from './locale-catalog';
 
 export const locales = localeCatalog.map(({ code, name }) => ({ code, name }));
@@ -28,3 +28,9 @@ init({
   fallbackLocale: 'en',
   initialLocale: isSupportedLocale(navigatorLocale) ? navigatorLocale : 'en',
 });
+
+if (typeof document !== 'undefined') {
+  locale.subscribe((currentLocale) => {
+    document.documentElement.lang = toBcp47Locale(currentLocale);
+  });
+}

@@ -115,14 +115,14 @@
       <div class="hero-container">
         <img
           src={hero}
-          alt="Hero Landscape"
+          alt={$t('hero_landscape')}
           class="hero-image"
         />
         <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
       </div>
 
       <div class="absolute top-12 left-12 flex items-center gap-3 text-white">
-        <img src={logo} alt="Lymic Logo" class="w-16 h-16 object-contain" />
+        <img src={logo} alt={$t('lymic_logo')} class="w-16 h-16 object-contain" />
         <span class="font-bold tracking-tight text-3xl">Lymic</span>
       </div>
       <div class="absolute bottom-12 left-12 right-12 text-white">
@@ -157,15 +157,15 @@
       <div class="space-y-6">
         <!-- Brand / Header (padded for desktop window controls) -->
         <div class="flex items-center gap-3 px-3 py-1">
-          <img src={logo} alt="Lymic Logo" class="w-8 h-8 object-contain shrink-0" />
+          <img src={logo} alt={$t('lymic_logo')} class="w-8 h-8 object-contain shrink-0" />
           <div class="leading-tight">
             <span class="font-bold text-base text-slate-900 dark:text-slate-100">Lymic</span>
-            <p class="text-[10px] text-slate-400 dark:text-zinc-500 uppercase tracking-wider font-semibold">Desktop Client</p>
+            <p class="text-[10px] text-slate-400 dark:text-zinc-500 uppercase tracking-wider font-semibold">{$t('desktop_client')}</p>
           </div>
         </div>
 
         <!-- Navigation items -->
-        <nav class="space-y-1" aria-label="Main Navigation">
+        <nav class="space-y-1" aria-label={$t('main_navigation')}>
           <button
             type="button"
             class="nav-item {currentView === 'dashboard' ? 'active' : ''}"
@@ -214,7 +214,7 @@
           {#if auth.profileImage && !profileImageLoadFailed}
             <img
               src={auth.profileImage}
-              alt={auth.currentUserName || "User profile"}
+              alt={auth.currentUserName || $t('user_profile')}
               class="w-3.5 h-3.5 rounded-full object-cover shrink-0"
               onerror={() => profileImageLoadFailed = true}
               data-testid="sidebar-profile-image"
@@ -223,7 +223,7 @@
             <User class="w-3.5 h-3.5 shrink-0" data-testid="sidebar-user-icon" />
           {/if}
           <span class="truncate font-medium" title={auth.currentUserName || auth.serverUrl}>
-            {auth.currentUserName || "Connected"}
+            {auth.currentUserName || $t('connected')}
           </span>
         </div>
       </div>

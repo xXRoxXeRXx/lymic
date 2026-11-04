@@ -186,5 +186,19 @@
   "folder_exclusions_all_warning": "This rule set excludes all media in this Watched Folder.",
   "folder_exclusions_save": "Save exclusions",
   "folder_exclusions_close": "Close exclusion settings",
-  "folder_exclusions_cancel": "Cancel"
+  "folder_exclusions_cancel": "Cancel",
+  "desktop_client": "Desktop Client",
+  "user_profile": "User profile",
+  "connected": "Connected",
+  "unofficial_immich_desktop_client": "Unofficial Immich Desktop Client",
+  "show_api_key": "Show API key",
+  "hide_api_key": "Hide API key",
+  "show_secret": "Show secret",
+  "hide_secret": "Hide secret",
+  "log_duplicate_resolve_failed": "Could not resolve duplicate {file}: {error}",
+  "log_upload_completion_persist_failed": "Could not complete synchronization for {file}: {error}",
+  "log_removable_volume_error": "Error handling removable volume event: {error}"
+  ,"hero_landscape": "Hero landscape"
+  ,"lymic_logo": "Lymic logo"
+  ,"main_navigation": "Main navigation"
 }

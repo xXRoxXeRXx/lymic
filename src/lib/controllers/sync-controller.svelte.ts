@@ -160,6 +160,7 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
     lastSync = new Date().toLocaleTimeString(toBcp47Locale(options.locale()), {
       hour: "2-digit",
       minute: "2-digit",
+      hour12: false,
     });
     if (progressResetTimer) clearTimeout(progressResetTimer);
     progressResetTimer = setTimeout(() => {

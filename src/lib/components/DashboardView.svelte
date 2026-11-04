@@ -102,7 +102,7 @@
     {:else}
       <div class="pt-4 border-t border-slate-100 dark:border-zinc-800">
         <p class="text-xs text-slate-500 dark:text-zinc-400">
-          {$t('last_sync')}: {status.lastSync ? `${status.lastSync} Uhr` : $t('never')}
+          {$t('last_sync')}: {status.lastSync ?? $t('never')}
         </p>
       </div>
     {/if}

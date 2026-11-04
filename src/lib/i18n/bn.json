@@ -186,5 +186,19 @@
   "folder_exclusions_all_warning": "This rule set excludes all media in this Watched Folder.",
   "folder_exclusions_save": "Save exclusions",
   "folder_exclusions_close": "Close exclusion settings",
-  "folder_exclusions_cancel": "Cancel"
+  "folder_exclusions_cancel": "Cancel",
+  "desktop_client": "ডেস্কটপ ক্লায়েন্ট",
+  "user_profile": "ব্যবহারকারীর প্রোফাইল",
+  "connected": "সংযুক্ত",
+  "unofficial_immich_desktop_client": "অনানুষ্ঠানিক Immich ডেস্কটপ ক্লায়েন্ট",
+  "show_api_key": "API কী দেখান",
+  "hide_api_key": "API কী লুকান",
+  "show_secret": "গোপন তথ্য দেখান",
+  "hide_secret": "গোপন তথ্য লুকান",
+  "log_duplicate_resolve_failed": "ডুপ্লিকেট {file} সমাধান করা যায়নি: {error}",
+  "log_upload_completion_persist_failed": "{file} এর সিঙ্ক সম্পন্ন করা যায়নি: {error}",
+  "log_removable_volume_error": "অপসারণযোগ্য ভলিউম ইভেন্ট পরিচালনায় ত্রুটি: {error}"
+  ,"hero_landscape": "প্রধান দৃশ্যের প্রাকৃতিক দৃশ্য"
+  ,"lymic_logo": "Lymic লোগো"
+  ,"main_navigation": "প্রধান নেভিগেশন"
 }
