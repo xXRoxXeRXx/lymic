@@ -89,3 +89,25 @@ _Avoid_: cloud file, virtual file, stub
 **Hydration**:
 The process of downloading the full content of a Remote Asset into a Virtual Placeholder upon user access or pinning.
 _Avoid_: download, fetch, caching
+
+## Photo Timeline
+
+**Photo Timeline**:
+The chronological presentation of Remote Assets in the Immich Library grouped into time buckets.
+_Avoid_: gallery, photo feed, media stream
+
+**Timeline Bucket**:
+A discrete time interval (such as a month) returned by Immich, containing asset counts and identifiers for assets captured during that period.
+_Avoid_: time slice, photo group, date cluster
+
+**Asset Thumbnail**:
+A downscaled preview image of a Remote Asset generated and served by the Immich Server.
+_Avoid_: preview image, mini image, thumb
+
+**Thumbnail Cache**:
+A size-bounded local disk cache maintained by Lymic for Asset Thumbnails to eliminate repeated network fetches.
+_Avoid_: image cache, photo store
+
+**Timeline Scrubber**:
+A vertical control alongside the Photo Timeline displaying years and months to enable fast jumping to any time period.
+_Avoid_: date slider, fast scroll bar, year index
