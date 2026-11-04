@@ -3,19 +3,21 @@
 use std::{
     collections::VecDeque,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU32, AtomicU64, Ordering},
         Arc, Mutex,
     },
     time::{Duration, Instant},
 };
 
 use serde::Serialize;
-use tauri::Emitter;
+use tauri::{Emitter, Runtime};
 
 /// Duration of the recent-transfer window used when calculating the upload rate.
 pub(crate) const TRANSFER_RATE_WINDOW: Duration = Duration::from_secs(3);
 /// Minimum interval between eligible transfer-statistics updates.
 pub(crate) const TRANSFER_STATS_THROTTLE: Duration = Duration::from_millis(250);
+/// Minimum interval between current-file updates sent to the UI.
+pub(crate) const CURRENT_FILE_THROTTLE: Duration = Duration::from_millis(100);
 
 /// A serializable view of the transfer metrics suitable for UI events.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -217,6 +219,42 @@ fn calculate_rate(samples: &VecDeque<(Instant, u64)>, now: Instant) -> f64 {
     samples.iter().map(|(_, bytes)| *bytes as f64).sum::<f64>() / elapsed
 }
 
+/// Coordinates current-file UI updates across concurrent upload workers.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct CurrentFileProgress {
+    last_emission: Arc<Mutex<Option<Instant>>>,
+}
+
+impl CurrentFileProgress {
+    pub(crate) fn emit<R: Runtime>(&self, app: &tauri::AppHandle<R>, path: &str) {
+        if path.is_empty() {
+            self.last_emission
+                .lock()
+                .expect("current-file progress lock poisoned")
+                .take();
+            let _ = app.emit("sync-progress", path);
+            return;
+        }
+
+        if self.should_emit_at(Instant::now()) {
+            let _ = app.emit("sync-progress", path);
+        }
+    }
+
+    fn should_emit_at(&self, now: Instant) -> bool {
+        let mut last_emission = self
+            .last_emission
+            .lock()
+            .expect("current-file progress lock poisoned");
+        let eligible =
+            last_emission.is_none_or(|last| now.duration_since(last) >= CURRENT_FILE_THROTTLE);
+        if eligible {
+            *last_emission = Some(now);
+        }
+        eligible
+    }
+}
+
 fn snapshot_at_locked(state: &mut TransferStatsState, now: Instant) -> TransferStatsSnapshot {
     prune_samples(&mut state.samples, now);
     let rate = if !state.status.active {
@@ -257,6 +295,7 @@ pub(crate) fn calculate_percent(done: u64, total: u64) -> u32 {
 pub(crate) struct JobByteProgress {
     total_bytes: Arc<AtomicU64>,
     completed_bytes: Arc<AtomicU64>,
+    last_emitted_pct: Arc<AtomicU32>,
     transfer_stats: TransferStatsTracker,
 }
 
@@ -265,6 +304,7 @@ impl JobByteProgress {
         Self {
             total_bytes: Arc::new(AtomicU64::new(total_bytes)),
             completed_bytes: Arc::new(AtomicU64::new(completed_bytes)),
+            last_emitted_pct: Arc::new(AtomicU32::new(u32::MAX)),
             transfer_stats: TransferStatsTracker::new(total_bytes, completed_bytes),
         }
     }
@@ -287,12 +327,14 @@ impl JobByteProgress {
         self.transfer_stats.clone()
     }
 
-    pub(crate) fn advance(&self, app: &tauri::AppHandle, bytes: u64) {
+    pub(crate) fn advance<R: Runtime>(&self, app: &tauri::AppHandle<R>, bytes: u64) {
         if bytes == 0 {
             return;
         }
         let (_, _, pct) = self.add_bytes(bytes);
-        let _ = app.emit("sync-progress-percent", pct);
+        if pct != self.last_emitted_pct.swap(pct, Ordering::SeqCst) {
+            let _ = app.emit("sync-progress-percent", pct);
+        }
     }
 
     #[cfg(test)]
@@ -316,6 +358,8 @@ impl JobByteProgress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
+    use tauri::Listener;
 
     #[test]
     fn calculate_percent_matches_rounding_and_bounds() {
@@ -335,6 +379,49 @@ mod tests {
         assert_eq!(progress.current_percent(), 50);
         progress.add_bytes(5_000);
         assert_eq!(progress.current_percent(), 100);
+    }
+
+    #[test]
+    fn emits_each_progress_percentage_only_once() {
+        let app = tauri::test::mock_app();
+        let percentages = Arc::new(Mutex::new(Vec::new()));
+        let captured_percentages = Arc::clone(&percentages);
+        app.handle().listen("sync-progress-percent", move |event| {
+            captured_percentages
+                .lock()
+                .unwrap()
+                .push(serde_json::from_str::<u32>(event.payload()).unwrap());
+        });
+        let progress = JobByteProgress::new(1_000, 0);
+
+        progress.advance(app.handle(), 1);
+        progress.advance(app.handle(), 1);
+        progress.advance(app.handle(), 8);
+        progress.advance(app.handle(), 1);
+
+        assert_eq!(*percentages.lock().unwrap(), vec![0, 1]);
+    }
+
+    #[test]
+    fn current_file_updates_are_throttled_and_clear_immediately() {
+        let app = tauri::test::mock_app();
+        let files = Arc::new(Mutex::new(Vec::new()));
+        let captured_files = Arc::clone(&files);
+        app.handle().listen("sync-progress", move |event| {
+            captured_files
+                .lock()
+                .unwrap()
+                .push(serde_json::from_str::<String>(event.payload()).unwrap());
+        });
+        let progress = CurrentFileProgress::default();
+        let start = Instant::now();
+
+        assert!(progress.should_emit_at(start));
+        assert!(!progress.should_emit_at(start + CURRENT_FILE_THROTTLE - Duration::from_millis(1)));
+        progress.emit(app.handle(), "");
+
+        assert_eq!(*files.lock().unwrap(), vec![""]);
+        assert!(progress.should_emit_at(start + Duration::from_millis(1)));
     }
 
     #[test]

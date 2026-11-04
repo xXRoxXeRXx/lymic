@@ -10,7 +10,7 @@ use crate::{
     immich::{ImmichClient, SidecarDirectoryCache},
     sync::{
         processor::{RunProcessor, SyncSummary},
-        JobByteProgress, SyncCoordinatorInner, SyncSource,
+        CurrentFileProgress, JobByteProgress, SyncCoordinatorInner, SyncSource,
     },
 };
 use serde_json::json;
@@ -92,6 +92,7 @@ pub(crate) async fn run_sync_pipeline(
         snapshot.total_bytes.max(0) as u64,
         snapshot.completed_bytes.max(0) as u64,
     );
+    let current_file_progress = CurrentFileProgress::default();
     let transfer_stats = progress.transfer_stats();
     let sidecar_cache = SidecarDirectoryCache::new();
     let processor = RunProcessor::new(
@@ -100,6 +101,7 @@ pub(crate) async fn run_sync_pipeline(
         client,
         audit_context.clone(),
         progress.clone(),
+        current_file_progress.clone(),
         coordinator.clone(),
         sidecar_cache,
     )
@@ -135,6 +137,7 @@ pub(crate) async fn run_sync_pipeline(
                 snapshot.completed_bytes.max(0) as u64,
             );
             transfer_stats.set_paused(true);
+            current_file_progress.emit(&app, "");
             emit_transfer_stats(&app, &transfer_stats);
             let _ = app.emit("sync-paused", &snapshot);
             audit_event(
@@ -199,6 +202,7 @@ pub(crate) async fn run_sync_pipeline(
                 snapshot.completed_bytes.max(0) as u64,
             );
             transfer_stats.set_active(false);
+            current_file_progress.emit(&app, "");
             emit_transfer_stats(&app, &transfer_stats);
             if is_automatic {
                 let _ = app.emit("sync-idle", ());

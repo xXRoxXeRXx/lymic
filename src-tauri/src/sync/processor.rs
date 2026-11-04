@@ -13,13 +13,12 @@ use crate::{
         album_batch,
         completion::{self, PendingAlbumUnit, UploadUnitCompletion},
         retry::check_assets_exist_with_backoff,
-        JobByteProgress, ProcessingContext, SyncCoordinatorInner,
+        CurrentFileProgress, JobByteProgress, ProcessingContext, SyncCoordinatorInner,
     },
 };
 use futures::{future, stream::FuturesUnordered, StreamExt};
 use serde_json::json;
 use std::sync::{atomic::Ordering, Arc};
-use tauri::Emitter;
 use tokio_util::sync::CancellationToken;
 
 #[derive(serde::Serialize, Default)]
@@ -55,6 +54,7 @@ pub(crate) struct RunProcessor {
     client: Arc<ImmichClient>,
     audit_context: SyncAuditContext,
     progress: JobByteProgress,
+    current_file_progress: CurrentFileProgress,
     coordinator: Arc<SyncCoordinatorInner>,
     sidecar_cache: SidecarDirectoryCache,
     upload_parallelism: usize,
@@ -68,6 +68,7 @@ impl RunProcessor {
         client: Arc<ImmichClient>,
         audit_context: SyncAuditContext,
         progress: JobByteProgress,
+        current_file_progress: CurrentFileProgress,
         coordinator: Arc<SyncCoordinatorInner>,
         sidecar_cache: SidecarDirectoryCache,
     ) -> Result<Self, String> {
@@ -78,6 +79,7 @@ impl RunProcessor {
             client,
             audit_context,
             progress,
+            current_file_progress,
             coordinator,
             sidecar_cache,
             upload_parallelism,
@@ -384,6 +386,7 @@ impl RunProcessor {
                 self.pool.clone(),
                 self.app.clone(),
                 self.progress.clone(),
+                self.current_file_progress.clone(),
                 self.audit_context.clone(),
                 cancellation,
                 self.sidecar_cache.clone(),
@@ -409,6 +412,7 @@ impl RunProcessor {
                         self.pool.clone(),
                         self.app.clone(),
                         self.progress.clone(),
+                        self.current_file_progress.clone(),
                         self.audit_context.clone(),
                         cancellation,
                         self.sidecar_cache.clone(),
@@ -649,6 +653,7 @@ async fn upload_unit(
     pool: sqlx::SqlitePool,
     app: tauri::AppHandle,
     progress: JobByteProgress,
+    current_file_progress: CurrentFileProgress,
     audit_context: SyncAuditContext,
     cancellation: CancellationToken,
     sidecar_cache: SidecarDirectoryCache,
@@ -682,7 +687,7 @@ async fn upload_unit(
             details,
         ),
     );
-    let _ = app.emit("sync-progress", &unit.image.path);
+    current_file_progress.emit(&app, &unit.image.path);
 
     let upload = client.upload_asset_with_live_photo(
         &unit.image.path,
