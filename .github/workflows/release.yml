@@ -74,14 +74,14 @@ jobs:
           LYMIC_RELEASE_CHANNEL: store
         run: |
           npm run build
-          cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+          cargo build --manifest-path src-tauri/Cargo.toml --release --locked --features custom-protocol
 
       - name: package and validate MSIX (windows only)
         if: matrix.platform == 'windows-latest'
         shell: powershell
         run: |
           $ver = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          ./scripts/package-msix.ps1 -Version $ver -OutputDir dist/msix
+          ./scripts/package-msix.ps1 -Version $ver -SourceExe "src-tauri/target/release/lymic-desktop.exe" -OutputDir dist/msix
           ./scripts/validate-msix.ps1 -MsixPath "dist/msix/Lymic_${ver}_x64.msix" -ExpectedVersion $ver
 
       - name: upload MSIX artifact (windows only)

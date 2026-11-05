@@ -43,18 +43,22 @@ if (-not $makeappx) {
 
 Write-Host "Using makeappx: $makeappx"
 
-if (-not $SourceExe) {
-    $candidate1 = "$repoRoot/src-tauri/target/release/Lymic.exe"
-    $candidate2 = "$repoRoot/src-tauri/target/release/lymic.exe"
-    $candidate3 = "$repoRoot/src-tauri/target/release/lymic-desktop.exe"
-    if (Test-Path $candidate1) {
-        $SourceExe = $candidate1
-    } elseif (Test-Path $candidate2) {
-        $SourceExe = $candidate2
-    } elseif (Test-Path $candidate3) {
-        $SourceExe = $candidate3
+if ($SourceExe) {
+    if (-not (Test-Path $SourceExe)) {
+        throw "Specified SourceExe not found at: $SourceExe"
+    }
+    $SourceExe = (Get-Item $SourceExe).FullName
+} else {
+    $candidates = @(
+        "$repoRoot/src-tauri/target/release/lymic-desktop.exe",
+        "$repoRoot/src-tauri/target/release/Lymic.exe",
+        "$repoRoot/src-tauri/target/release/lymic.exe"
+    ) | Where-Object { Test-Path $_ } | Sort-Object { (Get-Item $_).LastWriteTime } -Descending
+
+    if ($candidates.Count -gt 0) {
+        $SourceExe = $candidates[0]
     } else {
-        throw "Source executable not found at $candidate1, $candidate2, or $candidate3. Please run 'cargo build --release' first."
+        throw "Source executable not found in src-tauri/target/release. Please run 'cargo build --release' first."
     }
 }
 
