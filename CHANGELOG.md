@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.1] - 2026-11-05
+
+### Fixed
+- **Microsoft Store MSIX packaged startup and frontend delivery**:
+  - Enables `custom-protocol` feature for Tauri in `src-tauri/Cargo.toml` so standalone release builds embed frontend assets and resolve `tauri.localhost` rather than defaulting to development `devUrl`.
+  - Targets the dedicated Store binary (`lymic-desktop.exe`) in MSIX packaging scripts and release workflows.
+  - Adds `internetClient` and `privateNetworkClientServer` capabilities to `AppxManifest.template.xml`.
+
 ## [0.23.0] - 2026-11-04
 
 ### Added
