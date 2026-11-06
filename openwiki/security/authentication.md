@@ -1,8 +1,11 @@
 ---
 type: security architecture
-title: Authentication and Credential Safety
-description: How Lymic validates Immich login details, constrains server URLs, stores credentials in the native keyring, and prevents credential values from entering audit diagnostics.
+title: Authentication and Credential Boundaries
+description: How the desktop client validates and stores Immich credentials, constrains credential-bearing network requests, and isolates profile and audit data across sessions.
 tags: [security, authentication, credentials, keyring, immich]
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-11-06T15:30:15.009Z
 sources:
   - id: openwiki-source-23775c3de52f3ab95a13cb8b
     resource: repo://README.md
@@ -26,90 +29,100 @@ sources:
     resource: repo://src/lib/controllers/auth-controller.svelte.ts
   - id: openwiki-source-aca69707d11c38fb1aa256e1
     resource: repo://src/lib/tauri/desktop-adapter.ts
-generated: { by: "openwiki/0.7.2", at: "2026-10-19T15:10:01.321Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-06T15:30:15.009Z" }
 ---
 
-# Authentication and Credential Safety
+# Authentication and Credential Boundaries
 
-Lymic is a desktop upload client for Immich. Authentication is based on an Immich API key, optionally augmented with a Cloudflare Access service-token pair. The application keeps those connection credentials out of SQLite: its Rust backend serializes the connection configuration and writes it to the platform keyring. The frontend only uses Tauri commands to submit, query, or delete the configuration.
+Lymic authenticates to Immich with an API key. A connection may additionally use a Cloudflare Access service-token pair. The renderer submits those values only through Tauri commands; the Rust backend validates a proposed connection before persisting its `AuthConfig` in the operating system's native keyring. The profile cache and audit trail are deliberately separate from that secret store.
 
-## Trust boundaries and configuration
+## Credential ownership and session boundary
 
-`AuthConfig` contains the configured server URL, API key, an `allow_local_http` flag, and optional Cloudflare client ID and client secret. It is serialized as one keyring password under the fixed `lymic-sync` / `api-credentials` service/account entry. A missing keyring entry means there is no authenticated configuration; deletion treats that already-absent state as success. Older serialized records default local HTTP to disabled and Cloudflare fields to absent.
+`AuthConfig` holds the server URL, API key, local-HTTP opt-in, and optional Cloudflare client ID and secret. It is serialized as one password in the fixed `lymic-sync` / `api-credentials` keyring entry. A missing entry is the logged-out state, and deleting a missing entry succeeds. Serde defaults keep older stored JSON safe: local HTTP remains disabled and Cloudflare Access remains absent when those fields are missing.
 
-The configuration must be treated as secret-bearing as a whole: although the server URL and Cloudflare client ID are not redacted by `Debug`, the API key and Cloudflare client secret are. Do not put real credential values, complete credential-bearing configuration, or Cloudflare service-token values in examples, bug reports, screenshots, or diagnostics.
+Treat the complete configuration as secret-bearing. Its `Debug` implementation redacts the API key and Cloudflare secret, but not the server URL or Cloudflare client ID. Avoid emitting the complete configuration or any real credential component in diagnostics, screenshots, or support material.
 
-The renderer's `DesktopAdapter` exposes `login`, `logout`, `getAuthStatus`, `getServerUrl`, and `getCurrentUser`; the desktop application registers the corresponding Rust commands. The default Tauri capability is restricted to the main window and declares core defaults plus the dialog, restart, updater, and opener plugin permissions. It does not itself define a separate permission model for Immich credentials; protection of the keyring entry relies on the operating-system account/keyring and the integrity of the desktop application.
+The browser-side controller depends on the `AuthDesktopAdapter` contract (`login`, `logout`, `getAuthStatus`, `getServerUrl`, and `getCurrentUser`); `tauriDesktopAdapter` maps those calls to registered Rust commands. On startup, `hydrate()` first establishes authentication from keyring presence, then retrieves the stored URL and attempts profile loading. A profile failure is non-fatal: keyring presence remains the UI's authentication state.
 
 ## Login validation and persistence
 
-The UI requires a nonempty server URL and API key before it invokes `login`. It trims optional Cloudflare fields and rejects an incomplete pair locally. The backend repeats normalization, then constructs a temporary `ImmichClient`. That construction is important: it applies the URL, HTTP, redirect, and Cloudflare-header validation that every later client uses. The temporary client calls `users/me`; only a successful current-user response permits the credentials to be stored. The temporary client is discarded after this probe.
+The controller refuses an empty URL or API key and trims Cloudflare inputs. It rejects a partial Cloudflare pair before IPC. The backend repeats Cloudflare normalization, creates a temporary `ImmichClient`, and calls `validate_connection()`. Validation is a `GET users/me` request with `x-api-key`; it requires a successful JSON current-user response with either a nonblank name or email. Only then does the backend write credentials; it stores the local-HTTP setting derived from the validated client, then best-effort clears the prior profile cache. The temporary client is discarded.
 
 ```mermaid
 sequenceDiagram
-    participant UI as Svelte authentication controller
-    participant IPC as Tauri commands
+    participant UI as Svelte controller
+    participant IPC as Tauri auth command
     participant Client as Temporary Immich client
-    participant Server as Immich server
+    participant Immich as Immich server
     participant Keyring as Native keyring
     participant Cache as Profile cache
-    UI->>UI: Require URL and API key
-    UI->>UI: Trim and require Cloudflare pair
+
+    UI->>UI: Check required fields and Cloudflare pair
     UI->>IPC: login request
-    IPC->>Client: Construct and validate URL and headers
-    Client->>Server: GET users/me with API key
-    Server-->>Client: Current user or error
-    alt Validation succeeds
-        IPC->>Keyring: Store credential configuration
-        IPC->>Cache: Clear profile cache
+    IPC->>Client: Construct proposed client
+    Client->>Client: Validate URL and request headers
+    Client->>Immich: GET users/me with x-api-key
+    Immich-->>Client: Current user or error
+    alt Current user is valid
+        IPC->>Keyring: Store AuthConfig
+        IPC->>Cache: Clear prior profile cache
         IPC-->>UI: Success
-    else Validation fails
-        IPC-->>UI: Error and no credential write
+        UI->>UI: Mark authenticated and load profile
+    else Client construction or validation fails
+        IPC-->>UI: Error with no keyring write
     end
 ```
 
-*Login validates the endpoint before keyring persistence; a successful login also invalidates any cached profile from the preceding account.*
+*Login validates the proposed endpoint and current-user response before credentials cross into the native keyring.*
 
-The client sends the API key in `x-api-key` on the current-user request and subsequent Immich API requests. A current-user response must be successful JSON and must provide a nonblank name or email; otherwise validation fails. Consequently, a stored credential is evidence of a successful validation at login time, not a promise that the server, key, or network will remain usable later.
+After a successful command, the controller clears its in-memory API key and Cloudflare secret, marks itself authenticated, invokes its login hook, and tries to load the profile. The latter failure is caught and logged as a warning rather than rolling back login. The backend also exposes `get_auth_status` and `get_server_url`; neither returns the API key.
 
-After login, the UI marks itself authenticated, runs its application-level login hook, and attempts to load the profile. A profile-load failure is non-fatal to that successful authentication state. At startup, hydration first asks whether keyring credentials exist, then loads the stored server URL and tries to refresh the profile.
+## URL and HTTP transport policy
 
-## Endpoint and transport policy
+Every constructed `ImmichClient`, including the temporary validation client, applies the following policy before it can issue a request:
 
-`ImmichClient::new` parses and trims the configured URL before any request:
+- HTTPS is mandatory by default. HTTP is permitted only with `allow_local_http` **and** an exact `localhost`, IPv4 loopback, or IPv6 loopback host. LAN addresses, `.local` names, public hosts, and non-HTTP(S) schemes are rejected.
+- A server URL must have a host and cannot contain userinfo, a query, or a fragment. This prevents embedded credentials and ambiguous request targets.
+- The accepted base path is normalized to an Immich API base: a trailing `/api` is retained and otherwise `/api/` is appended. Path-prefix deployments are therefore supported without allowing query or fragment data in configuration.
+- The reqwest client has redirects disabled, so a credential-bearing request cannot be redirected to another destination or downgraded from HTTPS.
 
-- HTTPS is required by default. Plain HTTP is available only when `allow_local_http` is true **and** the host is exactly `localhost`, an IPv4 loopback address, or an IPv6 loopback address. LAN, `.local`, public, and non-HTTP(S) endpoints are not admitted by this exception.
-- A URL must include a host and must not contain userinfo, a query string, or a fragment. This prevents configuration from carrying embedded secrets or ambiguous request targets.
-- The configured path is normalized to an Immich API base: an existing trailing `/api` is retained, otherwise `/api/` is appended. This supports deployments behind a path prefix without accepting a query or fragment.
-- The reqwest client refuses redirects. Operators must configure a reverse proxy to expose the final endpoint directly; redirects cannot forward a request carrying an API key to another target or from HTTPS to HTTP.
+The backend prefixes rejected non-loopback HTTP with `LOCAL_HTTP_NOT_ALLOWED`; the controller maps that stable code to a localized message. Local HTTP remains an explicit risk acceptance because the API key travels over that loopback connection.
 
-The local-HTTP rejection begins with the stable `LOCAL_HTTP_NOT_ALLOWED` code, which the UI maps to a localized error. Local HTTP remains a deliberate security tradeoff because the API key is transmitted over that loopback connection.
+## Cloudflare Access boundary
 
-## Cloudflare Access
+Cloudflare Access is off when both optional values are absent; whitespace-only values normalize to absent. A supplied client ID requires a supplied secret and vice versa. `ImmichClient::new` validates both as HTTP header values, installs `cf-access-client-id` and `cf-access-client-secret` as default headers, and marks the secret header sensitive. These default headers apply to validation, profile, and synchronization requests made by that client, while `x-api-key` is applied to Immich requests individually.
 
-Cloudflare Access is disabled when both optional values are absent. Whitespace-only values are normalized to absent; if only one value remains, both the UI and backend reject the login. With a complete pair, the client validates each value as an HTTP header value and installs `cf-access-client-id` and `cf-access-client-secret` as default headers. The secret header is marked sensitive in reqwest.
+A complete pair is persisted with the API key only after the validation request succeeds. Changes to either the UI validation or the Rust constructor must preserve both layers: the UI supplies early feedback, whereas the backend remains the enforcement point for untrusted IPC input.
 
-Those headers accompany requests made by that `ImmichClient`, including login validation and profile fetches, while the API key continues to be set per request. They are stored alongside the API key in the native keyring after successful validation. Do not log either member of the pair or construct diagnostic examples containing them.
+## Logout and profile cache lifecycle
 
-## Logout and profile-cache lifecycle
+Logout obtains the audit actor from the existing credentials before attempting keyring deletion. On successful deletion it clears the profile-cache directory; if deletion fails, the cache and frontend authenticated state remain. After a successful logout command and user confirmation, the controller clears its API-key, local-HTTP, Cloudflare, display-name, and avatar state before running its logout hook.
 
-Logout derives its audit actor from the credentials before removal, deletes the keyring entry, and clears the profile cache only after a successful deletion. The UI first asks for confirmation; after a successful command it clears its API-key, local-HTTP, Cloudflare, displayed-name, and image state, then runs its logout hook. If deletion fails, the UI keeps its authenticated state and reports the error.
+Profile metadata and an optional avatar live under the application cache directory in `profile_cache`, not in the keyring. Metadata includes a derived account ID and user ID. Cache reads reject a different account and, when supplied, a different user. A refresh failure can return only the same account's cache; an avatar-fetch failure can reuse an image only for the same user. Before resolving a current-user refresh, the backend rereads credentials and compares the derived account ID. If the session changed during the request, it returns `Session changed during profile refresh` and does not persist the response into the new session.
 
-The backend stores profile metadata and an optional avatar under the application cache directory in `profile_cache`, rather than in the keyring. Metadata is keyed by a derived account identifier; cache reads refuse a different account and, when known, a different user ID. A successful login or logout clears those files. During a profile refresh, the backend rereads credentials before resolving or persisting the result; if the derived account changed during the request, it returns `Session changed during profile refresh` instead of writing a stale profile into a new session. On refresh or image-fetch failure, it may return a cache entry only for the same account.
+The cache serializes profile metadata and raw image bytes separately, using temporary files followed by rename for writes. It converts only JPEG, PNG, WebP, and GIF signatures to data URLs; unrecognized payloads, including SVG, are not rendered as an avatar. Profile-image downloads are limited to 10 MiB both by declared content length and after reading.
 
-## Diagnostics and operations
+## Audit redaction and operating guidance
 
-Login and logout emit started/completed/failed audit events. Their actor identifier is a domain-separated SHA-256 value derived from normalized server URL and API key, rather than either input value. For a failed login, the audit failure reason is sanitized against the submitted URL, API key, Cloudflare ID, and Cloudflare secret. The sanitizer also collapses line breaks and whitespace and limits the retained text to 512 characters. Login's UI progress message is generic and intentionally does not include connection values.
+Login writes a started audit event and then a success or failure event; logout writes its terminal success or failure event. Their actor identifier is a domain-separated SHA-256 value derived from the normalized server URL and API key, rather than either raw value. Failed-login audit reasons redact the submitted URL, API key, Cloudflare client ID, and secret. The shared sanitizer also replaces line breaks, collapses whitespace, and truncates retained text to 512 characters. Profile-refresh diagnostic errors use the same credential-aware redaction.
 
-When changing this area, preserve the ordering invariant: validate with a client built from the proposed configuration before `store_credentials`, and clear profile cache only after a successful login store or logout deletion. Keep any newly introduced diagnostic path secret-safe—redact the URL and all credential components before persisting or displaying errors. The focused test coverage verifies URL rejection and local-loopback opt-in, Cloudflare pair validation, API-base normalization, native-config compatibility and debug redaction, frontend error handling, account-separated cache fallbacks, and the profile-refresh logout-race guard.
+When changing authentication code, preserve these ordering and containment rules:
 
-## Server-side permission assumptions
+1. Construct and validate a client from the proposed values before calling `store_credentials`.
+2. Keep URL validation and redirect refusal in the shared client constructor so login and subsequent requests cannot diverge.
+3. Clear profile cache only after a successful credential store or credential deletion, and retain the account-change guard around profile persistence.
+4. Redact the URL and every credential component before writing an error to an audit record or diagnostic output.
 
-The Immich API key must be granted the capabilities used by the client. The project documentation identifies `user.read` for login/current-user lookup, `asset.read` for duplicate checks, `asset.upload` for transfers, and album read/create/asset-create permissions for album features. Normal operation does not require asset deletion or album update permissions. These are server-side API-key scopes, not permissions enforced by the Tauri capability file; deployments should grant the least set required by the enabled workflow.
+Focused tests cover loopback-only HTTP opt-in, URL and Cloudflare-header rejection, API-base normalization, legacy keyring configuration and debug redaction, controller error and session behavior, cache account/user isolation, rejected SVG avatars, and the profile-refresh session-change guard.
+
+## Server-side permissions
+
+The Immich API key's scopes are controlled by Immich, not by Tauri capabilities. The documented workflow uses `user.read` for login/current-user lookup, `asset.read` and `asset.upload` for synchronization, and album read/create/asset-create permissions for album features. Normal operation does not require asset deletion or album update; grant only the scopes required by enabled functionality.
 
 ## Related documentation
 
-- [Local Persistence and Recovery](../data/local-state.md) describes database and cache state distinct from keyring credentials.
-- [UI and IPC](../frontend/ui-and-ipc.md) covers the renderer-to-Tauri command boundary.
-- [Immich API Integration](../integrations/immich-api.md) describes authenticated API operations.
-- [Audit Logging](../operations/audit-logging.md) explains the audit-event store and operational review.
+- [Local Persistence and Recovery](../data/local-state.md) distinguishes caches and database state from keyring credentials.
+- [UI and IPC](../frontend/ui-and-ipc.md) describes the renderer-to-Tauri command boundary.
+- [Immich API Integration](../integrations/immich-api.md) covers authenticated API operations.
+- [Audit Logging](../operations/audit-logging.md) explains audit-event storage and review.
+- [Synchronization](../workflows/synchronization.md) describes the authenticated transfer workflow.

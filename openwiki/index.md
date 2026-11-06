@@ -4,7 +4,7 @@ okf_version: "0.2"
 
 # Files
 
-- [Lymic Codebase Guide](quickstart.md) - Contributor routing guide from Lymic's Tauri and Svelte entry points to the runtime, UI/IPC boundary, synchronization, folders, persistence, Immich, security, diagnostics, and development guidance.
+- [Lymic Codebase Quickstart](quickstart.md) - Entry point for safely changing Lymic, an upload-only Tauri and Svelte desktop client for Immich. It identifies the composition boundaries, local development commands, verification gates, and the documentation that owns common changes.
 
 # Directories
 

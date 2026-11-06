@@ -1,15 +1,14 @@
 ---
 type: workflow
 title: Synchronization Pipeline
-description: How Lymic turns manual, automatic, recovered, and retry inputs into durable queue work, checks or uploads it to Immich, and exposes progress, pause, completion, and failure recovery.
+description: The durable local-to-Immich media synchronization pipeline, from scan producers and queue admission through duplicate detection, upload, album assignment, recovery, and UI progress.
 tags: [synchronization, queue, immich, recovery, uploads]
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-11-06T15:30:15.009Z
 sources:
-  - id: openwiki-source-ab40d61d1bfa656ad091dbd7
-    resource: repo://docs/agents/application-map.md
   - id: openwiki-source-2fd48a041dfbcb39bc092be1
     resource: repo://src-tauri/src/app/startup.rs
-  - id: openwiki-source-53e081c93fba07219ed1e23f
-    resource: repo://src-tauri/src/commands/sync.rs
   - id: openwiki-source-341e376f65355ac7aab7d324
     resource: repo://src-tauri/src/db/queue.rs
   - id: openwiki-source-5eb94a640e50f33a69637199
@@ -26,120 +25,116 @@ sources:
     resource: repo://src-tauri/src/sync/retry.rs
   - id: openwiki-source-d86d6ce7cb2c85ce2672a18b
     resource: repo://src-tauri/src/sync/service.rs
-generated: { by: "openwiki/0.7.2", at: "2026-10-19T15:10:01.321Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-06T15:30:15.009Z" }
 ---
 
 # Synchronization Pipeline
 
-Synchronization is a one-way local-to-Immich workflow. Scans are **producers**, not the runner's source of truth: after an item has been persisted, the runner consumes the SQLite queue. This lets work survive a restart, lets watcher-driven scans add work during another run, and avoids rescanning completed items to recover a run.
+Synchronization is a one-way local-to-Immich workflow whose recovery authority is the SQLite queue, not a scan result or an in-memory transfer. Producers first turn discovered media into durable upload units; a serialized runner later reads pending units from that queue. This permits watcher and folder events to add work during a run and preserves uncompleted work across restart.
 
-## Entry points and admission
+## Admission and execution
 
-The Tauri commands `start_sync`, `pause_sync`, `resume_sync`, `get_sync_status`, `get_failed_syncs`, and `retry_failed_syncs` are thin adapters over `Synchronization`. The dashboard hydrates from the durable snapshot and subscribes to sync events; it uses the same action for pause and resume and separately offers retry for persisted failures.
+The Tauri commands `start_sync`, `pause_sync`, `resume_sync`, `get_sync_status`, `get_failed_syncs`, and `retry_failed_syncs` expose the service to the frontend. `start_sync` requires watched folders, scans them, then submits the result as the `Manual` source. Producers include manual scans, retry, watcher batches, startup/deferred-folder scans, folder changes, exclusion changes, removable-media reconnects, and recovery.
 
-| Entry point | What it does |
-| --- | --- |
-| Manual start | Requires at least one watched folder, atomically acquires the in-memory `running` gate, persists `RUNNING`, authenticates, scans watched folders, then invokes the queue pipeline. A second manual start is rejected as already in progress. |
-| Automatic scan | Converts a scan result to durable queue rows **before** attempting to start a runner. If paused or another run owns the lifecycle gate, it leaves the work queued for that runner or a later resume. |
-| Startup recovery | Startup changes a previously `RUNNING` durable job to `PAUSED`; it does not assume an interrupted HTTP upload failed or succeeded. The user must explicitly resume. |
-| Resume | Changes a paused job to `RUNNING`, clears the coordinator pause flag, and wakes an in-memory runner. If no runner holds the coordinator lock, it checks the persisted queue: it completes an already-empty job or spawns a recovery pipeline with an empty scan result. |
-| Retry failed | Starts a normal run from the persisted failed paths. It validates that each path is still supported, a regular readable file, and not currently excluded; missing or excluded paths are discarded, while invalid or unreadable paths remain failures. |
+Admission copies the current watched-folder target album to each asset, combines related image and live-photo video assets into an upload unit, and writes units and scan failures transactionally. This freezes the target album for already-admitted work. A `SYNCED` queue row is retained on a conflicting re-enqueue; other conflicting rows become `PENDING` and have their failure reason cleared.
 
 ```mermaid
-flowchart TD
-    Manual["Manual start"] --> Scan["Scan watched folders"]
-    Automatic["Watcher or folder scan"] --> Persist["Persist queue work"]
-    Retry["Retry failed paths"] --> Validate["Validate paths and exclusions"]
-    Recovery["Resume recovered work"] --> Queue
-    Scan --> Persist
-    Validate --> Persist
-    Persist --> Queue["Durable pending upload units"]
-    Queue --> Lock["Acquire runner lock"]
-    Lock --> Window["Load up to 50 upload units"]
-    Window --> Hash["Hash or reuse validated cache"]
-    Hash --> Check["Bulk Immich existence check"]
-    Check --> Duplicate{"Remote duplicate"}
-    Duplicate -->|yes| Complete["Persist remote ID and complete"]
-    Duplicate -->|no| Upload["Upload to Immich"]
-    Upload --> Complete
-    Complete --> Album{"Target album"}
-    Album -->|yes| Assign["Batch album assignment"]
-    Album -->|no| Finalize["Finalize queue outcomes"]
-    Assign --> Finalize
-    Finalize --> Queue
-    Queue --> Empty{"No pending work"}
-    Empty -->|yes| Idle["Persist IDLE and emit completion"]
+sequenceDiagram
+    participant Producer
+    participant Service as Synchronization service
+    participant Queue as SQLite queue
+    participant Lifecycle as Lifecycle gate
+    participant Runner
+    participant Immich
+
+    Producer->>Service: scan result or retry result
+    Service->>Queue: admit upload units and failures
+    Service->>Lifecycle: start or join
+    alt newly started
+        Service->>Service: load credentials and client
+        Service->>Runner: run now or spawn
+        Runner->>Queue: load pending unit window
+        Runner->>Immich: bulk existence check
+        alt remote duplicate
+            Runner->>Queue: persist completion path
+        else missing remotely
+            Runner->>Immich: upload unit
+            Runner->>Queue: persist remote ID and completion
+        end
+        Runner->>Queue: finalize returned outcomes
+    else joined or paused
+        Service-->>Producer: work remains durable
+    end
 ```
 
-This shows how all producers converge on the durable queue and how the runner processes it.
+This sequence shows that durable admission precedes runner ownership and that duplicates use the completion path rather than being treated as an upload miss.
 
-The `running` atomic gate protects lifecycle admission, while the coordinator mutex serializes runners. A pipeline that loses the mutex does not discard its just-enqueued scan result: it waits for the active runner. The runner is therefore the only executor, even though queue producers may overlap.
+`start_or_join` uses an atomic `running` gate. It returns `Joined` if another lifecycle already owns the run and returns `Paused` without starting work when the durable job is paused. The coordinator mutex serializes runners. Automatic producers return after admission and runner startup; manual and retry sources await their claimed runner. Before either runner form starts, credentials and a valid authenticated Immich client are required. An execution or setup failure marks the job `FAILED`, clears the in-memory running gate, emits a snapshot, and records `sync.aborted`.
 
-## Queue model and lifecycle
+The runner itself takes work only from the queue. It waits for the coordinator lock when required, so a producer that overlaps a run does not lose its admitted work. To close the empty-queue race, it releases the lifecycle gate, rechecks for newly pending work, and reclaims it before conditionally completing the job.
 
-There is one durable sync job and an ordered queue. A queue record retains path, size, modification time, status, target album, remote ID, sequence, and an upload-unit identity. An upload unit is a primary image with an optional live-photo video; it is recovered and finalized as a unit rather than accidentally splitting the pair. Enqueueing preserves an existing `SYNCED` entry, but makes a non-synced conflicting entry pending and clears its failure reason. Folder-to-album resolution occurs before enqueue, so later changes to a watched folder's target album do not rewrite already queued work.
+## Durable states, pause, and recovery
+
+There is one durable sync job (`id = 1`) with job statuses `IDLE`, `RUNNING`, `PAUSED`, and `FAILED`. Queue entries are independently `PENDING`, `SYNCED`, or `FAILED`; terminal entries contribute to completed bytes and counts. A job can become `IDLE` only while `RUNNING` and when no pending queue row exists.
 
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    IDLE --> RUNNING: start or enqueue runnable work
+    IDLE --> RUNNING: admission starts work
+    FAILED --> RUNNING: admission starts new work
     RUNNING --> PAUSED: pause or startup recovery
     PAUSED --> RUNNING: explicit resume
     RUNNING --> IDLE: no pending entries
-    RUNNING --> IDLE: setup or pipeline error
+    RUNNING --> FAILED: setup or runner error
 
     state RUNNING {
         [*] --> PENDING
-        PENDING --> SYNCED: terminal completion
-        PENDING --> FAILED: hash upload or completion failure
-        SYNCED --> [*]
-        FAILED --> [*]
+        PENDING --> SYNCED: durable completion
+        PENDING --> FAILED: item failure
     }
 ```
 
-The outer states are the singleton job's durable status; `PENDING`, `SYNCED`, and `FAILED` are durable queue-entry outcomes. On an unclean shutdown, recovery deliberately converts `RUNNING` to `PAUSED`, preserving pending work until confirmation. A run reaches `IDLE` only when no pending queue entries remain; failed entries remain recorded and make retry possible.
+This diagram separates the singleton durable job lifecycle from durable per-entry outcomes.
 
-The runner loads bounded windows of 50 upload units. It rechecks current watched-folder exclusions at this queue boundary and discards still-pending matching entries. It registers loaded paths as active work, allowing folder removal to cancel matching uploads; cancellation deliberately produces no terminal outcome so that the still-pending work can be handled later. A pause is observed before another window and between new processor work. Terminal results for only the processed portion of a window are committed, leaving the pause remainder pending.
+On startup, recovery changes an interrupted `RUNNING` job to `PAUSED`: the application cannot safely infer whether an in-flight HTTP upload succeeded. Pause sets both the coordinator flag and the durable status. A running runner waits on a notification, emits the paused lifecycle and transfer state, and does not load another queue window. Resume changes `PAUSED` to `RUNNING`, clears and notifies the coordinator flag, and wakes an existing runner. If no runner owns the coordinator lock, resume either conditionally completes an empty queue or authenticates and spawns a recovery runner for persisted pending rows.
 
-## Processing, deduplication, and durable completion
+The runner loads at most 50 pending **upload units** per window. A unit keeps a primary image and optional live-photo video together; the primary owns its target album and remote ID. Before processing a window, the runner reevaluates watched-folder exclusions and deletes matching still-pending rows. It registers the materialized unit as active work so matching folder removal can cancel it. Cancellation and a pause boundary leave unreturned work pending; only the terminal results returned by the processor are finalized.
 
-For each unit, the processor hashes up to four units concurrently. It reuses a cached SHA-1 only after the file still agrees with the cached size and modification time; otherwise it calculates stable checksums and records pending sync state. It bulk-checks up to 100 hashed units against Immich. A duplicate is not uploaded, but its remote asset ID is resolved so it can follow the same completion and target-album path as a new upload.
+## Processing and completion
 
-Missing units are uploaded concurrently up to the configured upload parallelism. The setting is persisted, defaults to 3, and accepts values from 1 through 8. Uploads include the optional live-photo video and use the shared transfer tracker. Sidecar lookup is held in a per-run directory cache.
+For each window, hashing starts at most four units concurrently. A cached SHA-1 is reusable only when the live file validates against its expected size and modification time; otherwise stable checksums are calculated and pending local sync state is recorded. Hashed units are bulk-checked against Immich in chunks of at most 100.
 
-Completion is deliberately ordered to avoid reporting a false success:
+A remote duplicate is resolved to a remote asset ID and sent through the same completion flow as an upload. Missing units upload concurrently up to the persisted upload-parallelism setting. Uploads can include a live-photo video and report byte chunks through the shared transfer tracker. Bulk existence checks retry only retryable errors: three attempts total, with one- and two-second delays before attempts two and three. A non-retryable response or exhausted attempts aborts the runner rather than treating the check as a miss.
 
-1. Once a remote ID is known—whether from upload, duplicate detection, or recovered queue state—it is persisted on the primary queue entry.
-2. If the unit has a target album, it remains nonterminal until batched album assignment succeeds. Assignment failure produces a failed queue outcome rather than silently succeeding in the root library.
-3. Terminal completion persists every member's synchronized local state with its checksum and remote ID, then returns `SYNCED` queue results. The runner atomically applies the returned terminal block results and updates counts and the current path.
+Completion makes durable bookkeeping precede a `SYNCED` queue outcome:
 
-If local completion persistence fails after a remote upload, the processor marks the unit failed when possible rather than claiming it synced. Its reconciliation helper can recheck all unit hashes remotely and retry persistence without another upload; if every asset cannot be confirmed or the retry fails, it aborts without a terminal success result. This makes remote success with uncertain local bookkeeping visible and recoverable instead of silently duplicating work.
+1. The primary queue row receives the resolved remote ID.
+2. A unit with a target album remains nonterminal until batched album assignment succeeds.
+3. Local synchronized state and queue results are persisted for all members of the unit; the runner then finalizes those returned results.
 
-## Progress, UI, and operational signals
+Thus album-assignment or completion-persistence failures become visible failed outcomes instead of a false success. Individual hash or upload failures likewise mark local state failed and return failed queue results, while a pipeline-level fault puts the job in `FAILED` with its unresolved queue work retained.
 
-`SyncSnapshot` is the durable UI baseline: job status, item totals, success and failure counts, current path, total bytes, and terminal completed bytes. The runner emits snapshots after enqueue, block finalization, exclusions, resume, and completion. It also emits the current path, an integer byte-progress percentage, lifecycle events, and `sync-transfer-stats` for the tray and frontend.
+## Retry, progress, and operations
 
-Transfer statistics are runtime-only: completed queue bytes are reconciled from snapshots, while transferred bytes, rate, and ETA measure the current runner's HTTP activity. Rate uses a rolling three-second sample window and reporting is eligible every 250 ms. During pause the tracker freezes the displayed rate and suppresses ETA; it is marked inactive at completion or on runner cleanup.
+Retry reads failed paths from persistence and revalidates each against current folder exclusions, supported-media rules, metadata, and readability. Missing or excluded paths are discarded from the failed queue; other validation failures remain failed. Valid retry results re-enter the same admission and execution path as normal work.
 
-The pipeline records audit events for starts, pauses, resumes, completion, aborted manual/retry runs, bulk-check failures and retries, hashing failures, upload start/completion, and completion-persistence failures. Manual and retry setup failures reset the durable job to `IDLE`; asynchronous automatic/recovery runner errors emit a sync error and also reset it. Individual item failures remain in the queue and `sync_state` for inspection and retry.
+`SyncSnapshot` is the durable UI baseline: job status, totals, succeeded and failed counts, current path, total bytes, and terminal completed bytes. The runner emits `sync-progress-snapshot` after admission and durable changes, `sync-progress` for the current path, lifecycle events such as `sync-started`, `sync-paused`, `sync-resumed`, and `sync-idle`, and `sync-transfer-stats` for the tray and frontend.
 
-Bulk duplicate checks retry only retryable Immich errors: at most three attempts with one- then two-second exponential delays. A non-retryable response, or exhaustion, aborts the pipeline rather than treating the check as an upload miss. Authentication and client construction are also required before a runner starts; a missing login or invalid server configuration leaves queued automatic work durable but does not run it.
+Transfer statistics are runtime metrics distinct from durable completion. They use a rolling three-second rate window and are eligible for reporting every 250 milliseconds. When paused, the tracker freezes the displayed rate and suppresses ETA; cleanup marks it inactive and emits a final state. Audit events cover run start, pause/resume, completion, aborts, bulk-check retries and failures, hashing, uploads, and completion failures.
 
-## Tests and safe changes
+## Safe changes and related documentation
 
-Focused tests cover the invariants that are easiest to regress:
+Preserve these invariants when changing the pipeline:
 
-- `sync/service.rs` tests durable lifecycle transitions, folder admission, client configuration, and frozen target-album choices for already queued work.
-- `db/queue.rs` and `sync/queue_runner.rs` test crash recovery, upload-unit recovery, bounded windows, exclusion removal, and that a partial paused window finalizes only its terminal subset.
-- `sync/completion.rs` tests remote-ID persistence, coherent live-photo completion, album-gated completion, and refusal to report `SYNCED` when durable persistence fails.
-- `sync/processor.rs`, `sync/retry.rs`, and `sync/progress.rs` test reconciliation without re-upload, duplicate-check retry limits, pause boundaries, cancellation behavior, and progress/statistics calculations.
+- Persist producer output before starting or joining a runner.
+- Treat the queue and local sync state—not UI progress or an in-memory scan—as recovery authority.
+- Keep a live-photo pair and its target-album completion decision coherent as one upload unit.
+- Finalize only results that have reached a durable terminal outcome; do not turn pause or cancellation into silent success.
 
-When changing the pipeline, retain the central invariant: queue and local state must have a durable, retryable record before the UI is told that work is complete. Do not make a scan, an in-memory runner, or a transfer-statistics value the recovery authority.
+Focused tests in `sync/service.rs`, `db/queue.rs`, `sync/queue_runner.rs`, `sync/processor.rs`, `sync/retry.rs`, and `sync/progress.rs` cover lifecycle admission, crash recovery, bounded windows, partial pause finalization, deduplication retries, and progress calculations.
 
-## Related documentation
-
-- [Watched Folders and Media Discovery](watched-folders.md) describes scan producers and folder policy.
-- [Local Persistence and Recovery](../data/local-state.md) describes the SQLite state behind jobs, queues, and local sync state.
+- [Watched Folders and Media Discovery](watched-folders.md) explains scan producers and folder policy.
+- [Local Persistence and Recovery](../data/local-state.md) describes SQLite queue and sync state.
 - [Immich Integration](../integrations/immich-api.md) describes the remote API boundary.
-- [Frontend UI and IPC](../frontend/ui-and-ipc.md) describes command and event consumption.
+- [Frontend UI and IPC](../frontend/ui-and-ipc.md) describes commands and event consumers.
 - [Audit Logging](../operations/audit-logging.md) describes operational audit records.
