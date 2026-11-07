@@ -184,10 +184,10 @@
             type="button"
             class="nav-item {currentView === 'photos' ? 'active' : ''}"
             onclick={() => currentView = "photos"}
-            aria-label="Fotos"
+            aria-label={$t('timeline_title')}
           >
             <Images class="w-4 h-4 shrink-0 {currentView === 'photos' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>Fotos</span>
+            <span>{$t('timeline_title')}</span>
           </button>
 
           <button
@@ -259,7 +259,7 @@
       <header class="h-16 px-8 flex items-center justify-between shrink-0 z-10">
         <div class="flex items-center gap-4">
           <h1 class="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {currentView === "photos" ? "Fotos" : currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
+            {currentView === "photos" ? $t('timeline_title') : currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
           </h1>
         </div>
       </header>

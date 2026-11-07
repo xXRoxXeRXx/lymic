@@ -1,5 +1,12 @@
 {
   "dashboard": "Synchronization",
+  "timeline_title": "Photos",
+  "timeline_offline": "Photo Timeline is offline. Showing cached photos.",
+  "timeline_retry_connection": "Retry timeline connection",
+  "timeline_retry": "Retry",
+  "timeline_refresh": "Refresh timeline",
+  "timeline_asset_count": "{count} assets",
+  "timeline_placeholders": "Media placeholders",
   "logs": "Logs",
   "settings": "Settings",
   "info": "Info",

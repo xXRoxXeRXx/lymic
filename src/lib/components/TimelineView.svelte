@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ExternalLink, Play, RefreshCw, X } from "lucide-svelte";
-  import { locale } from "svelte-i18n";
+  import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
@@ -110,6 +110,12 @@
     return calculateMasonryLayout(timeline.assetsFor(timeBucket), viewportWidth);
   }
 
+  function placeholderHeight(assetCount: number) {
+    const layout = calculateMasonryLayout([], viewportWidth);
+    const rows = Math.ceil(assetCount / layout.columnCount);
+    return Math.max(128, rows * (layout.columnWidth * 0.75 + 8));
+  }
+
   function formatDuration(duration: number | null) {
     if (duration === null) return "";
     const hours = Math.floor(duration / 3600);
@@ -162,19 +168,19 @@
   <div class="mb-4 flex items-center justify-end gap-3">
     {#if timeline.isOffline}
       <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
-        <span>Timeline is offline. Showing cached photos.</span>
+        <span>{$t("timeline_offline")}</span>
         <button
           type="button"
           class="font-semibold underline underline-offset-2"
-          aria-label="Retry timeline connection"
+          aria-label={$t("timeline_retry_connection")}
           onclick={() => void timeline.refresh()}
-        >Retry</button>
+        >{$t("timeline_retry")}</button>
       </div>
     {/if}
     <button
       type="button"
       class="rounded-lg p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-      aria-label="Refresh timeline"
+      aria-label={$t("timeline_refresh")}
       aria-busy={timeline.isRefreshing}
       disabled={timeline.isRefreshing}
       onclick={() => void timeline.refresh()}
@@ -182,7 +188,7 @@
       <RefreshCw class="h-4 w-4 {timeline.isRefreshing ? 'animate-spin' : ''}" />
     </button>
   </div>
-  <div bind:this={viewport} use:measureViewport class="h-full overflow-y-auto pr-16" aria-label="Photo Timeline" onscroll={syncActiveBucket}>
+  <div bind:this={viewport} use:measureViewport class="h-full overflow-y-auto pr-16" aria-label={$t("timeline_title")} onscroll={syncActiveBucket}>
     <div class="space-y-8">
       {#each timeline.buckets as bucket (bucket.timeBucket)}
         {@const layout = masonryLayout(bucket.timeBucket)}
@@ -194,7 +200,7 @@
         >
           <div class="flex items-baseline justify-between">
             <h2 class="text-xl font-bold text-slate-900 dark:text-slate-100">{monthLabel(bucket.timeBucket)}</h2>
-            <p class="text-sm text-slate-500 dark:text-zinc-400">{bucket.count.toLocaleString(numberLocale)} assets</p>
+            <p class="text-sm text-slate-500 dark:text-zinc-400">{$t("timeline_asset_count", { values: { count: bucket.count.toLocaleString(numberLocale) } })}</p>
           </div>
           {#if activeBuckets[bucket.timeBucket] && timeline.assetsFor(bucket.timeBucket).length > 0}
             <div class="flex gap-2" style:height={`${layout.height}px`} aria-label="Month masonry grid">
@@ -212,7 +218,7 @@
               {/each}
             </div>
           {:else}
-            <div style:height={`${layout.height || 128}px`} class="rounded-xl bg-slate-200/70 dark:bg-zinc-800/70 animate-pulse" aria-label="Media placeholders"></div>
+            <div style:height={`${layout.height || placeholderHeight(bucket.count)}px`} class="rounded-xl bg-slate-200/70 dark:bg-zinc-800/70 animate-pulse" aria-label={$t("timeline_placeholders")}></div>
           {/if}
         </section>
       {/each}

@@ -108,12 +108,21 @@ fn read_cached(cache_dir: &Path, asset_id: &str) -> Result<Option<Vec<u8>>, Stri
     let path = cache_path(cache_dir, asset_id);
     match fs::read(&path) {
         Ok(bytes) => {
+            // A partial or otherwise corrupt cache entry must behave like a
+            // miss. Leaving it in place would permanently poison this asset.
+            if !is_webp(&bytes) {
+                let _ = fs::remove_file(&path);
+                return Ok(None);
+            }
             let _ = fs::File::open(&path).and_then(|file| file.set_modified(SystemTime::now()));
             Ok(Some(bytes))
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.to_string()),
     }
+}
+fn is_webp(bytes: &[u8]) -> bool {
+    bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP"
 }
 fn write_cached(cache_dir: &Path, asset_id: &str, bytes: &[u8]) -> Result<(), String> {
     fs::create_dir_all(cache_dir).map_err(|error| error.to_string())?;
@@ -197,5 +206,14 @@ mod tests {
             asset_id(&"lymic-thumb://asset/id".parse().unwrap()),
             Some("id")
         );
+    }
+    #[test]
+    fn removes_corrupt_cache_entries_before_refetching() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(cache_path(&dir, "asset"), b"not-webp").unwrap();
+        assert_eq!(read_cached(&dir, "asset").unwrap(), None);
+        assert!(!cache_path(&dir, "asset").exists());
+        fs::remove_dir_all(dir).unwrap();
     }
 }
