@@ -1,0 +1,52 @@
+name: Update Homebrew Cask
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-tap:
+    if: github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Download macOS release artifact
+        if: env.HOMEBREW_TAP_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "Lymic_${version}_aarch64.dmg" \
+            --dir release
+
+      - name: Update lymic Cask
+        if: env.HOMEBREW_TAP_TOKEN != ''
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/xXRoxXeRXx/homebrew-tap.git" tap
+          node scripts/update-homebrew-cask.mjs \
+            --version "$version" \
+            --asset "release/Lymic_${version}_aarch64.dmg" \
+            --output tap/Casks/lymic.rb
+
+          cd tap
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Casks/lymic.rb
+          git commit -m "Update lymic to ${version}"
+          git push

@@ -65,6 +65,15 @@ Ubuntu and Linux users can install and update Lymic directly from the Snap Store
 sudo snap install lymic
 ```
 
+#### macOS (Homebrew)
+
+```bash
+brew tap xXRoxXeRXx/tap
+brew install --cask lymic
+```
+
+See the [Homebrew Cask guide](docs/homebrew-cask.md) for release automation and local installation verification.
+
 > [!IMPORTANT]
 > **macOS Users:** Since this is an open-source project without a paid Apple Developer certificate, macOS will block the app as "unidentified" or "damaged".
 >
