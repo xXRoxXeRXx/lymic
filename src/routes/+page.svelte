@@ -255,7 +255,7 @@
     <!-- Right Side: Content Column -->
     <div class="flex-1 flex flex-col h-full relative overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60">
       <!-- Header -->
-      <header class="h-16 px-8 flex items-center justify-between shrink-0 z-10">
+      <header class="h-12 px-8 flex items-center justify-between shrink-0 z-10">
         <div class="flex items-center gap-4">
           <h1 class="text-lg font-bold text-slate-900 dark:text-slate-100">
             {currentView === "photos" ? $t('timeline_title') : currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
@@ -263,7 +263,7 @@
         </div>
       </header>
 
-      <main class="flex-1 {currentView === 'photos' ? 'overflow-hidden p-8' : 'overflow-y-auto p-8'} flex flex-col space-y-6">
+      <main class="flex-1 {currentView === 'photos' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />

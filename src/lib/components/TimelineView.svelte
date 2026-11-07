@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { ExternalLink, Play, RefreshCw, X } from "lucide-svelte";
+  import { ChevronLeft, ChevronRight, ExternalLink, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
@@ -210,6 +210,12 @@
     }
   }
 
+  function handleWindowResize() {
+    if (viewport && viewport.clientWidth > 0) {
+      viewportWidth = viewport.clientWidth;
+    }
+  }
+
   function assetUrl(asset: TimelineAsset) {
     return `${serverUrl.replace(/\/$/, "")}/photos/${encodeURIComponent(asset.id)}`;
   }
@@ -229,10 +235,10 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onresize={handleWindowResize} />
 
-<div class="relative h-full min-h-0">
-  <div class="mb-4 flex items-center justify-end gap-3">
+<div class="relative flex h-full min-h-0 flex-col">
+  <div class="-mt-10 mb-2 flex shrink-0 items-center justify-end gap-3 z-20">
     {#if timeline.isOffline}
       <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
         <span>{$t("timeline_offline")}</span>
@@ -255,7 +261,7 @@
       <RefreshCw class="h-4 w-4 {timeline.isRefreshing ? 'animate-spin' : ''}" />
     </button>
   </div>
-  <div bind:this={viewport} use:measureViewport class="h-full overflow-y-auto pr-16" aria-label={$t("timeline_title")} onscroll={syncActiveBucket}>
+  <div bind:this={viewport} use:measureViewport class="min-h-0 flex-1 overflow-y-auto pr-16 scrollbar-none" aria-label={$t("timeline_title")} onscroll={syncActiveBucket}>
     <div class="space-y-8">
       {#each timeline.buckets as bucket (bucket.timeBucket)}
         {@const layout = masonryLayout(bucket.timeBucket)}
@@ -296,7 +302,7 @@
     {@const thumbRatio = scrubberMonths.length > 1 && activeTimeBucket ? Math.max(0, scrubberMonths.indexOf(activeTimeBucket)) / (scrubberMonths.length - 1) : 0}
     <nav class="absolute inset-y-0 right-0 w-14 border-l border-slate-200/80 bg-slate-100/85 py-2 pl-1 backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/85" aria-label={$t("timeline_scrubber")}>
       <div class="relative h-full">
-        <div class="h-full overflow-y-auto pr-2">
+        <div class="h-full overflow-y-auto pr-2 scrollbar-none">
           {#each scrubberIndex as entry (entry.year)}
             <div class="mb-1 flex flex-col items-end gap-0.5">
               <button type="button" class="min-h-6 rounded px-1 text-xs font-bold text-slate-700 hover:bg-slate-200 dark:text-zinc-200 dark:hover:bg-zinc-700" onclick={() => scrollToBucket(entry.months[0])}>{entry.year}</button>
@@ -329,15 +335,17 @@
 
 {#if selectedAsset}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" role="presentation" onclick={(event) => event.currentTarget === event.target && closeLightbox()}>
-    <dialog open aria-label={$t("timeline_lightbox_label")} aria-modal="true" class="m-0 grid h-full w-full max-w-7xl grid-rows-[minmax(0,1fr)_auto] border-0 bg-transparent p-0 text-white">
-      <div class="relative flex min-h-0 items-center justify-center">
-        <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3" aria-label={$t("timeline_close_lightbox")} onclick={closeLightbox}><X class="h-5 w-5" /></button>
+    <dialog open aria-label={$t("timeline_lightbox_label")} aria-modal="true" class="m-0 grid h-full w-full max-h-none max-w-none grid-rows-[minmax(0,1fr)_auto] border-0 bg-transparent p-0 text-white">
+      <div class="relative flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
+        <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3 text-white hover:bg-black/80" aria-label={$t("timeline_close_lightbox")} onclick={closeLightbox}><X class="h-5 w-5" /></button>
+        <button type="button" class="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80" aria-label={$t("timeline_previous_asset")} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
+        <button type="button" class="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80" aria-label={$t("timeline_next_asset")} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
         {#if selectedAsset.type === "VIDEO"}
-          <video class="max-h-full max-w-full" controls autoplay aria-label={$t("timeline_video_preview")} src={protocolSrc("lymic-asset", "video", selectedAsset.id)}>
+          <video class="h-full w-full max-h-full max-w-full object-contain" controls autoplay aria-label={$t("timeline_video_preview")} src={protocolSrc("lymic-asset", "video", selectedAsset.id)}>
             <track kind="captions" />
           </video>
         {:else}
-          <img class="max-h-full max-w-full object-contain" alt={$t("timeline_photo_preview")} src={protocolSrc("lymic-asset", "asset", selectedAsset.id)} />
+          <img class="h-full w-full max-h-full max-w-full object-contain" alt={$t("timeline_photo_preview")} src={protocolSrc("lymic-asset", "asset", selectedAsset.id)} />
         {/if}
       </div>
       <div class="flex flex-wrap items-center justify-between gap-3 bg-black/70 px-4 py-3 text-sm">
@@ -354,8 +362,6 @@
           </p>
         </div>
         <div class="flex gap-2">
-          <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label={$t("timeline_previous_asset")} onclick={() => navigate(-1)}>{$t("timeline_previous")}</button>
-          <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label={$t("timeline_next_asset")} onclick={() => navigate(1)}>{$t("timeline_next")}</button>
           <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 disabled:opacity-50" aria-label={$t("timeline_open_in_immich")} disabled={!serverUrl.trim()} onclick={() => selectedAsset && serverUrl.trim() && onOpenExternalUrl(assetUrl(selectedAsset))}>{$t("timeline_open_in_immich")} <ExternalLink class="h-4 w-4" /></button>
         </div>
       </div>

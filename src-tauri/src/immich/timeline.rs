@@ -90,12 +90,10 @@ fn default_image_type() -> String {
 
 fn parse_duration_value(value: &serde_json::Value) -> Option<u64> {
     match value {
-        serde_json::Value::Number(number) => number.as_u64().or_else(|| {
-            number
-                .as_f64()
-                .filter(|v| v.is_finite() && *v >= 0.0)
-                .map(|v| v.round() as u64)
-        }),
+        serde_json::Value::Number(number) => number
+            .as_f64()
+            .filter(|v| v.is_finite() && *v >= 0.0)
+            .map(|ms| (ms / 1000.0).round() as u64),
         serde_json::Value::String(value) => {
             if value.contains(':') {
                 let mut total_seconds = 0.0_f64;
@@ -106,13 +104,11 @@ fn parse_duration_value(value: &serde_json::Value) -> Option<u64> {
                 (total_seconds.is_finite() && total_seconds >= 0.0)
                     .then_some(total_seconds.round() as u64)
             } else {
-                value.parse::<u64>().ok().or_else(|| {
-                    value
-                        .parse::<f64>()
-                        .ok()
-                        .filter(|v| v.is_finite() && *v >= 0.0)
-                        .map(|v| v.round() as u64)
-                })
+                value
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|v| v.is_finite() && *v >= 0.0)
+                    .map(|ms| (ms / 1000.0).round() as u64)
             }
         }
         _ => None,
@@ -261,7 +257,7 @@ mod tests {
             ));
             assert!(request.contains("x-api-key: test-key"));
             let body =
-                b"[{\"id\":\"asset-1\",\"type\":\"VIDEO\",\"duration\":65,\"exifInfo\":{\"imageWidth\":640,\"imageHeight\":480,\"dateTimeOriginal\":\"2025-03-01T12:30:00.000Z\",\"make\":\"Canon\",\"model\":\"EOS R6\",\"fileSizeInByte\":1234}}]";
+                b"[{\"id\":\"asset-1\",\"type\":\"VIDEO\",\"duration\":65000,\"exifInfo\":{\"imageWidth\":640,\"imageHeight\":480,\"dateTimeOriginal\":\"2025-03-01T12:30:00.000Z\",\"make\":\"Canon\",\"model\":\"EOS R6\",\"fileSizeInByte\":1234}}]";
             stream
                 .write_all(
                     format!(
@@ -331,7 +327,7 @@ mod tests {
             assert!(request
                 .starts_with("GET /api/timeline/bucket?size=MONTH&timeBucket=2026-11-01 HTTP/1.1"));
             assert!(request.contains("x-api-key: test-key"));
-            let assets_body = br#"{"id":["photo-1","video-1"],"isImage":[true,false],"ratio":[0.67,1.7778],"duration":[null,"0:01:05.000"],"fileCreatedAt":["2026-11-04T19:47:41.29","2026-11-03T10:00:00.000Z"]}"#;
+            let assets_body = br#"{"id":["photo-1","video-1","video-2","video-3"],"isImage":[true,false,false,false],"ratio":[0.67,1.7778,1.7778,1.7778],"duration":[null,"0:01:05.000",2205,"5231"],"fileCreatedAt":["2026-11-04T19:47:41.29","2026-11-03T10:00:00.000Z","2026-11-02T10:00:00.000Z","2026-11-01T10:00:00.000Z"]}"#;
             stream
                 .write_all(
                     format!(
@@ -362,7 +358,7 @@ mod tests {
             .get_timeline_bucket_assets("2026-11-01")
             .await
             .unwrap();
-        assert_eq!(assets.len(), 2);
+        assert_eq!(assets.len(), 4);
         assert_eq!(assets[0].id, "photo-1");
         assert_eq!(assets[0].width, 670);
         assert_eq!(assets[0].height, 1000);
@@ -378,6 +374,12 @@ mod tests {
         assert_eq!(assets[1].height, 1000);
         assert_eq!(assets[1].r#type, "VIDEO");
         assert_eq!(assets[1].duration, Some(65));
+
+        assert_eq!(assets[2].id, "video-2");
+        assert_eq!(assets[2].duration, Some(2));
+
+        assert_eq!(assets[3].id, "video-3");
+        assert_eq!(assets[3].duration, Some(5));
         server.await.unwrap();
     }
 }

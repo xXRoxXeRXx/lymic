@@ -227,6 +227,15 @@
   .desktop-toggle:not(.enabled) .desktop-toggle-knob {
     transform: translateX(2px);
   }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Hero Styles (Restored and Kept) */
