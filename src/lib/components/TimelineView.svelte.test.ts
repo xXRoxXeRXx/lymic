@@ -5,6 +5,19 @@ import "../i18n";
 import TimelineView from "./TimelineView.svelte";
 import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
 
+vi.stubGlobal("ResizeObserver", class {
+  observe() {}
+  disconnect() {}
+});
+
+vi.stubGlobal("IntersectionObserver", class {
+  constructor(private readonly callback: IntersectionObserverCallback) {}
+  observe(target: Element) {
+    this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+  }
+  disconnect() {}
+});
+
 const timeline: TimelineViewState = {
   buckets: [
     { timeBucket: "2025-03-01T00:00:00.000Z", count: 12 },
