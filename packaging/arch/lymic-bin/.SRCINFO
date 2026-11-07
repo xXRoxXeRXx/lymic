@@ -1,0 +1,18 @@
+pkgbase = lymic-bin
+	pkgdesc = Desktop synchronization client for Immich
+	pkgver = 0.23.0
+	pkgrel = 1
+	url = https://github.com/xXRoxXeRXx/lymic
+	arch = x86_64
+	license = MIT
+	makedepends = libarchive
+	depends = gtk3
+	depends = webkit2gtk-4.1
+	depends = librsvg
+	depends = openssl
+	provides = lymic
+	conflicts = lymic
+	source = lymic-bin-0.23.0.deb::https://github.com/xXRoxXeRXx/lymic/releases/download/v0.23.0/Lymic_0.23.0_amd64.deb
+	sha256sums = d4a8e5a2aa4a29b29a2a4b54d8480185e78a3d09c2c1b0dd9085fb26ea9a73f8
+
+pkgname = lymic-bin

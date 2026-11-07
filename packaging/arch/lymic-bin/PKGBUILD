@@ -1,0 +1,30 @@
+# Maintainer: xXRoxXeRXx <https://github.com/xXRoxXeRXx>
+
+pkgname=lymic-bin
+pkgver=0.23.0
+pkgrel=1
+pkgdesc="Desktop synchronization client for Immich"
+arch=('x86_64')
+url="https://github.com/xXRoxXeRXx/lymic"
+license=('MIT')
+depends=('gtk3' 'webkit2gtk-4.1' 'librsvg' 'openssl')
+makedepends=('libarchive')
+provides=('lymic')
+conflicts=('lymic')
+source=("${pkgname}-${pkgver}.deb::${url}/releases/download/v${pkgver}/Lymic_${pkgver}_amd64.deb")
+sha256sums=('d4a8e5a2aa4a29b29a2a4b54d8480185e78a3d09c2c1b0dd9085fb26ea9a73f8')
+
+package() {
+  local deb_archive="${srcdir}/${pkgname}-${pkgver}.deb"
+  local data_archive
+
+  bsdtar -xf "$deb_archive" -C "$srcdir"
+  data_archive=$(find "$srcdir" -maxdepth 1 -name 'data.tar.*' -print -quit)
+
+  if [[ -z "$data_archive" ]]; then
+    error "The Debian release artifact does not contain a data archive"
+    return 1
+  fi
+
+  bsdtar -xf "$data_archive" -C "$pkgdir"
+}

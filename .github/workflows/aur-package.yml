@@ -1,0 +1,35 @@
+name: Validate AUR package
+
+on:
+  pull_request:
+    paths:
+      - 'packaging/arch/lymic-bin/**'
+  push:
+    paths:
+      - 'packaging/arch/lymic-bin/**'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate metadata and release artifact with namcap
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace/packaging/arch/lymic-bin \
+            archlinux:latest \
+            /bin/bash -lc '
+              set -euo pipefail
+              pacman -Syu --noconfirm --needed base-devel namcap
+              useradd --create-home builder
+              chown -R builder:builder /workspace/packaging/arch/lymic-bin
+              runuser -u builder -- makepkg --verifysource
+              runuser -u builder -- namcap PKGBUILD
+              runuser -u builder -- makepkg --noconfirm
+              runuser -u builder -- namcap ./*.pkg.tar.*
+              runuser -u builder -- makepkg --printsrcinfo > .SRCINFO.generated
+              diff -u .SRCINFO .SRCINFO.generated
+            '
