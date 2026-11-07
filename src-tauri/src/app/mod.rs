@@ -4,7 +4,7 @@ pub(crate) mod events;
 pub(crate) mod locale;
 pub(crate) mod startup;
 pub(crate) mod state;
-mod thumbnail_protocol;
+pub(crate) mod thumbnail_protocol;
 pub(crate) mod tray;
 
 use std::ffi::{OsStr, OsString};

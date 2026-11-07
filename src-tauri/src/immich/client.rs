@@ -17,7 +17,21 @@ use url::{Host, Url};
 const UPLOAD_TIMEOUT_BASE_SECONDS: u64 = 5 * 60;
 const UPLOAD_TIMEOUT_SECONDS_PER_GIB: u64 = 2 * 60 * 60;
 const GIB_BYTES: u128 = 1024 * 1024 * 1024;
+const MAX_THUMBNAIL_BYTES: usize = 20 * 1024 * 1024;
+const MAX_ASSET_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
 pub(crate) const LOCAL_HTTP_NOT_ALLOWED_ERROR: &str = "LOCAL_HTTP_NOT_ALLOWED";
+
+type CachedAuthenticatedClient = (
+    crate::auth::AuthConfig,
+    std::sync::Arc<ImmichClient>,
+    String,
+);
+
+fn authenticated_client_cache() -> &'static std::sync::Mutex<Option<CachedAuthenticatedClient>> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<Option<CachedAuthenticatedClient>>> =
+        std::sync::OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(None))
+}
 
 fn upload_timeout(total_file_bytes: u64) -> std::time::Duration {
     let proportional_seconds = (u128::from(total_file_bytes)
@@ -145,7 +159,47 @@ impl ImmichClient {
             .expect("validated base URL must support relative endpoint paths")
     }
 
-    pub(super) fn validate_path_segment(value: &str, name: &str) -> Result<(), String> {
+    pub(crate) fn from_stored_credentials(
+    ) -> Result<(std::sync::Arc<Self>, crate::auth::AuthConfig, String), String> {
+        let credentials =
+            crate::auth::get_credentials()?.ok_or_else(|| "Not authenticated".to_string())?;
+        if let Ok(cache) = authenticated_client_cache().lock() {
+            if let Some((ref cached_creds, ref client, ref account_id)) = *cache {
+                if cached_creds == &credentials {
+                    return Ok((client.clone(), credentials, account_id.clone()));
+                }
+            }
+        }
+        let account_id = crate::audit::actor_id(&credentials.server_url, &credentials.api_key);
+        let client = std::sync::Arc::new(
+            Self::new(
+                credentials.server_url.clone(),
+                credentials.api_key.clone(),
+                credentials.allow_local_http,
+                credentials.cloudflare_client_id.clone(),
+                credentials.cloudflare_client_secret.clone(),
+            )
+            .map_err(|error| Self::redact_error(&error, &credentials))?,
+        );
+        if let Ok(mut cache) = authenticated_client_cache().lock() {
+            *cache = Some((credentials.clone(), client.clone(), account_id.clone()));
+        }
+        Ok((client, credentials, account_id))
+    }
+
+    pub(crate) fn redact_error(error: &str, credentials: &crate::auth::AuthConfig) -> String {
+        crate::audit::audit_safe_error(
+            error,
+            &[
+                Some(&credentials.server_url),
+                Some(&credentials.api_key),
+                credentials.cloudflare_client_id.as_deref(),
+                credentials.cloudflare_client_secret.as_deref(),
+            ],
+        )
+    }
+
+    pub(crate) fn validate_path_segment(value: &str, name: &str) -> Result<(), String> {
         if value.trim().is_empty()
             || value.contains("..")
             || value.chars().any(|character| {
@@ -248,7 +302,6 @@ impl ImmichClient {
     }
 
     pub(crate) async fn get_thumbnail(&self, asset_id: &str) -> Result<Vec<u8>, String> {
-        const MAX_THUMBNAIL_BYTES: usize = 20 * 1024 * 1024;
         Self::validate_path_segment(asset_id, "asset ID")?;
         let response = self
             .client
@@ -264,20 +317,9 @@ impl ImmichClient {
                 response_status_error(response).await?
             ));
         }
-        if response
-            .content_length()
-            .is_some_and(|length| length as usize > MAX_THUMBNAIL_BYTES)
-        {
-            return Err("Thumbnail exceeds maximum allowed size".to_string());
-        }
-        let bytes = response
-            .bytes()
+        read_response_body_limited(response, MAX_THUMBNAIL_BYTES)
             .await
-            .map_err(|error| format!("Failed to read thumbnail: {error}"))?;
-        if bytes.len() > MAX_THUMBNAIL_BYTES {
-            return Err("Thumbnail exceeds maximum allowed size".to_string());
-        }
-        Ok(bytes.to_vec())
+            .map_err(|error| format!("Failed to read thumbnail: {error}"))
     }
 
     pub(crate) async fn get_asset(
@@ -305,11 +347,9 @@ impl ImmichClient {
             ));
         }
         let headers = response.headers().clone();
-        let body = response
-            .bytes()
+        let body = read_response_body_limited(response, MAX_ASSET_RESPONSE_BYTES)
             .await
-            .map_err(|error| format!("Failed to read asset: {error}"))?
-            .to_vec();
+            .map_err(|error| format!("Failed to read asset: {error}"))?;
         let header = |name| {
             headers
                 .get(name)

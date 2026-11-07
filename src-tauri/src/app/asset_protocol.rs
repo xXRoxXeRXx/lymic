@@ -1,8 +1,7 @@
-use crate::{
-    auth,
-    immich::{AssetResponse, ImmichClient},
-};
+use crate::immich::{AssetResponse, ImmichClient};
 use tauri::http::{header, Response, StatusCode, Uri};
+
+const MAX_VIDEO_RANGE_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
 
 pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     builder.register_asynchronous_uri_scheme_protocol(
@@ -25,48 +24,60 @@ async fn serve(uri: Uri, range: Option<&str>) -> Response<Vec<u8>> {
     let Some((kind, asset_id)) = asset_target(&uri) else {
         return error_response(StatusCode::BAD_REQUEST, "Invalid asset URI");
     };
-    if kind == "video" && range.is_none() {
-        // The browser may issue an initial request without Range; Immich still returns a playable response.
-    }
-    let credentials = match auth::get_credentials()
-        .map_err(|error| error.to_string())
-        .and_then(|value| value.ok_or_else(|| "Not authenticated".to_string()))
-    {
-        Ok(credentials) => credentials,
+    let (client, credentials, _) = match ImmichClient::from_stored_credentials() {
+        Ok(authenticated) => authenticated,
         Err(error) => return error_response(StatusCode::UNAUTHORIZED, &error),
     };
-    match ImmichClient::new(
-        credentials.server_url,
-        credentials.api_key,
-        credentials.allow_local_http,
-        credentials.cloudflare_client_id,
-        credentials.cloudflare_client_secret,
-    )
-    .and_then(|client| Ok(client))
-    {
-        Ok(client) => match client.get_asset(asset_id, range).await {
-            Ok(response) => asset_response(response),
-            Err(error) => error_response(StatusCode::BAD_GATEWAY, &error),
-        },
-        Err(error) => error_response(StatusCode::BAD_REQUEST, &error),
+    let effective_range = (kind == "video")
+        .then(|| bounded_video_range(range))
+        .or_else(|| range.map(str::to_string));
+    match client.get_asset(asset_id, effective_range.as_deref()).await {
+        Ok(response) => asset_response(response),
+        Err(error) => error_response(
+            StatusCode::BAD_GATEWAY,
+            &ImmichClient::redact_error(&error, &credentials),
+        ),
     }
 }
 
-fn asset_target(uri: &Uri) -> Option<(&str, &str)> {
+pub(crate) fn protocol_target<'a>(
+    uri: &'a Uri,
+    allowed_kinds: &[&str],
+) -> Option<(&'a str, &'a str)> {
     let (kind, id) = match uri.authority()?.as_str() {
-        kind @ ("asset" | "video") => (kind, uri.path().strip_prefix('/')?),
         "localhost" => {
             let path = uri.path().strip_prefix('/')?;
-            let (kind, id) = path.split_once('/')?;
-            (kind == "asset" || kind == "video").then_some((kind, id))?
+            path.split_once('/')?
         }
-        _ => return None,
+        kind => (kind, uri.path().strip_prefix('/')?),
     };
-    (!id.is_empty()
-        && !id.contains('/')
-        && !id.contains("..")
-        && !id.chars().any(char::is_whitespace))
-    .then_some((kind, id))
+    (allowed_kinds.contains(&kind) && ImmichClient::validate_path_segment(id, "asset ID").is_ok())
+        .then_some((kind, id))
+}
+
+fn asset_target(uri: &Uri) -> Option<(&str, &str)> {
+    protocol_target(uri, &["asset", "video"])
+}
+
+fn bounded_video_range(range: Option<&str>) -> String {
+    let max_span = MAX_VIDEO_RANGE_CHUNK_BYTES - 1;
+    let Some(raw) = range.and_then(|r| r.trim().strip_prefix("bytes=")) else {
+        return format!("bytes=0-{max_span}");
+    };
+    let Some((start_str, end_str)) = raw.split_once('-') else {
+        return format!("bytes=0-{max_span}");
+    };
+    let Ok(start) = start_str.trim().parse::<u64>() else {
+        return format!("bytes=0-{max_span}");
+    };
+    let capped_end = start.saturating_add(max_span);
+    match end_str.trim() {
+        "" => format!("bytes={start}-{capped_end}"),
+        explicit => match explicit.parse::<u64>() {
+            Ok(end) if end >= start => format!("bytes={start}-{}", end.min(capped_end)),
+            _ => format!("bytes={start}-{capped_end}"),
+        },
+    }
 }
 
 fn asset_response(asset: AssetResponse) -> Response<Vec<u8>> {
@@ -131,5 +142,17 @@ mod tests {
             Some(("video", "video-1"))
         );
         assert!(asset_target(&"lymic-asset://localhost/other/photo-1".parse().unwrap()).is_none());
+    }
+
+    #[test]
+    fn bounds_open_ended_or_missing_video_ranges_while_preserving_small_ranges() {
+        assert_eq!(bounded_video_range(None), "bytes=0-8388607");
+        assert_eq!(bounded_video_range(Some("bytes=0-")), "bytes=0-8388607");
+        assert_eq!(bounded_video_range(Some("bytes=100-")), "bytes=100-8388707");
+        assert_eq!(bounded_video_range(Some("bytes=10-19")), "bytes=10-19");
+        assert_eq!(
+            bounded_video_range(Some("bytes=0-999999999")),
+            "bytes=0-8388607"
+        );
     }
 }

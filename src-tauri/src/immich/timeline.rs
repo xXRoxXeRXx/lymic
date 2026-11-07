@@ -303,24 +303,26 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0_u8; 2048];
-            let read = stream.read(&mut request).await.unwrap();
-            let request = String::from_utf8_lossy(&request[..read]);
-            assert!(request.starts_with("GET /api/timeline/buckets?size=MONTH HTTP/1.1"));
-            assert!(request.contains("x-api-key: test-key"));
-            let buckets_body = b"[{\"timeBucket\":\"2026-11-01\",\"count\":2}]";
-            stream
-                .write_all(
-                    format!(
-                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n",
-                        buckets_body.len()
+            {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = [0_u8; 2048];
+                let read = stream.read(&mut request).await.unwrap();
+                let request = String::from_utf8_lossy(&request[..read]);
+                assert!(request.starts_with("GET /api/timeline/buckets?size=MONTH HTTP/1.1"));
+                assert!(request.contains("x-api-key: test-key"));
+                let buckets_body = b"[{\"timeBucket\":\"2026-11-01\",\"count\":2}]";
+                stream
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                            buckets_body.len()
+                        )
+                        .as_bytes(),
                     )
-                    .as_bytes(),
-                )
-                .await
-                .unwrap();
-            stream.write_all(buckets_body).await.unwrap();
+                    .await
+                    .unwrap();
+                stream.write_all(buckets_body).await.unwrap();
+            }
 
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut request = [0_u8; 2048];
@@ -333,7 +335,7 @@ mod tests {
             stream
                 .write_all(
                     format!(
-                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n",
+                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
                         assets_body.len()
                     )
                     .as_bytes(),

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { ExternalLink, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
@@ -21,6 +22,9 @@
   const numberLocale = $derived(toBcp47Locale($locale));
   const scrubberIndex = $derived(buildTimelineScrubberIndex(timeline.buckets));
   const scrubberMonths = $derived(scrubberIndex.flatMap((entry) => entry.months));
+  const lightboxAssets = $derived(
+    timeline.buckets.flatMap((bucket) => timeline.assetsFor(bucket.timeBucket)),
+  );
   let viewport: HTMLDivElement;
   let activeTimeBucket = $state<string | null>(null);
   let activeBuckets = $state<Record<string, boolean>>({});
@@ -28,13 +32,23 @@
   let isDragging = false;
   let selectedAsset = $state<TimelineAsset | null>(null);
   let selectedIndex = $state(-1);
-  let lightboxAssets = $state<TimelineAsset[]>([]);
   let opener = $state<HTMLElement | null>(null);
 
   $effect(() => {
     if (!activeTimeBucket || !scrubberMonths.includes(activeTimeBucket)) {
       activeTimeBucket = scrubberMonths[0] ?? null;
     }
+  });
+
+  $effect(() => {
+    const currentBuckets = timeline.buckets;
+    untrack(() => {
+      for (const bucket of currentBuckets) {
+        if (activeBuckets[bucket.timeBucket]) {
+          void Promise.resolve(timeline.activateBucket(bucket.timeBucket)).catch(() => {});
+        }
+      }
+    });
   });
 
   function monthLabel(timeBucket: string) {
@@ -88,15 +102,22 @@
   }
 
   function measureViewport(node: HTMLElement) {
+    if (typeof ResizeObserver === "undefined") {
+      if (node.clientWidth > 0) viewportWidth = node.clientWidth;
+      return {};
+    }
     const resizeObserver = new ResizeObserver(() => {
-      viewportWidth = node.clientWidth;
+      if (node.clientWidth > 0) viewportWidth = node.clientWidth;
     });
     resizeObserver.observe(node);
-    viewportWidth = node.clientWidth;
+    if (node.clientWidth > 0) viewportWidth = node.clientWidth;
     return { destroy: () => resizeObserver.disconnect() };
   }
 
   function observeBucket(node: HTMLElement, timeBucket: string) {
+    if (typeof IntersectionObserver === "undefined") {
+      return {};
+    }
     const observer = new IntersectionObserver((entries) => {
       const isActive = entries.some((entry) => entry.isIntersecting);
       activeBuckets = { ...activeBuckets, [timeBucket]: isActive };
@@ -125,10 +146,22 @@
   }
 
   function openLightbox(asset: TimelineAsset, source: HTMLElement) {
-    lightboxAssets = timeline.buckets.flatMap((bucket) => timeline.assetsFor(bucket.timeBucket));
     selectedIndex = lightboxAssets.findIndex((candidate) => candidate.id === asset.id);
     selectedAsset = asset;
     opener = source;
+  }
+
+  function hasRealDimensions(asset: TimelineAsset) {
+    if (asset.width <= 0 || asset.height <= 0) return false;
+    if (
+      asset.height === 1000 &&
+      asset.fileSize === null &&
+      !asset.cameraMake &&
+      !asset.cameraModel
+    ) {
+      return false;
+    }
+    return true;
   }
 
   function closeLightbox() {
@@ -217,11 +250,11 @@
             <p class="text-sm text-slate-500 dark:text-zinc-400">{$t("timeline_asset_count", { values: { count: bucket.count.toLocaleString(numberLocale) } })}</p>
           </div>
           {#if activeBuckets[bucket.timeBucket] && timeline.assetsFor(bucket.timeBucket).length > 0}
-            <div class="flex gap-2" style:height={`${layout.height}px`} aria-label="Month masonry grid">
+            <div class="flex gap-2" style:height={`${layout.height}px`} aria-label={$t("timeline_masonry_grid")}>
               {#each layout.columns as column, columnIndex (columnIndex)}
                 <div class="flex min-w-0 flex-1 flex-col gap-2">
                   {#each column as item (item.asset.id)}
-                    <button type="button" class="relative overflow-hidden rounded-lg bg-slate-200 text-left dark:bg-zinc-800" aria-label={`Open ${item.asset.type === "VIDEO" ? "video" : "photo"}`} onclick={(event) => openLightbox(item.asset, event.currentTarget)}>
+                    <button type="button" class="relative overflow-hidden rounded-lg bg-slate-200 text-left dark:bg-zinc-800" aria-label={item.asset.type === "VIDEO" ? $t("timeline_open_video") : $t("timeline_open_photo")} onclick={(event) => openLightbox(item.asset, event.currentTarget)}>
                       <img src={protocolSrc("lymic-thumb", "asset", item.asset.id)} alt="" loading="lazy" width={item.asset.width} height={item.asset.height} style:height={`${item.height}px`} class="w-full object-cover" />
                       {#if item.asset.type === "VIDEO"}
                         <span class="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white"><Play class="h-3 w-3 fill-current" />{formatDuration(item.asset.duration)}</span>
@@ -240,7 +273,8 @@
   </div>
 
   {#if scrubberMonths.length > 0}
-    <nav class="absolute inset-y-0 right-0 w-14 border-l border-slate-200/80 bg-slate-100/85 py-2 pl-1 backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/85" aria-label="Timeline scrubber">
+    {@const thumbRatio = scrubberMonths.length > 1 && activeTimeBucket ? Math.max(0, scrubberMonths.indexOf(activeTimeBucket)) / (scrubberMonths.length - 1) : 0}
+    <nav class="absolute inset-y-0 right-0 w-14 border-l border-slate-200/80 bg-slate-100/85 py-2 pl-1 backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/85" aria-label={$t("timeline_scrubber")}>
       <div class="relative h-full">
         <div class="h-full overflow-y-auto pr-2">
           {#each scrubberIndex as entry (entry.year)}
@@ -261,8 +295,8 @@
         <button
           type="button"
           class="absolute right-0 h-6 w-2 rounded-full bg-blue-600 shadow transition-transform"
-          style:top={`${scrubberMonths.length > 1 && activeTimeBucket ? `${(Math.max(0, scrubberMonths.indexOf(activeTimeBucket)) / (scrubberMonths.length - 1)) * 100}%` : "0"}`}
-          aria-label="Drag timeline scrubber"
+          style:top={`calc(${thumbRatio * 100}% - ${thumbRatio * 1.5}rem)`}
+          aria-label={$t("timeline_scrubber_drag")}
           onpointerdown={startDrag}
           onpointermove={drag}
           onpointerup={endDrag}
@@ -275,25 +309,34 @@
 
 {#if selectedAsset}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" role="presentation" onclick={(event) => event.currentTarget === event.target && closeLightbox()}>
-    <dialog open role="dialog" aria-label="Media lightbox" aria-modal="true" class="m-0 grid h-full w-full max-w-7xl grid-rows-[minmax(0,1fr)_auto] border-0 bg-transparent p-0 text-white">
+    <dialog open aria-label={$t("timeline_lightbox_label")} aria-modal="true" class="m-0 grid h-full w-full max-w-7xl grid-rows-[minmax(0,1fr)_auto] border-0 bg-transparent p-0 text-white">
       <div class="relative flex min-h-0 items-center justify-center">
-        <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3" aria-label="Close lightbox" onclick={closeLightbox}><X class="h-5 w-5" /></button>
+        <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3" aria-label={$t("timeline_close_lightbox")} onclick={closeLightbox}><X class="h-5 w-5" /></button>
         {#if selectedAsset.type === "VIDEO"}
-          <video class="max-h-full max-w-full" controls autoplay aria-label="Video preview" src={protocolSrc("lymic-asset", "video", selectedAsset.id)}></video>
+          <video class="max-h-full max-w-full" controls autoplay aria-label={$t("timeline_video_preview")} src={protocolSrc("lymic-asset", "video", selectedAsset.id)}>
+            <track kind="captions" />
+          </video>
         {:else}
-          <img class="max-h-full max-w-full object-contain" alt="Photo preview" src={protocolSrc("lymic-asset", "asset", selectedAsset.id)} />
+          <img class="max-h-full max-w-full object-contain" alt={$t("timeline_photo_preview")} src={protocolSrc("lymic-asset", "asset", selectedAsset.id)} />
         {/if}
       </div>
       <div class="flex flex-wrap items-center justify-between gap-3 bg-black/70 px-4 py-3 text-sm">
         <div class="space-y-1">
-          <p>{selectedAsset.takenAt ? new Intl.DateTimeFormat(numberLocale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedAsset.takenAt)) : "Unknown date"}</p>
-          <p>{[selectedAsset.cameraMake, selectedAsset.cameraModel].filter(Boolean).join(" ") || "Unknown camera"}</p>
-          <p>{selectedAsset.width.toLocaleString(numberLocale)} × {selectedAsset.height.toLocaleString(numberLocale)}{selectedAsset.fileSize === null ? "" : ` · ${(selectedAsset.fileSize / 1024 / 1024).toFixed(1)} MB`}</p>
+          <p>{selectedAsset.takenAt ? new Intl.DateTimeFormat(numberLocale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedAsset.takenAt)) : $t("timeline_unknown_date")}</p>
+          <p>{[selectedAsset.cameraMake, selectedAsset.cameraModel].filter(Boolean).join(" ") || $t("timeline_unknown_camera")}</p>
+          <p>
+            {#if hasRealDimensions(selectedAsset)}
+              <span>{selectedAsset.width.toLocaleString(numberLocale)} × {selectedAsset.height.toLocaleString(numberLocale)}</span>
+            {/if}
+            {#if selectedAsset.fileSize !== null}
+              <span>{hasRealDimensions(selectedAsset) ? " · " : ""}{(selectedAsset.fileSize / 1024 / 1024).toFixed(1)} MB</span>
+            {/if}
+          </p>
         </div>
         <div class="flex gap-2">
-          <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label="Previous asset" onclick={() => navigate(-1)}>Previous</button>
-          <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label="Next asset" onclick={() => navigate(1)}>Next</button>
-          <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2" aria-label="Open in Immich" onclick={() => selectedAsset && onOpenExternalUrl(assetUrl(selectedAsset))}>Open in Immich <ExternalLink class="h-4 w-4" /></button>
+          <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label={$t("timeline_previous_asset")} onclick={() => navigate(-1)}>{$t("timeline_previous")}</button>
+          <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label={$t("timeline_next_asset")} onclick={() => navigate(1)}>{$t("timeline_next")}</button>
+          <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2" aria-label={$t("timeline_open_in_immich")} onclick={() => selectedAsset && onOpenExternalUrl(assetUrl(selectedAsset))}>{$t("timeline_open_in_immich")} <ExternalLink class="h-4 w-4" /></button>
         </div>
       </div>
     </dialog>

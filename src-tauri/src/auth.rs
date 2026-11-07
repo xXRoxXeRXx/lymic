@@ -1,8 +1,21 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{
+    fmt,
+    sync::{Mutex, OnceLock},
+    time::{Duration, Instant},
+};
 
-#[derive(Clone, Serialize, Deserialize)]
+const CREDENTIAL_CACHE_TTL: Duration = Duration::from_secs(2);
+
+type CachedCredentials = Option<(Instant, Option<AuthConfig>)>;
+
+fn credential_cache() -> &'static Mutex<CachedCredentials> {
+    static CACHE: OnceLock<Mutex<CachedCredentials>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthConfig {
     pub server_url: String,
     pub api_key: String,
@@ -49,6 +62,9 @@ pub fn store_credentials(
     };
     let json = serde_json::to_string(&config).map_err(|e| e.to_string())?;
     entry.set_password(&json).map_err(|e| e.to_string())?;
+    if let Ok(mut cache) = credential_cache().lock() {
+        *cache = Some((Instant::now(), Some(config)));
+    }
     Ok(())
 }
 
@@ -102,22 +118,41 @@ mod tests {
 }
 
 pub fn get_credentials() -> Result<Option<AuthConfig>, String> {
+    if let Ok(cache) = credential_cache().lock() {
+        if let Some((cached_at, ref config)) = *cache {
+            if cached_at.elapsed() < CREDENTIAL_CACHE_TTL {
+                return Ok(config.clone());
+            }
+        }
+    }
     let entry = Entry::new(SERVICE_NAME, ACCOUNT_NAME).map_err(|e| e.to_string())?;
-    match entry.get_password() {
+    let loaded = match entry.get_password() {
         Ok(json) => {
             let config: AuthConfig = serde_json::from_str(&json).map_err(|e| e.to_string())?;
             Ok(Some(config))
         }
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(e.to_string()),
+    }?;
+    if let Ok(mut cache) = credential_cache().lock() {
+        *cache = Some((Instant::now(), loaded.clone()));
     }
+    Ok(loaded)
 }
 
 pub fn delete_credentials() -> Result<(), String> {
+    if let Ok(mut cache) = credential_cache().lock() {
+        *cache = None;
+    }
     let entry = Entry::new(SERVICE_NAME, ACCOUNT_NAME).map_err(|e| e.to_string())?;
     // NoEntry is the desired end-state; treat it as success.
     match entry.delete_password() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Ok(()) | Err(keyring::Error::NoEntry) => {
+            if let Ok(mut cache) = credential_cache().lock() {
+                *cache = Some((Instant::now(), None));
+            }
+            Ok(())
+        }
         Err(e) => Err(e.to_string()),
     }
 }

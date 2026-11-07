@@ -70,4 +70,27 @@ describe("Photo Timeline controller", () => {
     expect(timeline.isOffline).toBe(false);
     expect(timeline.buckets).toEqual([{ timeBucket: "2025-04-01T00:00:00.000Z", count: 1 }]);
   });
+
+  it("re-fetches stale bucket assets when re-activated after a timeline refresh", async () => {
+    const adapter: TimelineDesktopAdapter = {
+      getTimelineBuckets: vi.fn().mockResolvedValue([
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
+      ]),
+      getTimelineBucketAssets: vi.fn()
+        .mockResolvedValueOnce([{ id: "asset-1", width: 640, height: 480 }])
+        .mockResolvedValueOnce([
+          { id: "asset-1", width: 640, height: 480 },
+          { id: "asset-2", width: 800, height: 600 },
+        ]),
+    };
+    const timeline = createTimelineController(adapter);
+
+    await timeline.activateBucket("2025-03-01T00:00:00.000Z");
+    await timeline.refresh();
+    expect(timeline.assetsFor("2025-03-01T00:00:00.000Z")).toHaveLength(1);
+
+    await timeline.activateBucket("2025-03-01T00:00:00.000Z");
+    expect(adapter.getTimelineBucketAssets).toHaveBeenCalledTimes(2);
+    expect(timeline.assetsFor("2025-03-01T00:00:00.000Z")).toHaveLength(2);
+  });
 });

@@ -24,7 +24,7 @@
   import { createTimelineController } from "#lib/controllers/timeline-controller.svelte.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
-  let currentView = $state("dashboard");
+  let currentView = $state("photos");
   const desktop = tauriDesktopAdapter;
   const feedback = createFeedbackController(() => $t("unknown_error"));
   const targetAlbumCatalogue = createTargetAlbumCatalogue(desktop);
@@ -69,7 +69,7 @@
       sync.clearUserState();
       watchedFolders.clear();
       timeline.clear();
-      currentView = "dashboard";
+      currentView = "photos";
     },
   });
   const preferences = createPreferencesController({
@@ -100,7 +100,6 @@
     void auth.hydrate()
       .then(() => {
         if (!auth.isAuthenticated) return;
-        currentView = "photos";
         return Promise.all([sync.refreshFailedSyncs(), timeline.refresh()]);
       })
       .catch((error) => console.error("Failed to hydrate authentication", error));

@@ -32,7 +32,8 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     try {
       const loaded = await adapter.getTimelineBuckets();
       if (request === latestRequest) {
-        buckets = [...loaded].sort((a, b) => b.timeBucket.localeCompare(a.timeBucket));
+        const list = Array.isArray(loaded) ? loaded : [];
+        buckets = [...list].sort((a, b) => b.timeBucket.localeCompare(a.timeBucket));
         // Keep rendered assets visible while fresh bucket details arrive. A
         // generation makes requests started before this refresh unable to
         // overwrite the newer session view.

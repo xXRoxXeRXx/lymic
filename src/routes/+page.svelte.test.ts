@@ -75,6 +75,10 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve(uploadParallelism);
       case "get_sync_status":
         return Promise.resolve({ status: "IDLE", total: 0, succeeded: 0, failed: 0, currentPath: null });
+      case "get_timeline_buckets":
+        return Promise.resolve([]);
+      case "get_timeline_bucket_assets":
+        return Promise.resolve([]);
       case "update_locale":
         return Promise.resolve();
       case "get_release_channel":
@@ -178,7 +182,7 @@ describe("app version", () => {
 });
 
 describe("Photo Timeline", () => {
-  it("opens Fotos by default and renders descending month buckets", async () => {
+  it("opens Photos by default and renders descending month buckets", async () => {
     renderAuthenticatedPage({
       get_timeline_buckets: async () => [
         { timeBucket: "2025-03-01T00:00:00.000Z", count: 12 },
@@ -186,8 +190,8 @@ describe("Photo Timeline", () => {
       ],
     });
 
-    expect(await screen.findByRole("heading", { name: "Fotos" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Fotos" })[0]).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Photos" })[0]).toBeInTheDocument();
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
     expect(screen.getByText("12 assets")).toBeInTheDocument();
     expect(screen.getByText("February 2025")).toBeInTheDocument();
@@ -233,7 +237,7 @@ describe("application updates", () => {
 
   it("checks manually from settings and reports the current version", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
 
@@ -307,6 +311,7 @@ describe("application updates", () => {
       return Promise.resolve();
     });
     render(Page);
+    await openDashboard();
 
     await screen.findByText("Sync paused");
     const install = await screen.findByRole("button", { name: "Install and restart" });
@@ -336,6 +341,7 @@ describe("sync dashboard", () => {
       return Promise.resolve();
     });
     render(Page);
+    await openDashboard();
 
     const resume = await screen.findByRole("button", { name: "Resume" });
     expect(screen.getByText("Sync paused")).toBeInTheDocument();
@@ -369,6 +375,7 @@ describe("sync dashboard", () => {
       return Promise.resolve();
     });
     render(Page);
+    await openDashboard();
 
     expect(await screen.findByText("75% completed")).toBeInTheDocument();
     expect(screen.getByText("Processed: 1 / 10")).toBeInTheDocument();
@@ -378,6 +385,7 @@ describe("sync dashboard", () => {
   it("updates progress from sync-progress-snapshot with byte fields", async () => {
     watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     renderAuthenticatedPage();
+    await openDashboard();
     await waitFor(() => expect(syncProgressSnapshot).toBeTypeOf("function"));
     syncProgressSnapshot?.({
       payload: {
@@ -399,6 +407,7 @@ describe("sync dashboard", () => {
   it("counts succeeded and failed queue entries as processed", async () => {
     watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     renderAuthenticatedPage();
+    await openDashboard();
     await waitFor(() => expect(syncProgressSnapshot).toBeTypeOf("function"));
     syncProgressSnapshot?.({
       payload: {
@@ -416,6 +425,7 @@ describe("sync dashboard", () => {
   it("keeps snapshot progress when sync-started follows it", async () => {
     watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     renderAuthenticatedPage();
+    await openDashboard();
     await waitFor(() => expect(syncProgressSnapshot).toBeTypeOf("function"));
     syncProgressSnapshot?.({
       payload: {
@@ -437,6 +447,7 @@ describe("sync dashboard", () => {
   it("renders transfer statistics, preserves them while paused, and resets them for a new run", async () => {
     watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     renderAuthenticatedPage();
+    await openDashboard();
     await waitFor(() => expect(syncTransferStats).toBeTypeOf("function"));
     syncProgressSnapshot?.({ payload: { status: "RUNNING", total: 1, succeeded: 0, failed: 0, currentPath: null } });
     syncTransferStats?.({ payload: { transferredBytes: 1_500_000, transferRateBytesPerSecond: 2_000_000, estimatedSecondsRemaining: 10, status: "RUNNING" } });
@@ -451,6 +462,7 @@ describe("sync dashboard", () => {
   it("changes sync controls from pause to resume when events arrive", async () => {
     watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     renderAuthenticatedPage();
+    await openDashboard();
     await waitFor(() => expect(syncPaused).toBeTypeOf("function"));
     syncPaused?.({ payload: { status: "PAUSED", total: 2, succeeded: 0, failed: 0, currentPath: "C:/photos/one.jpg" } });
 
@@ -462,6 +474,7 @@ describe("sync dashboard", () => {
 
   it("does not start sync without a watched folder", async () => {
     renderAuthenticatedPage();
+    await openDashboard();
 
     const syncButton = await screen.findByRole("button", { name: "Sync Now" });
     expect(syncButton).toBeDisabled();
@@ -473,6 +486,7 @@ describe("sync dashboard", () => {
   it("returns to idle when an empty sync result is received", async () => {
     watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     renderAuthenticatedPage();
+    await openDashboard();
     tauri.invoke.mockImplementation((command: string) => {
       if (command === "start_sync") {
         return Promise.resolve({ processed: 0, uploaded: 0, failed: 0 });
@@ -497,6 +511,7 @@ describe("sync dashboard", () => {
   it("disables sync after the final folder is removed", async () => {
     watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     renderAuthenticatedPage();
+    await openDashboard();
 
     await screen.findByText("photos");
     tauri.invoke.mockImplementation((command: string) => {
@@ -544,6 +559,7 @@ describe("sync dashboard", () => {
       return Promise.resolve();
     });
     render(Page);
+    await openDashboard();
 
     await fireEvent.click(await screen.findByRole("button", { name: "Remove folder: C:/photos" }));
 
@@ -570,6 +586,7 @@ describe("sync dashboard", () => {
       return Promise.resolve();
     });
     render(Page);
+    await openDashboard();
 
     await fireEvent.click(await screen.findByRole("button", { name: "Remove folder: C:/photos" }));
 
@@ -593,6 +610,7 @@ describe("sync dashboard", () => {
       return Promise.resolve();
     });
     render(Page);
+    await openDashboard();
 
     await fireEvent.click(await screen.findByRole("button", { name: "Remove folder: C:/photos" }));
 
@@ -607,6 +625,7 @@ describe("sync dashboard", () => {
   it("shows persisted failure details and retries them", async () => {
     failedSyncs = [{ localPath: "C:/photos/failed.jpg", failureReason: "Upload rejected" }];
     renderAuthenticatedPage();
+    await openDashboard();
 
     const detailsButton = await screen.findByRole("button", { name: "1 failed file(s)" });
     expect(screen.getByText("Sync completed with errors")).toBeInTheDocument();
@@ -641,6 +660,7 @@ describe("sync dashboard", () => {
   it("shows all up to date when retry only discards missing files", async () => {
     failedSyncs = [{ localPath: "C:/photos/missing.jpg", failureReason: "Upload rejected" }];
     renderAuthenticatedPage();
+    await openDashboard();
 
     await screen.findByRole("button", { name: "1 failed file(s)" });
     tauri.invoke.mockImplementation((command: string) => {
@@ -669,6 +689,7 @@ describe("sync dashboard", () => {
     watchedFolders = [{ id: 1, path: "C:/photos", recursive: true, target_album_id: null }];
     failedSyncs = [{ localPath: "C:/photos/failed.jpg", failureReason: "Upload rejected" }];
     renderAuthenticatedPage();
+    await openDashboard();
     tauri.invoke.mockImplementation((command: string) => {
       if (command === "start_sync") return Promise.resolve({ processed: 1, uploaded: 1, failed: 0 });
       if (command === "get_auth_status") return Promise.resolve(true);
@@ -752,7 +773,7 @@ describe("activity log", () => {
 describe("logout", () => {
   it("returns to a clean login view after a confirmed logout", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
     await fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
@@ -764,7 +785,7 @@ describe("logout", () => {
 
   it("does not log out when the confirmation is cancelled", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const logoutButton = await screen.findByRole("button", { name: "Logout" });
@@ -782,7 +803,7 @@ describe("logout", () => {
 
   it("keeps the authenticated view and displays an error when logout fails", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const logoutButton = await screen.findByRole("button", { name: "Logout" });
@@ -806,7 +827,7 @@ describe("logout", () => {
 describe("settings", () => {
   it("shows the authenticated user name", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
@@ -815,7 +836,7 @@ describe("settings", () => {
 
   it("displays language settings and switches language", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
@@ -834,7 +855,7 @@ describe("settings", () => {
 
   it("sets and persists an explicit theme preference", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const darkButton = await screen.findByRole("button", { name: "Dark" });
@@ -848,7 +869,7 @@ describe("settings", () => {
   it("loads and saves upload parallelism", async () => {
     uploadParallelism = 6;
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
@@ -885,7 +906,7 @@ describe("settings", () => {
   it("shows an error and restores upload parallelism when saving fails", async () => {
     uploadParallelism = 4;
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
     tauri.invoke.mockImplementation((command: string) => {
       if (command === "set_upload_parallelism") return Promise.reject(new Error("Database unavailable"));
       if (command === "get_auth_status") return Promise.resolve(true);
@@ -935,7 +956,7 @@ describe("theme preference", () => {
     colorSchemeListeners.forEach((listener) => listener({ matches: false } as MediaQueryListEvent));
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
 
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Dark" }));
     systemThemeIsDark = false;
@@ -949,6 +970,7 @@ describe("removable volume setup flow", () => {
   it("refreshes watched folders when a removable volume remounts", async () => {
     watchedFolders = [{ id: 10, path: "E:/DCIM", recursive: true, target_album_id: null }];
     renderAuthenticatedPage();
+    await openDashboard();
 
     expect(await screen.findByText("E:/DCIM")).toBeInTheDocument();
 
@@ -968,7 +990,7 @@ describe("removable volume setup flow", () => {
   it("detects removable card, prompts user, opens picker with mount path, and invokes accept_removable_media_folder", async () => {
     tauri.open.mockResolvedValue("E:/DCIM");
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     tauri.invoke.mockImplementation((command: string) => {
       switch (command) {
@@ -1042,7 +1064,7 @@ describe("removable volume setup flow", () => {
   it("surfaces typed backend errors in feedback banner when accepting outside volume", async () => {
     tauri.open.mockResolvedValue("C:/NotOnCard");
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     tauri.invoke.mockImplementation((command: string) => {
       switch (command) {
@@ -1089,7 +1111,7 @@ describe("removable volume setup flow", () => {
 
   it("dismisses prompt without opening dialog when dismiss button is clicked", async () => {
     renderAuthenticatedPage();
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     removableVolumeDetected!({
       payload: {
@@ -1137,7 +1159,7 @@ describe("removable volume setup flow", () => {
       }
     });
     render(Page);
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     const avatar = await screen.findByTestId("sidebar-profile-image");
     expect(avatar).toHaveAttribute("src", "data:image/jpeg;base64,dGVzdA==");
@@ -1171,7 +1193,7 @@ describe("removable volume setup flow", () => {
       }
     });
     render(Page);
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     const avatar = await screen.findByTestId("sidebar-profile-image");
     await fireEvent.error(avatar);
@@ -1209,7 +1231,7 @@ describe("removable volume setup flow", () => {
       }
     });
     render(Page);
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(await screen.findByRole("button", { name: "Check for updates" })).toBeInTheDocument();
@@ -1243,7 +1265,7 @@ describe("removable volume setup flow", () => {
       }
     });
     render(Page);
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await screen.findByText("Language");
@@ -1263,7 +1285,7 @@ describe("watched folder setup flow with target album", () => {
       },
     });
     render(Page);
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     const addFolderButton = screen.getByRole("button", { name: "Add" });
     await fireEvent.click(addFolderButton);
@@ -1305,7 +1327,7 @@ describe("watched folder setup flow with target album", () => {
       },
     });
     render(Page);
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     const addFolderButton = screen.getByRole("button", { name: "Add" });
     await fireEvent.click(addFolderButton);
@@ -1334,7 +1356,7 @@ describe("watched folder setup flow with target album", () => {
       get_albums: () => Promise.resolve([{ id: "alb-family", albumName: "Family 2026" }]),
     });
     render(Page);
-    await screen.findByText("Synchronization", { selector: "h1" });
+    await openDashboard();
 
     const addFolderButton = screen.getByRole("button", { name: "Add" });
     await fireEvent.click(addFolderButton);

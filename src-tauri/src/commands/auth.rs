@@ -137,6 +137,7 @@ pub(crate) async fn logout(app: tauri::AppHandle) -> Result<(), String> {
         if let Ok(cache_dir) = profile_cache_dir(&app) {
             profile_cache::clear_profile_cache(&cache_dir);
         }
+        crate::app::thumbnail_protocol::clear_thumbnail_cache(&app);
     }
     audit_event(
         &app,
