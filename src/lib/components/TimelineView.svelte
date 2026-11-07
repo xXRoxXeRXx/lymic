@@ -300,9 +300,9 @@
 
   {#if scrubberMonths.length > 0}
     {@const thumbRatio = scrubberMonths.length > 1 && activeTimeBucket ? Math.max(0, scrubberMonths.indexOf(activeTimeBucket)) / (scrubberMonths.length - 1) : 0}
-    <nav class="absolute inset-y-0 right-0 w-14 border-l border-slate-200/80 bg-slate-100/85 py-2 pl-1 backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/85" aria-label={$t("timeline_scrubber")}>
+    <nav class="absolute inset-y-0 -right-4 w-16 border-l border-slate-200/80 bg-slate-100/85 py-2 pl-1 pr-1 backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/85" aria-label={$t("timeline_scrubber")}>
       <div class="relative h-full">
-        <div class="h-full overflow-y-auto pr-2 scrollbar-none">
+        <div class="h-full overflow-y-auto pr-5 scrollbar-none">
           {#each scrubberIndex as entry (entry.year)}
             <div class="mb-1 flex flex-col items-end gap-0.5">
               <button type="button" class="min-h-6 rounded px-1 text-xs font-bold text-slate-700 hover:bg-slate-200 dark:text-zinc-200 dark:hover:bg-zinc-700" onclick={() => scrollToBucket(entry.months[0])}>{entry.year}</button>
