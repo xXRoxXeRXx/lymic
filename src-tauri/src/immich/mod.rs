@@ -3,10 +3,12 @@ mod bulk_check;
 mod client;
 pub(crate) mod ids;
 mod response;
+mod timeline;
 mod upload;
 
 pub(crate) use album::Album;
 pub(crate) use bulk_check::BulkCheckDuplicate;
 pub(crate) use client::ImmichClient;
 pub(crate) use ids::{AlbumId, RemoteAssetId};
+pub(crate) use timeline::TimelineBucket;
 pub(crate) use upload::SidecarDirectoryCache;

@@ -36,6 +36,11 @@ export interface Album {
   albumName: string;
 }
 
+export interface TimelineBucket {
+  timeBucket: string;
+  count: number;
+}
+
 export interface UiLogMessage {
   level?: string;
   message?: string;
