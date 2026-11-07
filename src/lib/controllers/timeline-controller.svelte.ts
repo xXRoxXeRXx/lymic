@@ -18,8 +18,10 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   let isRefreshing = $state(false);
   let isOffline = $state(false);
   let latestRequest = 0;
+  let assetGeneration = 0;
   let assetsByBucket = $state<Record<string, TimelineAsset[]>>({});
   const pendingBuckets = new Map<string, Promise<void>>();
+  const staleBuckets = new Set<string>();
 
   async function refresh() {
     const request = ++latestRequest;
@@ -31,10 +33,12 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
       const loaded = await adapter.getTimelineBuckets();
       if (request === latestRequest) {
         buckets = [...loaded].sort((a, b) => b.timeBucket.localeCompare(a.timeBucket));
-        // A bucket can receive new assets after synchronization.  Drop only
-        // successful-session metadata so visible sections fetch current data.
-        assetsByBucket = {};
-        pendingBuckets.clear();
+        // Keep rendered assets visible while fresh bucket details arrive. A
+        // generation makes requests started before this refresh unable to
+        // overwrite the newer session view.
+        assetGeneration += 1;
+        staleBuckets.clear();
+        for (const timeBucket of Object.keys(assetsByBucket)) staleBuckets.add(timeBucket);
         isOffline = false;
       }
     } catch (error) {
@@ -58,6 +62,8 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     isOffline = false;
     assetsByBucket = {};
     pendingBuckets.clear();
+    staleBuckets.clear();
+    assetGeneration += 1;
   }
 
   function assetsFor(timeBucket: string) {
@@ -65,16 +71,21 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   }
 
   function activateBucket(timeBucket: string) {
-    if (timeBucket in assetsByBucket) return Promise.resolve();
+    if (timeBucket in assetsByBucket && !staleBuckets.has(timeBucket)) return Promise.resolve();
     const pending = pendingBuckets.get(timeBucket);
     if (pending) return pending;
+    const generation = assetGeneration;
     const request = adapter.getTimelineBucketAssets(timeBucket).then((assets) => {
+      if (generation !== assetGeneration) return;
       assetsByBucket = { ...assetsByBucket, [timeBucket]: assets };
+      staleBuckets.delete(timeBucket);
       isOffline = false;
     }).catch((error) => {
       isOffline = true;
       throw error;
-    }).finally(() => pendingBuckets.delete(timeBucket));
+    }).finally(() => {
+      if (pendingBuckets.get(timeBucket) === request) pendingBuckets.delete(timeBucket);
+    });
     pendingBuckets.set(timeBucket, request);
     return request;
   }

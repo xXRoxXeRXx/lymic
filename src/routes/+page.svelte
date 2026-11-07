@@ -46,8 +46,9 @@
     reportError: feedback.report,
     locale: () => $locale ?? "en",
     canStartSync: () => watchedFolders.hasFolders,
-    onSyncSettled: async () => {
-      await Promise.all([watchedFolders.refresh(), timeline.refresh()]);
+    onSyncSettled: () => {
+      void timeline.refresh();
+      return watchedFolders.refresh();
     },
   });
   const timeline = createTimelineController(desktop);
@@ -59,8 +60,7 @@
     t: (key) => $t(key),
     onLogin: async () => {
       currentView = "photos";
-      await timeline.refresh();
-      await Promise.all([sync.refreshFailedSyncs(), watchedFolders.refresh()]);
+      await Promise.all([timeline.refresh(), sync.refreshFailedSyncs(), watchedFolders.refresh()]);
     },
     onLogout: () => {
       targetAlbumCatalogue.clear();
@@ -69,7 +69,7 @@
       sync.clearUserState();
       watchedFolders.clear();
       timeline.clear();
-      currentView = "photos";
+      currentView = "dashboard";
     },
   });
   const preferences = createPreferencesController({
