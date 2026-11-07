@@ -3,6 +3,7 @@
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
+  import { calculateMasonryLayout } from "./timeline-masonry";
 
   interface Props {
     timeline: TimelineViewState;
@@ -14,6 +15,8 @@
   const scrubberMonths = $derived(scrubberIndex.flatMap((entry) => entry.months));
   let viewport: HTMLDivElement;
   let activeTimeBucket = $state<string | null>(null);
+  let activeBuckets = $state<Record<string, boolean>>({});
+  let viewportWidth = $state(616);
   let isDragging = false;
 
   $effect(() => {
@@ -60,7 +63,7 @@
 
   function startDrag(event: PointerEvent) {
     isDragging = true;
-    event.currentTarget.setPointerCapture(event.pointerId);
+    (event.currentTarget as HTMLElement | null)?.setPointerCapture(event.pointerId);
     jumpFromPointer(event.clientY);
   }
 
@@ -71,32 +74,70 @@
   function endDrag() {
     isDragging = false;
   }
+
+  function measureViewport(node: HTMLElement) {
+    const resizeObserver = new ResizeObserver(() => {
+      viewportWidth = node.clientWidth;
+    });
+    resizeObserver.observe(node);
+    viewportWidth = node.clientWidth;
+    return { destroy: () => resizeObserver.disconnect() };
+  }
+
+  function observeBucket(node: HTMLElement, timeBucket: string) {
+    const observer = new IntersectionObserver((entries) => {
+      const isActive = entries.some((entry) => entry.isIntersecting);
+      activeBuckets = { ...activeBuckets, [timeBucket]: isActive };
+      if (isActive) void timeline.activateBucket(timeBucket).catch(() => {});
+    }, { root: viewport, rootMargin: "400px 0px" });
+    observer.observe(node);
+    return { destroy: () => observer.disconnect() };
+  }
+
+  function masonryLayout(timeBucket: string) {
+    return calculateMasonryLayout(timeline.assetsFor(timeBucket), viewportWidth);
+  }
 </script>
 
 <div class="relative h-full min-h-0">
-  <div bind:this={viewport} class="h-full overflow-y-auto pr-16" aria-label="Photo Timeline" onscroll={syncActiveBucket}>
+  <div bind:this={viewport} use:measureViewport class="h-full overflow-y-auto pr-16" aria-label="Photo Timeline" onscroll={syncActiveBucket}>
     <div class="space-y-8">
       {#each timeline.buckets as bucket (bucket.timeBucket)}
-        <section id={bucketId(bucket.timeBucket)} class="space-y-3 scroll-mt-4" onmouseenter={() => timeline.activateBucket(bucket.timeBucket)} onfocusin={() => timeline.activateBucket(bucket.timeBucket)}>
+        {@const layout = masonryLayout(bucket.timeBucket)}
+        <section
+          id={bucketId(bucket.timeBucket)}
+          use:observeBucket={bucket.timeBucket}
+          class="space-y-3 scroll-mt-4"
+          style:min-height={`${layout.height + 52}px`}
+        >
           <div class="flex items-baseline justify-between">
             <h2 class="text-xl font-bold text-slate-900 dark:text-slate-100">{monthLabel(bucket.timeBucket)}</h2>
             <p class="text-sm text-slate-500 dark:text-zinc-400">{bucket.count.toLocaleString(numberLocale)} assets</p>
           </div>
-          {#if timeline.assetsFor(bucket.timeBucket).length > 0}
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-              {#each timeline.assetsFor(bucket.timeBucket) as asset (asset.id)}
-                <img
-                  src={`lymic-thumb://asset/${asset.id}`}
-                  alt=""
-                  loading="lazy"
-                  width={asset.width}
-                  height={asset.height}
-                  class="aspect-square w-full rounded-lg object-cover bg-slate-200 dark:bg-zinc-800"
-                />
+          {#if activeBuckets[bucket.timeBucket] && timeline.assetsFor(bucket.timeBucket).length > 0}
+            <div class="flex gap-2" style:height={`${layout.height}px`} aria-label="Month masonry grid">
+              {#each layout.columns as column, columnIndex (columnIndex)}
+                <div class="flex min-w-0 flex-1 flex-col gap-2">
+                  {#each column as item (item.asset.id)}
+                    <img
+                      src={`lymic-thumb://asset/${item.asset.id}`}
+                      alt=""
+                      loading="lazy"
+                      width={item.asset.width}
+                      height={item.asset.height}
+                      style:height={`${item.height}px`}
+                      class="w-full rounded-lg object-cover bg-slate-200 dark:bg-zinc-800"
+                    />
+                  {/each}
+                </div>
               {/each}
             </div>
           {:else}
-            <div class="h-32 rounded-xl bg-slate-200/70 dark:bg-zinc-800/70 animate-pulse" aria-label="Media placeholders"></div>
+            <div
+              style:height={`${layout.height || 128}px`}
+              class="rounded-xl bg-slate-200/70 dark:bg-zinc-800/70 animate-pulse"
+              aria-label="Media placeholders"
+            ></div>
           {/if}
         </section>
       {/each}

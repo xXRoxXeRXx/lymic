@@ -5,6 +5,16 @@ import "../i18n";
 import TimelineView from "./TimelineView.svelte";
 import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
 
+vi.stubGlobal("ResizeObserver", class {
+  observe() {}
+  disconnect() {}
+});
+
+vi.stubGlobal("IntersectionObserver", class {
+  observe() {}
+  disconnect() {}
+});
+
 const timeline: TimelineViewState = {
   buckets: [
     { timeBucket: "2025-03-01T00:00:00.000Z", count: 12 },
@@ -12,6 +22,8 @@ const timeline: TimelineViewState = {
     { timeBucket: "2024-12-01T00:00:00.000Z", count: 1 },
   ],
   isLoading: false,
+  assetsFor: vi.fn().mockReturnValue([]),
+  activateBucket: vi.fn().mockResolvedValue(undefined),
   refresh: vi.fn(),
   clear: vi.fn(),
 };
