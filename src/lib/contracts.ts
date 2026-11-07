@@ -41,6 +41,12 @@ export interface TimelineBucket {
   count: number;
 }
 
+export interface TimelineAsset {
+  id: string;
+  width: number;
+  height: number;
+}
+
 export interface UiLogMessage {
   level?: string;
   message?: string;

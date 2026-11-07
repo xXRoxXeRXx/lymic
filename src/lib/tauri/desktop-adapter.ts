@@ -21,6 +21,7 @@ import type {
   DetectedVolume,
   WatchedFolder,
   TimelineBucket,
+  TimelineAsset,
 } from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
 
@@ -59,6 +60,7 @@ export interface AlbumsDesktopAdapter {
 
 export interface TimelineDesktopAdapter {
   getTimelineBuckets(): Promise<TimelineBucket[]>;
+  getTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
 }
 
 export interface PreferencesDesktopAdapter {
@@ -143,6 +145,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getAlbums: () => invoke<Album[]>("get_albums"),
   createAlbum: (name) => invoke<Album>("create_album", { name }),
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
+  getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),

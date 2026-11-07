@@ -238,6 +238,39 @@ impl ImmichClient {
         Ok((bytes, content_type))
     }
 
+    pub(crate) async fn get_thumbnail(&self, asset_id: &str) -> Result<Vec<u8>, String> {
+        const MAX_THUMBNAIL_BYTES: usize = 20 * 1024 * 1024;
+        Self::validate_path_segment(asset_id, "asset ID")?;
+        let response = self
+            .client
+            .get(self.endpoint_url(&format!("assets/{asset_id}/thumbnail")))
+            .query(&[("format", "WEBP")])
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to fetch thumbnail: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Failed to fetch thumbnail: {}",
+                response_status_error(response).await?
+            ));
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length as usize > MAX_THUMBNAIL_BYTES)
+        {
+            return Err("Thumbnail exceeds maximum allowed size".to_string());
+        }
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|error| format!("Failed to read thumbnail: {error}"))?;
+        if bytes.len() > MAX_THUMBNAIL_BYTES {
+            return Err("Thumbnail exceeds maximum allowed size".to_string());
+        }
+        Ok(bytes.to_vec())
+    }
+
     pub(crate) async fn check_assets_exist(
         &self,
         hashes: Vec<String>,

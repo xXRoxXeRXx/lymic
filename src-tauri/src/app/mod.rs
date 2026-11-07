@@ -3,6 +3,7 @@ pub(crate) mod events;
 pub(crate) mod locale;
 pub(crate) mod startup;
 pub(crate) mod state;
+mod thumbnail_protocol;
 pub(crate) mod tray;
 
 use std::ffi::{OsStr, OsString};
@@ -20,7 +21,7 @@ fn should_start_in_background(args: &[OsString], has_credentials: bool) -> bool 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub(crate) fn run() {
-    tauri::Builder::default()
+    thumbnail_protocol::register(tauri::Builder::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
@@ -98,6 +99,7 @@ pub(crate) fn run() {
             crate::commands::albums::get_albums,
             crate::commands::albums::create_album,
             crate::commands::timeline::get_timeline_buckets,
+            crate::commands::timeline::get_timeline_bucket_assets,
             crate::commands::folders::add_folder,
             crate::commands::folders::accept_removable_media_folder,
             crate::commands::folders::get_folders,
@@ -180,6 +182,7 @@ mod tests {
             "get_albums",
             "create_album",
             "get_timeline_buckets",
+            "get_timeline_bucket_assets",
             "get_locale_catalog",
             "update_locale",
             "get_database_recovery_notice",
