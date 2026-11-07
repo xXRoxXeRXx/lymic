@@ -20,6 +20,7 @@ import type {
   WebviewStartupPhase,
   DetectedVolume,
   WatchedFolder,
+  TimelineBucket,
 } from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
 
@@ -54,6 +55,10 @@ export interface WatchedFoldersDesktopAdapter {
 export interface AlbumsDesktopAdapter {
   getAlbums(): Promise<Album[]>;
   createAlbum(name: string): Promise<Album>;
+}
+
+export interface TimelineDesktopAdapter {
+  getTimelineBuckets(): Promise<TimelineBucket[]>;
 }
 
 export interface PreferencesDesktopAdapter {
@@ -97,6 +102,7 @@ export interface DesktopAdapter
     SyncDesktopAdapter,
     WatchedFoldersDesktopAdapter,
     AlbumsDesktopAdapter,
+    TimelineDesktopAdapter,
     PreferencesDesktopAdapter,
     UpdateDesktopAdapter,
     RemovableVolumeDesktopAdapter {}
@@ -136,6 +142,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
 
   getAlbums: () => invoke<Album[]>("get_albums"),
   createAlbum: (name) => invoke<Album>("create_album", { name }),
+  getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),

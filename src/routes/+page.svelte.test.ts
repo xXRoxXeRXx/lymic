@@ -89,6 +89,11 @@ function renderAuthenticatedPage(handlers: Record<string, (args?: unknown) => Pr
   return render(Page);
 }
 
+async function openDashboard() {
+  await fireEvent.click(await screen.findByRole("button", { name: "Synchronization" }));
+  return screen.findByText("Synchronization", { selector: "h1" });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
@@ -162,10 +167,29 @@ describe("app version", () => {
 
     renderAuthenticatedPage();
 
-    expect(await screen.findByText("Synchronization", { selector: "h1" })).toBeInTheDocument();
+    await openDashboard();
     await fireEvent.click(await screen.findByRole("button", { name: "Info" }));
     expect(screen.queryByText(/v\d+/)).not.toBeInTheDocument();
     expect(warn).toHaveBeenCalledWith("Failed to load app version", error);
+  });
+});
+
+describe("Photo Timeline", () => {
+  it("opens Fotos by default and renders descending month buckets", async () => {
+    renderAuthenticatedPage({
+      get_timeline_buckets: async () => [
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 12 },
+        { timeBucket: "2025-02-01T00:00:00.000Z", count: 3 },
+      ],
+    });
+
+    expect(await screen.findByRole("heading", { name: "Fotos" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Fotos" })[0]).toBeInTheDocument();
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByText("12 assets")).toBeInTheDocument();
+    expect(screen.getByText("February 2025")).toBeInTheDocument();
+    expect(screen.getByText("3 assets")).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_timeline_buckets");
   });
 });
 
@@ -185,7 +209,7 @@ describe("application updates", () => {
     tauri.check.mockRejectedValue(error);
     renderAuthenticatedPage();
 
-    expect(await screen.findByText("Synchronization", { selector: "h1" })).toBeInTheDocument();
+    await openDashboard();
     await waitFor(() => expect(warn).toHaveBeenCalledWith("Failed to check for updates", error));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });

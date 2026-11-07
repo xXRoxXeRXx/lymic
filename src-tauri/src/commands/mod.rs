@@ -4,3 +4,4 @@ pub(crate) mod folders;
 pub(crate) mod profile_cache;
 pub(crate) mod settings;
 pub(crate) mod sync;
+pub(crate) mod timeline;

@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User } from "lucide-svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
   import LoginView from "#lib/components/LoginView.svelte";
   import DashboardView from "#lib/components/DashboardView.svelte";
+  import TimelineView from "#lib/components/TimelineView.svelte";
   import ActivityLog from "#lib/components/ActivityLog.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
   import InfoView from "#lib/components/InfoView.svelte";
@@ -20,6 +21,7 @@
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
   import { createRemovableVolumeController } from "#lib/controllers/removable-volume-controller.svelte.ts";
   import { createTargetAlbumCatalogue } from "#lib/controllers/target-album-catalogue.svelte.ts";
+  import { createTimelineController } from "#lib/controllers/timeline-controller.svelte.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("dashboard");
@@ -46,6 +48,7 @@
     canStartSync: () => watchedFolders.hasFolders,
     onSyncSettled: () => watchedFolders.refresh(),
   });
+  const timeline = createTimelineController(desktop);
 
   const auth = createAuthController({
     adapter: desktop,
@@ -53,6 +56,8 @@
     reportError: feedback.report,
     t: (key) => $t(key),
     onLogin: async () => {
+      currentView = "photos";
+      await timeline.refresh();
       await Promise.all([sync.refreshFailedSyncs(), watchedFolders.refresh()]);
     },
     onLogout: () => {
@@ -61,7 +66,8 @@
       removable.clear();
       sync.clearUserState();
       watchedFolders.clear();
-      currentView = "dashboard";
+      timeline.clear();
+      currentView = "photos";
     },
   });
   const preferences = createPreferencesController({
@@ -90,7 +96,11 @@
     void removable.startSubscriptions();
 
     void auth.hydrate()
-      .then(() => auth.isAuthenticated ? sync.refreshFailedSyncs() : undefined)
+      .then(() => {
+        if (!auth.isAuthenticated) return;
+        currentView = "photos";
+        return Promise.all([sync.refreshFailedSyncs(), timeline.refresh()]);
+      })
       .catch((error) => console.error("Failed to hydrate authentication", error));
     void watchedFolders.refresh()
       .catch((error) => console.error("Failed to hydrate watched folders", error));
@@ -170,6 +180,16 @@
         <nav class="space-y-1" aria-label={$t('main_navigation')}>
           <button
             type="button"
+            class="nav-item {currentView === 'photos' ? 'active' : ''}"
+            onclick={() => currentView = "photos"}
+            aria-label="Fotos"
+          >
+            <Images class="w-4 h-4 shrink-0 {currentView === 'photos' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>Fotos</span>
+          </button>
+
+          <button
+            type="button"
             class="nav-item {currentView === 'dashboard' ? 'active' : ''}"
             onclick={() => currentView = "dashboard"}
             aria-label={$t('dashboard')}
@@ -237,7 +257,7 @@
       <header class="h-16 px-8 flex items-center justify-between shrink-0 z-10">
         <div class="flex items-center gap-4">
           <h1 class="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
+            {currentView === "photos" ? "Fotos" : currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
           </h1>
         </div>
       </header>
@@ -268,7 +288,9 @@
           />
         {/if}
 
-        {#if currentView === "dashboard"}
+        {#if currentView === "photos"}
+          <TimelineView {timeline} />
+        {:else if currentView === "dashboard"}
           <DashboardView
             status={sync.status}
             folders={watchedFolders.folders}
