@@ -1,8 +1,11 @@
 ---
 type: operations guide
-title: Development, Validation, and Test Boundaries
-description: Local development and validation guidance for the SvelteKit and Rust desktop application. Explains test-layer limits, IPC contract coverage, durable synchronization tests, and release gates.
-tags: [development, validation, testing, tauri, operations]
+title: Development and Testing
+description: Narrow-to-broad development verification for the SvelteKit and Rust/Tauri desktop application. Covers toolchain gates, test-layer boundaries, IPC contracts, durable synchronization behavior, smoke tests, and release CI.
+tags: [development, testing, validation, tauri, operations]
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-11-06T15:30:15.009Z
 sources:
   - id: openwiki-source-4d1d392666be6dfdd7a91a2e
     resource: repo://.github/workflows/release.yml
@@ -38,38 +41,37 @@ sources:
     resource: repo://src/site.test.ts
   - id: openwiki-source-581dc5746c844c4ee0b781c7
     resource: repo://vite.config.js
-generated: { by: "openwiki/0.7.2", at: "2026-10-25T12:52:45.890Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-06T15:30:15.009Z" }
 ---
 
-# Development, Validation, and Test Boundaries
+# Development and Testing
 
-Lymic has two executable layers: a SvelteKit/TypeScript webview built by Vite and a Rust/Tauri desktop host in `src-tauri/`. Validate a change at the narrowest useful layer first, then cross the desktop boundary when its behavior depends on native commands, permissions, the filesystem, or a packaged updater.
+Lymic has two executable layers: a SvelteKit/TypeScript webview built by Vite and a Rust/Tauri desktop host in `src-tauri/`. Start with the narrowest test that can falsify a change, then cross the desktop boundary when correctness depends on native commands, permissions, the filesystem, credentials, or packaging.
 
 ## Toolchain and local entrypoints
 
-Use the development prerequisites in the [README](../../README.md) and install the lockfile-resolved frontend dependencies:
+Install the lockfile-resolved frontend dependencies:
 
 ```bash
 npm ci
 ```
 
-The Rust crate lives at `src-tauri/Cargo.toml`; there is no root Cargo workspace manifest. Consequently, invoke Cargo with `--manifest-path src-tauri/Cargo.toml`. Contributors are expected to add appropriate tests, pass the suite, and lint/format their changes; the project style guidance names `cargo fmt` and `cargo clippy` for Rust.
+The Rust crate is `src-tauri/Cargo.toml`; commands must name that manifest. The frontend scripts provide static checking, one-shot Vitest, Vite development, and the Tauri CLI:
 
-| Need | Command | What it covers |
+| Need | Command | Boundary covered |
 | --- | --- | --- |
-| Frontend dev server | `npm run dev` | Vite/SvelteKit only; it does not open a native window. |
-| Static frontend validation | `npm run check` | `svelte-kit sync` followed by `svelte-check --tsconfig ./tsconfig.json`. |
-| Watch static validation | `npm run check:watch` | The same validation in watch mode. |
-| Frontend tests | `npm test` | A one-shot `vitest run`. |
-| Production webview bundle | `npm run build` | `vite build`; this is the configured pre-package frontend build. |
-| Native desktop development | `npm run tauri dev` | The Tauri CLI starts the configured frontend command and opens the desktop app. |
-| Native package build | `npm run tauri build` | The Tauri CLI's production build route. |
+| Frontend development | `npm run dev` | Vite/SvelteKit only; no native window. |
+| Static frontend validation | `npm run check` | `svelte-kit sync` and `svelte-check --tsconfig ./tsconfig.json`. |
+| Frontend tests | `npm test` | One-shot `vitest run`. |
+| Production webview bundle | `npm run build` | `vite build`, the frontend packaging build. |
+| Desktop smoke test | `npm run tauri dev` | Configured Vite server plus native desktop host. |
+| Native package route | `npm run tauri build` | Tauri production build. |
 
-`npm run tauri dev` runs `npm run dev` and expects `http://localhost:1420`. Vite deliberately uses strict port 1420; it can bind to `TAURI_DEV_HOST` and, when that variable is set, serves HMR on port 1421. Its watcher ignores `src-tauri`, so frontend HMR is not evidence that a Rust change has rebuilt or works.
+Tauri development expects Vite at `http://localhost:1420`. The port is strict; `TAURI_DEV_HOST` changes the bind host and enables HMR on port 1421. Vite ignores `src-tauri`, so frontend HMR is not evidence that Rust code rebuilt or works.
 
-## Handoff validation
+## Handoff gates and scope
 
-Run the gates applicable to the changed layer before handoff. The following sequence is also the core verification performed for a tagged release:
+Run focused tests while iterating, then run the applicable shared gates before handoff:
 
 ```bash
 npm run check
@@ -79,73 +81,77 @@ cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 ```
 
-`cargo fmt --check` detects formatting drift, `-D warnings` turns Clippy warnings into failures, and `--locked` requires the checked-in Cargo resolution. These gates provide static, unit, and native-test confidence, but they do not run a real webview-to-Rust invocation or an external Immich transfer.
+Formatting detects Rust style drift, Clippy treats warnings as errors, and `--locked` requires the checked-in Cargo resolution. These gates give static, unit, and native-test confidence, but do not perform a real webview-to-Rust request, operate a filesystem watcher, retrieve native credentials, or transfer to Immich.
 
 ```mermaid
 flowchart TD
     Change["Implementation change"] --> Focus["Run focused test"]
     Focus --> Web{"Frontend affected"}
-    Web -->|yes| WebGate["npm run check and npm test"]
+    Web -->|yes| WebGate["Run check and Vitest"]
     Web -->|no| Native{"Rust affected"}
     WebGate --> Native
-    Native -->|yes| RustGate["fmt check Clippy and locked Cargo test"]
-    Native -->|no| Boundary{"Native boundary affected"}
+    Native -->|yes| RustGate["Run format Clippy and Cargo test"]
+    Native -->|no| Boundary{"Desktop boundary affected"}
     RustGate --> Boundary
-    Boundary -->|yes| Smoke["npm run tauri dev smoke test"]
+    Boundary -->|yes| Smoke["Run Tauri desktop smoke test"]
     Boundary -->|no| Review["Review configuration and release impact"]
     Smoke --> Review
 ```
 
-This decision flow distinguishes fast, isolated feedback from validation that requires the actual desktop shell.
+This flow separates fast feedback from evidence that needs the actual desktop shell.
 
-## Frontend and IPC contract tests
+## Frontend behavior and IPC contracts
 
-Vitest uses `jsdom`. Controller tests construct controllers with a mocked `DesktopAdapter`, mocked dialog/event APIs, and controlled promises; for example, the sync-controller suite checks lifecycle cleanup, state projection, pause/resume and retry intentions, confirmation handling, and adapter-error reporting. This is the right layer for UI state and user-intention behavior, not native execution.
+Vitest runs in `jsdom`. Controller tests inject mocked desktop adapters and Tauri APIs, allowing them to verify UI state, lifecycle cleanup, event handling, confirmations, error reporting, and the user intent sent to an adapter. For example, the synchronization-controller suite verifies projection of backend status and handling of a `sync-error` event; the update-controller suite verifies Store-channel suppression and that an update is not installed while sync is active. They do not execute Rust.
 
-`src/lib/tauri/desktop-adapter.test.ts` mocks Tauri `invoke` and asserts the complete command-name and argument serialization list. It is a useful wire-contract alarm when an adapter method, snake-case command name, or camel-case payload field changes. It does **not** execute a Rust command. Cargo adds a complementary registration test: it reads the adapter source and asserts every command string is present in Tauri's `generate_handler!` registrations. That protects adapter/registration drift, but neither source-text test proves Rust argument deserialization or command behavior. For changed IPC behavior, combine the adapter test and Cargo test with a native behavior test where practical and a desktop smoke test.
+`src/lib/tauri/desktop-adapter.test.ts` mocks Tauri `invoke` and asserts command names plus camel-case argument serialization across the adapter interfaces. The Rust application test complements this by requiring the adapter command strings to appear in the `generate_handler!` registrations. Together they catch adapter/registration drift, but they do not prove Rust deserialization or command behavior. For an IPC change, add a native behavior test where practical and perform a desktop smoke test.
 
-The frontend suite also includes repository-content checks for the public privacy/support pages and Microsoft Store listing/release evidence. Such tests protect required release collateral; they are not browser rendering or Store-submission tests.
+`src/site.test.ts` is also a repository-content suite: it reads the landing, privacy, support, Store listing, Flight-validation, and release-record files and checks required copy, links, metadata, and assets. It protects release collateral, not browser rendering or Store submission.
 
-## Durable database and synchronization tests
+## Durable synchronization and removable-media tests
 
-Rust database tests use a unique in-memory SQLite database with foreign keys enabled and run the production migrations. They test persistence semantics directly: a `RUNNING` job recovers as `PAUSED`; queue admission deduplicates paths while preserving sequence; queue blocks page only after finalization; terminal accounting waits for every item; and settings validation/defaulting is retained in storage. Tests are intentionally isolated from a native window, actual mounted volumes, filesystem watchers, keyring, and Immich.
+Database tests create isolated, single-connection in-memory SQLite pools with foreign keys enabled; tests that need schema behavior run the production migrations. They cover observable persistence contracts such as recovery of `RUNNING` work as `PAUSED`, ordered queue admission and duplicate handling, retry and terminal accounting, transactional rollback of uploaded-unit persistence, and repair of a migration-incompatible database while preserving salvageable folder settings and removable bindings.
 
-Synchronization has a second valuable test seam below the desktop shell. `SynchronizationLifecycle` works with the real SQLite schema and a coordinator/running flag: it refuses a new runner for a paused job, atomically lets one caller start while others join, persists `RUNNING` only after claiming the flag, and clears that flag if persistence fails. Its pause/resume operations persist state and coordinate the runner notification. `Synchronization::admit_and_run` first persists scan results, then claims or joins that lifecycle; manual and retry sources await the runner, while automatic sources spawn it after admission. Failed execution is made durable as `FAILED` and surfaced to desktop listeners.
+Synchronization has a test seam below the desktop shell. `Synchronization::admit_and_run` persists scan output before it claims a lifecycle. The lifecycle returns `Paused` for a paused snapshot and `Joined` when another caller owns the atomic running flag; only the caller that claims the flag persists `RUNNING` and starts a runner. If that persistence fails, it clears the flag. Manual sources await their pipeline; automatic sources spawn it after admission. Credential or client setup failures and pipeline failures go through the durable failure path.
 
 ```mermaid
 flowchart TD
     Producer["Manual watcher remount or recovery producer"] --> Admit["Persist scan result in SQLite queue"]
     Admit --> Claim["Claim or join lifecycle"]
     Claim --> Paused{"Job paused"}
-    Paused -->|yes| NoRun["Leave work durable no runner"]
+    Paused -->|yes| NoRun["Leave durable work without runner"]
     Paused -->|no| Owner{"Caller claimed runner"}
     Owner -->|no| Joined["Existing runner owns execution"]
     Owner -->|yes| Auth["Load credentials and build client"]
     Auth --> Run["Run queue pipeline"]
-    Run --> Success["Clear running flag"]
+    Run --> Clear["Clear running flag"]
     Run --> Failure["Persist FAILED and emit error"]
 ```
 
-This is the admission and runner-ownership boundary: queue work is durable before a runner observes it, and overlapping producers do not each start a pipeline.
+This is the durable admission and runner-ownership boundary: overlapping producers must not each start a pipeline. When changing queue, migration, or recovery code, assert database outcomes rather than implementation details: ordering and deduplication, pause/restart behavior, failed-item retry, terminal counts, and repair.
 
-When changing queue or recovery code, assert observable database outcomes rather than implementation details: migration compatibility, ordering/deduplication, pagination, pause/restart behavior, terminal counts and bytes, failed-item retry, and corruption recovery. For removable media, test reconnect path changes, watcher reconciliation/rescan, and the invariant that removal unwatches a folder without deleting its persisted folder or volume binding. Exercise real media, watchers, credentials, and server transfer separately in a desktop run with disposable data and non-production credentials.
+Removable-volume coordinator tests model remounting under a changed path, reconciliation of the old and new watcher paths, a rescan, and removal. Removal unwatches a bound folder but deliberately retains its persisted folder and binding rows so the volume can be recognized on return. Real mounts and filesystem watchers still require a desktop run.
 
-## Desktop smoke tests and configuration
+## Audit logging test boundary
 
-Run `npm run tauri dev` when a change crosses IPC, startup, filesystem watching, permissions, dialogs, updater behavior, or native configuration. Confirm that the window starts and that the changed IPC-backed action completes. For synchronization work, use a disposable folder/account and explicitly exercise the changed path and its failure/recovery path.
+The audit facade gets the managed `AuditLogger`; if the logger is absent or append fails, it reports an error to the UI. The writer stores JSON Lines slots under the application-data `logs` directory, rotates across five 5-MiB files, and uses a bounded asynchronous queue. Saturation drops events and reports saturation; after both queued records and bytes fall below recovery thresholds, it reports recovery and the drop count. Terminal events flush file data, and process exit makes a best-effort shutdown append and flush.
 
-Review configuration together with dependent code:
+For audit changes, test serialization, rotation, queue saturation/recovery, and reporting in Rust. Exercise application-data resolution and the visible UI error path in a desktop smoke test. See [Audit Logging](audit-logging.md) for the operational format and retention boundary.
 
-- `vite.config.js` makes the SvelteKit application a static SPA with the `index.html` fallback, configures Tauri's dev server behavior, exposes only `VITE_` and `LYMIC_` environment prefixes, and selects Vitest's `jsdom` environment.
-- `src-tauri/tauri.conf.json` couples Tauri development and packaging to the frontend commands, URLs, and output directory. It also defines the initially hidden `main` window, CSPs, bundle targets, and updater endpoint.
-- `src-tauri/capabilities/default.json` is the native permission boundary for the `main` window. Add the smallest plugin permission needed; importing a JavaScript API alone does not grant native permission.
+## Desktop smoke tests and high-risk changes
 
-For updater changes, test the GitHub-release channel rather than assuming all builds use it. The update controller obtains the release channel on startup and skips checks/installation for the `store` channel. On supported channels, an available update opens a dialog; installation refuses to run during sync or while already downloading/installing, tracks download progress, then relaunches after installation. The configured updater verifies artifacts using its public key and latest-release manifest endpoint. See [Release and Distribution](release-distribution.md) for delivery details.
+Run `npm run tauri dev` when changing IPC, startup, native permissions, dialogs, filesystem watching, credentials, updater behavior, or Tauri configuration. Confirm the window starts and the changed IPC-backed action completes. Use disposable folders and non-production credentials for synchronization tests; explicitly exercise both the intended action and its failure or recovery path.
 
-## CI and release gates
+The repository identifies migrations, pause/recovery, credential handling, queue retry, duplicates, and target-album failures as high-risk behavior. Validate the observable outcome for those paths, not only compilation. For watched folders and removable media, test a changed mount location, removal, return, watcher reconciliation, and rescan. For synchronization, include unavailable or invalid credentials, a failed upload followed by retry, duplicate candidates, and target-album failure. Related operational behavior is described in [Synchronization](../workflows/synchronization.md) and [Watched Folders](../workflows/watched-folders.md).
 
-Pushing a tag matching `v*` runs the `publish` workflow on macOS, Ubuntu 22.04, and Windows. Each matrix job installs Node 22, stable Rust with `clippy` and `rustfmt`, and on Ubuntu the GTK/WebKit/AppIndicator/librsvg/patchelf prerequisites. It then runs `npm ci`, frontend checking/testing, Rust format/Clippy/locked tests, and `tauri-apps/tauri-action` with signing secrets, a draft release, and locked resolution.
+Review configuration with its dependent code: `vite.config.js` owns Tauri-facing Vite server behavior and the `jsdom` test environment; `src-tauri/tauri.conf.json` couples frontend commands and output to packaging; and `src-tauri/capabilities/default.json` is the native permission boundary. JavaScript imports do not themselves grant a Tauri plugin permission.
 
-The Windows job additionally builds the Store channel with `LYMIC_RELEASE_CHANNEL=store`, packages an x64 MSIX, validates its expected version, uploads it as a workflow artifact, and attaches it to the corresponding GitHub release when present. A release change should therefore be validated against both updater-distributed and Store-channel assumptions, including version alignment among `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`.
+For updater work, distinguish channels. The updater configuration uses a public key and GitHub latest-release endpoint. The frontend loads the release channel at startup and bypasses in-app checks and installation on `store`; on other channels, an available update opens its dialog. Installation refuses while synchronization is active or an installation is already underway, tracks download progress, installs, and relaunches. See [Release and Distribution](release-distribution.md) and [Frontend UI and IPC](../frontend/ui-and-ipc.md).
 
-See [Desktop Runtime Architecture](../architecture/runtime.md) for desktop lifecycle, [Local Persistence and Recovery](../data/local-state.md) for database recovery, [Frontend UI and IPC](../frontend/ui-and-ipc.md) for the bridge, and [Synchronization Workflow](../workflows/synchronization.md) for operational sync behavior.
+## Release CI gates
+
+The `publish` workflow runs on a `v*` tag and by manual dispatch, with a macOS, Ubuntu 22.04, and Windows matrix. Every matrix job installs Node 22 and stable Rust with Clippy and rustfmt, runs `npm ci`, the frontend gates, and the Rust format/Clippy/locked-test gates, then invokes `tauri-apps/tauri-action` with locked dependency resolution, a draft release, and updater-signing secrets.
+
+Windows additionally builds with `LYMIC_RELEASE_CHANNEL=store`, packages and validates a versioned x64 MSIX, uploads the artifact, and attaches it to the GitHub release if present. Ubuntu validates Snapcraft configuration, builds a Snap, uploads and attaches the artifact, and publishes it to the candidate and stable Snap Store channels only when the Snapcraft credentials secret is available. A release change therefore needs both updater-distributed and Store/Snap assumptions checked, including version alignment among `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`.
+
+See [Quickstart](../quickstart.md) for setup, [Audit Logging](audit-logging.md) for logs, and [Release and Distribution](release-distribution.md) for delivery operations.

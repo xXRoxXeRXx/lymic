@@ -1,11 +1,11 @@
 ---
 type: persistence
-title: Local Persistence and Recovery
+title: Local State and Recovery
 description: SQLite-backed watched-folder configuration, synchronization queue and cache records, schema recovery, and the invariants that make synchronization resumable.
 tags: [persistence, sqlite, synchronization, recovery]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-11-04T15:53:48.838Z
+    at: 2026-11-06T15:30:15.009Z
 sources:
   - id: openwiki-source-941c10286ffa11a6881678ef
     resource: repo://src-tauri/migrations/0004_sync_queue.sql
@@ -17,6 +17,8 @@ sources:
     resource: repo://src-tauri/migrations/0009_watched_folder_exclusion_patterns.sql
   - id: openwiki-source-a6946ba9fd6a4f69d72ef7c5
     resource: repo://src-tauri/migrations/0010_sync_job_failed_status.sql
+  - id: openwiki-source-55fa8db475cb8f07c1133b77
+    resource: repo://src-tauri/migrations/0011_bound_sync_queue_window_indexes.sql
   - id: openwiki-source-2fd48a041dfbcb39bc092be1
     resource: repo://src-tauri/src/app/startup.rs
   - id: openwiki-source-8dda64652f19eba279222e0a
@@ -35,10 +37,10 @@ sources:
     resource: repo://src-tauri/src/sync/queue_runner.rs
   - id: openwiki-source-d86d6ce7cb2c85ce2672a18b
     resource: repo://src-tauri/src/sync/service.rs
-generated: { by: "openwiki/0.7.2", at: "2026-11-04T15:53:48.838Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-06T15:30:15.009Z" }
 ---
 
-# Local Persistence and Recovery
+# Local State and Recovery
 
 Lymic stores operational state in `immich_sync.db` in the application data directory. SQLite is the durable boundary for watched-folder configuration, synchronization work and outcomes, the upload-concurrency preference, and the local hash cache. Credentials are held separately in the platform keyring; see [Authentication and Credential Security](../security/authentication.md).
 
@@ -144,7 +146,7 @@ For a removable volume whose mount path changes, `remap_watched_folder_path` tra
 
 ## Initialization, migrations, and repair
 
-`db::init` creates the application-data directory if needed and opens `immich_sync.db` with foreign keys enabled, WAL journal mode, a five-second SQLite busy timeout, and a pool of one to four connections with a ten-second acquisition timeout. Each open runs `PRAGMA quick_check(1)` before SQLx applies the embedded migrations in `src-tauri/migrations/`. The migration history establishes folders and sync state, failure details, settings, the singleton queue, queue album and remote IDs, removable bindings, upload units, exclusions, and the durable `FAILED` job status. Add schema changes as new migrations: SQLx validates previously applied versions and checksums.
+`db::init` creates the application-data directory if needed and opens `immich_sync.db` with foreign keys enabled, WAL journal mode, a five-second SQLite busy timeout, and a pool of one to four connections with a ten-second acquisition timeout. Each open runs `PRAGMA quick_check(1)` before SQLx applies the embedded migrations in `src-tauri/migrations/`. The migration history establishes folders and sync state, failure details, settings, the singleton queue, queue album and remote IDs, removable bindings, upload units, exclusions, the durable `FAILED` job status, and indexes for bounded pending-unit window selection. The queue indexes order pending rows by `(job_id, status, sequence)` and support grouping pending upload units by `(job_id, status, upload_unit_id)`; the runner still determines each unit's earliest sequence. Add schema changes as new migrations: SQLx validates previously applied versions and checksums.
 
 Repair is intentionally narrow. SQLite corruption (`SQLITE_CORRUPT` primary code 11 or `SQLITE_NOTADB` primary code 26), a non-`ok` quick check, and a SQLx migration version/checksum mismatch are recoverable. A lock or another open or migration failure is returned without quarantining the database. For a recoverable failure, the application:
 

@@ -1,4 +1,4 @@
 # Files
 
-- [Synchronization Pipeline](synchronization.md) - How Lymic turns manual, automatic, recovered, and retry inputs into durable queue work, checks or uploads it to Immich, and exposes progress, pause, completion, and failure recovery.
-- [Watched Folders and Media Discovery](watched-folders.md) - How Lymic validates and persists watched roots, discovers media through scans and filesystem events, and recovers folders on unavailable or removable volumes.
+- [Synchronization Pipeline](synchronization.md) - The durable local-to-Immich media synchronization pipeline, from scan producers and queue admission through duplicate detection, upload, album assignment, recovery, and UI progress.
+- [Watched Folder and Removable Media Lifecycle](watched-folders.md) - How Lymic registers durable watched roots, reconciles native filesystem events and unavailable paths, and recovers removable-media folders across mount changes.

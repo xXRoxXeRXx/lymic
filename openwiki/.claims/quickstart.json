@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:40a18e0848ab60828b40a99a0f5e68f8d4e1a4d3c88291a4983c5d0c357ad3dc",
+  "pageVersion": "sha256:55dca916c2f978d5f6eb0d45eeda9888183e5f1fdc31f9e8b93332a88ecb8f73",
   "claims": [
     {
       "id": "claim_655ad282a57142a1afaa65a72307e791",
@@ -8,7 +8,7 @@
       "evidence": [
         {
           "resource": "repo://README.md",
-          "version": "repo-file-v1:sha256:5877a6eca7c63f4abde5715c67f7879f87bae37559ac2312f2692b2366e35372"
+          "version": "repo-file-v1:sha256:fa75ea768293a5ab22ccbb557c8a771e856a4c660720e49ee488be531516e5bd"
         }
       ]
     },
@@ -18,7 +18,7 @@
       "evidence": [
         {
           "resource": "repo://docs/agents/application-map.md",
-          "version": "repo-file-v1:sha256:c76e136a52aec96ff1cd27bcb2a411d6b9a3e79c36f84666f84eef2f00938b68"
+          "version": "repo-file-v1:sha256:b06dd384febe9eac858fdba37d9488cb7874ce12e76a047878e30c5f69fa5a38"
         }
       ]
     },
@@ -28,17 +28,17 @@
       "evidence": [
         {
           "resource": "repo://package.json",
-          "version": "repo-file-v1:sha256:85a1486f5d833afa6e3cec68aa6b176ea10c425dcf3d34a9e11b8fb5e538a85a"
+          "version": "repo-file-v1:sha256:64e53d401788f5632a8a306e96384a6896c34300bd6f47f46bf9ba9fc2e50add"
         }
       ]
     },
     {
       "id": "claim_8164af830c6c4fdf9cea910645795126",
-      "statement": "The Svelte root creates concern-specific controllers and, on mount, starts controller lifecycles, hydrates authentication, synchronization, and preferences state, then begins sync event subscriptions after sync hydration.",
+      "statement": "On mount, the Svelte root starts sync, watched-folder, update, and preferences lifecycles plus removable-volume subscriptions; it independently hydrates authentication, watched folders, sync, and preferences, and begins sync event subscriptions only after sync hydration. On unmount it destroys the sync, watched-folder, update, and removable-volume controllers and stops the preferences lifecycle.",
       "evidence": [
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L15-L88",
-          "version": "repo-lines-v1:sha256:1159b4a03436375bbc2f1d019124558e3c3cc439764bc82eba569105d888c8b4:eyJzZWxlY3RlZExpbmVDb3VudCI6NzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmYTU2OWQ5OTE4YzA2NTdjZmVjMjFhMTNlNjU4MmU1MGRiMDUxMGRjOWM3YzVhOTYyODFjMzViMzdiOGJmZTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2ZDZiYmRhOTA4NTVhMWRhNmFmZGRiODc5MzVjMjQxNjUxMzMyYzA4OWJjMDVkMmE1ZWYwODRjYWViZDQwYjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxOGZlZThlYTdkNWQ3MzNhNTc1MjA0NzRiMWQ4MTk0NWJiYmQ3OWE5NjRlZWMxZmUzMWRkZmUyM2QyOWU3MDIifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L85-L109",
+          "version": "repo-lines-v1:sha256:75cb45580225bc751701236380516dfdc6fa14800cfddf8a323d82e7f3e1a83f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZjVmYTE1OTFmN2RiOTQ2YjVhMjQ4NmYwY2NjNTY2NmY4MDM5YThlMjJhNDc2NjQ1MDUzYzY3NjNjYmFkZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyMGZjOWU2N2RiMDdlZDIzOWJiM2FkMjMxMmVhYWI5YTcwZTFmNmZiYTAxMjg4YjBiYTZlNjFkN2Y4ZWU3ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk5YjgwOTg1NDBiNzcwZWU5NjFlZGU3ZDFhOTdkNjAzYmEyMDg0ZTU1OTZhMjRjNDI3Nzc5MDA1YmQzYWUzOTkifQ"
         }
       ]
     },
@@ -47,11 +47,11 @@
       "statement": "Lymic treats the durable queue as the synchronization recovery boundary: recovered work resumes from queued state rather than requiring a folder rescan, and persisted remote asset identity prevents an album-assignment retry from re-uploading an asset.",
       "evidence": [
         {
-          "resource": "repo://docs/agents/application-map.md#L49-L58",
+          "resource": "repo://docs/agents/application-map.md#L52-L61",
           "version": "repo-lines-v1:sha256:77da0f22e7f43473885d0a02708fdaafcc36c9e7f4728a612aa876cac9d4f033:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3NjkwZjEwYjNkNTk2YzY1MWU1MTdhYjlmMDU2M2UxNjQwYWMzMDBmMGFjNzlkZDJlYTNhOWI1OGE0NTA5MTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwNjhkMDQ3ZmMyYjBlZWExZjhjMjkwNmZlNDM3YjQ0MDE2YzE2YTQzN2RhMjFlNmI4MGUxYTZhMWFkNjVlMDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNiOGUzNzgyNDhiYTc3NmIwZjUyNmM1ODk4ODgxMGE1YjkyMTc3OTNkOTIzNDY0ZGQ3ODUyNmU5MzU3MDc4OWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIxOGFjZTNiYzRhYjQ0NDcxMDhhMzNmMzNhMmZiMDk3NTgyNDU2N2M4ZGM4MmUwM2M4ZmYwYTgzOWEyZjY5ZGYifQ"
         },
         {
-          "resource": "repo://docs/agents/application-map.md#L60-L70",
+          "resource": "repo://docs/agents/application-map.md#L63-L73",
           "version": "repo-lines-v1:sha256:4a0ce12e33eca7a52bcc2c91543266e1bfe5a8f4d5d2adf90faf7fab8ca08db8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzYWE3MjczMWY3ODc0YWIyYTEzMjQ3NGNjOTIwZTljMTBiMmJiZjJkZTU5MmNhNzA1NWY3OWUyZDRiZTlkOGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjY2FmMDY4ZmRhZmU5YjFkZjc3MTlmMGU3YWEwNDAwZmZiNmJjOGM1Zjk0YmIwMGE4NWYwZmMwNGQ0MDNkYWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1MDQxNWVjN2ZjNWIzMzM1ZDQ4YjcwYWNiNzFhMWZkYThkOTAyODY0OWVlYjRkMTEwN2UxYTMyMDc5MTRhN2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzZWEzYTZkYTBhNWI1M2I3NGM0NzUzMmRlYzkwMzE3YWM2OWUwYzQ1Y2UzNDE5MDk2MWI2NzJjYTE5ZDc1OWUifQ"
         }
       ]
@@ -61,7 +61,7 @@
       "statement": "Credentials must remain in the native keyring and out of SQLite, logs, errors, and UI events; hashing and upload I/O must stream files rather than buffer whole files.",
       "evidence": [
         {
-          "resource": "repo://docs/agents/application-map.md#L60-L70",
+          "resource": "repo://docs/agents/application-map.md#L63-L73",
           "version": "repo-lines-v1:sha256:4a0ce12e33eca7a52bcc2c91543266e1bfe5a8f4d5d2adf90faf7fab8ca08db8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzYWE3MjczMWY3ODc0YWIyYTEzMjQ3NGNjOTIwZTljMTBiMmJiZjJkZTU5MmNhNzA1NWY3OWUyZDRiZTlkOGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjY2FmMDY4ZmRhZmU5YjFkZjc3MTlmMGU3YWEwNDAwZmZiNmJjOGM1Zjk0YmIwMGE4NWYwZmMwNGQ0MDNkYWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1MDQxNWVjN2ZjNWIzMzM1ZDQ4YjcwYWNiNzFhMWZkYThkOTAyODY0OWVlYjRkMTEwN2UxYTMyMDc5MTRhN2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzZWEzYTZkYTBhNWI1M2I3NGM0NzUzMmRlYzkwMzE3YWM2OWUwYzQ1Y2UzNDE5MDk2MWI2NzJjYTE5ZDc1OWUifQ"
         }
       ]
@@ -71,7 +71,7 @@
       "statement": "Watched Folder paths are normalized and may not duplicate or overlap, while temporarily unavailable folders remain configured for watcher reconciliation instead of being silently removed.",
       "evidence": [
         {
-          "resource": "repo://docs/agents/application-map.md#L60-L63",
+          "resource": "repo://docs/agents/application-map.md#L63-L66",
           "version": "repo-lines-v1:sha256:4cfa08d5ec6d2f2412446dc6de157451f1585f7b59829f2332791cd274ee8631:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDNhYTcyNzMxZjc4NzRhYjJhMTMyNDc0Y2M5MjBlOWMxMGIyYmJmMmRlNTkyY2E3MDU1Zjc5ZTJkNGJlOWQ4ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmIwZTViZTMwMGJmNzk0YzEyYjMyZGJjNTVkY2I5ZmZiOWY1NTdkZWYzM2Q4OTgxN2ZhNmNiYWVlN2U5N2E4YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzUwNDE1ZWM3ZmM1YjMzMzVkNDhiNzBhY2I3MWExZmRhOGQ5MDI4NjQ5ZWViNGQxMTA3ZTFhMzIwNzkxNGE3ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTZmYzdkY2JmZjM4NTFhOWRhY2I0NDFkNmZkYjY5ZGYyZTEwMDE1ZjZiZjJmMTE4NjNmNzRjMGI5NzZjMTEyYiJ9"
         }
       ]
@@ -81,12 +81,12 @@
       "statement": "Tauri command and event names and payloads form a frontend/backend contract that must remain synchronized with Svelte callers, and database schema changes must be added as new forward-only migrations rather than edits to applied migrations.",
       "evidence": [
         {
-          "resource": "repo://docs/agents/application-map.md#L69-L70",
+          "resource": "repo://docs/agents/application-map.md#L72-L73",
           "version": "repo-lines-v1:sha256:4e999cd0587428db30998859bbd7973074c31c1e4b7942151b52e6ff00ecb59f:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGRkZThiOTA0NjMxZTlmYzdhZDA0ODA0ZWVhMzllZmI1N2M5NGMyZjc5NzYxM2M2NTczNDBkZTFhNGY1MTY4YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmNjYWYwNjhmZGFmZTliMWRmNzcxOWYwZTdhYTA0MDBmZmI2YmM4YzVmOTRiYjAwYTg1ZjBmYzA0ZDQwM2RhYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDA0Y2QwYWRhOWM5N2E1OWVjNzc4YTljODVjYjBhNmU0YjNjNjY1OTllM2RkOTcxN2NmNDQxYTgzZTRmNjc2ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODNlYTNhNmRhMGE1YjUzYjc0YzQ3NTMyZGVjOTAzMTdhYzY5ZTBjNDVjZTM0MTkwOTYxYjY3MmNhMTlkNzU5ZSJ9"
         },
         {
-          "resource": "repo://docs/agents/application-map.md#L72-L86",
-          "version": "repo-lines-v1:sha256:6721d01b8b6f9bdbe49d4cf79c4e5df2c2c11c925c93bb514e325dcc5ac43311:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2NjVkNmU0NmIyZDFmZWY0YWJhMzBmMWFhODdlZWE0ZTgzM2Q3NDU1OThiMTk3ZTAyYWJlNjhlNzE5MzZiOWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhYTE5ZjFiYTc0MDQ0M2Q3MDNlOTczYzE4N2RmZjc3ZmRiODc4M2VlZTg1MzFkM2I4N2NkMGQ2NzY2NDc3YTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhlYWVlYjA0YmI3Y2U4ZjhlN2M5N2FiNWZiZDYyMjRkZWJmNGU3MjUwYWVhNmNlMjA4Y2RhZDNmZDM2NTdiZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxZWY2MmFjNWFiYTAxZDIzZjA0Yzk1YWY4YmYxZjQ2ZmZhNmZiMjViYzczODZjMDE0MDEyNTRiZWI0MDE3ODIifQ"
+          "resource": "repo://docs/agents/application-map.md#L75-L89",
+          "version": "repo-lines-v1:sha256:cebac12ed592e937b9cb6c5bb28d7de3a8175ecdf486eb0565e89ebff61fd0f9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2NjVkNmU0NmIyZDFmZWY0YWJhMzBmMWFhODdlZWE0ZTgzM2Q3NDU1OThiMTk3ZTAyYWJlNjhlNzE5MzZiOWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhYTE5ZjFiYTc0MDQ0M2Q3MDNlOTczYzE4N2RmZjc3ZmRiODc4M2VlZTg1MzFkM2I4N2NkMGQ2NzY2NDc3YTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhlYWVlYjA0YmI3Y2U4ZjhlN2M5N2FiNWZiZDYyMjRkZWJmNGU3MjUwYWVhNmNlMjA4Y2RhZDNmZDM2NTdiZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxZWY2MmFjNWFiYTAxZDIzZjA0Yzk1YWY4YmYxZjQ2ZmZhNmZiMjViYzczODZjMDE0MDEyNTRiZWI0MDE3ODIifQ"
         }
       ]
     },
@@ -95,12 +95,12 @@
       "statement": "The Svelte root selects the login interface when authentication is absent and otherwise presents dashboard, activity-log, settings, and information views; unmount cleanup destroys the sync, update, and removable-volume controllers and stops the preferences lifecycle.",
       "evidence": [
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L67-L87",
-          "version": "repo-lines-v1:sha256:f5233261056c05be3c37d0b18ac999ff833fd7a5326dd200b99a5759c3d91f16:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZjVmYTE1OTFmN2RiOTQ2YjVhMjQ4NmYwY2NjNTY2NmY4MDM5YThlMjJhNDc2NjQ1MDUzYzY3NjNjYmFkZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyMGZjOWU2N2RiMDdlZDIzOWJiM2FkMjMxMmVhYWI5YTcwZTFmNmZiYTAxMjg4YjBiYTZlNjFkN2Y4ZWU3ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk5YjgwOTg1NDBiNzcwZWU5NjFlZGU3ZDFhOTdkNjAzYmEyMDg0ZTU1OTZhMjRjNDI3Nzc5MDA1YmQzYWUzOTkifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L85-L109",
+          "version": "repo-lines-v1:sha256:75cb45580225bc751701236380516dfdc6fa14800cfddf8a323d82e7f3e1a83f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZjVmYTE1OTFmN2RiOTQ2YjVhMjQ4NmYwY2NjNTY2NmY4MDM5YThlMjJhNDc2NjQ1MDUzYzY3NjNjYmFkZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyMGZjOWU2N2RiMDdlZDIzOWJiM2FkMjMxMmVhYWI5YTcwZTFmNmZiYTAxMjg4YjBiYTZlNjFkN2Y4ZWU3ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk5YjgwOTg1NDBiNzcwZWU5NjFlZGU3ZDFhOTdkNjAzYmEyMDg0ZTU1OTZhMjRjNDI3Nzc5MDA1YmQzYWUzOTkifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L91-L304",
-          "version": "repo-lines-v1:sha256:b9813447e2a03fdc482ded5c62cd2f67747ca2b68698d63cf14e7592ef1833c4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjE0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmNWMxZWI4MjRkMmY4NGY3YzdmYjQ0MjBkNzE0ZDU3NzVhZmNlZDI4ZDBjNmE4N2VkMTFhYjc0N2VkZWRiYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3ODhlN2M1ZWVjNWZhMGM1NzUxZTI0NTBkOGE2MWZlM2FlZjk1MzAzYTM4MGE3OWZlNmY3YmEwNWNlMDc1MTE1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5OWI4MDk4NTQwYjc3MGVlOTYxZWRlN2QxYTk3ZDYwM2JhMjA4NGU1NTk2YTI0YzQyNzc3OTAwNWJkM2FlMzk5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1ZWI1MTY1OGM0ZmYwMzVmZWNkZWI0YzI2OWVmYjJkMzNhNjdhYzk5MjhhMmE2YzJkMmQ5YTE0NjMwYTBlYzM1In0"
+          "resource": "repo://src/routes/%2Bpage.svelte#L113-L328",
+          "version": "repo-lines-v1:sha256:18e58f6cafd0ff7552a1d85ba42187c777224c404e45576b7a98efc615cf57b4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjE2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmNWMxZWI4MjRkMmY4NGY3YzdmYjQ0MjBkNzE0ZDU3NzVhZmNlZDI4ZDBjNmE4N2VkMTFhYjc0N2VkZWRiYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3ODhlN2M1ZWVjNWZhMGM1NzUxZTI0NTBkOGE2MWZlM2FlZjk1MzAzYTM4MGE3OWZlNmY3YmEwNWNlMDc1MTE1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5OWI4MDk4NTQwYjc3MGVlOTYxZWRlN2QxYTk3ZDYwM2JhMjA4NGU1NTk2YTI0YzQyNzc3OTAwNWJkM2FlMzk5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1ZWI1MTY1OGM0ZmYwMzVmZWNkZWI0YzI2OWVmYjJkMzNhNjdhYzk5MjhhMmE2YzJkMmQ5YTE0NjMwYTBlYzM1In0"
         }
       ]
     },
@@ -109,11 +109,11 @@
       "statement": "Lymic's server URL policy is HTTPS by default; local HTTP requires explicit opt-in and is limited to loopback hosts, while credentials in URLs, redirects, query strings, and fragments are rejected.",
       "evidence": [
         {
-          "resource": "repo://README.md#L104-L116",
+          "resource": "repo://README.md#L115-L127",
           "version": "repo-lines-v1:sha256:829c9df02308d49fe2922e9c1c45d131bb7b7c752ab1aec46a3e36078bff3f9a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2NzRhODNkMGZjYjFkMmVkNmYzMjZlOTBiOGRkMmQ1MTU1ODVmMGI2ZjdlN2VmNjRmOTYwZWRhNDBmMzRmZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4M2Y3ZDg2MzE1ZDhjYzhhM2I1NzY4MzI4ZTI0MjFhZTExNDU2OWYwNTVkODQ2N2NkMDgzZDMzZjIzMjcwOGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhZTJlYTNkYTU3ZDkyZmU0N2Y5ODI4OWU4ZDU4NWJkOGVhMzQ5ZTQ4ODEwYmQzMWM2ZGU2NDEzZWY1OGI3NDYifQ"
         },
         {
-          "resource": "repo://docs/agents/application-map.md#L67-L70",
+          "resource": "repo://docs/agents/application-map.md#L70-L73",
           "version": "repo-lines-v1:sha256:2971349c2a3e43b223f3ed1bdff925665b7bd89ee9eff68a0a7031d367922f16:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGVjNWQxOTAzYjVlMDdmM2IyNTYwZGMxMzNhZDBiZGI5MDg4ZjRiNWQ3YjJhMDJlOWY3MWNmMWRmMTBkN2M0YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmNjYWYwNjhmZGFmZTliMWRmNzcxOWYwZTdhYTA0MDBmZmI2YmM4YzVmOTRiYjAwYTg1ZjBmYzA0ZDQwM2RhYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTZmYzdkY2JmZjM4NTFhOWRhY2I0NDFkNmZkYjY5ZGYyZTEwMDE1ZjZiZjJmMTE4NjNmNzRjMGI5NzZjMTEyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODNlYTNhNmRhMGE1YjUzYjc0YzQ3NTMyZGVjOTAzMTdhYzY5ZTBjNDVjZTM0MTkwOTYxYjY3MmNhMTlkNzU5ZSJ9"
         }
       ]
@@ -123,7 +123,7 @@
       "statement": "The repository's standard verification includes frontend type checking and tests plus Cargo formatting, Clippy with warnings denied, and locked Rust tests; `npm run tauri dev` is the end-to-end desktop smoke-test command.",
       "evidence": [
         {
-          "resource": "repo://docs/agents/application-map.md#L100-L112",
+          "resource": "repo://docs/agents/application-map.md#L103-L115",
           "version": "repo-lines-v1:sha256:939518c3b6306c0c4e28d82fd539cb7fc84c1a21fe6f3130663acae8744f2374:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2N2EwODQ3MjUyZTNkMWNiYTkxYzU4MzIwNGQxYzk5MWQwZDYyYzM3OGIxMDYyOGQzNTRkYWEzMmY5OWYxMzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhMTc4NDdkYjMyYTM2ZGE0ZTU2YmQwOGIwNDkzYzdjNDM0ZmQ2ZjQ4OGQyN2IwZjM2M2I1NDNjNzZhZTVjMjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1NWNlM2Y1YzhiNWI3YjQ2ZmJjMWVjNzkwNzljZGMwYjZmZWM1NTRmYjIxNjVmODA2YWUzYzg1N2IxNDU2OTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjNGI3YWM5MWI1ODIyYjU5MTA4Y2ZjZmZkMmI5NzkwYzA5NjAwYTZlZDQxMDY3MjM4ZjQ5ZDNlNmExNWM5MmEifQ"
         },
         {
@@ -131,10 +131,30 @@
           "version": "repo-lines-v1:sha256:34486a9048e9944cfdc475eee65e308aafbac54d51627425bd30870771052ff7:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzQ4MzNkNTk0OWMwM2E0MGNhOTUyNDkxNjEwYTY2NTk2NDRiM2FhNDY2MzYyZjc5OTAyMGRiZjE5ODE1NDdkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTMwZDZlYmEzYjU3NWZiYmQxZDBmZjdhZWIzMzI2MzdiZTc2ZGNjMWRhZjg3OGU4NDRlNDg3NDIwOGMzY2IzNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWI5Y2UwMzU3ODc0MmM5ZjNiNzg5OTc3ZTg1NTllMWMzYzk3Nzk5ZWYzMDU1ZTA2ZjE1YzM2YmFkMTg2MDFlNiJ9"
         }
       ]
+    },
+    {
+      "id": "claim_c81fd49ab80c437e8cfa627435428e10",
+      "statement": "The frontend scripts provide Vite development through `npm run dev`, static validation through `npm run check`, one-shot Vitest through `npm test`, and Tauri CLI access through `npm run tauri dev` or `npm run tauri build`.",
+      "evidence": [
+        {
+          "resource": "repo://package.json#L23-L31",
+          "version": "repo-lines-v1:sha256:34486a9048e9944cfdc475eee65e308aafbac54d51627425bd30870771052ff7:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzQ4MzNkNTk0OWMwM2E0MGNhOTUyNDkxNjEwYTY2NTk2NDRiM2FhNDY2MzYyZjc5OTAyMGRiZjE5ODE1NDdkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTMwZDZlYmEzYjU3NWZiYmQxZDBmZjdhZWIzMzI2MzdiZTc2ZGNjMWRhZjg3OGU4NDRlNDg3NDIwOGMzY2IzNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjg2M2Y2YmVjNjIyMThkYTc1NjAzNGFjNmU2ZjY4NjY0NGY2MjhkMGM0Y2M3YzQ5OGY5MzQ5MmQ3ZjA5YWNhMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_326204d376b845fcb3222d2c3abc1f24",
+      "statement": "The repository handoff gates run frontend static checks and Vitest plus Rust formatting, warning-denying Clippy, and locked Cargo tests; `npm run tauri dev` is the end-to-end desktop smoke-test command, particularly for high-risk behavior such as migrations, recovery, credential handling, queue retry, duplicate handling, and target-album failures.",
+      "evidence": [
+        {
+          "resource": "repo://docs/agents/application-map.md#L103-L115",
+          "version": "repo-lines-v1:sha256:939518c3b6306c0c4e28d82fd539cb7fc84c1a21fe6f3130663acae8744f2374:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2N2EwODQ3MjUyZTNkMWNiYTkxYzU4MzIwNGQxYzk5MWQwZDYyYzM3OGIxMDYyOGQzNTRkYWEzMmY5OWYxMzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhMTc4NDdkYjMyYTM2ZGE0ZTU2YmQwOGIwNDkzYzdjNDM0ZmQ2ZjQ4OGQyN2IwZjM2M2I1NDNjNzZhZTVjMjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1NWNlM2Y1YzhiNWI3YjQ2ZmJjMWVjNzkwNzljZGMwYjZmZWM1NTRmYjIxNjVmODA2YWUzYzg1N2IxNDU2OTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjNGI3YWM5MWI1ODIyYjU5MTA4Y2ZjZmZkMmI5NzkwYzA5NjAwYTZlZDQxMDY3MjM4ZjQ5ZDNlNmExNWM5MmEifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-10-23T12:59:10.542Z"
+    "at": "2026-11-06T15:30:15.009Z"
   }
 }

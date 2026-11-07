@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:14c59414d4cf180c2295b26dcf5aadd1d087101ab94c34ccbde0fe7301717a6c",
+  "pageVersion": "sha256:62fd579db3b656936c28e438941ba6869f54e7c575722718483d44c5e53f239f",
   "claims": [
     {
       "id": "claim_3b6738143db9456697bc2e88a0ce9adc",
@@ -114,7 +114,7 @@
     },
     {
       "id": "claim_40be6ec3fd794e5da1a41b266035f956",
-      "statement": "The `audit_event` gateway reports absent logger state and logger append errors through a UI error log; writer-side errors and queue overflow use the same reporter, whose UI payload has a stable `log-message` event and normalized level.",
+      "statement": "The `audit_event` gateway reports unavailable logger state and append errors through a keyed UI error log. The writer and overflow reporter use the same callback; it emits the stable `log-message` UI event with a normalized level, avoiding recursive audit events for audit-delivery failures.",
       "evidence": [
         {
           "resource": "repo://src-tauri/src/app/events.rs#L105-L125",
@@ -125,12 +125,12 @@
           "version": "repo-lines-v1:sha256:e95e0c99cc74398fe93a41772ef7aa44a69fc6cd9172b52c9ece08263d1f349d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2M2I0ZjQzOGIwN2E5YzM1MThkY2ZkYWUyNWRhMGVhODM5ZmU3YmY2YmQ0NGRkNGY2MzNlYjk0MGQyZDhkOTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3Y2QyNjBhMDQwYTU3ZjJmYWQ0ODgwN2QwMmI1NGE4Nzg4Mzk3NzQwZDBhMWFjYTViZGJiMmVmOWE2NzgwYjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
         },
         {
-          "resource": "repo://src-tauri/src/audit/writer.rs#L193-L223",
-          "version": "repo-lines-v1:sha256:4f5bab9f6c0ceeab680a50c263d799963ecf1d77a7b93e15e0997a113cb6e6c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiZjBkNjQwNWQxMjM5MzMyM2I2NWE0YWI2MzA0ZjNiYTA4N2I5MDBkOTJiZGU2YjQzMzdiNTcxM2ZiMzdiMjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1NGZhMzM5YzhhMWFkYTRkNDY0MTA2OGYyMzVkM2EzMmU4MTAxZmQ3ZWNlYzM3ZWY3YTFmMTgyMzNiYjQ5NzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZmNzAxYmNiYzMwOTk4YTIzZTViYjA5NTQ1MWFlMGE5ODU1YTYyZWY5NjFiMzJlMTk1Yzg4NWYzNjljN2UyNzAifQ"
+          "resource": "repo://src-tauri/src/audit/writer.rs#L193-L233",
+          "version": "repo-lines-v1:sha256:cf601f646a1e9760f0d959e88b3edf73db1f4585c164ee8e7950abe73b77c783:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiZjBkNjQwNWQxMjM5MzMyM2I2NWE0YWI2MzA0ZjNiYTA4N2I5MDBkOTJiZGU2YjQzMzdiNTcxM2ZiMzdiMjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1NGZhMzM5YzhhMWFkYTRkNDY0MTA2OGYyMzVkM2EzMmU4MTAxZmQ3ZWNlYzM3ZWY3YTFmMTgyMzNiYjQ5NzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE1YjRjNTdkYTQxNDQyMGViZTk2MzgyMTI3MmYxNmMzZDUyNGQ5ODUxMmRlN2JiM2IzM2YwMjNmMDQ4OWJjZTMifQ"
         },
         {
-          "resource": "repo://src-tauri/src/audit/writer.rs#L226-L233",
-          "version": "repo-lines-v1:sha256:597a01b02ef6994412f9e6555100b7d49f0736907fb33ec5a037846bd58a90b5:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzg5NzFmNDcwNmMzMDNlY2IyNWMyMTE2ZDZiZGI0ZWI0OTRjYTZmZTU5ODRjZjNiZjAyMTZjM2M4MDc1OGYzMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDg5M2Y0MGUzNzgxZWI4OTZjODJkMDQ2YTA4MDY3YTExZTM1Y2RmMmYxZGZhZjI2ZmVhOTBiOGRiNjY3NjQxMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTllNzYzNTVjZjExOTk0ODBjM2Y5OTgzNmIxNDg2Yzg0MWQ4OTFmYWFkOTA0YzYwOGUwOTMwMjJkMzc1N2FlZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTViNGM1N2RhNDE0NDIwZWJlOTYzODIxMjcyZjE2YzNkNTI0ZDk4NTEyZGU3YmIzYjMzZjAyM2YwNDg5YmNlMyJ9"
+          "resource": "repo://src-tauri/src/audit/writer.rs#L253-L268",
+          "version": "repo-lines-v1:sha256:00758cab9845aaa43952dacfd6bfbda52ab888de0d3dbe5ec7e17ba365c1bf37:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3NWNmMGQyM2Y5YWNkOGNlNmM1ZjVhZmNjZGI5MDM0MDg1ZWM1MjA0ZTk0NTJmN2VjMGFjMjNkY2EzZmU0YmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3YTVmZmEzZTA5NWRmMDViNmIzMzMzODcxYWJhMWMxYjNlMjVhYjNkYmYxZDQ5MmYxNTRjMmNjMmIxMjJmNTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3ZmRmMGNjOTZjMWZiZDMyYjkyMjIyMmZkZDE2YWFjNTliMWVjZTNkOTdjNTAxMTUzNWI5ZjEzM2IwNTA3ODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ0MmNhNWNlZmY1MzUwNzNhYWI4ZWQzNjI5NzkzMzNiOTVkNzlkNmQ2OWZlYTUxZmUwZWE1MjNiMzBlN2FmNGIifQ"
         },
         {
           "resource": "repo://src-tauri/src/audit/writer.rs#L377-L380",
@@ -256,7 +256,7 @@
     },
     {
       "id": "claim_b679ce39a7f14709bc3c7fc0c58beccc",
-      "statement": "Synchronization persists scanned producer output before lifecycle claim or runner execution; a claimed run creates its credential-derived audit context after credentials are obtained. Pre-run failures emit a sanitized `sync.aborted` audit record and fail the durable job, whereas an error from an asynchronously spawned automatic runner emits `sync-error` and attempts that state transition without adding a terminal runner audit event.",
+      "statement": "Synchronization persists scanned producer output before lifecycle claim or runner execution, and a newly claimed run creates its credential-derived audit context after credentials are obtained. Both pre-run failures and runner failures invoke the same path, which clears runner ownership, attempts to set the durable job to `FAILED`, and emits a `sync.aborted` failure audit record; an asynchronously spawned automatic runner additionally emits `sync-error` after that path.",
       "evidence": [
         {
           "resource": "repo://src-tauri/src/sync/service.rs#L172-L180",
@@ -264,17 +264,17 @@
         },
         {
           "resource": "repo://src-tauri/src/sync/service.rs#L231-L303",
-          "version": "repo-lines-v1:sha256:c196cc059ceaf1006ad4ff57863d8e09e900cc14fc18d9d19eb11fc2f4320b17:eyJzZWxlY3RlZExpbmVDb3VudCI6NzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZjFjZGEyZWE4ODU2YjgyNGM5ZWEwODUxOTI2YmZmNTMwZDg3YjBhOTE0N2ZhOGJlNTI4YjBjYzZkM2MzM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTU4Y2NiNjcxNzllMWY0Yjg0OTUwYTNiNDI4MjBmZmQ0ZWZlY2YzYzJjMmIzNjcwYzM2OTQ4YjI3ZGI0ZDQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY1ZTFjZGZmNDYyMjc0NzczOWYxOTkyYjY5NWZmNGIwZDE0ODNmNTk3NjVkNDAzNmU3MDk1MWIxNTFhYmI2YjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgifQ"
+          "version": "repo-lines-v1:sha256:c25064fb13f8aa7b4bc29f8bcfda754aae48d41f7897e34f729e8d2b9eaa9c4e:eyJzZWxlY3RlZExpbmVDb3VudCI6NzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZjFjZGEyZWE4ODU2YjgyNGM5ZWEwODUxOTI2YmZmNTMwZDg3YjBhOTE0N2ZhOGJlNTI4YjBjYzZkM2MzM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY1ZTFjZGZmNDYyMjc0NzczOWYxOTkyYjY5NWZmNGIwZDE0ODNmNTk3NjVkNDAzNmU3MDk1MWIxNTFhYmI2YjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ2NzVkNjYxYTZjZjgwYjlhODEzMzUzZTIyMmIxZmJlOGU1NzExOTA3N2VlY2FlOTdkNzAwMDkyZjNiYzZkYzkifQ"
         },
         {
-          "resource": "repo://src-tauri/src/sync/service.rs#L307-L325",
-          "version": "repo-lines-v1:sha256:4da6a9397ef427673f1a4462d0f033a78bac4a9bf0c77286f137d45a42198270:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI5MjA3ODRmMzUwYjE2YWQwZGY2ZjIzYmFiOTM1ZWJhZjc4MjFjY2M4MzVkNTk5ZDI1Y2YyNjlhMWY4NWM3MTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0ODdiOGM1Mjg0Mzk2Zjk2M2Q0YzE4ZThjYTFiMWU4ODljZTExMDY1ODczZTk3MjYxZjNmOGI1ZDIyZjljYzMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEwZDJlNTZkZGViNjllZTEzNjFhMTg0YWY4YTFkNzQ5NWU2MzI3MTgwOGE1NzliMGVjOTQ3NzA2NzUzMDk4MGQifQ"
+          "resource": "repo://src-tauri/src/sync/service.rs#L385-L440",
+          "version": "repo-lines-v1:sha256:012362049b1430be4b5d49acbfe546c24afaeeaac229801cdfc7430735d071ec:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjNmI5NGMyY2ExYTc3ZGEwZGRlZjkzNjdlYmU1MDhlNzg1MmUxMDVmZjFiMTExNDJmYWUzZmRmYjY0M2VmNjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2YmY4MWQ4NTNjNTgzMjI3NzQ0NjFkNWNlYWIxYzE1YWY2MDQ1YjRkYmE2ZmU3MTUxN2VmZGQ4NGQ3NTI4OGMifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-11-04T15:53:48.838Z"
+    "at": "2026-11-06T15:30:15.009Z"
   }
 }
