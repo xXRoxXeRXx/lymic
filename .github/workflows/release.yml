@@ -145,20 +145,25 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v5
 
+      - name: Skip AUR update when not configured
+        if: env.AUR_SSH_PRIVATE_KEY == ''
+        run: echo 'AUR_SSH_PRIVATE_KEY is not configured; skipping the AUR update.'
+
       - name: Configure SSH access to AUR
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        if: env.AUR_SSH_PRIVATE_KEY != ''
         run: |
-          test -n "$AUR_SSH_PRIVATE_KEY"
           install -d -m 700 ~/.ssh
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
 
       - name: Update lymic-bin sources
+        if: env.AUR_SSH_PRIVATE_KEY != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
