@@ -94,12 +94,12 @@ describe("TimelineView scrubber", () => {
 
     expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toHaveTextContent("2025");
     expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toHaveTextContent("2024");
-    expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
   });
 
   it("marks the visible month as active when the timeline viewport scrolls", async () => {
     render(TimelineView, { timeline });
-    const viewport = screen.getByLabelText("Photo Timeline");
+    const viewport = screen.getByLabelText("Photos");
     const march = document.getElementById("timeline-bucket-2025-03-01T00-00-00-000Z")!;
     const february = document.getElementById("timeline-bucket-2025-02-01T00-00-00-000Z")!;
     const december = document.getElementById("timeline-bucket-2024-12-01T00-00-00-000Z")!;
@@ -115,7 +115,7 @@ describe("TimelineView scrubber", () => {
 
   it("jumps through periods while the scrubber thumb is dragged", async () => {
     render(TimelineView, { timeline });
-    const viewport = screen.getByLabelText("Photo Timeline");
+    const viewport = screen.getByLabelText("Photos");
     const target = document.getElementById("timeline-bucket-2024-12-01T00-00-00-000Z")!;
     target.scrollIntoView = vi.fn();
     viewport.getBoundingClientRect = () => ({ top: 0, height: 600 } as DOMRect);
@@ -124,6 +124,30 @@ describe("TimelineView scrubber", () => {
 
     await fireEvent.pointerDown(thumb, { pointerId: 1, clientY: 600 });
 
-    expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
+  });
+
+  it("uses Tauri convertFileSrc when present so Windows WebView2 resolves custom protocol URLs", async () => {
+    const internals = (globalThis as typeof globalThis & { __TAURI_INTERNALS__?: unknown });
+    const previous = internals.__TAURI_INTERNALS__;
+    internals.__TAURI_INTERNALS__ = {
+      convertFileSrc: (filePath: string, protocol = "asset") =>
+        `http://${protocol}.localhost/${encodeURIComponent(filePath)}`,
+    };
+    try {
+      render(TimelineView, { timeline });
+      const thumbnailButton = screen.getByRole("button", { name: "Open photo" });
+      expect(thumbnailButton.querySelector("img")).toHaveAttribute(
+        "src",
+        "http://lymic-thumb.localhost/asset/photo-1",
+      );
+      await fireEvent.click(thumbnailButton);
+      expect(screen.getByRole("img", { name: "Photo preview" })).toHaveAttribute(
+        "src",
+        "http://lymic-asset.localhost/asset/photo-1",
+      );
+    } finally {
+      internals.__TAURI_INTERNALS__ = previous;
+    }
   });
 });

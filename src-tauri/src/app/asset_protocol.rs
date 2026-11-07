@@ -53,9 +53,15 @@ async fn serve(uri: Uri, range: Option<&str>) -> Response<Vec<u8>> {
 }
 
 fn asset_target(uri: &Uri) -> Option<(&str, &str)> {
-    let kind = uri.authority()?.as_str();
-    (kind == "asset" || kind == "video").then_some(())?;
-    let id = uri.path().strip_prefix('/')?;
+    let (kind, id) = match uri.authority()?.as_str() {
+        kind @ ("asset" | "video") => (kind, uri.path().strip_prefix('/')?),
+        "localhost" => {
+            let path = uri.path().strip_prefix('/')?;
+            let (kind, id) = path.split_once('/')?;
+            (kind == "asset" || kind == "video").then_some((kind, id))?
+        }
+        _ => return None,
+    };
     (!id.is_empty()
         && !id.contains('/')
         && !id.contains("..")
@@ -104,5 +110,26 @@ mod tests {
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(response.headers()[header::CONTENT_RANGE], "bytes 10-19/100");
         assert_eq!(response.headers()[header::ACCEPT_RANGES], "bytes");
+    }
+
+    #[test]
+    fn resolves_asset_and_video_targets_for_direct_and_localhost_uris() {
+        assert_eq!(
+            asset_target(&"lymic-asset://asset/photo-1".parse().unwrap()),
+            Some(("asset", "photo-1"))
+        );
+        assert_eq!(
+            asset_target(&"lymic-asset://video/video-1".parse().unwrap()),
+            Some(("video", "video-1"))
+        );
+        assert_eq!(
+            asset_target(&"lymic-asset://localhost/asset/photo-1".parse().unwrap()),
+            Some(("asset", "photo-1"))
+        );
+        assert_eq!(
+            asset_target(&"lymic-asset://localhost/video/video-1".parse().unwrap()),
+            Some(("video", "video-1"))
+        );
+        assert!(asset_target(&"lymic-asset://localhost/other/photo-1".parse().unwrap()).is_none());
     }
 }

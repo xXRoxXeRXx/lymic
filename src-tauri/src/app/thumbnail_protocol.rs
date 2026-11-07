@@ -75,15 +75,16 @@ async fn serve(
 }
 
 fn asset_id(uri: &tauri::http::Uri) -> Option<&str> {
-    if uri.authority()?.as_str() != "asset" {
-        return None;
-    }
-    uri.path().strip_prefix('/').filter(|id| {
-        !id.is_empty()
-            && !id.contains('/')
-            && !id.contains("..")
-            && !id.chars().any(char::is_whitespace)
-    })
+    let candidate = match uri.authority()?.as_str() {
+        "asset" => uri.path().strip_prefix('/'),
+        "localhost" => uri.path().strip_prefix("/asset/"),
+        _ => None,
+    }?;
+    (!candidate.is_empty()
+        && !candidate.contains('/')
+        && !candidate.contains("..")
+        && !candidate.chars().any(char::is_whitespace))
+    .then_some(candidate)
 }
 
 async fn fetch_thumbnail(asset_id: &str) -> Result<Vec<u8>, String> {
@@ -202,8 +203,13 @@ mod tests {
     #[test]
     fn rejects_non_asset_thumbnail_uris() {
         assert!(asset_id(&"lymic-thumb://other/id".parse().unwrap()).is_none());
+        assert!(asset_id(&"lymic-thumb://localhost/other/id".parse().unwrap()).is_none());
         assert_eq!(
             asset_id(&"lymic-thumb://asset/id".parse().unwrap()),
+            Some("id")
+        );
+        assert_eq!(
+            asset_id(&"lymic-thumb://localhost/asset/id".parse().unwrap()),
             Some("id")
         );
     }

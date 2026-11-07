@@ -100,7 +100,7 @@
     const observer = new IntersectionObserver((entries) => {
       const isActive = entries.some((entry) => entry.isIntersecting);
       activeBuckets = { ...activeBuckets, [timeBucket]: isActive };
-      if (isActive) void timeline.activateBucket(timeBucket).catch(() => {});
+      if (isActive) void Promise.resolve(timeline.activateBucket(timeBucket)).catch(() => {});
     }, { root: viewport, rootMargin: "400px 0px" });
     observer.observe(node);
     return { destroy: () => observer.disconnect() };
@@ -160,6 +160,20 @@
   function assetUrl(asset: TimelineAsset) {
     return `${serverUrl.replace(/\/$/, "")}/photos/${encodeURIComponent(asset.id)}`;
   }
+
+  function protocolSrc(protocol: "lymic-thumb" | "lymic-asset", kind: "asset" | "video", id: string) {
+    const encodedId = encodeURIComponent(id);
+    const convertFileSrc = (
+      globalThis as typeof globalThis & {
+        __TAURI_INTERNALS__?: { convertFileSrc?: (filePath: string, protocol?: string) => string };
+      }
+    ).__TAURI_INTERNALS__?.convertFileSrc;
+    if (typeof convertFileSrc === "function") {
+      const base = convertFileSrc("", protocol).replace(/\/$/, "");
+      return `${base}/${kind}/${encodedId}`;
+    }
+    return `${protocol}://${kind}/${encodedId}`;
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -208,7 +222,7 @@
                 <div class="flex min-w-0 flex-1 flex-col gap-2">
                   {#each column as item (item.asset.id)}
                     <button type="button" class="relative overflow-hidden rounded-lg bg-slate-200 text-left dark:bg-zinc-800" aria-label={`Open ${item.asset.type === "VIDEO" ? "video" : "photo"}`} onclick={(event) => openLightbox(item.asset, event.currentTarget)}>
-                      <img src={`lymic-thumb://asset/${item.asset.id}`} alt="" loading="lazy" width={item.asset.width} height={item.asset.height} style:height={`${item.height}px`} class="w-full object-cover" />
+                      <img src={protocolSrc("lymic-thumb", "asset", item.asset.id)} alt="" loading="lazy" width={item.asset.width} height={item.asset.height} style:height={`${item.height}px`} class="w-full object-cover" />
                       {#if item.asset.type === "VIDEO"}
                         <span class="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white"><Play class="h-3 w-3 fill-current" />{formatDuration(item.asset.duration)}</span>
                       {/if}
@@ -265,9 +279,9 @@
       <div class="relative flex min-h-0 items-center justify-center">
         <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3" aria-label="Close lightbox" onclick={closeLightbox}><X class="h-5 w-5" /></button>
         {#if selectedAsset.type === "VIDEO"}
-          <video class="max-h-full max-w-full" controls autoplay aria-label="Video preview" src={`lymic-asset://video/${selectedAsset.id}`}></video>
+          <video class="max-h-full max-w-full" controls autoplay aria-label="Video preview" src={protocolSrc("lymic-asset", "video", selectedAsset.id)}></video>
         {:else}
-          <img class="max-h-full max-w-full object-contain" alt="Photo preview" src={`lymic-asset://asset/${selectedAsset.id}`} />
+          <img class="max-h-full max-w-full object-contain" alt="Photo preview" src={protocolSrc("lymic-asset", "asset", selectedAsset.id)} />
         {/if}
       </div>
       <div class="flex flex-wrap items-center justify-between gap-3 bg-black/70 px-4 py-3 text-sm">

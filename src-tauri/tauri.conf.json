@@ -21,8 +21,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost",
-      "devCsp": "default-src 'self'; script-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420"
+      "csp": "default-src 'self'; script-src 'self'; img-src 'self' data: lymic-thumb: http://lymic-thumb.localhost https://lymic-thumb.localhost lymic-asset: http://lymic-asset.localhost https://lymic-asset.localhost; media-src 'self' lymic-asset: http://lymic-asset.localhost https://lymic-asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost",
+      "devCsp": "default-src 'self'; script-src 'self'; img-src 'self' data: lymic-thumb: http://lymic-thumb.localhost https://lymic-thumb.localhost lymic-asset: http://lymic-asset.localhost https://lymic-asset.localhost; media-src 'self' lymic-asset: http://lymic-asset.localhost https://lymic-asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420"
     }
   },
   "bundle": {
