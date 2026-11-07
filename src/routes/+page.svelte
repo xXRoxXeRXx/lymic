@@ -46,7 +46,9 @@
     reportError: feedback.report,
     locale: () => $locale ?? "en",
     canStartSync: () => watchedFolders.hasFolders,
-    onSyncSettled: () => Promise.all([watchedFolders.refresh(), timeline.refresh()]),
+    onSyncSettled: async () => {
+      await Promise.all([watchedFolders.refresh(), timeline.refresh()]);
+    },
   });
   const timeline = createTimelineController(desktop);
 

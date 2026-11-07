@@ -4,6 +4,7 @@ import type { TimelineDesktopAdapter } from "../tauri/desktop-adapter";
 export interface TimelineViewState {
   readonly buckets: TimelineBucket[];
   readonly isLoading: boolean;
+  readonly isRefreshing: boolean;
   readonly isOffline: boolean;
   assetsFor(timeBucket: string): TimelineAsset[];
   activateBucket(timeBucket: string): Promise<void>;
@@ -14,6 +15,7 @@ export interface TimelineViewState {
 export function createTimelineController(adapter: TimelineDesktopAdapter): TimelineViewState {
   let buckets = $state<TimelineBucket[]>([]);
   let isLoading = $state(false);
+  let isRefreshing = $state(false);
   let isOffline = $state(false);
   let latestRequest = 0;
   let assetsByBucket = $state<Record<string, TimelineAsset[]>>({});
@@ -21,11 +23,18 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
 
   async function refresh() {
     const request = ++latestRequest;
-    isLoading = true;
+    // A background refresh must not replace an already usable timeline with a
+    // loading state.  Keep the cached view interactive while the request runs.
+    isLoading = buckets.length === 0;
+    isRefreshing = true;
     try {
       const loaded = await adapter.getTimelineBuckets();
       if (request === latestRequest) {
         buckets = [...loaded].sort((a, b) => b.timeBucket.localeCompare(a.timeBucket));
+        // A bucket can receive new assets after synchronization.  Drop only
+        // successful-session metadata so visible sections fetch current data.
+        assetsByBucket = {};
+        pendingBuckets.clear();
         isOffline = false;
       }
     } catch (error) {
@@ -34,7 +43,10 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
         isOffline = true;
       }
     } finally {
-      if (request === latestRequest) isLoading = false;
+      if (request === latestRequest) {
+        isLoading = false;
+        isRefreshing = false;
+      }
     }
   }
 
@@ -42,6 +54,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     latestRequest += 1;
     buckets = [];
     isLoading = false;
+    isRefreshing = false;
     isOffline = false;
     assetsByBucket = {};
     pendingBuckets.clear();
@@ -57,6 +70,10 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     if (pending) return pending;
     const request = adapter.getTimelineBucketAssets(timeBucket).then((assets) => {
       assetsByBucket = { ...assetsByBucket, [timeBucket]: assets };
+      isOffline = false;
+    }).catch((error) => {
+      isOffline = true;
+      throw error;
     }).finally(() => pendingBuckets.delete(timeBucket));
     pendingBuckets.set(timeBucket, request);
     return request;
@@ -65,6 +82,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   return {
     get buckets() { return buckets; },
     get isLoading() { return isLoading; },
+    get isRefreshing() { return isRefreshing; },
     get isOffline() { return isOffline; },
     assetsFor,
     activateBucket,

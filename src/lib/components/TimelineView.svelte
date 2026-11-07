@@ -52,7 +52,7 @@
   }
 
   function scrollToBucket(timeBucket: string) {
-    document.getElementById(bucketId(timeBucket))?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById(bucketId(timeBucket))?.scrollIntoView({ behavior: "auto", block: "start" });
     activeTimeBucket = timeBucket;
   }
 
@@ -75,7 +75,7 @@
 
   function startDrag(event: PointerEvent) {
     isDragging = true;
-    event.currentTarget.setPointerCapture(event.pointerId);
+    (event.currentTarget as HTMLElement | null)?.setPointerCapture(event.pointerId);
     jumpFromPointer(event.clientY);
   }
 
@@ -112,8 +112,10 @@
 
   function formatDuration(duration: number | null) {
     if (duration === null) return "";
-    const minutes = Math.floor(duration / 60);
-    return `${minutes}:${Math.floor(duration % 60).toString().padStart(2, "0")}`;
+    const hours = Math.floor(duration / 3600);
+    const minutes = Math.floor((duration % 3600) / 60);
+    const seconds = Math.floor(duration % 60).toString().padStart(2, "0");
+    return hours > 0 ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
   }
 
   function openLightbox(asset: TimelineAsset, source: HTMLElement) {
@@ -173,11 +175,11 @@
       type="button"
       class="rounded-lg p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
       aria-label="Refresh timeline"
-      aria-busy={timeline.isLoading}
-      disabled={timeline.isLoading}
+      aria-busy={timeline.isRefreshing}
+      disabled={timeline.isRefreshing}
       onclick={() => void timeline.refresh()}
     >
-      <RefreshCw class="h-4 w-4 {timeline.isLoading ? 'animate-spin' : ''}" />
+      <RefreshCw class="h-4 w-4 {timeline.isRefreshing ? 'animate-spin' : ''}" />
     </button>
   </div>
   <div bind:this={viewport} use:measureViewport class="h-full overflow-y-auto pr-16" aria-label="Photo Timeline" onscroll={syncActiveBucket}>
@@ -271,7 +273,7 @@
         <div class="flex gap-2">
           <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label="Previous asset" onclick={() => navigate(-1)}>Previous</button>
           <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label="Next asset" onclick={() => navigate(1)}>Next</button>
-          <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2" aria-label="Open in Immich" onclick={() => onOpenExternalUrl(assetUrl(selectedAsset))}>Open in Immich <ExternalLink class="h-4 w-4" /></button>
+          <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2" aria-label="Open in Immich" onclick={() => selectedAsset && onOpenExternalUrl(assetUrl(selectedAsset))}>Open in Immich <ExternalLink class="h-4 w-4" /></button>
         </div>
       </div>
     </dialog>

@@ -1,7 +1,6 @@
 import type { TimelineAsset } from "../contracts";
 
 const MIN_TILE_WIDTH = 200;
-const MIN_COLUMN_COUNT = 3;
 const COLUMN_GAP = 8;
 
 export interface MasonryItem {
@@ -18,7 +17,7 @@ export interface MasonryLayout {
 
 function calculateColumnCount(containerWidth: number): number {
   return Math.max(
-    MIN_COLUMN_COUNT,
+    1,
     Math.floor((containerWidth + COLUMN_GAP) / (MIN_TILE_WIDTH + COLUMN_GAP)),
   );
 }

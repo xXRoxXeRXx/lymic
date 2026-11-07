@@ -74,7 +74,6 @@ impl ImmichClient {
             .client
             .get(self.endpoint_url("timeline/buckets"))
             .query(&[("size", "MONTH")])
-            .header("x-api-key", &self.api_key)
             .send()
             .await
             .map_err(|error| format!("Failed to fetch timeline buckets: {error}"))?;
@@ -101,7 +100,6 @@ impl ImmichClient {
             .client
             .get(self.endpoint_url("timeline/bucket"))
             .query(&[("size", "MONTH"), ("timeBucket", time_bucket)])
-            .header("x-api-key", &self.api_key)
             .send()
             .await
             .map_err(|error| format!("Failed to fetch timeline bucket: {error}"))?;

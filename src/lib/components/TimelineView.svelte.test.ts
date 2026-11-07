@@ -25,6 +25,7 @@ const timeline: TimelineViewState = {
     { timeBucket: "2024-12-01T00:00:00.000Z", count: 1 },
   ],
   isLoading: false,
+  isRefreshing: false,
   isOffline: false,
   assetsFor: (timeBucket) => timeBucket === "2025-03-01T00:00:00.000Z" ? [
     { id: "photo-1", width: 4032, height: 3024, type: "IMAGE", takenAt: "2025-03-05T12:34:56.000Z", cameraMake: "Canon", cameraModel: "EOS R6", fileSize: 1234567, duration: null },
@@ -45,7 +46,7 @@ describe("TimelineView scrubber", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Refresh timeline" }));
 
     expect(refresh).toHaveBeenCalledOnce();
-    view.rerender({ timeline: { ...timeline, refresh, isLoading: true } });
+    view.rerender({ timeline: { ...timeline, refresh, isRefreshing: true } });
     expect(screen.getByRole("button", { name: "Refresh timeline" })).toHaveAttribute("aria-busy", "true");
   });
 
