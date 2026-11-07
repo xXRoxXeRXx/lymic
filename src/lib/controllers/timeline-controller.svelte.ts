@@ -1,9 +1,11 @@
-import type { TimelineBucket } from "../contracts";
+import type { TimelineAsset, TimelineBucket } from "../contracts";
 import type { TimelineDesktopAdapter } from "../tauri/desktop-adapter";
 
 export interface TimelineViewState {
   readonly buckets: TimelineBucket[];
   readonly isLoading: boolean;
+  assetsFor(timeBucket: string): TimelineAsset[];
+  activateBucket(timeBucket: string): Promise<void>;
   refresh(): Promise<void>;
   clear(): void;
 }
@@ -12,6 +14,8 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   let buckets = $state<TimelineBucket[]>([]);
   let isLoading = $state(false);
   let latestRequest = 0;
+  let assetsByBucket = $state<Record<string, TimelineAsset[]>>({});
+  const pendingBuckets = new Map<string, Promise<void>>();
 
   async function refresh() {
     const request = ++latestRequest;
@@ -30,11 +34,30 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     latestRequest += 1;
     buckets = [];
     isLoading = false;
+    assetsByBucket = {};
+    pendingBuckets.clear();
+  }
+
+  function assetsFor(timeBucket: string) {
+    return assetsByBucket[timeBucket] ?? [];
+  }
+
+  function activateBucket(timeBucket: string) {
+    if (timeBucket in assetsByBucket) return Promise.resolve();
+    const pending = pendingBuckets.get(timeBucket);
+    if (pending) return pending;
+    const request = adapter.getTimelineBucketAssets(timeBucket).then((assets) => {
+      assetsByBucket = { ...assetsByBucket, [timeBucket]: assets };
+    }).finally(() => pendingBuckets.delete(timeBucket));
+    pendingBuckets.set(timeBucket, request);
+    return request;
   }
 
   return {
     get buckets() { return buckets; },
     get isLoading() { return isLoading; },
+    assetsFor,
+    activateBucket,
     refresh,
     clear,
   };
