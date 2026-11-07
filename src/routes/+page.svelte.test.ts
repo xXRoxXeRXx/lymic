@@ -30,6 +30,7 @@ let watchedFolders: WatchedFolder[] = [];
 let failedSyncs: FailedSyncEntry[] = [];
 let uploadParallelism = 3;
 let syncStarted: (() => void) | undefined;
+let syncIdle: (() => void) | undefined;
 let syncPaused: ((event: { payload: unknown }) => void) | undefined;
 let syncResumed: ((event: { payload: unknown }) => void) | undefined;
 let syncProgressSnapshot: ((event: { payload: unknown }) => void) | undefined;
@@ -115,6 +116,7 @@ beforeEach(() => {
   failedSyncs = [];
   uploadParallelism = 3;
   syncStarted = undefined;
+  syncIdle = undefined;
   syncPaused = undefined;
   syncResumed = undefined;
   syncProgressSnapshot = undefined;
@@ -124,6 +126,7 @@ beforeEach(() => {
   removableVolumeRemounted = undefined;
   tauri.listen.mockImplementation((event: string, handler: () => void) => {
     if (event === "sync-started") syncStarted = handler;
+    if (event === "sync-idle") syncIdle = handler;
     if (event === "sync-paused") syncPaused = handler as (event: { payload: unknown }) => void;
     if (event === "sync-resumed") syncResumed = handler as (event: { payload: unknown }) => void;
     if (event === "sync-progress-snapshot") syncProgressSnapshot = handler as (event: { payload: unknown }) => void;
@@ -190,6 +193,20 @@ describe("Photo Timeline", () => {
     expect(screen.getByText("February 2025")).toBeInTheDocument();
     expect(screen.getByText("3 assets")).toBeInTheDocument();
     expect(tauri.invoke).toHaveBeenCalledWith("get_timeline_buckets");
+  });
+
+  it("refreshes cached timeline buckets after synchronization settles", async () => {
+    renderAuthenticatedPage({
+      get_timeline_buckets: async () => [],
+    });
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+
+    await waitFor(() => {
+      const timelineRefreshes = tauri.invoke.mock.calls.filter(([command]) => command === "get_timeline_buckets");
+      expect(timelineRefreshes).toHaveLength(2);
+    });
   });
 });
 

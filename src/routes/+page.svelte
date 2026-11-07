@@ -46,7 +46,7 @@
     reportError: feedback.report,
     locale: () => $locale ?? "en",
     canStartSync: () => watchedFolders.hasFolders,
-    onSyncSettled: () => watchedFolders.refresh(),
+    onSyncSettled: () => Promise.all([watchedFolders.refresh(), timeline.refresh()]),
   });
   const timeline = createTimelineController(desktop);
 
@@ -289,7 +289,7 @@
         {/if}
 
         {#if currentView === "photos"}
-          <TimelineView {timeline} />
+          <TimelineView {timeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} />
         {:else if currentView === "dashboard"}
           <DashboardView
             status={sync.status}

@@ -45,6 +45,12 @@ export interface TimelineAsset {
   id: string;
   width: number;
   height: number;
+  type: "IMAGE" | "VIDEO";
+  takenAt: string | null;
+  cameraMake: string | null;
+  cameraModel: string | null;
+  fileSize: number | null;
+  duration: number | null;
 }
 
 export interface UiLogMessage {

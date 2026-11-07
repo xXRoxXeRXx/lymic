@@ -38,4 +38,36 @@ describe("Photo Timeline controller", () => {
       { id: "asset-1", width: 640, height: 480 },
     ]);
   });
+
+  it("keeps cached buckets and exposes an offline state when refreshing fails", async () => {
+    const adapter: TimelineDesktopAdapter = {
+      getTimelineBuckets: vi.fn()
+        .mockResolvedValueOnce([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 3 }])
+        .mockRejectedValueOnce(new Error("Network request failed")),
+      getTimelineBucketAssets: vi.fn(),
+    };
+    const timeline = createTimelineController(adapter);
+
+    await timeline.refresh();
+    await timeline.refresh();
+
+    expect(timeline.buckets).toEqual([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 3 }]);
+    expect(timeline.isOffline).toBe(true);
+  });
+
+  it("clears the offline state after a successful retry", async () => {
+    const adapter: TimelineDesktopAdapter = {
+      getTimelineBuckets: vi.fn()
+        .mockRejectedValueOnce(new Error("Connection refused"))
+        .mockResolvedValueOnce([{ timeBucket: "2025-04-01T00:00:00.000Z", count: 1 }]),
+      getTimelineBucketAssets: vi.fn(),
+    };
+    const timeline = createTimelineController(adapter);
+
+    await timeline.refresh();
+    await timeline.refresh();
+
+    expect(timeline.isOffline).toBe(false);
+    expect(timeline.buckets).toEqual([{ timeBucket: "2025-04-01T00:00:00.000Z", count: 1 }]);
+  });
 });

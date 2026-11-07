@@ -1,20 +1,33 @@
 <script lang="ts">
+  import { RefreshCw } from "lucide-svelte";
   import { locale } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
+  import { ExternalLink, Play, X } from "lucide-svelte";
+  import type { TimelineAsset } from "../contracts";
 
   interface Props {
     timeline: TimelineViewState;
+    serverUrl?: string;
+    onOpenExternalUrl?(url: string): Promise<void>;
   }
 
-  let { timeline }: Props = $props();
+  let {
+    timeline,
+    serverUrl = "",
+    onOpenExternalUrl = async () => {},
+  }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   const scrubberIndex = $derived(buildTimelineScrubberIndex(timeline.buckets));
   const scrubberMonths = $derived(scrubberIndex.flatMap((entry) => entry.months));
   let viewport: HTMLDivElement;
   let activeTimeBucket = $state<string | null>(null);
   let isDragging = false;
+  let selectedAsset = $state<TimelineAsset | null>(null);
+  let selectedIndex = $state(-1);
+  let lightboxAssets = $state<TimelineAsset[]>([]);
+  let opener = $state<HTMLElement | null>(null);
 
   $effect(() => {
     if (!activeTimeBucket || !scrubberMonths.includes(activeTimeBucket)) {
@@ -71,9 +84,77 @@
   function endDrag() {
     isDragging = false;
   }
+
+  function formatDuration(duration: number | null) {
+    if (duration === null) return "";
+    const minutes = Math.floor(duration / 60);
+    return `${minutes}:${Math.floor(duration % 60).toString().padStart(2, "0")}`;
+  }
+
+  function openLightbox(asset: TimelineAsset, source: HTMLElement) {
+    lightboxAssets = timeline.buckets.flatMap((bucket) => timeline.assetsFor(bucket.timeBucket));
+    selectedIndex = lightboxAssets.findIndex((candidate) => candidate.id === asset.id);
+    selectedAsset = asset;
+    opener = source;
+  }
+
+  function closeLightbox() {
+    selectedAsset = null;
+    selectedIndex = -1;
+    queueMicrotask(() => opener?.focus());
+  }
+
+  function navigate(delta: number) {
+    if (!selectedAsset || lightboxAssets.length === 0) return;
+    selectedIndex = (selectedIndex + delta + lightboxAssets.length) % lightboxAssets.length;
+    selectedAsset = lightboxAssets[selectedIndex];
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (!selectedAsset) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeLightbox();
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      navigate(-1);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      navigate(1);
+    }
+  }
+
+  function assetUrl(asset: TimelineAsset) {
+    return `${serverUrl.replace(/\/$/, "")}/photos/${encodeURIComponent(asset.id)}`;
+  }
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div class="relative h-full min-h-0">
+  <div class="mb-4 flex items-center justify-end gap-3">
+    {#if timeline.isOffline}
+      <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+        <span>Timeline is offline. Showing cached photos.</span>
+        <button
+          type="button"
+          class="font-semibold underline underline-offset-2"
+          aria-label="Retry timeline connection"
+          onclick={() => void timeline.refresh()}
+        >Retry</button>
+      </div>
+    {/if}
+    <button
+      type="button"
+      class="rounded-lg p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+      aria-label="Refresh timeline"
+      aria-busy={timeline.isLoading}
+      disabled={timeline.isLoading}
+      onclick={() => void timeline.refresh()}
+    >
+      <RefreshCw class="h-4 w-4 {timeline.isLoading ? 'animate-spin' : ''}" />
+    </button>
+  </div>
   <div bind:this={viewport} class="h-full overflow-y-auto pr-16" aria-label="Photo Timeline" onscroll={syncActiveBucket}>
     <div class="space-y-8">
       {#each timeline.buckets as bucket (bucket.timeBucket)}
@@ -85,14 +166,12 @@
           {#if timeline.assetsFor(bucket.timeBucket).length > 0}
             <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
               {#each timeline.assetsFor(bucket.timeBucket) as asset (asset.id)}
-                <img
-                  src={`lymic-thumb://asset/${asset.id}`}
-                  alt=""
-                  loading="lazy"
-                  width={asset.width}
-                  height={asset.height}
-                  class="aspect-square w-full rounded-lg object-cover bg-slate-200 dark:bg-zinc-800"
-                />
+                <button type="button" class="relative aspect-square overflow-hidden rounded-lg bg-slate-200 text-left dark:bg-zinc-800" aria-label={`Open ${asset.type === "VIDEO" ? "video" : "photo"}`} onclick={(event) => openLightbox(asset, event.currentTarget)}>
+                  <img src={`lymic-thumb://asset/${asset.id}`} alt="" loading="lazy" width={asset.width} height={asset.height} class="h-full w-full object-cover" />
+                  {#if asset.type === "VIDEO"}
+                    <span class="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white"><Play class="h-3 w-3 fill-current" />{formatDuration(asset.duration)}</span>
+                  {/if}
+                </button>
               {/each}
             </div>
           {:else}
@@ -136,3 +215,30 @@
     </nav>
   {/if}
 </div>
+
+{#if selectedAsset}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" role="presentation" onclick={(event) => event.currentTarget === event.target && closeLightbox()}>
+    <dialog open role="dialog" aria-label="Media lightbox" aria-modal="true" class="m-0 grid h-full w-full max-w-7xl grid-rows-[minmax(0,1fr)_auto] border-0 bg-transparent p-0 text-white">
+      <div class="relative flex min-h-0 items-center justify-center">
+        <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3" aria-label="Close lightbox" onclick={closeLightbox}><X class="h-5 w-5" /></button>
+        {#if selectedAsset.type === "VIDEO"}
+          <video class="max-h-full max-w-full" controls autoplay aria-label="Video preview" src={`lymic-asset://video/${selectedAsset.id}`}></video>
+        {:else}
+          <img class="max-h-full max-w-full object-contain" alt="Photo preview" src={`lymic-asset://asset/${selectedAsset.id}`} />
+        {/if}
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-3 bg-black/70 px-4 py-3 text-sm">
+        <div class="space-y-1">
+          <p>{selectedAsset.takenAt ? new Intl.DateTimeFormat(numberLocale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedAsset.takenAt)) : "Unknown date"}</p>
+          <p>{[selectedAsset.cameraMake, selectedAsset.cameraModel].filter(Boolean).join(" ") || "Unknown camera"}</p>
+          <p>{selectedAsset.width.toLocaleString(numberLocale)} × {selectedAsset.height.toLocaleString(numberLocale)}{selectedAsset.fileSize === null ? "" : ` · ${(selectedAsset.fileSize / 1024 / 1024).toFixed(1)} MB`}</p>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label="Previous asset" onclick={() => navigate(-1)}>Previous</button>
+          <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label="Next asset" onclick={() => navigate(1)}>Next</button>
+          <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2" aria-label="Open in Immich" onclick={() => onOpenExternalUrl(assetUrl(selectedAsset))}>Open in Immich <ExternalLink class="h-4 w-4" /></button>
+        </div>
+      </div>
+    </dialog>
+  </div>
+{/if}

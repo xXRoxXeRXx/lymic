@@ -35,6 +35,15 @@ pub(crate) struct ImmichClient {
     pub(super) api_key: String,
 }
 
+pub(crate) struct AssetResponse {
+    pub status: u16,
+    pub content_type: Option<String>,
+    pub content_range: Option<String>,
+    pub content_length: Option<String>,
+    pub accept_ranges: Option<String>,
+    pub body: Vec<u8>,
+}
+
 #[derive(Deserialize)]
 struct CurrentUserResponse {
     #[serde(default)]
@@ -271,6 +280,52 @@ impl ImmichClient {
         Ok(bytes.to_vec())
     }
 
+    pub(crate) async fn get_asset(
+        &self,
+        asset_id: &str,
+        range: Option<&str>,
+    ) -> Result<AssetResponse, String> {
+        Self::validate_path_segment(asset_id, "asset ID")?;
+        let mut request = self
+            .client
+            .get(self.endpoint_url(&format!("assets/{asset_id}/original")))
+            .header("x-api-key", &self.api_key);
+        if let Some(range) = range {
+            request = request.header(reqwest::header::RANGE, range);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| format!("Failed to fetch asset: {error}"))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(format!(
+                "Failed to fetch asset: {}",
+                response_status_error(response).await?
+            ));
+        }
+        let headers = response.headers().clone();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|error| format!("Failed to read asset: {error}"))?
+            .to_vec();
+        let header = |name| {
+            headers
+                .get(name)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_string)
+        };
+        Ok(AssetResponse {
+            status: status.as_u16(),
+            content_type: header(reqwest::header::CONTENT_TYPE),
+            content_range: header(reqwest::header::CONTENT_RANGE),
+            content_length: header(reqwest::header::CONTENT_LENGTH),
+            accept_ranges: header(reqwest::header::ACCEPT_RANGES),
+            body,
+        })
+    }
+
     pub(crate) async fn check_assets_exist(
         &self,
         hashes: Vec<String>,
@@ -433,6 +488,40 @@ mod tests {
         headers.insert("cf-access-client-id", "client-id".parse().unwrap());
         headers.insert("cf-access-client-secret", "client-secret".parse().unwrap());
         Client::builder().default_headers(headers).build().unwrap()
+    }
+
+    #[tokio::test]
+    async fn forwards_video_range_requests_and_preserves_partial_response_headers() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request = read_http_request(&mut stream).await;
+            let request = String::from_utf8_lossy(&request);
+            assert!(request.starts_with("GET /api/assets/video-1/original HTTP/1.1"));
+            assert!(
+                request.contains("range: bytes=10-19") || request.contains("Range: bytes=10-19")
+            );
+            stream.write_all(b"HTTP/1.1 206 Partial Content\r\ncontent-type: video/mp4\r\ncontent-range: bytes 10-19/100\r\ncontent-length: 10\r\naccept-ranges: bytes\r\n\r\n0123456789").await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let response = client
+            .get_asset("video-1", Some("bytes=10-19"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status, 206);
+        assert_eq!(response.content_range.as_deref(), Some("bytes 10-19/100"));
+        assert_eq!(response.accept_ranges.as_deref(), Some("bytes"));
+        server.await.unwrap();
     }
 
     #[test]

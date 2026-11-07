@@ -17,13 +17,23 @@ pub struct TimelineAsset {
     pub id: String,
     pub width: u32,
     pub height: u32,
+    pub r#type: String,
+    pub taken_at: Option<String>,
+    pub camera_make: Option<String>,
+    pub camera_model: Option<String>,
+    pub file_size: Option<u64>,
+    pub duration: Option<u64>,
 }
 
 #[derive(Deserialize)]
 struct TimelineAssetResponse {
     id: String,
+    #[serde(rename = "type", default = "default_image_type")]
+    asset_type: String,
     #[serde(rename = "exifInfo", alias = "exif")]
     exif: TimelineAssetExif,
+    #[serde(default, deserialize_with = "deserialize_duration")]
+    duration: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -32,6 +42,30 @@ struct TimelineAssetExif {
     width: u32,
     #[serde(rename = "imageHeight", alias = "height")]
     height: u32,
+    #[serde(rename = "dateTimeOriginal", default)]
+    taken_at: Option<String>,
+    #[serde(default)]
+    make: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(rename = "fileSizeInByte", default)]
+    file_size: Option<u64>,
+}
+
+fn default_image_type() -> String {
+    "IMAGE".to_string()
+}
+
+fn deserialize_duration<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|value| match value {
+        serde_json::Value::Number(number) => number.as_u64(),
+        serde_json::Value::String(value) => value.parse().ok(),
+        _ => None,
+    }))
 }
 
 impl ImmichClient {
@@ -86,6 +120,12 @@ impl ImmichClient {
                 id: asset.id,
                 width: asset.exif.width,
                 height: asset.exif.height,
+                r#type: asset.asset_type,
+                taken_at: asset.exif.taken_at,
+                camera_make: asset.exif.make,
+                camera_model: asset.exif.model,
+                file_size: asset.exif.file_size,
+                duration: asset.duration,
             })
             .collect())
     }
@@ -111,7 +151,7 @@ mod tests {
             ));
             assert!(request.contains("x-api-key: test-key"));
             let body =
-                b"[{\"id\":\"asset-1\",\"exifInfo\":{\"imageWidth\":640,\"imageHeight\":480}}]";
+                b"[{\"id\":\"asset-1\",\"type\":\"VIDEO\",\"duration\":65,\"exifInfo\":{\"imageWidth\":640,\"imageHeight\":480,\"dateTimeOriginal\":\"2025-03-01T12:30:00.000Z\",\"make\":\"Canon\",\"model\":\"EOS R6\",\"fileSizeInByte\":1234}}]";
             stream
                 .write_all(
                     format!(
@@ -142,6 +182,9 @@ mod tests {
         assert_eq!(assets[0].id, "asset-1");
         assert_eq!(assets[0].width, 640);
         assert_eq!(assets[0].height, 480);
+        assert_eq!(assets[0].r#type, "VIDEO");
+        assert_eq!(assets[0].duration, Some(65));
+        assert_eq!(assets[0].camera_model.as_deref(), Some("EOS R6"));
         server.await.unwrap();
     }
 }

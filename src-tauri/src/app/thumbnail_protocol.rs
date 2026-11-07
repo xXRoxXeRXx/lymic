@@ -6,7 +6,10 @@ use std::{
     sync::Arc,
     time::SystemTime,
 };
-use tauri::http::{header, Response, StatusCode};
+use tauri::{
+    http::{header, Response, StatusCode},
+    Manager,
+};
 use tokio::sync::Semaphore;
 
 const CACHE_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;

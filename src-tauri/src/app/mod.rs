@@ -1,3 +1,4 @@
+mod asset_protocol;
 pub(crate) mod background;
 pub(crate) mod events;
 pub(crate) mod locale;
@@ -21,7 +22,7 @@ fn should_start_in_background(args: &[OsString], has_credentials: bool) -> bool 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub(crate) fn run() {
-    thumbnail_protocol::register(tauri::Builder::default())
+    asset_protocol::register(thumbnail_protocol::register(tauri::Builder::default()))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
