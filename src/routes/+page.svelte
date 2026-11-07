@@ -262,7 +262,7 @@
         </div>
       </header>
 
-      <main class="flex-1 overflow-y-auto p-8 flex flex-col space-y-6">
+      <main class="flex-1 {currentView === 'photos' ? 'overflow-hidden p-8' : 'overflow-y-auto p-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
