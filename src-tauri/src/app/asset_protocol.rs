@@ -28,10 +28,14 @@ async fn serve(uri: Uri, range: Option<&str>) -> Response<Vec<u8>> {
         Ok(authenticated) => authenticated,
         Err(error) => return error_response(StatusCode::UNAUTHORIZED, &error),
     };
-    let effective_range = (kind == "video")
-        .then(|| bounded_video_range(range))
-        .or_else(|| range.map(str::to_string));
-    match client.get_asset(asset_id, effective_range.as_deref()).await {
+    let result = match kind {
+        "video" => {
+            let effective_range = bounded_video_range(range);
+            client.get_asset(asset_id, Some(&effective_range)).await
+        }
+        _ => client.get_asset_preview(asset_id).await,
+    };
+    match result {
         Ok(response) => asset_response(response),
         Err(error) => error_response(
             StatusCode::BAD_GATEWAY,

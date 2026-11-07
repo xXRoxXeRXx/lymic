@@ -30,6 +30,7 @@
   let activeBuckets = $state<Record<string, boolean>>({});
   let viewportWidth = $state(616);
   let isDragging = false;
+  let scrollRaf: number | null = null;
   let selectedAsset = $state<TimelineAsset | null>(null);
   let selectedIndex = $state(-1);
   let opener = $state<HTMLElement | null>(null);
@@ -70,7 +71,8 @@
     activeTimeBucket = timeBucket;
   }
 
-  function syncActiveBucket() {
+  function updateActiveBucket() {
+    if (!viewport) return;
     let visibleBucket = scrubberMonths[0] ?? null;
     for (const timeBucket of scrubberMonths) {
       const section = document.getElementById(bucketId(timeBucket));
@@ -79,8 +81,22 @@
     activeTimeBucket = visibleBucket;
   }
 
-  function jumpFromPointer(clientY: number) {
-    const bounds = viewport.getBoundingClientRect();
+  function syncActiveBucket() {
+    if (scrollRaf !== null) return;
+    updateActiveBucket();
+    if (typeof requestAnimationFrame === "function") {
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = null;
+        updateActiveBucket();
+      });
+    }
+  }
+
+  function jumpFromPointer(clientY: number, trackElement?: HTMLElement | null) {
+    const trackBounds = trackElement?.getBoundingClientRect();
+    const bounds =
+      trackBounds && trackBounds.height > 0 ? trackBounds : viewport.getBoundingClientRect();
+    if (bounds.height <= 0) return;
     const ratio = Math.max(0, Math.min(1, (clientY - bounds.top) / bounds.height));
     const index = Math.round(ratio * (scrubberMonths.length - 1));
     const timeBucket = scrubberMonths[index];
@@ -89,12 +105,16 @@
 
   function startDrag(event: PointerEvent) {
     isDragging = true;
-    (event.currentTarget as HTMLElement | null)?.setPointerCapture(event.pointerId);
-    jumpFromPointer(event.clientY);
+    const thumb = event.currentTarget as HTMLElement | null;
+    thumb?.setPointerCapture(event.pointerId);
+    jumpFromPointer(event.clientY, thumb?.parentElement);
   }
 
   function drag(event: PointerEvent) {
-    if (isDragging) jumpFromPointer(event.clientY);
+    if (isDragging) {
+      const thumb = event.currentTarget as HTMLElement | null;
+      jumpFromPointer(event.clientY, thumb?.parentElement);
+    }
   }
 
   function endDrag() {
@@ -336,7 +356,7 @@
         <div class="flex gap-2">
           <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label={$t("timeline_previous_asset")} onclick={() => navigate(-1)}>{$t("timeline_previous")}</button>
           <button type="button" class="rounded bg-white/15 px-3 py-2" aria-label={$t("timeline_next_asset")} onclick={() => navigate(1)}>{$t("timeline_next")}</button>
-          <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2" aria-label={$t("timeline_open_in_immich")} onclick={() => selectedAsset && onOpenExternalUrl(assetUrl(selectedAsset))}>{$t("timeline_open_in_immich")} <ExternalLink class="h-4 w-4" /></button>
+          <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 disabled:opacity-50" aria-label={$t("timeline_open_in_immich")} disabled={!serverUrl.trim()} onclick={() => selectedAsset && serverUrl.trim() && onOpenExternalUrl(assetUrl(selectedAsset))}>{$t("timeline_open_in_immich")} <ExternalLink class="h-4 w-4" /></button>
         </div>
       </div>
     </dialog>

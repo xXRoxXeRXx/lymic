@@ -322,6 +322,19 @@ impl ImmichClient {
             .map_err(|error| format!("Failed to read thumbnail: {error}"))
     }
 
+    pub(crate) async fn get_asset_preview(&self, asset_id: &str) -> Result<AssetResponse, String> {
+        Self::validate_path_segment(asset_id, "asset ID")?;
+        let response = self
+            .client
+            .get(self.endpoint_url(&format!("assets/{asset_id}/thumbnail")))
+            .query(&[("size", "preview")])
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to fetch asset preview: {error}"))?;
+        Self::read_asset_response(response, MAX_THUMBNAIL_BYTES).await
+    }
+
     pub(crate) async fn get_asset(
         &self,
         asset_id: &str,
@@ -339,6 +352,13 @@ impl ImmichClient {
             .send()
             .await
             .map_err(|error| format!("Failed to fetch asset: {error}"))?;
+        Self::read_asset_response(response, MAX_ASSET_RESPONSE_BYTES).await
+    }
+
+    async fn read_asset_response(
+        response: reqwest::Response,
+        max_bytes: usize,
+    ) -> Result<AssetResponse, String> {
         let status = response.status();
         if !status.is_success() {
             return Err(format!(
@@ -347,7 +367,7 @@ impl ImmichClient {
             ));
         }
         let headers = response.headers().clone();
-        let body = read_response_body_limited(response, MAX_ASSET_RESPONSE_BYTES)
+        let body = read_response_body_limited(response, max_bytes)
             .await
             .map_err(|error| format!("Failed to read asset: {error}"))?;
         let header = |name| {
@@ -561,6 +581,40 @@ mod tests {
         assert_eq!(response.status, 206);
         assert_eq!(response.content_range.as_deref(), Some("bytes 10-19/100"));
         assert_eq!(response.accept_ranges.as_deref(), Some("bytes"));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetches_lightbox_photo_preview_from_immich_preview_thumbnail_endpoint() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request = read_http_request(&mut stream).await;
+            let request = String::from_utf8_lossy(&request);
+            assert!(request.starts_with("GET /api/assets/photo-1/thumbnail?size=preview HTTP/1.1"));
+            assert!(request.contains("x-api-key: test-key"));
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\ncontent-type: image/jpeg\r\ncontent-length: 4\r\nconnection: close\r\n\r\njpeg",
+                )
+                .await
+                .unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let response = client.get_asset_preview("photo-1").await.unwrap();
+
+        assert_eq!(response.status, 200);
+        assert_eq!(response.content_type.as_deref(), Some("image/jpeg"));
+        assert_eq!(response.body, b"jpeg");
         server.await.unwrap();
     }
 
