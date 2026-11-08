@@ -25,7 +25,7 @@
   import { createTimelineController } from "#lib/controllers/timeline-controller.svelte.ts";
   import { createPeopleController } from "#lib/controllers/people-controller.svelte.ts";
   import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
-  import type { RecognizedPerson } from "#lib/contracts";
+  import type { RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
@@ -60,7 +60,7 @@
   let selectedPerson = $state<RecognizedPerson | null>(null);
   let personTimeline = $state<ReturnType<typeof createPersonTimelineController> | null>(null);
   let peopleScrollTop = 0;
-  let content: HTMLElement;
+  let content = $state<HTMLElement>();
 
   function selectPerson(person: RecognizedPerson) {
     peopleScrollTop = content?.scrollTop ?? 0;

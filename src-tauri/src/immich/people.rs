@@ -1,8 +1,15 @@
 use super::client::ImmichClient;
-use super::response::{
-    read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
-};
+use super::response::{read_response_body_limited, MAX_SUCCESS_RESPONSE_BYTES};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+
+fn recognized_people_access_error(status: StatusCode) -> String {
+    match status {
+        StatusCode::UNAUTHORIZED => "recognized_people_authentication_required:people".to_string(),
+        StatusCode::FORBIDDEN => "recognized_people_permission_denied:people:configure an API key with person.read and asset.read permissions".to_string(),
+        _ => "recognized_people_unavailable:people".to_string(),
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -41,10 +48,7 @@ impl ImmichClient {
             .await
             .map_err(|_| "Unable to load recognized people".to_string())?;
         if !response.status().is_success() {
-            return Err(format!(
-                "Unable to load recognized people: {}",
-                response_status_error(response).await?
-            ));
+            return Err(recognized_people_access_error(response.status()));
         }
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         let response: PeopleResponse = serde_json::from_slice(&body)

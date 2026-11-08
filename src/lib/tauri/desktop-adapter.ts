@@ -23,6 +23,7 @@ import type {
   TimelineBucket,
   TimelineAsset,
   PeoplePage,
+  PersonTimelinePage,
 } from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
 
@@ -65,7 +66,7 @@ export interface TimelineDesktopAdapter {
 }
 export interface PeopleDesktopAdapter {
   getPeople(page: number, size: number): Promise<PeoplePage>;
-  getPersonTimelineAssets(personId: string): Promise<TimelineAsset[]>;
+  getPersonTimelineAssets(personId: string, page: number, size: number): Promise<PersonTimelinePage>;
 }
 
 export interface PreferencesDesktopAdapter {
@@ -153,7 +154,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
   getPeople: (page, size) => invoke<PeoplePage>("get_people", { page, size }),
-  getPersonTimelineAssets: (personId) => invoke<TimelineAsset[]>("get_person_timeline_assets", { personId }),
+  getPersonTimelineAssets: (personId, page, size) => invoke<PersonTimelinePage>("get_person_timeline_assets", { personId, page, size }),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),

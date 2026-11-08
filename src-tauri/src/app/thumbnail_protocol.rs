@@ -21,6 +21,21 @@ const MAX_CONCURRENT_DOWNLOADS: usize = 12;
 const MAX_QUEUED_WAITERS: usize = 256;
 const EVICTION_CHECK_INTERVAL_WRITES: u64 = 64;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ThumbnailKind {
+    Asset,
+    Person,
+}
+
+impl ThumbnailKind {
+    fn cache_key(self) -> &'static str {
+        match self {
+            Self::Asset => "asset",
+            Self::Person => "person",
+        }
+    }
+}
+
 struct ViewportPriorityPool {
     semaphore: Arc<Semaphore>,
     waiters: Mutex<VecDeque<oneshot::Sender<OwnedSemaphorePermit>>>,
@@ -167,9 +182,8 @@ async fn serve(
         return image_response(bytes);
     }
     let result = match kind {
-        "asset" => client.get_thumbnail(&id).await,
-        "person" => client.get_person_thumbnail(&id).await,
-        _ => unreachable!("thumbnail targets are validated"),
+        ThumbnailKind::Asset => client.get_thumbnail(&id).await,
+        ThumbnailKind::Person => client.get_person_thumbnail(&id).await,
     };
     drop(permit);
     match result {
@@ -199,20 +213,28 @@ fn account_cache_dir(cache_root: &Path, account_id: &str) -> PathBuf {
     cache_root.join(format!("{:x}", Sha256::digest(account_id.as_bytes())))
 }
 
-fn thumbnail_target(uri: &tauri::http::Uri) -> Option<(&str, &str)> {
-    super::asset_protocol::protocol_target(uri, &["asset", "person"])
+fn thumbnail_target(uri: &tauri::http::Uri) -> Option<(ThumbnailKind, &str)> {
+    let (kind, id) = super::asset_protocol::protocol_target(uri, &["asset", "person"])?;
+    Some((
+        match kind {
+            "asset" => ThumbnailKind::Asset,
+            "person" => ThumbnailKind::Person,
+            _ => return None,
+        },
+        id,
+    ))
 }
 
 fn asset_id(uri: &tauri::http::Uri) -> Option<&str> {
-    thumbnail_target(uri).and_then(|(kind, id)| (kind == "asset").then_some(id))
+    thumbnail_target(uri).and_then(|(kind, id)| (kind == ThumbnailKind::Asset).then_some(id))
 }
-fn cache_path(cache_dir: &Path, kind: &str, id: &str) -> PathBuf {
+fn cache_path(cache_dir: &Path, kind: ThumbnailKind, id: &str) -> PathBuf {
     cache_dir.join(format!(
         "{:x}.image",
-        Sha256::digest(format!("{kind}:{id}").as_bytes())
+        Sha256::digest(format!("{}:{id}", kind.cache_key()).as_bytes())
     ))
 }
-fn read_cached(cache_dir: &Path, kind: &str, id: &str) -> Result<Option<Vec<u8>>, String> {
+fn read_cached(cache_dir: &Path, kind: ThumbnailKind, id: &str) -> Result<Option<Vec<u8>>, String> {
     let path = cache_path(cache_dir, kind, id);
     match fs::read(&path) {
         Ok(bytes) => {
@@ -238,16 +260,21 @@ fn is_webp(bytes: &[u8]) -> bool {
 fn is_jpeg(bytes: &[u8]) -> bool {
     bytes.len() >= 4 && bytes.starts_with(&[0xFF, 0xD8]) && bytes.ends_with(&[0xFF, 0xD9])
 }
-fn is_valid_image(kind: &str, bytes: &[u8]) -> bool {
-    is_webp(bytes) || (kind == "person" && is_jpeg(bytes))
+fn is_valid_image(kind: ThumbnailKind, bytes: &[u8]) -> bool {
+    is_webp(bytes) || (kind == ThumbnailKind::Person && is_jpeg(bytes))
 }
 #[cfg(test)]
-fn write_cached(cache_dir: &Path, kind: &str, id: &str, bytes: &[u8]) -> Result<(), String> {
+fn write_cached(
+    cache_dir: &Path,
+    kind: ThumbnailKind,
+    id: &str,
+    bytes: &[u8],
+) -> Result<(), String> {
     write_cached_with_eviction(cache_dir, kind, id, bytes, true)
 }
 fn write_cached_with_eviction(
     cache_dir: &Path,
-    kind: &str,
+    kind: ThumbnailKind,
     id: &str,
     bytes: &[u8],
     run_eviction: bool,
@@ -328,9 +355,9 @@ mod tests {
     #[test]
     fn cache_key_does_not_expose_asset_id_and_reuses_bytes() {
         let dir = temp_dir();
-        write_cached(&dir, "asset", "asset/unsafe", VALID_WEBP).unwrap();
+        write_cached(&dir, ThumbnailKind::Asset, "asset/unsafe", VALID_WEBP).unwrap();
         assert_eq!(
-            read_cached(&dir, "asset", "asset/unsafe").unwrap(),
+            read_cached(&dir, ThumbnailKind::Asset, "asset/unsafe").unwrap(),
             Some(VALID_WEBP.to_vec())
         );
         assert!(!fs::read_dir(&dir)
@@ -357,7 +384,7 @@ mod tests {
         );
         assert_eq!(
             thumbnail_target(&"lymic-thumb://person/person-1".parse().unwrap()),
-            Some(("person", "person-1"))
+            Some((ThumbnailKind::Person, "person-1"))
         );
         assert!(thumbnail_target(&"lymic-thumb://person/not/a-person".parse().unwrap()).is_none());
     }
@@ -365,17 +392,17 @@ mod tests {
     fn separates_person_and_asset_cache_identities() {
         let dir = temp_dir();
         assert_ne!(
-            cache_path(&dir, "asset", "shared-id"),
-            cache_path(&dir, "person", "shared-id")
+            cache_path(&dir, ThumbnailKind::Asset, "shared-id"),
+            cache_path(&dir, ThumbnailKind::Person, "shared-id")
         );
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn reuses_valid_person_thumbnail_cache_entries() {
         let dir = temp_dir();
-        write_cached(&dir, "person", "person-1", VALID_JPEG).unwrap();
+        write_cached(&dir, ThumbnailKind::Person, "person-1", VALID_JPEG).unwrap();
         assert_eq!(
-            read_cached(&dir, "person", "person-1").unwrap(),
+            read_cached(&dir, ThumbnailKind::Person, "person-1").unwrap(),
             Some(VALID_JPEG.to_vec())
         );
         fs::remove_dir_all(dir).unwrap();
@@ -384,26 +411,29 @@ mod tests {
     fn removes_corrupt_cache_entries_before_refetching() {
         let dir = temp_dir();
         fs::create_dir_all(&dir).unwrap();
-        fs::write(cache_path(&dir, "asset", "asset"), b"not-webp").unwrap();
-        assert_eq!(read_cached(&dir, "asset", "asset").unwrap(), None);
-        assert!(!cache_path(&dir, "asset", "asset").exists());
+        fs::write(cache_path(&dir, ThumbnailKind::Asset, "asset"), b"not-webp").unwrap();
+        assert_eq!(
+            read_cached(&dir, ThumbnailKind::Asset, "asset").unwrap(),
+            None
+        );
+        assert!(!cache_path(&dir, ThumbnailKind::Asset, "asset").exists());
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn evicts_least_recently_modified_thumbnails_when_exceeding_limit() {
         let dir = temp_dir();
-        write_cached_with_eviction(&dir, "asset", "older", VALID_WEBP, false).unwrap();
-        let older_path = cache_path(&dir, "asset", "older");
+        write_cached_with_eviction(&dir, ThumbnailKind::Asset, "older", VALID_WEBP, false).unwrap();
+        let older_path = cache_path(&dir, ThumbnailKind::Asset, "older");
         fs::OpenOptions::new()
             .write(true)
             .open(&older_path)
             .unwrap()
             .set_modified(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(10))
             .unwrap();
-        write_cached_with_eviction(&dir, "asset", "newer", VALID_WEBP, false).unwrap();
+        write_cached_with_eviction(&dir, ThumbnailKind::Asset, "newer", VALID_WEBP, false).unwrap();
         evict_to_limit(&dir, VALID_WEBP.len() as u64).unwrap();
         assert!(!older_path.exists());
-        assert!(cache_path(&dir, "asset", "newer").exists());
+        assert!(cache_path(&dir, ThumbnailKind::Asset, "newer").exists());
         fs::remove_dir_all(dir).unwrap();
     }
     #[tokio::test]

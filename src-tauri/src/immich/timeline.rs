@@ -2,6 +2,7 @@ use super::client::ImmichClient;
 use super::response::{
     read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
 };
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -23,6 +24,21 @@ pub struct TimelineAsset {
     pub camera_model: Option<String>,
     pub file_size: Option<u64>,
     pub duration: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PersonTimelinePage {
+    pub assets: Vec<TimelineAsset>,
+    pub has_next_page: bool,
+}
+
+fn recognized_people_access_error(status: StatusCode, resource: &str) -> String {
+    match status {
+        StatusCode::UNAUTHORIZED => format!("recognized_people_authentication_required:{resource}"),
+        StatusCode::FORBIDDEN => format!("recognized_people_permission_denied:{resource}:configure an API key with person.read and asset.read permissions"),
+        _ => format!("recognized_people_unavailable:{resource}"),
+    }
 }
 
 #[derive(Deserialize)]
@@ -140,46 +156,67 @@ impl ImmichClient {
     pub async fn get_person_timeline_assets(
         &self,
         person_id: &str,
-    ) -> Result<Vec<TimelineAsset>, String> {
+        page: u32,
+        size: u32,
+    ) -> Result<PersonTimelinePage, String> {
         Self::validate_path_segment(person_id, "person ID")?;
         let response = self
             .client
             .post(self.endpoint_url("search/metadata"))
             .header("x-api-key", &self.api_key)
-            .json(&serde_json::json!({ "personIds": [person_id], "size": 1000, "page": 1 }))
+            .json(&serde_json::json!({ "personIds": [person_id], "size": size, "page": page }))
             .send()
             .await
             .map_err(|_| "Unable to load recognized person assets".to_string())?;
         if !response.status().is_success() {
-            return Err(format!(
-                "Unable to load recognized person assets: {}",
-                response_status_error(response).await?
+            return Err(recognized_people_access_error(
+                response.status(),
+                "timeline",
             ));
         }
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         let value: serde_json::Value = serde_json::from_slice(&body)
             .map_err(|_| "Invalid recognized person assets response".to_string())?;
-        let assets = value
-            .get("assets")
+        let response_assets = value.get("assets");
+        let assets = response_assets
             .and_then(|assets| assets.get("items"))
-            .or_else(|| value.get("assets"))
+            .or(response_assets)
             .unwrap_or(&value);
         let assets: Vec<TimelineAssetResponse> = serde_json::from_value(assets.clone())
             .map_err(|_| "Invalid recognized person assets response".to_string())?;
-        Ok(assets
-            .into_iter()
-            .map(|asset| TimelineAsset {
-                id: asset.id,
-                width: asset.exif.width,
-                height: asset.exif.height,
-                r#type: asset.asset_type,
-                taken_at: asset.exif.taken_at,
-                camera_make: asset.exif.make,
-                camera_model: asset.exif.model,
-                file_size: asset.exif.file_size,
-                duration: asset.duration,
+        let has_next_page = response_assets
+            .and_then(|assets| {
+                assets
+                    .get("hasNextPage")
+                    .and_then(serde_json::Value::as_bool)
             })
-            .collect())
+            .or_else(|| {
+                response_assets
+                    .and_then(|assets| assets.get("nextPage"))
+                    .and_then(serde_json::Value::as_bool)
+            })
+            .unwrap_or_else(|| {
+                response_assets
+                    .and_then(|assets| assets.get("total").and_then(serde_json::Value::as_u64))
+                    .is_some_and(|total| u64::from(page) * u64::from(size) < total)
+            });
+        Ok(PersonTimelinePage {
+            assets: assets
+                .into_iter()
+                .map(|asset| TimelineAsset {
+                    id: asset.id,
+                    width: asset.exif.width,
+                    height: asset.exif.height,
+                    r#type: asset.asset_type,
+                    taken_at: asset.exif.taken_at,
+                    camera_make: asset.exif.make,
+                    camera_model: asset.exif.model,
+                    file_size: asset.exif.file_size,
+                    duration: asset.duration,
+                })
+                .collect(),
+            has_next_page,
+        })
     }
 
     pub async fn get_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
@@ -453,10 +490,14 @@ mod tests {
         )
         .unwrap();
 
-        let assets = client.get_person_timeline_assets("person-1").await.unwrap();
+        let assets = client
+            .get_person_timeline_assets("person-1", 1, 250)
+            .await
+            .unwrap();
 
-        assert_eq!(assets.len(), 1);
-        assert_eq!(assets[0].id, "asset-1");
+        assert_eq!(assets.assets.len(), 1);
+        assert_eq!(assets.assets[0].id, "asset-1");
+        assert!(!assets.has_next_page);
         assert_eq!(
             assets[0].taken_at.as_deref(),
             Some("2025-03-01T12:30:00.000Z")

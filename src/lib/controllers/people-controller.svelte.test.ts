@@ -9,6 +9,7 @@ describe("People controller", () => {
         .mockResolvedValueOnce({ people: [{ id: "one", name: "Ada", assetCount: 4, thumbnailPath: null }], hasNextPage: true })
         .mockResolvedValueOnce({ people: [{ id: "two", name: null, assetCount: 1, thumbnailPath: null }], hasNextPage: false })
         .mockRejectedValueOnce(new Error("offline")),
+      getPersonTimelineAssets: vi.fn(),
     };
     const people = createPeopleController(adapter);
     await people.refresh();
