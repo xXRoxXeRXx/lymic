@@ -11,14 +11,18 @@ function peopleState(thumbnailPath: string | null, onSelect = vi.fn()): PeopleVi
     isLoading: false,
     isRefreshing: false,
     isOffline: false,
+    hasNextPage: false,
     error: null,
     refresh: vi.fn(),
+    loadMore: vi.fn(),
     clear: vi.fn(),
     onSelect,
   };
 }
 
 afterEach(cleanup);
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("PeopleView thumbnails", () => {
   it("renders an available person thumbnail through the credential-safe protocol", () => {
@@ -45,4 +49,26 @@ it("opens the selected Recognized Person", async () => {
   render(PeopleView, { people: peopleState(null, onSelect) });
   await fireEvent.click(screen.getByRole("button", { name: "Ada" }));
   expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "person-1" }));
+});
+
+it("loads the next people page when the end marker enters the app scroll container", () => {
+  const loadMore = vi.fn();
+  let observedOptions: IntersectionObserverInit | undefined;
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(private readonly callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+      observedOptions = options;
+    }
+    observe(target: Element) {
+      this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+    }
+    disconnect() {}
+  });
+  const people = { ...peopleState(null), hasNextPage: true, loadMore };
+  const main = document.createElement("main");
+  document.body.append(main);
+
+  render(PeopleView, { people }, { baseElement: main });
+
+  expect(loadMore).toHaveBeenCalledOnce();
+  expect(observedOptions?.root).toBe(main);
 });

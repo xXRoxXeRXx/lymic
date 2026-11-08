@@ -21,6 +21,15 @@
   function hideThumbnail(personId: string) {
     failedThumbnailIds = new Set(failedThumbnailIds).add(personId);
   }
+
+  function loadMoreWhenVisible(node: HTMLElement) {
+    if (typeof IntersectionObserver === "undefined") return {};
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void people.loadMore();
+    }, { root: node.closest("main"), rootMargin: "400px 0px" });
+    observer.observe(node);
+    return { destroy: () => observer.disconnect() };
+  }
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-4" aria-label={$t("people_title")}>
@@ -46,5 +55,6 @@
       </button>
     {/each}
   </div>
+  {#if people.hasNextPage}<div use:loadMoreWhenVisible class="h-px" aria-hidden="true"></div>{/if}
   {/if}
 </div>
