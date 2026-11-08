@@ -266,6 +266,19 @@ describe("Album Timelines", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Photo Timeline is offline");
     expect(screen.getByText("Mar 2025")).toBeInTheDocument();
   });
+
+  it("shows an album loading error instead of an empty album when its first timeline request fails", async () => {
+    renderAuthenticatedPage({
+      get_album_catalogue: async () => [{ id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null }],
+      get_album_timeline: async () => { throw new Error("offline"); },
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
+    await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Albums could not be loaded.");
+    expect(screen.queryByText("This album has no reachable photos yet.")).not.toBeInTheDocument();
+  });
 });
 
 describe("application updates", () => {

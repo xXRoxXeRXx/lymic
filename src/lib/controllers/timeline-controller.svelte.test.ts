@@ -55,6 +55,20 @@ describe("Photo Timeline controller", () => {
     expect(timeline.isOffline).toBe(true);
   });
 
+  it("distinguishes an initial load failure from a successfully empty timeline", async () => {
+    const adapter: TimelineDesktopAdapter = {
+      getTimelineBuckets: vi.fn().mockRejectedValue(new Error("Connection refused")),
+      getTimelineBucketAssets: vi.fn(),
+    };
+    const timeline = createTimelineController(adapter);
+
+    await timeline.refresh();
+
+    expect(timeline.buckets).toEqual([]);
+    expect(timeline.hasInitialLoadError).toBe(true);
+    expect(timeline.isOffline).toBe(true);
+  });
+
   it("clears the offline state after a successful retry", async () => {
     const adapter: TimelineDesktopAdapter = {
       getTimelineBuckets: vi.fn()

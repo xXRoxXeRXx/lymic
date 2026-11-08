@@ -186,6 +186,8 @@ impl ImmichClient {
                 .header("x-api-key", &self.api_key)
                 .json(&serde_json::json!({
                     "albumIds": [album_id],
+                    "order": "fileCreatedAt",
+                    "orderDirection": "desc",
                     "page": page,
                     "size": PAGE_SIZE,
                 }))
@@ -645,6 +647,8 @@ mod tests {
                 assert!(request.contains(&format!(r#""page":{expected_page}"#)));
                 assert!(request.contains(r#""size":1000"#));
                 assert!(request.contains(r#""albumIds":["album-1"]"#));
+                assert!(request.contains(r#""order":"fileCreatedAt""#));
+                assert!(request.contains(r#""orderDirection":"desc""#));
                 assert!(!request.contains("/api/albums/album-1"));
                 stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
                 stream.write_all(body).await.unwrap();

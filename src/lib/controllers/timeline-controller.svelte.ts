@@ -6,6 +6,7 @@ export interface TimelineViewState {
   readonly isLoading: boolean;
   readonly isRefreshing: boolean;
   readonly isOffline: boolean;
+  readonly hasInitialLoadError: boolean;
   assetsFor(timeBucket: string): TimelineAsset[];
   activateBucket(timeBucket: string): Promise<void>;
   refresh(): Promise<void>;
@@ -17,6 +18,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   let isLoading = $state(false);
   let isRefreshing = $state(false);
   let isOffline = $state(false);
+  let hasInitialLoadError = $state(false);
   let latestRequest = 0;
   let assetGeneration = 0;
   let assetsByBucket = $state<Record<string, TimelineAsset[]>>({});
@@ -41,11 +43,13 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
         staleBuckets.clear();
         for (const timeBucket of Object.keys(assetsByBucket)) staleBuckets.add(timeBucket);
         isOffline = false;
+        hasInitialLoadError = false;
       }
     } catch (error) {
       if (request === latestRequest) {
         console.warn("Failed to refresh Photo Timeline", error);
         isOffline = true;
+        hasInitialLoadError = buckets.length === 0;
       }
     } finally {
       if (request === latestRequest) {
@@ -61,6 +65,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     isLoading = false;
     isRefreshing = false;
     isOffline = false;
+    hasInitialLoadError = false;
     assetsByBucket = {};
     pendingBuckets.clear();
     staleBuckets.clear();
@@ -96,6 +101,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     get isLoading() { return isLoading; },
     get isRefreshing() { return isRefreshing; },
     get isOffline() { return isOffline; },
+    get hasInitialLoadError() { return hasInitialLoadError; },
     assetsFor,
     activateBucket,
     refresh,
