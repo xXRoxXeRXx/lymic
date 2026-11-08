@@ -28,6 +28,10 @@ _Avoid_: remote filesystem, destination folder
 An optional album in the Immich Library associated with one Watched Folder. Every asset discovered in that folder is intended to belong to this album.
 _Avoid_: target folder, sync album, destination album
 
+**Album**:
+A user-visible collection of Remote Assets in the Immich Library. An Album can be owned by or shared with the authenticated user; a Target Album is an Album used for Watched Folder assignment.
+_Avoid_: folder, directory, sync album
+
 **Exclusion Pattern**:
 A user-defined rule on a Watched Folder that excludes matching paths from Media Asset discovery.
 _Avoid_: ignore rule, filter, exclusion filter
@@ -115,3 +119,7 @@ _Avoid_: image cache, photo store
 **Timeline Scrubber**:
 A vertical control alongside the Photo Timeline displaying years and months to enable fast jumping to any time period.
 _Avoid_: date slider, fast scroll bar, year index
+
+**Album Timeline**:
+The chronological presentation of the Remote Assets belonging to one Album, grouped into time buckets like the Photo Timeline.
+_Avoid_: album grid, album gallery
