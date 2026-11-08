@@ -716,4 +716,31 @@ mod tests {
         );
         server.await.unwrap();
     }
+
+    #[tokio::test]
+    async fn rejects_malformed_album_metadata_responses_without_exposing_the_api_key() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request).await.unwrap();
+            let body = br#"{not-json"#;
+            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "album-api-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let error = client.get_album_timeline("album-1").await.unwrap_err();
+        assert!(error.starts_with("Invalid album timeline response:"));
+        assert!(!error.contains("album-api-key"));
+        server.await.unwrap();
+    }
 }

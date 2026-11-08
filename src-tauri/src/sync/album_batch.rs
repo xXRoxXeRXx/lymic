@@ -318,4 +318,88 @@ mod tests {
             Some("remote-photo")
         );
     }
+
+    #[tokio::test]
+    async fn failed_target_album_assignment_stays_failed_with_its_persisted_remote_id_for_retry() {
+        let pool = test_pool().await;
+        let album_id = AlbumId::new("deleted-album");
+        db::enqueue_sync_assets(
+            &pool,
+            &[QueueAsset {
+                path: "photo.jpg",
+                size: 123,
+                mtime: 42,
+                target_album_id: Some(&album_id),
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        let pending = begin_upload_unit_completion(
+            &pool,
+            upload_unit(album_id),
+            RemoteAssetId::new("remote-photo"),
+            1,
+        )
+        .await
+        .unwrap()
+        .into_pending_album()
+        .unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = tokio::io::AsyncReadExt::read(&mut stream, &mut buf).await;
+            let response = r#"{"message":"Album not found"}"#;
+            stream.write_all(format!("HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", response.len(), response).as_bytes()).await.unwrap();
+        });
+        let server_url = format!("http://{address}");
+        let client = Arc::new(
+            ImmichClient::new(server_url.clone(), "test-key".to_string(), true, None, None)
+                .unwrap(),
+        );
+        let app = tauri::test::mock_app();
+        let audit_context = SyncAuditContext::from_credentials(
+            &AuthConfig {
+                server_url,
+                api_key: "test-key".to_string(),
+                allow_local_http: true,
+                cloudflare_client_id: None,
+                cloudflare_client_secret: None,
+            },
+            "manual_sync",
+        );
+        let mut queue_results = Vec::new();
+        let mut uploaded = 0;
+
+        assign_pending_album_units(
+            &client,
+            &pool,
+            app.handle(),
+            &audit_context,
+            vec![pending],
+            &mut queue_results,
+            &mut uploaded,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            queue_results,
+            [("photo.jpg".to_string(), "FAILED".to_string())]
+        );
+        assert_eq!(uploaded, 0);
+        let queue =
+            sqlx::query("SELECT status, remote_id FROM sync_queue WHERE local_path = 'photo.jpg'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(queue.get::<String, _>("status"), "FAILED");
+        assert_eq!(
+            queue.get::<Option<String>, _>("remote_id").as_deref(),
+            Some("remote-photo")
+        );
+    }
 }
