@@ -30,6 +30,7 @@ import {
   tauriDesktopAdapter,
   type AlbumsDesktopAdapter,
   type AlbumCatalogueDesktopAdapter,
+  type AlbumTimelineDesktopAdapter,
   type AuthDesktopAdapter,
   type PreferencesDesktopAdapter,
   type RemovableVolumeDesktopAdapter,
@@ -46,6 +47,7 @@ describe("tauriDesktopAdapter", () => {
   const albumsAdapter: AlbumsDesktopAdapter = tauriDesktopAdapter;
   const albumCatalogueAdapter: AlbumCatalogueDesktopAdapter = tauriDesktopAdapter;
   const timelineAdapter: TimelineDesktopAdapter = tauriDesktopAdapter;
+  const albumTimelineAdapter: AlbumTimelineDesktopAdapter = tauriDesktopAdapter;
   const preferencesAdapter: PreferencesDesktopAdapter = tauriDesktopAdapter;
   const updateAdapter: UpdateDesktopAdapter = tauriDesktopAdapter;
   const removableVolumeAdapter: RemovableVolumeDesktopAdapter = tauriDesktopAdapter;
@@ -86,6 +88,7 @@ describe("tauriDesktopAdapter", () => {
     await albumsAdapter.createAlbum("Summer");
     await timelineAdapter.getTimelineBuckets();
     await timelineAdapter.getTimelineBucketAssets("2025-03-01T00:00:00.000Z");
+    await albumTimelineAdapter.getAlbumTimeline("album-1");
     await tauriDesktopAdapter.getPersonTimelineBuckets("person-1");
     await tauriDesktopAdapter.getPersonTimelineBucketAssets("person-1", "2025-03-01T00:00:00.000Z");
     await preferencesAdapter.getLocaleCatalog();
@@ -139,6 +142,7 @@ describe("tauriDesktopAdapter", () => {
       ["create_album", { name: "Summer" }],
       ["get_timeline_buckets"],
       ["get_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
+      ["get_album_timeline", { albumId: "album-1" }],
       ["get_person_timeline_buckets", { personId: "person-1" }],
       ["get_person_timeline_bucket_assets", { personId: "person-1", timeBucket: "2025-03-01T00:00:00.000Z" }],
       ["get_locale_catalog"],
