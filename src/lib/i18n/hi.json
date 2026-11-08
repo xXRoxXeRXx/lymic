@@ -222,4 +222,6 @@
   ,"lymic_logo": "Lymic लोगो"
   ,"main_navigation": "मुख्य नेविगेशन"
   ,"people_title": "लोग", "people_loading": "लोग लोड हो रहे हैं…", "people_empty": "अभी कोई पहचाना हुआ व्यक्ति नहीं है।", "people_unnamed": "अनाम व्यक्ति", "people_asset_count": "{count} आइटम", "people_load_more": "और लोड करें", "people_refresh": "लोगों को रीफ़्रेश करें", "people_retry": "पुनः प्रयास करें", "people_offline": "लोग ऑफ़लाइन हैं। कैश किया गया डेटा दिखाया जा रहा है।", "people_error": "लोग लोड नहीं हो सके।", "people_unavailable": "लोग उपलब्ध नहीं हैं। चेहरे की पहचान और API अनुमतियाँ जाँचें।"
+  ,"people_return": "Back to People"
+  ,"people_timeline_empty": "This person has no reachable photos yet."
 }

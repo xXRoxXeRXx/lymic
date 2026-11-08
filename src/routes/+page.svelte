@@ -24,6 +24,8 @@
   import { createTargetAlbumCatalogue } from "#lib/controllers/target-album-catalogue.svelte.ts";
   import { createTimelineController } from "#lib/controllers/timeline-controller.svelte.ts";
   import { createPeopleController } from "#lib/controllers/people-controller.svelte.ts";
+  import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
+  import type { RecognizedPerson } from "#lib/contracts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
@@ -55,6 +57,26 @@
   });
   const timeline = createTimelineController(desktop);
   const people = createPeopleController(desktop);
+  let selectedPerson = $state<RecognizedPerson | null>(null);
+  let personTimeline = $state<ReturnType<typeof createPersonTimelineController> | null>(null);
+  let peopleScrollTop = 0;
+  let content: HTMLElement;
+
+  function selectPerson(person: RecognizedPerson) {
+    peopleScrollTop = content?.scrollTop ?? 0;
+    selectedPerson = person;
+    personTimeline = createPersonTimelineController(desktop, person.id);
+    currentView = "person-timeline";
+    void personTimeline.refresh();
+  }
+
+  function returnToPeople() {
+    personTimeline?.clear();
+    personTimeline = null;
+    selectedPerson = null;
+    currentView = "people";
+    queueMicrotask(() => { if (content) content.scrollTop = peopleScrollTop; });
+  }
 
   const auth = createAuthController({
     adapter: desktop,
@@ -73,6 +95,9 @@
       watchedFolders.clear();
       timeline.clear();
       people.clear();
+      personTimeline?.clear();
+      personTimeline = null;
+      selectedPerson = null;
       currentView = "photos";
     },
   });
@@ -271,12 +296,12 @@
       <header class="h-12 px-8 flex items-center justify-between shrink-0 z-10">
         <div class="flex items-center gap-4">
           <h1 class="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {currentView === "photos" ? $t('timeline_title') : currentView === "people" ? $t('people_title') : currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
+            {currentView === "photos" ? $t('timeline_title') : currentView === "people" ? $t('people_title') : currentView === "person-timeline" ? (selectedPerson?.name ?? $t('people_unnamed')) : currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
           </h1>
         </div>
       </header>
 
-      <main class="flex-1 {currentView === 'photos' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} class="flex-1 {currentView === 'photos' || currentView === 'person-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
@@ -305,7 +330,12 @@
         {#if currentView === "photos"}
           <TimelineView {timeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} />
         {:else if currentView === "people"}
-          <PeopleView {people} />
+          <PeopleView people={{ ...people, onSelect: selectPerson }} />
+        {:else if currentView === "person-timeline" && personTimeline}
+          <div class="flex h-full min-h-0 flex-col gap-2">
+            <button type="button" class="self-start rounded-lg px-2 py-1" onclick={returnToPeople}>{$t('people_return')}</button>
+            <TimelineView timeline={personTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} showScrubber={false} emptyMessage={$t('people_timeline_empty')} />
+          </div>
         {:else if currentView === "dashboard"}
           <DashboardView
             status={sync.status}

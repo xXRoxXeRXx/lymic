@@ -19,3 +19,14 @@ pub(crate) async fn get_timeline_bucket_assets(
         .await
         .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }
+
+#[tauri::command]
+pub(crate) async fn get_person_timeline_assets(
+    person_id: String,
+) -> Result<Vec<TimelineAsset>, String> {
+    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
+    client
+        .get_person_timeline_assets(&person_id)
+        .await
+        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
+}

@@ -222,4 +222,6 @@
   ,"lymic_logo": "Lymic-Logo"
   ,"main_navigation": "Hauptnavigation"
   ,"people_title": "Personen", "people_loading": "Personen werden geladen…", "people_empty": "Noch keine erkannten Personen.", "people_unnamed": "Unbenannte Person", "people_asset_count": "{count} Medien", "people_load_more": "Mehr laden", "people_refresh": "Personen aktualisieren", "people_retry": "Erneut versuchen", "people_offline": "Personen sind offline. Zwischengespeicherte Personen werden angezeigt.", "people_error": "Personen konnten nicht geladen werden.", "people_unavailable": "Personen sind nicht verfügbar. Prüfen Sie Gesichtserkennung und API-Berechtigungen."
+  ,"people_return": "Zurück zu Personen"
+  ,"people_timeline_empty": "Diese Person hat noch keine erreichbaren Fotos."
 }

@@ -5,7 +5,7 @@ import "../i18n";
 import PeopleView from "./PeopleView.svelte";
 import type { PeopleViewState } from "../controllers/people-controller.svelte";
 
-function peopleState(thumbnailPath: string | null): PeopleViewState {
+function peopleState(thumbnailPath: string | null, onSelect = vi.fn()): PeopleViewState {
   return {
     people: [{ id: "person-1", name: "Ada", assetCount: 3, thumbnailPath }],
     isLoading: false,
@@ -16,6 +16,7 @@ function peopleState(thumbnailPath: string | null): PeopleViewState {
     refresh: vi.fn(),
     loadMore: vi.fn(),
     clear: vi.fn(),
+    onSelect,
   };
 }
 
@@ -37,4 +38,11 @@ describe("PeopleView thumbnails", () => {
     await fireEvent.error(screen.getByRole("img", { name: "Ada" }));
     expect(screen.queryByRole("img", { name: "Ada" })).not.toBeInTheDocument();
   });
+});
+
+it("opens the selected Recognized Person", async () => {
+  const onSelect = vi.fn();
+  render(PeopleView, { people: peopleState(null, onSelect) });
+  await fireEvent.click(screen.getByRole("button", { name: "Ada" }));
+  expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "person-1" }));
 });

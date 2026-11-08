@@ -222,4 +222,6 @@
   ,"lymic_logo": "Lymic logo"
   ,"main_navigation": "Main navigation"
   ,"people_title": "People", "people_loading": "Loading people…", "people_empty": "No recognized people yet.", "people_unnamed": "Unnamed person", "people_asset_count": "{count} assets", "people_load_more": "Load more", "people_refresh": "Refresh people", "people_retry": "Retry", "people_offline": "People is offline. Showing cached people.", "people_error": "People could not be loaded.", "people_unavailable": "People is unavailable. Check face recognition and API key permissions."
+  ,"people_return": "Back to People"
+  ,"people_timeline_empty": "This person has no reachable photos yet."
 }

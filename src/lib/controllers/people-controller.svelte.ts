@@ -8,6 +8,7 @@ export interface PeopleViewState {
   readonly isOffline: boolean;
   readonly hasNextPage: boolean;
   readonly error: "unavailable" | "error" | null;
+  onSelect?: (person: RecognizedPerson) => void;
   refresh(): Promise<void>;
   loadMore(): Promise<void>;
   clear(): void;
