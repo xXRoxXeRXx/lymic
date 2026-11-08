@@ -51,6 +51,9 @@ impl ImmichClient {
     }
 
     pub async fn get_albums(&self) -> Result<Vec<Album>, String> {
+        // Keep Target Album selection on its established id/name-only contract.
+        // The read-only browse catalogue deliberately uses a separate request so
+        // its Immich order and display metadata cannot change synchronization UI.
         let response = self
             .client
             .get(self.endpoint_url("albums"))

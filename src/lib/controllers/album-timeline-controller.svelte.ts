@@ -1,4 +1,5 @@
-import type { AlbumTimelineDesktopAdapter, TimelineDesktopAdapter } from "../tauri/desktop-adapter";
+import type { TimelineAsset } from "../contracts";
+import type { AlbumTimelineDesktopAdapter } from "../tauri/desktop-adapter";
 import { createTimelineController, type TimelineViewState } from "./timeline-controller.svelte";
 
 /**
@@ -10,7 +11,7 @@ export function createAlbumTimelineController(
   adapter: AlbumTimelineDesktopAdapter,
   albumId: string,
 ): TimelineViewState {
-  let assetsByBucket: Record<string, import("../contracts").TimelineAsset[]> = {};
+  let assetsByBucket: Record<string, TimelineAsset[]> = {};
 
   return createTimelineController({
     async getTimelineBuckets() {

@@ -2,6 +2,7 @@ use super::client::ImmichClient;
 use super::response::{
     read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
 };
+use chrono::DateTime;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -390,22 +391,20 @@ fn timeline_asset_from_response(asset: TimelineAssetResponse) -> TimelineAsset {
     }
 }
 
-fn album_bucket_for(asset: &TimelineAsset) -> String {
-    let date = asset.taken_at.as_deref().unwrap_or("1970-01-01");
-    let month = date
-        .get(..7)
-        .filter(|month| month.as_bytes().get(4) == Some(&b'-'))
-        .unwrap_or("1970-01");
-    format!("{month}-01T00:00:00.000Z")
+fn album_bucket_for(asset: &TimelineAsset) -> Option<String> {
+    let captured_at = asset.taken_at.as_deref()?;
+    let captured_at = DateTime::parse_from_rfc3339(captured_at).ok()?;
+    Some(format!("{}-01T00:00:00.000Z", captured_at.format("%Y-%m")))
 }
 
 fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTimeline {
     let mut assets_by_bucket: BTreeMap<String, Vec<TimelineAsset>> = BTreeMap::new();
     for asset in assets {
-        assets_by_bucket
-            .entry(album_bucket_for(&asset))
-            .or_default()
-            .push(asset);
+        // An asset without a trustworthy capture timestamp cannot be placed in
+        // the chronological scrubber. Do not misrepresent it as January 1970.
+        if let Some(bucket) = album_bucket_for(&asset) {
+            assets_by_bucket.entry(bucket).or_default().push(asset);
+        }
     }
     for assets in assets_by_bucket.values_mut() {
         assets.sort_by(|left, right| {
@@ -431,9 +430,52 @@ fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTimeline {
 
 #[cfg(test)]
 mod tests {
-    use super::ImmichClient;
+    use super::{group_album_timeline_assets, ImmichClient, TimelineAsset};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+
+    #[test]
+    fn groups_album_assets_by_their_local_capture_month_and_skips_dateless_assets() {
+        let timeline = group_album_timeline_assets(vec![
+            TimelineAsset {
+                id: "march-local".to_string(),
+                width: 1,
+                height: 1,
+                r#type: "IMAGE".to_string(),
+                taken_at: Some("2025-03-31T23:30:00-02:00".to_string()),
+                camera_make: None,
+                camera_model: None,
+                file_size: None,
+                duration: None,
+            },
+            TimelineAsset {
+                id: "dateless".to_string(),
+                width: 1,
+                height: 1,
+                r#type: "IMAGE".to_string(),
+                taken_at: None,
+                camera_make: None,
+                camera_model: None,
+                file_size: None,
+                duration: None,
+            },
+        ]);
+
+        assert_eq!(
+            timeline.buckets,
+            vec![super::TimelineBucket {
+                time_bucket: "2025-03-01T00:00:00.000Z".to_string(),
+                count: 1,
+            }]
+        );
+        assert_eq!(
+            timeline.assets_by_bucket["2025-03-01T00:00:00.000Z"][0].id,
+            "march-local"
+        );
+        assert!(!timeline
+            .assets_by_bucket
+            .contains_key("1970-01-01T00:00:00.000Z"));
+    }
 
     #[tokio::test]
     async fn fetches_month_assets_with_ids_and_dimensions() {
