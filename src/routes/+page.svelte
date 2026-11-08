@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images } from "lucide-svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images, Users } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
   import LoginView from "#lib/components/LoginView.svelte";
   import DashboardView from "#lib/components/DashboardView.svelte";
   import TimelineView from "#lib/components/TimelineView.svelte";
+  import PeopleView from "#lib/components/PeopleView.svelte";
   import ActivityLog from "#lib/components/ActivityLog.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
   import InfoView from "#lib/components/InfoView.svelte";
@@ -22,6 +23,7 @@
   import { createRemovableVolumeController } from "#lib/controllers/removable-volume-controller.svelte.ts";
   import { createTargetAlbumCatalogue } from "#lib/controllers/target-album-catalogue.svelte.ts";
   import { createTimelineController } from "#lib/controllers/timeline-controller.svelte.ts";
+  import { createPeopleController } from "#lib/controllers/people-controller.svelte.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
@@ -52,6 +54,7 @@
     },
   });
   const timeline = createTimelineController(desktop);
+  const people = createPeopleController(desktop);
 
   const auth = createAuthController({
     adapter: desktop,
@@ -69,6 +72,7 @@
       sync.clearUserState();
       watchedFolders.clear();
       timeline.clear();
+      people.clear();
       currentView = "photos";
     },
   });
@@ -188,6 +192,15 @@
             <Images class="w-4 h-4 shrink-0 {currentView === 'photos' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('timeline_title')}</span>
           </button>
+          <button
+            type="button"
+            class="nav-item {currentView === 'people' ? 'active' : ''}"
+            onclick={() => { currentView = "people"; if (people.people.length === 0) void people.refresh(); }}
+            aria-label={$t('people_title')}
+          >
+            <Users class="w-4 h-4 shrink-0 {currentView === 'people' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('people_title')}</span>
+          </button>
 
           <button
             type="button"
@@ -258,7 +271,7 @@
       <header class="h-12 px-8 flex items-center justify-between shrink-0 z-10">
         <div class="flex items-center gap-4">
           <h1 class="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {currentView === "photos" ? $t('timeline_title') : currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
+            {currentView === "photos" ? $t('timeline_title') : currentView === "people" ? $t('people_title') : currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
           </h1>
         </div>
       </header>
@@ -291,6 +304,8 @@
 
         {#if currentView === "photos"}
           <TimelineView {timeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} />
+        {:else if currentView === "people"}
+          <PeopleView {people} />
         {:else if currentView === "dashboard"}
           <DashboardView
             status={sync.status}
