@@ -14,6 +14,7 @@
     onOpenExternalUrl?(url: string): Promise<void>;
     showScrubber?: boolean;
     emptyMessage?: string;
+    loadErrorMessage?: string;
   }
 
   let {
@@ -22,6 +23,7 @@
     onOpenExternalUrl = async () => {},
     showScrubber = true,
     emptyMessage = "",
+    loadErrorMessage = "",
   }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   const scrubberIndex = $derived(buildTimelineScrubberIndex(timeline.buckets));
@@ -243,7 +245,17 @@
 
 <div class="relative flex h-full min-h-0 flex-col">
   <div class="mb-2 flex shrink-0 items-center justify-end gap-3">
-    {#if timeline.isOffline}
+    {#if timeline.hasInitialLoadError}
+      <div class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
+        <span>{loadErrorMessage || $t("timeline_offline")}</span>
+        <button
+          type="button"
+          class="font-semibold underline underline-offset-2"
+          aria-label={$t("timeline_retry_connection")}
+          onclick={() => void timeline.refresh()}
+        >{$t("timeline_retry")}</button>
+      </div>
+    {:else if timeline.isOffline}
       <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
         <span>{$t("timeline_offline")}</span>
         <button

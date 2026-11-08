@@ -2,8 +2,10 @@ use super::client::ImmichClient;
 use super::response::{
     read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
 };
+use chrono::DateTime;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +28,16 @@ pub struct TimelineAsset {
     pub duration: Option<u64>,
 }
 
+/// A complete, locally indexed Album Timeline. Unlike the library timeline,
+/// album metadata search has no bucket endpoint, so assets are retained here
+/// after every search page has been collected.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumTimeline {
+    pub buckets: Vec<TimelineBucket>,
+    pub assets_by_bucket: BTreeMap<String, Vec<TimelineAsset>>,
+}
+
 fn recognized_people_access_error(status: StatusCode, resource: &str) -> String {
     match status {
         StatusCode::UNAUTHORIZED => format!("recognized_people_authentication_required:{resource}"),
@@ -46,10 +58,37 @@ struct TimelineAssetResponse {
     id: String,
     #[serde(rename = "type", default = "default_image_type")]
     asset_type: String,
+    #[serde(default)]
+    width: Option<u32>,
+    #[serde(default)]
+    height: Option<u32>,
     #[serde(rename = "exifInfo", alias = "exif", default)]
     exif: TimelineAssetExif,
+    #[serde(rename = "localDateTime", default)]
+    local_date_time: Option<String>,
+    #[serde(rename = "fileCreatedAt", default)]
+    file_created_at: Option<String>,
+    #[serde(rename = "createdAt", default)]
+    created_at: Option<String>,
     #[serde(default, deserialize_with = "deserialize_duration")]
     duration: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct MetadataSearchResponse {
+    assets: MetadataSearchAssets,
+}
+
+#[derive(Deserialize)]
+struct MetadataSearchAssets {
+    #[serde(default)]
+    items: Vec<TimelineAssetResponse>,
+    #[serde(
+        rename = "nextPage",
+        default,
+        deserialize_with = "deserialize_next_page"
+    )]
+    next_page: Option<u64>,
 }
 
 #[derive(Default, Deserialize)]
@@ -132,6 +171,25 @@ where
     Ok(value.as_ref().and_then(parse_duration_value))
 }
 
+fn deserialize_next_page<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match value {
+        None => Ok(None),
+        Some(serde_json::Value::Number(number)) => number
+            .as_u64()
+            .ok_or_else(|| serde::de::Error::custom("invalid nextPage number"))
+            .map(Some),
+        Some(serde_json::Value::String(text)) => text
+            .parse::<u64>()
+            .map_err(|_| serde::de::Error::custom("invalid nextPage token"))
+            .map(Some),
+        Some(_) => Err(serde::de::Error::custom("invalid nextPage value")),
+    }
+}
+
 fn dimensions_from_ratio(ratio: Option<f64>) -> (u32, u32) {
     match ratio {
         Some(value) if value.is_finite() && value > 0.0 => {
@@ -146,6 +204,54 @@ fn dimensions_from_ratio(ratio: Option<f64>) -> (u32, u32) {
 }
 
 impl ImmichClient {
+    pub async fn get_album_timeline(&self, album_id: &str) -> Result<AlbumTimeline, String> {
+        const PAGE_SIZE: u64 = 1_000;
+        let mut page = 1_u64;
+        let mut assets = Vec::new();
+
+        loop {
+            let response = self
+                .client
+                .post(self.endpoint_url("search/metadata"))
+                .header("x-api-key", &self.api_key)
+                .json(&serde_json::json!({
+                    "albumIds": [album_id],
+                    "order": "desc",
+                    "withExif": true,
+                    "page": page,
+                    "size": PAGE_SIZE,
+                }))
+                .send()
+                .await
+                .map_err(|error| format!("Failed to fetch album timeline: {error}"))?;
+            if !response.status().is_success() {
+                return Err(format!(
+                    "Failed to fetch album timeline: {}",
+                    response_status_error(response).await?
+                ));
+            }
+
+            let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
+            let payload: MetadataSearchResponse = serde_json::from_slice(&body)
+                .map_err(|error| format!("Invalid album timeline response: {error}"))?;
+            assets.extend(
+                payload
+                    .assets
+                    .items
+                    .into_iter()
+                    .map(timeline_asset_from_response),
+            );
+
+            match payload.assets.next_page {
+                Some(next_page) if next_page > page => page = next_page,
+                Some(_) => return Err("Invalid album timeline pagination response".to_string()),
+                None => break,
+            }
+        }
+
+        Ok(group_album_timeline_assets(assets))
+    }
+
     pub async fn get_person_timeline_buckets(
         &self,
         person_id: &str,
@@ -255,17 +361,7 @@ fn parse_timeline_bucket_assets(body: Vec<u8>) -> Result<Vec<TimelineAsset>, Str
     Ok(match payload {
         TimelineBucketPayload::Sequence(assets) => assets
             .into_iter()
-            .map(|asset| TimelineAsset {
-                id: asset.id,
-                width: asset.exif.width,
-                height: asset.exif.height,
-                r#type: asset.asset_type,
-                taken_at: asset.exif.taken_at,
-                camera_make: asset.exif.make,
-                camera_model: asset.exif.model,
-                file_size: asset.exif.file_size,
-                duration: asset.duration,
-            })
+            .map(timeline_asset_from_response)
             .collect(),
         TimelineBucketPayload::Columnar(columnar) => columnar
             .id
@@ -306,11 +402,118 @@ fn parse_timeline_bucket_assets(body: Vec<u8>) -> Result<Vec<TimelineAsset>, Str
     })
 }
 
+fn timeline_asset_from_response(asset: TimelineAssetResponse) -> TimelineAsset {
+    TimelineAsset {
+        id: asset.id,
+        width: if asset.exif.width > 0 {
+            asset.exif.width
+        } else {
+            asset.width.unwrap_or(0)
+        },
+        height: if asset.exif.height > 0 {
+            asset.exif.height
+        } else {
+            asset.height.unwrap_or(0)
+        },
+        r#type: asset.asset_type,
+        taken_at: asset
+            .exif
+            .taken_at
+            .or(asset.file_created_at)
+            .or(asset.local_date_time)
+            .or(asset.created_at),
+        camera_make: asset.exif.make,
+        camera_model: asset.exif.model,
+        file_size: asset.exif.file_size,
+        duration: asset.duration,
+    }
+}
+
+fn album_bucket_for(asset: &TimelineAsset) -> Option<String> {
+    let captured_at = asset.taken_at.as_deref()?;
+    let captured_at = DateTime::parse_from_rfc3339(captured_at).ok()?;
+    Some(format!("{}-01T00:00:00.000Z", captured_at.format("%Y-%m")))
+}
+
+fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTimeline {
+    let mut assets_by_bucket: BTreeMap<String, Vec<TimelineAsset>> = BTreeMap::new();
+    for asset in assets {
+        // An asset without a trustworthy capture timestamp cannot be placed in
+        // the chronological scrubber. Do not misrepresent it as January 1970.
+        if let Some(bucket) = album_bucket_for(&asset) {
+            assets_by_bucket.entry(bucket).or_default().push(asset);
+        }
+    }
+    for assets in assets_by_bucket.values_mut() {
+        assets.sort_by(|left, right| {
+            right
+                .taken_at
+                .cmp(&left.taken_at)
+                .then_with(|| right.id.cmp(&left.id))
+        });
+    }
+    let buckets = assets_by_bucket
+        .iter()
+        .rev()
+        .map(|(time_bucket, assets)| TimelineBucket {
+            time_bucket: time_bucket.clone(),
+            count: assets.len() as u64,
+        })
+        .collect();
+    AlbumTimeline {
+        buckets,
+        assets_by_bucket,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ImmichClient;
+    use super::{group_album_timeline_assets, ImmichClient, TimelineAsset};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+
+    #[test]
+    fn groups_album_assets_by_their_local_capture_month_and_skips_dateless_assets() {
+        let timeline = group_album_timeline_assets(vec![
+            TimelineAsset {
+                id: "march-local".to_string(),
+                width: 1,
+                height: 1,
+                r#type: "IMAGE".to_string(),
+                taken_at: Some("2025-03-31T23:30:00-02:00".to_string()),
+                camera_make: None,
+                camera_model: None,
+                file_size: None,
+                duration: None,
+            },
+            TimelineAsset {
+                id: "dateless".to_string(),
+                width: 1,
+                height: 1,
+                r#type: "IMAGE".to_string(),
+                taken_at: None,
+                camera_make: None,
+                camera_model: None,
+                file_size: None,
+                duration: None,
+            },
+        ]);
+
+        assert_eq!(
+            timeline.buckets,
+            vec![super::TimelineBucket {
+                time_bucket: "2025-03-01T00:00:00.000Z".to_string(),
+                count: 1,
+            }]
+        );
+        assert_eq!(
+            timeline.assets_by_bucket["2025-03-01T00:00:00.000Z"][0].id,
+            "march-local"
+        );
+        assert!(!timeline
+            .assets_by_bucket
+            .contains_key("1970-01-01T00:00:00.000Z"));
+    }
 
     #[tokio::test]
     async fn fetches_month_assets_with_ids_and_dimensions() {
@@ -503,6 +706,128 @@ mod tests {
             assets[0].taken_at.as_deref(),
             Some("2025-03-01T12:30:00.000Z")
         );
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetches_every_album_metadata_page_before_grouping_a_complete_month_index() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for (expected_page, body) in [
+                (1, br#"{"assets":{"items":[{"id":"feb","type":"IMAGE","fileCreatedAt":"2025-02-10T10:00:00.000Z","exifInfo":{"imageWidth":640,"imageHeight":480}},{"id":"march-old","type":"VIDEO","duration":"65000","exifInfo":{"dateTimeOriginal":"2025-03-01T10:00:00.000Z"}}],"nextPage":"2"}}"#.as_slice()),
+                (2, br#"{"assets":{"items":[{"id":"march-new","type":"IMAGE","width":1200,"height":900,"createdAt":"2025-03-15T10:00:00.000Z","exifInfo":{}}],"nextPage":null}}"#.as_slice()),
+            ] {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = [0_u8; 4096];
+                let read = stream.read(&mut request).await.unwrap();
+                let request = String::from_utf8_lossy(&request[..read]);
+                assert!(request.starts_with("POST /api/search/metadata HTTP/1.1"));
+                assert!(request.contains("x-api-key: test-key"));
+                assert!(request.contains(&format!(r#""page":{expected_page}"#)));
+                assert!(request.contains(r#""size":1000"#));
+                assert!(request.contains(r#""albumIds":["album-1"]"#));
+                assert!(request.contains(r#""order":"desc""#));
+                assert!(request.contains(r#""withExif":true"#));
+                assert!(!request.contains("orderDirection"));
+                assert!(!request.contains("/api/albums/album-1"));
+                stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+                stream.write_all(body).await.unwrap();
+            }
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let timeline = client.get_album_timeline("album-1").await.unwrap();
+
+        assert_eq!(
+            timeline.buckets,
+            vec![
+                super::TimelineBucket {
+                    time_bucket: "2025-03-01T00:00:00.000Z".to_string(),
+                    count: 2
+                },
+                super::TimelineBucket {
+                    time_bucket: "2025-02-01T00:00:00.000Z".to_string(),
+                    count: 1
+                },
+            ]
+        );
+        let march = timeline
+            .assets_by_bucket
+            .get("2025-03-01T00:00:00.000Z")
+            .unwrap();
+        assert_eq!(
+            march
+                .iter()
+                .map(|asset| asset.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["march-new", "march-old"]
+        );
+        assert_eq!(march[0].width, 1200);
+        assert_eq!(march[0].height, 900);
+        assert_eq!(march[1].duration, Some(65));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rejects_non_advancing_album_metadata_page_markers() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request).await.unwrap();
+            let body = br#"{"assets":{"items":[],"nextPage":1}}"#;
+            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            client.get_album_timeline("album-1").await.unwrap_err(),
+            "Invalid album timeline pagination response"
+        );
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rejects_malformed_album_metadata_responses_without_exposing_the_api_key() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request).await.unwrap();
+            let body = br#"{not-json"#;
+            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "album-api-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let error = client.get_album_timeline("album-1").await.unwrap_err();
+        assert!(error.starts_with("Invalid album timeline response:"));
+        assert!(!error.contains("album-api-key"));
         server.await.unwrap();
     }
 }

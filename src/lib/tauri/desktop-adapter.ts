@@ -9,6 +9,8 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import type {
   Album,
+  AlbumCatalogueItem,
+  AlbumTimeline,
   CurrentUser,
   DatabaseRecoveryNotice,
   FailedSyncEntry,
@@ -59,9 +61,17 @@ export interface AlbumsDesktopAdapter {
   createAlbum(name: string): Promise<Album>;
 }
 
+export interface AlbumCatalogueDesktopAdapter {
+  getAlbumCatalogue(): Promise<AlbumCatalogueItem[]>;
+}
+
 export interface TimelineDesktopAdapter {
   getTimelineBuckets(): Promise<TimelineBucket[]>;
   getTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
+}
+
+export interface AlbumTimelineDesktopAdapter {
+  getAlbumTimeline(albumId: string): Promise<AlbumTimeline>;
 }
 export interface PeopleDesktopAdapter {
   getPeople(page: number, size: number): Promise<PeoplePage>;
@@ -110,7 +120,9 @@ export interface DesktopAdapter
     SyncDesktopAdapter,
     WatchedFoldersDesktopAdapter,
     AlbumsDesktopAdapter,
+    AlbumCatalogueDesktopAdapter,
     TimelineDesktopAdapter,
+    AlbumTimelineDesktopAdapter,
     PeopleDesktopAdapter,
     PreferencesDesktopAdapter,
     UpdateDesktopAdapter,
@@ -150,9 +162,11 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   confirm,
 
   getAlbums: () => invoke<Album[]>("get_albums"),
+  getAlbumCatalogue: () => invoke<AlbumCatalogueItem[]>("get_album_catalogue"),
   createAlbum: (name) => invoke<Album>("create_album", { name }),
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
+  getAlbumTimeline: (albumId) => invoke<AlbumTimeline>("get_album_timeline", { albumId }),
   getPeople: (page, size) => invoke<PeoplePage>("get_people", { page, size }),
   getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),
   getPersonTimelineBucketAssets: (personId, timeBucket) => invoke<TimelineAsset[]>("get_person_timeline_bucket_assets", { personId, timeBucket }),

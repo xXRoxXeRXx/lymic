@@ -27,6 +27,7 @@ const timeline: TimelineViewState = {
   isLoading: false,
   isRefreshing: false,
   isOffline: false,
+  hasInitialLoadError: false,
   assetsFor: (timeBucket) => timeBucket === "2025-03-01T00:00:00.000Z" ? [
     { id: "photo-1", width: 4032, height: 3024, type: "IMAGE", takenAt: "2025-03-05T12:34:56.000Z", cameraMake: "Canon", cameraModel: "EOS R6", fileSize: 1234567, duration: null },
     { id: "video-1", width: 1920, height: 1080, type: "VIDEO", takenAt: "2025-03-04T12:34:56.000Z", cameraMake: null, cameraModel: null, fileSize: 2345678, duration: 65 },
@@ -59,6 +60,16 @@ describe("TimelineView scrubber", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Timeline is offline");
     expect(screen.getByText("March 2025")).toBeInTheDocument();
     expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("prioritizes an initial load error over the offline banner when no timeline is cached", () => {
+    render(TimelineView, {
+      timeline: { ...timeline, buckets: [], isOffline: true, hasInitialLoadError: true },
+      loadErrorMessage: "Could not load this album",
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not load this album");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("opens a photo in a lightbox with metadata and restores focus after closing", async () => {

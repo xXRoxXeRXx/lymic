@@ -12,3 +12,6 @@ Album detail reuses the Photo Timeline presentation, but Immich does not expose 
 
 - An Album Timeline initially loads all result pages before presenting the full chronological index; thumbnails still load lazily through the existing streaming protocol and cache.
 - Album cards use Immich's Album metadata, including the cover asset and asset count, and respect the server's Album ordering.
+- The full metadata result is retained in memory before the scrubber is shown, so a large Album is bounded by available process memory and Immich pagination. A failed later page deliberately fails the entire load; a partial chronological index would violate the scrubber contract.
+- Pagination rejects a non-advancing next page to prevent an unbounded loop.
+- Assets without a parseable local capture time are omitted from the chronological Album Timeline rather than placed in a misleading 1970 bucket.

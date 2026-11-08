@@ -79,6 +79,8 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve([]);
       case "get_timeline_bucket_assets":
         return Promise.resolve([]);
+      case "get_album_timeline":
+        return Promise.resolve({ buckets: [], assetsByBucket: {} });
       case "update_locale":
         return Promise.resolve();
       case "get_release_channel":
@@ -211,6 +213,71 @@ describe("Photo Timeline", () => {
       const timelineRefreshes = tauri.invoke.mock.calls.filter(([command]) => command === "get_timeline_buckets");
       expect(timelineRefreshes).toHaveLength(2);
     });
+  });
+});
+
+describe("Album Timelines", () => {
+  it("opens a selected album in the shared timeline and returns to its catalogue", async () => {
+    renderAuthenticatedPage({
+      get_album_catalogue: async () => [{ id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null }],
+      get_album_timeline: async () => ({
+        buckets: [{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }],
+        assetsByBucket: {
+          "2025-03-01T00:00:00.000Z": [{ id: "asset-1", width: 640, height: 480, type: "IMAGE", takenAt: "2025-03-02T00:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null }],
+        },
+      }),
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
+    await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+
+    expect(await screen.findByRole("heading", { name: "Holiday" })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_album_timeline", { albumId: "album-1" });
+    expect(await screen.findByText("Mar 2025")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Albums" }));
+    expect(await screen.findByRole("heading", { name: "Albums" })).toBeInTheDocument();
+    expect(screen.getByText("Holiday")).toBeInTheDocument();
+  });
+
+  it("keeps cached album browsing visible and offers recovery when refresh goes offline", async () => {
+    renderAuthenticatedPage({
+      get_album_catalogue: vi.fn()
+        .mockResolvedValueOnce([{ id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null }])
+        .mockRejectedValueOnce(new Error("offline")),
+      get_album_timeline: vi.fn()
+        .mockResolvedValueOnce({
+          buckets: [{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }],
+          assetsByBucket: {
+            "2025-03-01T00:00:00.000Z": [{ id: "asset-1", width: 640, height: 480, type: "IMAGE", takenAt: "2025-03-02T00:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null }],
+          },
+        })
+        .mockRejectedValueOnce(new Error("offline")),
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Refresh albums" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Albums are offline");
+    expect(screen.getByText("Holiday")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: /Holiday/ }));
+    expect(await screen.findByText("Mar 2025")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Refresh timeline" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Photo Timeline is offline");
+    expect(screen.getByText("Mar 2025")).toBeInTheDocument();
+  });
+
+  it("shows an album loading error instead of an empty album when its first timeline request fails", async () => {
+    renderAuthenticatedPage({
+      get_album_catalogue: async () => [{ id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null }],
+      get_album_timeline: async () => { throw new Error("offline"); },
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
+    await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Albums could not be loaded.");
+    expect(screen.queryByText("This album has no reachable photos yet.")).not.toBeInTheDocument();
   });
 });
 

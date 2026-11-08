@@ -93,4 +93,24 @@ describe("Target Album catalogue", () => {
     expect(catalogue.nameFor("unavailable")).toBeUndefined();
     expect(catalogue.error).toBe("Network offline");
   });
+
+  it("selects enriched album-list responses while the read-only catalogue remains a separate adapter method", async () => {
+    const enrichedAlbum = {
+      id: "family",
+      albumName: "Family",
+      albumThumbnailAssetId: "cover-1",
+      assetCount: 12,
+      isShared: true,
+      order: "z",
+    };
+    const adapter = createDesktopAdapter({ getAlbums: vi.fn().mockResolvedValue([enrichedAlbum]) });
+    const catalogue = createTargetAlbumCatalogue(adapter);
+
+    await catalogue.refresh();
+
+    expect(catalogue.nameFor("family")).toBe("Family");
+    expect(catalogue.albums).toEqual([enrichedAlbum]);
+    expect(adapter.getAlbums).toHaveBeenCalledOnce();
+    expect("getAlbumCatalogue" in adapter).toBe(false);
+  });
 });

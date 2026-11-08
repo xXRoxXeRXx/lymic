@@ -36,6 +36,13 @@ export interface Album {
   albumName: string;
 }
 
+export interface AlbumCatalogueItem extends Album {
+  albumThumbnailAssetId: string | null;
+  assetCount: number;
+  isShared: boolean;
+  order: string | null;
+}
+
 export interface TimelineBucket {
   timeBucket: string;
   count: number;
@@ -51,6 +58,11 @@ export interface TimelineAsset {
   cameraModel: string | null;
   fileSize: number | null;
   duration: number | null;
+}
+
+export interface AlbumTimeline {
+  buckets: TimelineBucket[];
+  assetsByBucket: Record<string, TimelineAsset[]>;
 }
 
 export interface RecognizedPerson {
