@@ -7,7 +7,7 @@ import type { PeopleViewState } from "../controllers/people-controller.svelte";
 
 function peopleState(thumbnailPath: string | null, onSelect = vi.fn()): PeopleViewState {
   return {
-    people: [{ id: "person-1", name: "Ada", assetCount: 3, thumbnailPath }],
+    people: [{ id: "person-1", name: "Ada", thumbnailPath }],
     isLoading: false,
     isRefreshing: false,
     isOffline: false,

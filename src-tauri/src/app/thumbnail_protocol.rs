@@ -225,6 +225,7 @@ fn thumbnail_target(uri: &tauri::http::Uri) -> Option<(ThumbnailKind, &str)> {
     ))
 }
 
+#[cfg(test)]
 fn asset_id(uri: &tauri::http::Uri) -> Option<&str> {
     thumbnail_target(uri).and_then(|(kind, id)| (kind == ThumbnailKind::Asset).then_some(id))
 }

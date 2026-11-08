@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(assets[0].height, 1000);
         assert_eq!(assets[0].r#type, "IMAGE");
         assert_eq!(
-            assets[0].taken_at.as_deref(),
+            assets.assets[0].taken_at.as_deref(),
             Some("2026-11-04T19:47:41.29")
         );
         assert_eq!(assets[0].duration, None);

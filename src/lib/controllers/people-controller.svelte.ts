@@ -39,7 +39,7 @@ export function createPeopleController(adapter: PeopleDesktopAdapter): PeopleVie
       isOffline = false;
     }).catch((reason: unknown) => {
       if (requestGeneration !== generation) return;
-      const message = reason instanceof Error ? reason.message.toLowerCase() : "";
+      const message = (typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "").toLowerCase();
       error = people.length === 0 ? (message.includes("permission") || message.includes("unavailable") ? "unavailable" : "error") : null;
       isOffline = people.length > 0;
     }).finally(() => {

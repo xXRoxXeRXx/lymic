@@ -56,7 +56,6 @@ export interface TimelineAsset {
 export interface RecognizedPerson {
   id: string;
   name: string | null;
-  assetCount: number;
   thumbnailPath: string | null;
 }
 
