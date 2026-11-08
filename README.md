@@ -33,6 +33,9 @@
 - **Secure credentials** — Stores API keys in the platform-native keyring (Keychain, Credential Manager, or Secret Service).
 - **Desktop experience** — Provides real-time status, progress, system-tray controls, notifications, optional autostart, light/dark themes, and English/German UI.
 - **Media-aware uploads** — Supports broad, extension-based media detection, recognized live-photo/motion pairs, and optional XMP sidecars.
+- **Media timeline** — Responsive photo and video timeline with masonry layout, date scrubber, thumbnail caching, and full lightbox preview.
+- **People discovery** — Browse recognized persons with cached avatars and filter the timeline by person.
+- **Album browsing** — Browse accessible Immich albums with cover thumbnails and asset counts, and explore album media in a dedicated timeline view.
 
 ---
 
@@ -63,6 +66,16 @@ Ubuntu and Linux users can install and update Lymic directly from the Snap Store
 
 ```bash
 sudo snap install lymic
+```
+
+#### Arch Linux (AUR)
+
+Arch Linux users can install Lymic from the AUR:
+
+```bash
+paru -S lymic-bin
+# or
+yay -S lymic-bin
 ```
 
 #### macOS (Homebrew)

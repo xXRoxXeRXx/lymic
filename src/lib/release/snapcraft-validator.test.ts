@@ -9,7 +9,7 @@ import {
 const SAMPLE_VALID_SNAPCRAFT = `name: lymic
 title: Lymic
 base: core22
-version: '0.23.1'
+version: '0.24.0'
 summary: High-performance desktop sync client for Immich
 description: |
   Lymic is an unofficial desktop client for uploading and synchronizing local
@@ -43,7 +43,7 @@ apps:
 describe("snapcraft validator", () => {
   const defaultExpected: ExpectedSnapcraftProperties = {
     name: "lymic",
-    version: "0.23.1",
+    version: "0.24.0",
     confinement: "strict",
     base: "core22",
   };

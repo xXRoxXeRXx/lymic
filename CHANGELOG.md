@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0] - 2026-11-08
+
+### Added
+- **Photo and video timeline**:
+  - Adds a dedicated timeline view grouping media into responsive month-based columnar buckets.
+  - Implements a responsive masonry layout for photos and videos with dynamic column sizing.
+  - Integrates an interactive date scrubber for rapid navigation across timeline months with throttling and spacing.
+  - Introduces a media lightbox modal supporting full-screen preview, image pan/zoom, and HTML5 video playback with millisecond-precision durations.
+  - Registers custom URI schemes (`lymic-thumb:` and `lymic-asset:`) for secure, sandboxed asset and thumbnail streaming into WebView2 and WebKit webviews.
+  - Establishes a multi-tier local thumbnail and asset cache with offline fallback and background cache refreshes that never block user browsing.
+- **Recognized people discovery**:
+  - Adds a dedicated People view displaying faces recognized by the Immich server.
+  - Implements lazy loading and incremental pagination for browsing large person libraries.
+  - Caches person thumbnails with versioned cache keys tied to thumbnail paths to prevent stale facial avatars.
+  - Adds person-filtered timeline browsing, enabling direct navigation from a person's avatar to their photos and videos.
+- **Album catalogue and album timeline**:
+  - Adds an Album Catalogue view displaying accessible albums with cover thumbnails, titles, asset counts, and shared album indicators.
+  - Integrates an album-specific timeline view grouping album media by local capture month into the shared timeline component.
+  - Supports opening any accessible album in the timeline with seamless return navigation to the album catalogue.
+  - Implements dedicated album caching and thumbnail loading with support for custom thumbnail protocols.
+- **Release packaging and distribution**:
+  - Adds Arch Linux AUR package (`lymic-bin`) support and automated release synchronization workflow.
+  - Adds macOS Homebrew Cask automation script, workflow, and documentation.
+- **Architecture and domain documentation**:
+  - Records ADR-0006 for album timeline data sources and updates domain glossary.
+
+### Fixed
+- **Timeline protocol and cache resilience**:
+  - Hardens custom URI schemes against invalid host lookups and WebView2 quirks.
+  - Resolves authorization header propagation and cache isolation across server switches.
+  - Fixes timeline refresh generation races so older fetch cycles cannot overwrite newer timeline state.
+
 ## [0.23.1] - 2026-11-05
 
 ### Fixed

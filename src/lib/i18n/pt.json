@@ -224,4 +224,5 @@
   ,"people_title": "Pessoas", "people_loading": "A carregar pessoas…", "people_empty": "Ainda não há pessoas reconhecidas.", "people_unnamed": "Pessoa sem nome", "people_asset_count": "{count} itens", "people_load_more": "Carregar mais", "people_refresh": "Atualizar pessoas", "people_retry": "Tentar novamente", "people_offline": "Pessoas offline. A mostrar dados em cache.", "people_error": "Não foi possível carregar pessoas.", "people_unavailable": "Pessoas indisponíveis. Verifique o reconhecimento facial e as permissões da API."
   ,"people_return": "Back to People"
   ,"people_timeline_empty": "This person has no reachable photos yet."
+  ,"albums_title": "Álbuns", "albums_loading": "A carregar álbuns…", "albums_empty": "Ainda não há álbuns acessíveis.", "albums_refresh": "Atualizar álbuns", "albums_retry": "Tentar novamente", "albums_offline": "Os álbuns estão offline. A mostrar álbuns em cache.", "albums_error": "Não foi possível carregar álbuns.", "albums_asset_count": "{count} itens", "albums_shared": "Partilhado", "albums_return": "Voltar aos álbuns", "albums_timeline_empty": "Este álbum ainda não tem fotos disponíveis."
 }

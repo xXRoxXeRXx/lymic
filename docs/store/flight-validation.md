@@ -9,7 +9,7 @@ This document records the private Flight verification runbook, WACK (Windows App
 - **Flight Name**: `Alpha Private Flight`
 - **Distribution Scope**: Restricted Flight Group (Internal validation accounts)
 - **Target OS**: Windows 10 (10.0.17763.0+) & Windows 11 x64
-- **Package Tested**: `Lymic_0.23.1_x64.msix`
+- **Package Tested**: `Lymic_0.24.0_x64.msix`
 - **Package Identity**: `xXRoxXeRXx.Lymic`
 - **Publisher**: `CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC`
 - **Package Family Name (PFN)**: `xXRoxXeRXx.Lymic_5pq7hxkq5cr6j`
@@ -23,7 +23,7 @@ This document records the private Flight verification runbook, WACK (Windows App
 The MSIX package structure and `AppxManifest.xml` were validated using `scripts/validate-msix.ps1` and the Windows App Certification Kit:
 1. **Processor Architecture**: Strictly `x64`.
 2. **Package Identity**: Matches reserved name `xXRoxXeRXx.Lymic`.
-3. **Version Alignment**: Quad-part version format `0.23.1.0` matches repository version `0.23.1`.
+3. **Version Alignment**: Quad-part version format `0.24.0.0` matches repository version `0.24.0`.
 4. **App Execution**: `EntryPoint="Windows.FullTrustApplication"` executes `Lymic.exe`.
 
 ### Restricted Capabilities Justification

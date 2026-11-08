@@ -224,4 +224,5 @@
   ,"people_title": "মানুষ", "people_loading": "মানুষ লোড হচ্ছে…", "people_empty": "এখনও কোনো স্বীকৃত ব্যক্তি নেই।", "people_unnamed": "নামহীন ব্যক্তি", "people_asset_count": "{count}টি আইটেম", "people_load_more": "আরও লোড করুন", "people_refresh": "মানুষ রিফ্রেশ করুন", "people_retry": "আবার চেষ্টা করুন", "people_offline": "মানুষ অফলাইনে। ক্যাশ করা তথ্য দেখানো হচ্ছে।", "people_error": "মানুষ লোড করা যায়নি।", "people_unavailable": "মানুষ উপলব্ধ নয়। মুখ শনাক্তকরণ ও API অনুমতি পরীক্ষা করুন।"
   ,"people_return": "Back to People"
   ,"people_timeline_empty": "This person has no reachable photos yet."
+  ,"albums_title": "অ্যালবাম", "albums_loading": "অ্যালবাম লোড হচ্ছে…", "albums_empty": "এখনও কোনো অ্যাক্সেসযোগ্য অ্যালবাম নেই।", "albums_refresh": "অ্যালবাম রিফ্রেশ করুন", "albums_retry": "আবার চেষ্টা করুন", "albums_offline": "অ্যালবাম অফলাইনে রয়েছে। ক্যাশ করা অ্যালবাম দেখানো হচ্ছে।", "albums_error": "অ্যালবাম লোড করা যায়নি।", "albums_asset_count": "{count}টি আইটেম", "albums_shared": "ভাগ করা", "albums_return": "অ্যালবামে ফিরে যান", "albums_timeline_empty": "এই অ্যালবামে এখনও কোনো ফটো উপলব্ধ নেই।"
 }

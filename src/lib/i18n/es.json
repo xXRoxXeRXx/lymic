@@ -224,4 +224,5 @@
   ,"people_title": "Personas", "people_loading": "Cargando personas…", "people_empty": "Aún no hay personas reconocidas.", "people_unnamed": "Persona sin nombre", "people_asset_count": "{count} elementos", "people_load_more": "Cargar más", "people_refresh": "Actualizar personas", "people_retry": "Reintentar", "people_offline": "Personas sin conexión. Mostrando datos guardados.", "people_error": "No se pudieron cargar las personas.", "people_unavailable": "Personas no disponibles. Compruebe el reconocimiento facial y los permisos de API."
   ,"people_return": "Volver a Personas"
   ,"people_timeline_empty": "Esta persona todavía no tiene fotos disponibles."
+  ,"albums_title": "Álbumes", "albums_loading": "Cargando álbumes…", "albums_empty": "Aún no hay álbumes accesibles.", "albums_refresh": "Actualizar álbumes", "albums_retry": "Reintentar", "albums_offline": "Los álbumes están sin conexión. Mostrando álbumes en caché.", "albums_error": "No se pudieron cargar los álbumes.", "albums_asset_count": "{count} elementos", "albums_shared": "Compartido", "albums_return": "Volver a Álbumes", "albums_timeline_empty": "Este álbum todavía no tiene fotos disponibles."
 }

@@ -314,7 +314,7 @@
     </div>
   </div>
 
-  {#if timeline.buckets.length === 0 && !timeline.isLoading && emptyMessage}<p role="status">{emptyMessage}</p>{/if}
+  {#if timeline.buckets.length === 0 && !timeline.isLoading && !timeline.hasInitialLoadError && emptyMessage}<p role="status">{emptyMessage}</p>{/if}
   {#if showScrubber && scrubberMonths.length > 0}
     {@const thumbRatio = scrubberMonths.length > 1 && activeTimeBucket ? Math.max(0, scrubberMonths.indexOf(activeTimeBucket)) / (scrubberMonths.length - 1) : 0}
     <nav class="absolute inset-y-0 -right-4 w-16 border-l border-slate-200/80 bg-slate-100/85 py-2 pl-1 pr-1 backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/85" aria-label={$t("timeline_scrubber")}>

@@ -224,4 +224,5 @@
   ,"people_title": "लोग", "people_loading": "लोग लोड हो रहे हैं…", "people_empty": "अभी कोई पहचाना हुआ व्यक्ति नहीं है।", "people_unnamed": "अनाम व्यक्ति", "people_asset_count": "{count} आइटम", "people_load_more": "और लोड करें", "people_refresh": "लोगों को रीफ़्रेश करें", "people_retry": "पुनः प्रयास करें", "people_offline": "लोग ऑफ़लाइन हैं। कैश किया गया डेटा दिखाया जा रहा है।", "people_error": "लोग लोड नहीं हो सके।", "people_unavailable": "लोग उपलब्ध नहीं हैं। चेहरे की पहचान और API अनुमतियाँ जाँचें।"
   ,"people_return": "Back to People"
   ,"people_timeline_empty": "This person has no reachable photos yet."
+  ,"albums_title": "एल्बम", "albums_loading": "एल्बम लोड हो रहे हैं…", "albums_empty": "अभी कोई सुलभ एल्बम नहीं है।", "albums_refresh": "एल्बम रीफ़्रेश करें", "albums_retry": "पुनः प्रयास करें", "albums_offline": "एल्बम ऑफ़लाइन हैं। कैश किए गए एल्बम दिखाए जा रहे हैं।", "albums_error": "एल्बम लोड नहीं हो सके।", "albums_asset_count": "{count} आइटम", "albums_shared": "साझा किया गया", "albums_return": "एल्बम पर वापस जाएँ", "albums_timeline_empty": "इस एल्बम में अभी कोई फ़ोटो उपलब्ध नहीं है।"
 }

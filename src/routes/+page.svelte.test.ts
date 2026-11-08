@@ -233,7 +233,7 @@ describe("Album Timelines", () => {
 
     expect(await screen.findByRole("heading", { name: "Holiday" })).toBeInTheDocument();
     expect(tauri.invoke).toHaveBeenCalledWith("get_album_timeline", { albumId: "album-1" });
-    expect(await screen.findByText("Mar 2025")).toBeInTheDocument();
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "Back to Albums" }));
     expect(await screen.findByRole("heading", { name: "Albums" })).toBeInTheDocument();
@@ -261,10 +261,10 @@ describe("Album Timelines", () => {
     expect(screen.getByText("Holiday")).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: /Holiday/ }));
-    expect(await screen.findByText("Mar 2025")).toBeInTheDocument();
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Refresh timeline" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Photo Timeline is offline");
-    expect(screen.getByText("Mar 2025")).toBeInTheDocument();
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
   });
 
   it("shows an album loading error instead of an empty album when its first timeline request fails", async () => {

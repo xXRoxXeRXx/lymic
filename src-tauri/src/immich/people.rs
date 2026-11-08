@@ -75,7 +75,10 @@ mod tests {
         .expect("Immich PersonResponseDto should deserialize");
 
         assert_eq!(response.people[0].id, "person-1");
-        assert_eq!(response.people[0].thumbnail_path.as_deref(), Some("/person-1.jpg"));
+        assert_eq!(
+            response.people[0].thumbnail_path.as_deref(),
+            Some("/person-1.jpg")
+        );
         assert_eq!(response.people[1].thumbnail_path, None);
     }
 }

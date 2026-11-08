@@ -194,7 +194,9 @@ async fn serve(
                 .is_multiple_of(EVICTION_CHECK_INTERVAL_WRITES);
             let _ = tokio::task::spawn_blocking({
                 let bytes = bytes.clone();
-                move || write_cached_with_eviction(&cache_dir, kind, &cache_id, &bytes, should_evict)
+                move || {
+                    write_cached_with_eviction(&cache_dir, kind, &cache_id, &bytes, should_evict)
+                }
             })
             .await;
             image_response(bytes)

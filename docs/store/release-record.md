@@ -17,7 +17,7 @@ This document records the official public release parameters for Lymic on Micros
 | **Store ID** | `9NLQWHTHR1FZ` |
 | **Store URL** | `https://apps.microsoft.com/detail/9NLQWHTHR1FZ` |
 | **Target Channel** | Microsoft Store (Windows 10/11 x64 MSIX) |
-| **Release Version** | `0.23.1` (MSIX Package Version `0.23.1.0`) |
+| **Release Version** | `0.24.0` (MSIX Package Version `0.24.0.0`) |
 | **Availability** | Worldwide (All Microsoft Store markets) |
 | **Pricing** | Free (No in-app purchases, subscriptions, or ads) |
 | **Category** | Photo & video (Primary), Utilities & tools (Secondary) |
@@ -54,7 +54,7 @@ Lymic maintains two isolated Windows distribution channels:
 
 ## 4. Release Checklist & Verification Sign-Off
 
-- [ ] Exact Flight-validated package (`Lymic_0.23.1_x64.msix`) submitted for worldwide public distribution.
+- [ ] Exact Flight-validated package (`Lymic_0.24.0_x64.msix`) submitted for worldwide public distribution.
 - [ ] Store listing configured as Free, Photo & Video, with full German and English metadata.
 - [ ] All-ages content questionnaire completed truthfully.
 - [ ] Store-only updater channel verified; no conflicting GitHub updater UI.
