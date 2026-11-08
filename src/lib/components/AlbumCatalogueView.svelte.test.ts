@@ -15,16 +15,19 @@ function catalogueState(): AlbumCatalogueViewState {
 }
 
 describe("AlbumCatalogueView", () => {
-  it("renders a shared album cover and asset count through the credential-safe thumbnail protocol", () => {
-    render(AlbumCatalogueView, { catalogue: catalogueState() });
+  it("renders a shared album cover and selects the album through the credential-safe thumbnail protocol", async () => {
+    const onSelect = vi.fn();
+    render(AlbumCatalogueView, { catalogue: catalogueState(), onSelect });
     expect(screen.getByRole("img", { name: "Shared memories" })).toHaveAttribute("src", "lymic-thumb://asset/cover-1");
     expect(screen.getByText("12 assets")).toBeInTheDocument();
     expect(screen.getByLabelText("Shared")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: /Shared memories/ }));
+    expect(onSelect).toHaveBeenCalledWith(catalogueState().albums[0]);
   });
 
   it("offers retry after an initial error", async () => {
     const refresh = vi.fn();
-    render(AlbumCatalogueView, { catalogue: { ...catalogueState(), albums: [], error: "error", refresh } });
+    render(AlbumCatalogueView, { catalogue: { ...catalogueState(), albums: [], error: "error", refresh }, onSelect: vi.fn() });
     await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(refresh).toHaveBeenCalledOnce();
   });

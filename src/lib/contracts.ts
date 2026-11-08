@@ -60,6 +60,11 @@ export interface TimelineAsset {
   duration: number | null;
 }
 
+export interface AlbumTimeline {
+  buckets: TimelineBucket[];
+  assetsByBucket: Record<string, TimelineAsset[]>;
+}
+
 export interface RecognizedPerson {
   id: string;
   name: string | null;

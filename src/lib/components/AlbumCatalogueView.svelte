@@ -4,7 +4,7 @@
   import type { AlbumCatalogueItem } from "../contracts";
   import type { AlbumCatalogueViewState } from "../controllers/album-catalogue-controller.svelte";
 
-  let { catalogue }: { catalogue: AlbumCatalogueViewState } = $props();
+  let { catalogue, onSelect }: { catalogue: AlbumCatalogueViewState; onSelect: (album: AlbumCatalogueItem) => void } = $props();
   let failedCoverIds = $state(new Set<string>());
 
   function coverSrc(album: AlbumCatalogueItem) {
@@ -26,7 +26,7 @@
   {:else if catalogue.albums.length === 0}<p>{$t("albums_empty")}</p>
   {:else}<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
     {#each catalogue.albums as album (album.id)}
-      <article class="rounded-xl border border-slate-200 p-4 dark:border-zinc-700">
+      <button type="button" class="rounded-xl border border-slate-200 p-4 text-left dark:border-zinc-700" onclick={() => onSelect(album)}>
         <div class="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-zinc-800">
           {#if album.albumThumbnailAssetId && !failedCoverIds.has(album.id)}
             <img class="h-full w-full object-cover" src={coverSrc(album)} alt={album.albumName} onerror={() => hideCover(album.id)} />
@@ -34,7 +34,7 @@
         </div>
         <div class="flex items-center gap-2"><h2 class="min-w-0 flex-1 truncate font-semibold">{album.albumName}</h2>{#if album.isShared}<Users class="h-4 w-4 shrink-0 text-slate-400" aria-label={$t("albums_shared")} />{/if}</div>
         <p class="text-sm text-slate-500 dark:text-zinc-400">{$t("albums_asset_count", { values: { count: album.assetCount } })}</p>
-      </article>
+      </button>
     {/each}
   </div>{/if}
 </div>

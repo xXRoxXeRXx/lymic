@@ -26,8 +26,9 @@
   import { createTimelineController } from "#lib/controllers/timeline-controller.svelte.ts";
   import { createPeopleController } from "#lib/controllers/people-controller.svelte.ts";
   import { createAlbumCatalogueController } from "#lib/controllers/album-catalogue-controller.svelte.ts";
+  import { createAlbumTimelineController } from "#lib/controllers/album-timeline-controller.svelte.ts";
   import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
-  import type { RecognizedPerson } from "#lib/contracts.ts";
+  import type { AlbumCatalogueItem, RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
@@ -60,9 +61,12 @@
   const timeline = createTimelineController(desktop);
   const people = createPeopleController(desktop);
   const albumCatalogue = createAlbumCatalogueController(desktop);
+  let selectedAlbum = $state<AlbumCatalogueItem | null>(null);
+  let albumTimeline = $state<ReturnType<typeof createAlbumTimelineController> | null>(null);
   let selectedPerson = $state<RecognizedPerson | null>(null);
   let personTimeline = $state<ReturnType<typeof createPersonTimelineController> | null>(null);
   let peopleScrollTop = 0;
+  let albumsScrollTop = 0;
   let content = $state<HTMLElement>();
 
   function selectPerson(person: RecognizedPerson) {
@@ -73,11 +77,20 @@
     void personTimeline.refresh();
   }
 
+  function selectAlbum(album: AlbumCatalogueItem) {
+    albumsScrollTop = content?.scrollTop ?? 0;
+    selectedAlbum = album;
+    albumTimeline = createAlbumTimelineController(desktop, album.id);
+    currentView = "album-timeline";
+    void albumTimeline.refresh();
+  }
+
   const pageTitle = $derived.by(() => {
     switch (currentView) {
       case "photos": return $t("timeline_title");
       case "people": return $t("people_title");
       case "albums": return $t("albums_title");
+      case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
       case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
       case "dashboard": return $t("dashboard");
       case "logs": return $t("logs");
@@ -90,6 +103,12 @@
     personTimeline?.clear();
     personTimeline = null;
     selectedPerson = null;
+  }
+
+  function closeAlbumTimeline() {
+    albumTimeline?.clear();
+    albumTimeline = null;
+    selectedAlbum = null;
   }
 
   function openPeople() {
@@ -106,6 +125,12 @@
     closePersonTimeline();
     currentView = "people";
     queueMicrotask(() => { if (content) content.scrollTop = peopleScrollTop; });
+  }
+
+  function returnToAlbums() {
+    closeAlbumTimeline();
+    currentView = "albums";
+    queueMicrotask(() => { if (content) content.scrollTop = albumsScrollTop; });
   }
 
   const auth = createAuthController({
@@ -126,6 +151,7 @@
       timeline.clear();
       people.clear();
       albumCatalogue.clear();
+      closeAlbumTimeline();
       closePersonTimeline();
       currentView = "photos";
     },
@@ -334,7 +360,7 @@
         </div>
       </header>
 
-      <main bind:this={content} class="flex-1 {currentView === 'photos' || currentView === 'person-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} class="flex-1 {currentView === 'photos' || currentView === 'person-timeline' || currentView === 'album-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
@@ -365,7 +391,15 @@
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
         {:else if currentView === "albums"}
-          <AlbumCatalogueView catalogue={albumCatalogue} />
+          <AlbumCatalogueView catalogue={albumCatalogue} onSelect={selectAlbum} />
+        {:else if currentView === "album-timeline" && albumTimeline}
+          <div class="flex h-full min-h-0 flex-col gap-2">
+            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToAlbums}>
+              <ArrowLeft class="h-4 w-4" />
+              Back to Albums
+            </button>
+            <TimelineView timeline={albumTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} emptyMessage="This album has no reachable photos yet." />
+          </div>
         {:else if currentView === "person-timeline" && personTimeline}
           <div class="flex h-full min-h-0 flex-col gap-2">
             <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToPeople}>
