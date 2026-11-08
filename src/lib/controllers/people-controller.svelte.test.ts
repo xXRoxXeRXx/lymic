@@ -6,8 +6,8 @@ describe("People controller", () => {
   it("loads pages in server order and retains cached people when refresh fails", async () => {
     const adapter: PeopleDesktopAdapter = {
       getPeople: vi.fn()
-        .mockResolvedValueOnce({ people: [{ id: "one", name: "Ada", assetCount: 4 }], hasNextPage: true })
-        .mockResolvedValueOnce({ people: [{ id: "two", name: null, assetCount: 1 }], hasNextPage: false })
+        .mockResolvedValueOnce({ people: [{ id: "one", name: "Ada", assetCount: 4, thumbnailPath: null }], hasNextPage: true })
+        .mockResolvedValueOnce({ people: [{ id: "two", name: null, assetCount: 1, thumbnailPath: null }], hasNextPage: false })
         .mockRejectedValueOnce(new Error("offline")),
     };
     const people = createPeopleController(adapter);

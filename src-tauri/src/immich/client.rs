@@ -322,6 +322,31 @@ impl ImmichClient {
             .map_err(|error| format!("Failed to read thumbnail: {error}"))
     }
 
+    pub(crate) async fn get_person_thumbnail(&self, person_id: &str) -> Result<Vec<u8>, String> {
+        Self::validate_path_segment(person_id, "person ID")?;
+        let response = self
+            .client
+            .get(self.endpoint_url(&format!("people/{person_id}/thumbnail")))
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to fetch person thumbnail: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Failed to fetch person thumbnail: {}",
+                response_status_error(response).await?
+            ));
+        }
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|error| format!("Failed to read person thumbnail: {error}"))?;
+        if bytes.len() > MAX_THUMBNAIL_BYTES {
+            return Err("Person thumbnail exceeds maximum allowed size".to_string());
+        }
+        Ok(bytes.to_vec())
+    }
+
     pub(crate) async fn get_asset_preview(&self, asset_id: &str) -> Result<AssetResponse, String> {
         Self::validate_path_segment(asset_id, "asset ID")?;
         let response = self
@@ -1103,6 +1128,40 @@ mod tests {
                 "Invalid user ID for API path"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn fetches_person_thumbnail_with_authentication() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            requests_tx
+                .send(read_http_request(&mut stream).await)
+                .await
+                .unwrap();
+            let image = b"\xFF\xD8\xFF\xE0person-thumbnail";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                image.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+            stream.write_all(image).await.unwrap();
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+
+        assert_eq!(
+            client.get_person_thumbnail("person-1").await.unwrap(),
+            b"\xFF\xD8\xFF\xE0person-thumbnail"
+        );
+        let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(request.starts_with("GET /api/people/person-1/thumbnail HTTP/1.1"));
+        assert!(request.contains("x-api-key: test-key"));
     }
 
     #[tokio::test]

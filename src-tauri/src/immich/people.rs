@@ -10,6 +10,7 @@ pub struct RecognizedPerson {
     pub id: String,
     pub name: Option<String>,
     pub asset_count: u64,
+    pub thumbnail_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
