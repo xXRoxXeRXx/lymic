@@ -8,7 +8,16 @@
   let failedCoverIds = $state(new Set<string>());
 
   function coverSrc(album: AlbumCatalogueItem) {
-    return `lymic-thumb://asset/${encodeURIComponent(album.albumThumbnailAssetId!)}`;
+    const encodedId = encodeURIComponent(album.albumThumbnailAssetId!);
+    const convertFileSrc = (
+      globalThis as typeof globalThis & {
+        __TAURI_INTERNALS__?: { convertFileSrc?: (filePath: string, protocol?: string) => string };
+      }
+    ).__TAURI_INTERNALS__?.convertFileSrc;
+    if (typeof convertFileSrc === "function") {
+      return `${convertFileSrc("", "lymic-thumb").replace(/\/$/, "")}/asset/${encodedId}`;
+    }
+    return `lymic-thumb://asset/${encodedId}`;
   }
 
   function hideCover(albumId: string) {

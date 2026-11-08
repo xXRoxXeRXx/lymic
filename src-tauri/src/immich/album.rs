@@ -24,6 +24,7 @@ pub struct AlbumCatalogueItem {
     pub album_name: String,
     pub album_thumbnail_asset_id: Option<String>,
     pub asset_count: u64,
+    #[serde(alias = "shared")]
     pub is_shared: bool,
     pub order: Option<String>,
 }
@@ -282,7 +283,7 @@ mod tests {
             let (mut stream, _) = listener.accept().await.unwrap();
             let req = read_http_request(&mut stream).await;
             assert!(req.starts_with("GET /api/albums HTTP/1.1"));
-            let response = r#"[{"id":"shared","albumName":"Shared memories","albumThumbnailAssetId":"cover-1","assetCount":12,"isShared":true,"order":"z"},{"id":"empty","albumName":"Empty album","albumThumbnailAssetId":null,"assetCount":0,"isShared":false,"order":"a"}]"#;
+            let response = r#"[{"id":"shared","albumName":"Shared memories","albumThumbnailAssetId":"cover-1","assetCount":12,"shared":true,"order":"desc"},{"id":"empty","albumName":"Empty album","albumThumbnailAssetId":null,"assetCount":0,"shared":false,"order":"asc"}]"#;
             stream
                 .write_all(
                     format!(
@@ -310,12 +311,14 @@ mod tests {
         );
         assert_eq!(albums[0].asset_count, 12);
         assert!(albums[0].is_shared);
-        assert_eq!(albums[0].order.as_deref(), Some("z"));
+        assert_eq!(albums[0].order.as_deref(), Some("desc"));
         assert_eq!(albums[1].id, AlbumId::new("empty"));
         assert_eq!(albums[1].album_thumbnail_asset_id, None);
         assert_eq!(albums[1].asset_count, 0);
         assert!(!albums[1].is_shared);
-        assert!(!serde_json::to_string(&albums).unwrap().contains("test-key"));
+        let serialized = serde_json::to_string(&albums).unwrap();
+        assert!(serialized.contains(r#""isShared":true"#));
+        assert!(!serialized.contains("test-key"));
     }
 
     #[tokio::test]

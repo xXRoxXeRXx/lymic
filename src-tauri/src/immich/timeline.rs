@@ -58,8 +58,14 @@ struct TimelineAssetResponse {
     id: String,
     #[serde(rename = "type", default = "default_image_type")]
     asset_type: String,
+    #[serde(default)]
+    width: Option<u32>,
+    #[serde(default)]
+    height: Option<u32>,
     #[serde(rename = "exifInfo", alias = "exif", default)]
     exif: TimelineAssetExif,
+    #[serde(rename = "localDateTime", default)]
+    local_date_time: Option<String>,
     #[serde(rename = "fileCreatedAt", default)]
     file_created_at: Option<String>,
     #[serde(rename = "createdAt", default)]
@@ -77,7 +83,11 @@ struct MetadataSearchResponse {
 struct MetadataSearchAssets {
     #[serde(default)]
     items: Vec<TimelineAssetResponse>,
-    #[serde(rename = "nextPage", default)]
+    #[serde(
+        rename = "nextPage",
+        default,
+        deserialize_with = "deserialize_next_page"
+    )]
     next_page: Option<u64>,
 }
 
@@ -161,6 +171,25 @@ where
     Ok(value.as_ref().and_then(parse_duration_value))
 }
 
+fn deserialize_next_page<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match value {
+        None => Ok(None),
+        Some(serde_json::Value::Number(number)) => number
+            .as_u64()
+            .ok_or_else(|| serde::de::Error::custom("invalid nextPage number"))
+            .map(Some),
+        Some(serde_json::Value::String(text)) => text
+            .parse::<u64>()
+            .map_err(|_| serde::de::Error::custom("invalid nextPage token"))
+            .map(Some),
+        Some(_) => Err(serde::de::Error::custom("invalid nextPage value")),
+    }
+}
+
 fn dimensions_from_ratio(ratio: Option<f64>) -> (u32, u32) {
     match ratio {
         Some(value) if value.is_finite() && value > 0.0 => {
@@ -187,8 +216,8 @@ impl ImmichClient {
                 .header("x-api-key", &self.api_key)
                 .json(&serde_json::json!({
                     "albumIds": [album_id],
-                    "order": "fileCreatedAt",
-                    "orderDirection": "desc",
+                    "order": "desc",
+                    "withExif": true,
                     "page": page,
                     "size": PAGE_SIZE,
                 }))
@@ -376,13 +405,22 @@ fn parse_timeline_bucket_assets(body: Vec<u8>) -> Result<Vec<TimelineAsset>, Str
 fn timeline_asset_from_response(asset: TimelineAssetResponse) -> TimelineAsset {
     TimelineAsset {
         id: asset.id,
-        width: asset.exif.width,
-        height: asset.exif.height,
+        width: if asset.exif.width > 0 {
+            asset.exif.width
+        } else {
+            asset.width.unwrap_or(0)
+        },
+        height: if asset.exif.height > 0 {
+            asset.exif.height
+        } else {
+            asset.height.unwrap_or(0)
+        },
         r#type: asset.asset_type,
         taken_at: asset
             .exif
             .taken_at
             .or(asset.file_created_at)
+            .or(asset.local_date_time)
             .or(asset.created_at),
         camera_make: asset.exif.make,
         camera_model: asset.exif.model,
@@ -677,8 +715,8 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             for (expected_page, body) in [
-                (1, br#"{"assets":{"items":[{"id":"feb","type":"IMAGE","fileCreatedAt":"2025-02-10T10:00:00.000Z","exifInfo":{"imageWidth":640,"imageHeight":480}},{"id":"march-old","type":"VIDEO","duration":"65000","exifInfo":{"dateTimeOriginal":"2025-03-01T10:00:00.000Z"}}],"nextPage":2}}"#.as_slice()),
-                (2, br#"{"assets":{"items":[{"id":"march-new","type":"IMAGE","createdAt":"2025-03-15T10:00:00.000Z","exifInfo":{}}],"nextPage":null}}"#.as_slice()),
+                (1, br#"{"assets":{"items":[{"id":"feb","type":"IMAGE","fileCreatedAt":"2025-02-10T10:00:00.000Z","exifInfo":{"imageWidth":640,"imageHeight":480}},{"id":"march-old","type":"VIDEO","duration":"65000","exifInfo":{"dateTimeOriginal":"2025-03-01T10:00:00.000Z"}}],"nextPage":"2"}}"#.as_slice()),
+                (2, br#"{"assets":{"items":[{"id":"march-new","type":"IMAGE","width":1200,"height":900,"createdAt":"2025-03-15T10:00:00.000Z","exifInfo":{}}],"nextPage":null}}"#.as_slice()),
             ] {
                 let (mut stream, _) = listener.accept().await.unwrap();
                 let mut request = [0_u8; 4096];
@@ -689,8 +727,9 @@ mod tests {
                 assert!(request.contains(&format!(r#""page":{expected_page}"#)));
                 assert!(request.contains(r#""size":1000"#));
                 assert!(request.contains(r#""albumIds":["album-1"]"#));
-                assert!(request.contains(r#""order":"fileCreatedAt""#));
-                assert!(request.contains(r#""orderDirection":"desc""#));
+                assert!(request.contains(r#""order":"desc""#));
+                assert!(request.contains(r#""withExif":true"#));
+                assert!(!request.contains("orderDirection"));
                 assert!(!request.contains("/api/albums/album-1"));
                 stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
                 stream.write_all(body).await.unwrap();
@@ -731,6 +770,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["march-new", "march-old"]
         );
+        assert_eq!(march[0].width, 1200);
+        assert_eq!(march[0].height, 900);
         assert_eq!(march[1].duration, Some(65));
         server.await.unwrap();
     }

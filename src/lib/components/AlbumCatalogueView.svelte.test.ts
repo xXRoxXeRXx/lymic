@@ -25,6 +25,25 @@ describe("AlbumCatalogueView", () => {
     expect(onSelect).toHaveBeenCalledWith(catalogueState().albums[0]);
   });
 
+  it("uses Tauri convertFileSrc when resolving album cover URLs in WebView2", () => {
+    const globals = globalThis as typeof globalThis & {
+      __TAURI_INTERNALS__?: { convertFileSrc?: (filePath: string, protocol?: string) => string };
+    };
+    const previous = globals.__TAURI_INTERNALS__;
+    globals.__TAURI_INTERNALS__ = {
+      convertFileSrc: (_filePath, protocol) => `http://${protocol}.localhost/`,
+    };
+    try {
+      render(AlbumCatalogueView, { catalogue: catalogueState(), onSelect: vi.fn() });
+      expect(screen.getByRole("img", { name: "Shared memories" })).toHaveAttribute(
+        "src",
+        "http://lymic-thumb.localhost/asset/cover-1",
+      );
+    } finally {
+      globals.__TAURI_INTERNALS__ = previous;
+    }
+  });
+
   it("offers retry after an initial error", async () => {
     const refresh = vi.fn();
     render(AlbumCatalogueView, { catalogue: { ...catalogueState(), albums: [], error: "error", refresh }, onSelect: vi.fn() });
