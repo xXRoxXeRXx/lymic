@@ -221,4 +221,7 @@
   ,"hero_landscape": "Пейзаж на заставке"
   ,"lymic_logo": "Логотип Lymic"
   ,"main_navigation": "Основная навигация"
+  ,"people_title": "Люди", "people_loading": "Загрузка людей…", "people_empty": "Распознанных людей пока нет.", "people_unnamed": "Безымянный человек", "people_asset_count": "{count} элементов", "people_load_more": "Загрузить ещё", "people_refresh": "Обновить людей", "people_retry": "Повторить", "people_offline": "Люди недоступны. Показаны кэшированные данные.", "people_error": "Не удалось загрузить людей.", "people_unavailable": "Люди недоступны. Проверьте распознавание лиц и разрешения API."
+  ,"people_return": "Back to People"
+  ,"people_timeline_empty": "This person has no reachable photos yet."
 }

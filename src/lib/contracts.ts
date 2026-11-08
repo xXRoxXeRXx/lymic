@@ -53,6 +53,17 @@ export interface TimelineAsset {
   duration: number | null;
 }
 
+export interface RecognizedPerson {
+  id: string;
+  name: string | null;
+  thumbnailPath: string | null;
+}
+
+export interface PeoplePage {
+  people: RecognizedPerson[];
+  hasNextPage: boolean;
+}
+
 export interface UiLogMessage {
   level?: string;
   message?: string;

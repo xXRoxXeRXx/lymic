@@ -5,10 +5,10 @@ pub(super) const MAX_SUCCESS_RESPONSE_BYTES: usize = 1024 * 1024;
 
 pub(super) async fn response_status_error(response: Response) -> Result<String, String> {
     let status = response.status();
-    match response_error_detail(response).await {
-        Ok(detail) => Ok(format!("{}{}", status, detail)),
-        Err(error) => Err(format!("{}: error body unreadable ({})", status, error)),
-    }
+    // Server response bodies may contain implementation details or sensitive
+    // context. Never forward them past the Immich boundary.
+    let _ = response_error_detail(response).await;
+    Ok(format!("request failed with status {status}"))
 }
 
 pub(super) async fn response_error_detail(response: Response) -> Result<String, String> {
@@ -168,14 +168,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn status_error_includes_status_when_error_body_read_fails() {
+    async fn status_error_omits_server_response_body_when_body_read_fails() {
         let response = test_response(
             "HTTP/1.1 401 Unauthorized\r\nContent-Length: 14\r\nConnection: close\r\n\r\n",
             b"partial".to_vec(),
         )
         .await;
 
-        let error = response_status_error(response).await.unwrap_err();
-        assert!(error.starts_with("401 Unauthorized: error body unreadable ("));
+        let error = response_status_error(response).await.unwrap();
+        assert_eq!(error, "request failed with status 401 Unauthorized");
     }
 }

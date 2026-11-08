@@ -221,4 +221,7 @@
   ,"hero_landscape": "Paysage principal"
   ,"lymic_logo": "Logo Lymic"
   ,"main_navigation": "Navigation principale"
+  ,"people_title": "Personnes", "people_loading": "Chargement des personnes…", "people_empty": "Aucune personne reconnue.", "people_unnamed": "Personne sans nom", "people_asset_count": "{count} éléments", "people_load_more": "Charger plus", "people_refresh": "Actualiser les personnes", "people_retry": "Réessayer", "people_offline": "Personnes hors ligne. Affichage des données en cache.", "people_error": "Impossible de charger les personnes.", "people_unavailable": "Personnes indisponibles. Vérifiez la reconnaissance faciale et les autorisations API."
+  ,"people_return": "Retour aux personnes"
+  ,"people_timeline_empty": "Cette personne n’a pas encore de photos disponibles."
 }

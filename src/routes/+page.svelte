@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images } from "lucide-svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, ArrowLeft, X, FolderSync, ScrollText, User, Images, Users } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
   import LoginView from "#lib/components/LoginView.svelte";
   import DashboardView from "#lib/components/DashboardView.svelte";
   import TimelineView from "#lib/components/TimelineView.svelte";
+  import PeopleView from "#lib/components/PeopleView.svelte";
   import ActivityLog from "#lib/components/ActivityLog.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
   import InfoView from "#lib/components/InfoView.svelte";
@@ -22,6 +23,9 @@
   import { createRemovableVolumeController } from "#lib/controllers/removable-volume-controller.svelte.ts";
   import { createTargetAlbumCatalogue } from "#lib/controllers/target-album-catalogue.svelte.ts";
   import { createTimelineController } from "#lib/controllers/timeline-controller.svelte.ts";
+  import { createPeopleController } from "#lib/controllers/people-controller.svelte.ts";
+  import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
+  import type { RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
@@ -52,6 +56,48 @@
     },
   });
   const timeline = createTimelineController(desktop);
+  const people = createPeopleController(desktop);
+  let selectedPerson = $state<RecognizedPerson | null>(null);
+  let personTimeline = $state<ReturnType<typeof createPersonTimelineController> | null>(null);
+  let peopleScrollTop = 0;
+  let content = $state<HTMLElement>();
+
+  function selectPerson(person: RecognizedPerson) {
+    peopleScrollTop = content?.scrollTop ?? 0;
+    selectedPerson = person;
+    personTimeline = createPersonTimelineController(desktop, person.id);
+    currentView = "person-timeline";
+    void personTimeline.refresh();
+  }
+
+  const pageTitle = $derived.by(() => {
+    switch (currentView) {
+      case "photos": return $t("timeline_title");
+      case "people": return $t("people_title");
+      case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
+      case "dashboard": return $t("dashboard");
+      case "logs": return $t("logs");
+      case "settings": return $t("settings");
+      default: return $t("info");
+    }
+  });
+
+  function closePersonTimeline() {
+    personTimeline?.clear();
+    personTimeline = null;
+    selectedPerson = null;
+  }
+
+  function openPeople() {
+    currentView = "people";
+    void people.refresh();
+  }
+
+  function returnToPeople() {
+    closePersonTimeline();
+    currentView = "people";
+    queueMicrotask(() => { if (content) content.scrollTop = peopleScrollTop; });
+  }
 
   const auth = createAuthController({
     adapter: desktop,
@@ -69,6 +115,8 @@
       sync.clearUserState();
       watchedFolders.clear();
       timeline.clear();
+      people.clear();
+      closePersonTimeline();
       currentView = "photos";
     },
   });
@@ -188,6 +236,15 @@
             <Images class="w-4 h-4 shrink-0 {currentView === 'photos' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('timeline_title')}</span>
           </button>
+          <button
+            type="button"
+            class="nav-item {currentView === 'people' ? 'active' : ''}"
+            onclick={openPeople}
+            aria-label={$t('people_title')}
+          >
+            <Users class="w-4 h-4 shrink-0 {currentView === 'people' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('people_title')}</span>
+          </button>
 
           <button
             type="button"
@@ -258,12 +315,12 @@
       <header class="h-12 px-8 flex items-center justify-between shrink-0 z-10">
         <div class="flex items-center gap-4">
           <h1 class="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {currentView === "photos" ? $t('timeline_title') : currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
+            {pageTitle}
           </h1>
         </div>
       </header>
 
-      <main class="flex-1 {currentView === 'photos' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} class="flex-1 {currentView === 'photos' || currentView === 'person-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
@@ -291,6 +348,16 @@
 
         {#if currentView === "photos"}
           <TimelineView {timeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} />
+        {:else if currentView === "people"}
+          <PeopleView {people} onSelect={selectPerson} />
+        {:else if currentView === "person-timeline" && personTimeline}
+          <div class="flex h-full min-h-0 flex-col gap-2">
+            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToPeople}>
+              <ArrowLeft class="h-4 w-4" />
+              {$t('people_return')}
+            </button>
+            <TimelineView timeline={personTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} emptyMessage={$t('people_timeline_empty')} />
+          </div>
         {:else if currentView === "dashboard"}
           <DashboardView
             status={sync.status}

@@ -22,6 +22,7 @@ import type {
   WatchedFolder,
   TimelineBucket,
   TimelineAsset,
+  PeoplePage,
 } from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
 
@@ -61,6 +62,11 @@ export interface AlbumsDesktopAdapter {
 export interface TimelineDesktopAdapter {
   getTimelineBuckets(): Promise<TimelineBucket[]>;
   getTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
+}
+export interface PeopleDesktopAdapter {
+  getPeople(page: number, size: number): Promise<PeoplePage>;
+  getPersonTimelineBuckets(personId: string): Promise<TimelineBucket[]>;
+  getPersonTimelineBucketAssets(personId: string, timeBucket: string): Promise<TimelineAsset[]>;
 }
 
 export interface PreferencesDesktopAdapter {
@@ -105,6 +111,7 @@ export interface DesktopAdapter
     WatchedFoldersDesktopAdapter,
     AlbumsDesktopAdapter,
     TimelineDesktopAdapter,
+    PeopleDesktopAdapter,
     PreferencesDesktopAdapter,
     UpdateDesktopAdapter,
     RemovableVolumeDesktopAdapter {}
@@ -146,6 +153,9 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   createAlbum: (name) => invoke<Album>("create_album", { name }),
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
+  getPeople: (page, size) => invoke<PeoplePage>("get_people", { page, size }),
+  getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),
+  getPersonTimelineBucketAssets: (personId, timeBucket) => invoke<TimelineAsset[]>("get_person_timeline_bucket_assets", { personId, timeBucket }),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),
