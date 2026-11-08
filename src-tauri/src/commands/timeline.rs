@@ -1,4 +1,4 @@
-use crate::immich::{ImmichClient, TimelineAsset, TimelineBucket};
+use crate::immich::{ImmichClient, PersonTimelinePage, TimelineAsset, TimelineBucket};
 
 #[tauri::command]
 pub(crate) async fn get_timeline_buckets() -> Result<Vec<TimelineBucket>, String> {
@@ -23,10 +23,12 @@ pub(crate) async fn get_timeline_bucket_assets(
 #[tauri::command]
 pub(crate) async fn get_person_timeline_assets(
     person_id: String,
-) -> Result<Vec<TimelineAsset>, String> {
+    page: u32,
+    size: u32,
+) -> Result<PersonTimelinePage, String> {
     let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
     client
-        .get_person_timeline_assets(&person_id)
+        .get_person_timeline_assets(&person_id, page.max(1), size.clamp(1, 250))
         .await
         .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }
