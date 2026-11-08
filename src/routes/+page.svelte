@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, ArrowLeft, X, FolderSync, ScrollText, User, Images, Users } from "lucide-svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, ArrowLeft, X, FolderSync, ScrollText, User, Images, Users, Album } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
@@ -8,6 +8,7 @@
   import DashboardView from "#lib/components/DashboardView.svelte";
   import TimelineView from "#lib/components/TimelineView.svelte";
   import PeopleView from "#lib/components/PeopleView.svelte";
+  import AlbumCatalogueView from "#lib/components/AlbumCatalogueView.svelte";
   import ActivityLog from "#lib/components/ActivityLog.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
   import InfoView from "#lib/components/InfoView.svelte";
@@ -24,6 +25,7 @@
   import { createTargetAlbumCatalogue } from "#lib/controllers/target-album-catalogue.svelte.ts";
   import { createTimelineController } from "#lib/controllers/timeline-controller.svelte.ts";
   import { createPeopleController } from "#lib/controllers/people-controller.svelte.ts";
+  import { createAlbumCatalogueController } from "#lib/controllers/album-catalogue-controller.svelte.ts";
   import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
   import type { RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
@@ -57,6 +59,7 @@
   });
   const timeline = createTimelineController(desktop);
   const people = createPeopleController(desktop);
+  const albumCatalogue = createAlbumCatalogueController(desktop);
   let selectedPerson = $state<RecognizedPerson | null>(null);
   let personTimeline = $state<ReturnType<typeof createPersonTimelineController> | null>(null);
   let peopleScrollTop = 0;
@@ -74,6 +77,7 @@
     switch (currentView) {
       case "photos": return $t("timeline_title");
       case "people": return $t("people_title");
+      case "albums": return $t("albums_title");
       case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
       case "dashboard": return $t("dashboard");
       case "logs": return $t("logs");
@@ -91,6 +95,11 @@
   function openPeople() {
     currentView = "people";
     void people.refresh();
+  }
+
+  function openAlbums() {
+    currentView = "albums";
+    void albumCatalogue.refresh();
   }
 
   function returnToPeople() {
@@ -116,6 +125,7 @@
       watchedFolders.clear();
       timeline.clear();
       people.clear();
+      albumCatalogue.clear();
       closePersonTimeline();
       currentView = "photos";
     },
@@ -236,6 +246,10 @@
             <Images class="w-4 h-4 shrink-0 {currentView === 'photos' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('timeline_title')}</span>
           </button>
+          <button type="button" class="nav-item {currentView === 'albums' ? 'active' : ''}" onclick={openAlbums} aria-label={$t('albums_title')}>
+            <Album class="w-4 h-4 shrink-0 {currentView === 'albums' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('albums_title')}</span>
+          </button>
           <button
             type="button"
             class="nav-item {currentView === 'people' ? 'active' : ''}"
@@ -350,6 +364,8 @@
           <TimelineView {timeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} />
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
+        {:else if currentView === "albums"}
+          <AlbumCatalogueView catalogue={albumCatalogue} />
         {:else if currentView === "person-timeline" && personTimeline}
           <div class="flex h-full min-h-0 flex-col gap-2">
             <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToPeople}>

@@ -36,6 +36,13 @@ export interface Album {
   albumName: string;
 }
 
+export interface AlbumCatalogueItem extends Album {
+  albumThumbnailAssetId: string | null;
+  assetCount: number;
+  isShared: boolean;
+  order: string | null;
+}
+
 export interface TimelineBucket {
   timeBucket: string;
   count: number;
