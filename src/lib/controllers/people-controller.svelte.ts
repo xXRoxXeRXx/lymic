@@ -8,13 +8,22 @@ export interface PeopleViewState {
   readonly isOffline: boolean;
   readonly hasNextPage: boolean;
   readonly error: "unavailable" | "error" | null;
-  onSelect?: (person: RecognizedPerson) => void;
   refresh(): Promise<void>;
   loadMore(): Promise<void>;
   clear(): void;
 }
 
 const PAGE_SIZE = 50;
+const UNAVAILABLE_PREFIXES = [
+  "recognized_people_permission_denied:",
+  "recognized_people_authentication_required:",
+  "recognized_people_unavailable:",
+];
+
+function classifyError(reason: unknown): "unavailable" | "error" {
+  const message = typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "";
+  return UNAVAILABLE_PREFIXES.some((prefix) => message.startsWith(prefix)) ? "unavailable" : "error";
+}
 
 export function createPeopleController(adapter: PeopleDesktopAdapter): PeopleViewState {
   let people = $state<RecognizedPerson[]>([]);
@@ -32,28 +41,63 @@ export function createPeopleController(adapter: PeopleDesktopAdapter): PeopleVie
     const requestGeneration = generation;
     isLoading = people.length === 0;
     isRefreshing = replace;
-    const request = adapter.getPeople(nextPage, PAGE_SIZE).then((result) => {
-      if (requestGeneration !== generation) return;
-      people = replace ? result.people : [...people, ...result.people];
-      page = nextPage;
-      hasNextPage = result.hasNextPage;
-      error = null;
-      isOffline = false;
-    }).catch((reason: unknown) => {
-      if (requestGeneration !== generation) return;
-      const message = (typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "").toLowerCase();
-      error = people.length === 0 ? (message.includes("permission") || message.includes("unavailable") ? "unavailable" : "error") : null;
-      isOffline = people.length > 0;
-    }).finally(() => {
-      if (pending === request) pending = null;
-      if (requestGeneration === generation) { isLoading = false; isRefreshing = false; }
-    });
+    const request = adapter
+      .getPeople(nextPage, PAGE_SIZE)
+      .then((result) => {
+        if (requestGeneration !== generation) return;
+        people = replace ? result.people : [...people, ...result.people];
+        page = nextPage;
+        hasNextPage = result.hasNextPage;
+        error = null;
+        isOffline = false;
+      })
+      .catch((reason: unknown) => {
+        if (requestGeneration !== generation) return;
+        error = people.length === 0 ? classifyError(reason) : null;
+        isOffline = people.length > 0;
+      })
+      .finally(() => {
+        if (pending === request) pending = null;
+        if (requestGeneration === generation) {
+          isLoading = false;
+          isRefreshing = false;
+        }
+      });
     pending = request;
     return request;
   }
 
-  function refresh() { generation += 1; pending = null; return load(1, true); }
-  function loadMore() { return hasNextPage ? load(page + 1, false) : Promise.resolve(); }
-  function clear() { generation += 1; pending = null; people = []; page = 0; hasNextPage = false; isLoading = false; isRefreshing = false; isOffline = false; error = null; }
-  return { get people() { return people; }, get isLoading() { return isLoading; }, get isRefreshing() { return isRefreshing; }, get isOffline() { return isOffline; }, get hasNextPage() { return hasNextPage; }, get error() { return error; }, refresh, loadMore, clear };
+  function refresh() {
+    generation += 1;
+    pending = null;
+    return load(1, true);
+  }
+
+  function loadMore() {
+    return hasNextPage ? load(page + 1, false) : Promise.resolve();
+  }
+
+  function clear() {
+    generation += 1;
+    pending = null;
+    people = [];
+    page = 0;
+    hasNextPage = false;
+    isLoading = false;
+    isRefreshing = false;
+    isOffline = false;
+    error = null;
+  }
+
+  return {
+    get people() { return people; },
+    get isLoading() { return isLoading; },
+    get isRefreshing() { return isRefreshing; },
+    get isOffline() { return isOffline; },
+    get hasNextPage() { return hasNextPage; },
+    get error() { return error; },
+    refresh,
+    loadMore,
+    clear,
+  };
 }

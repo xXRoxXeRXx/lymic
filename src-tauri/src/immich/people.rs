@@ -26,23 +26,6 @@ pub struct PeoplePage {
     pub has_next_page: bool,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::PeopleResponse;
-
-    #[test]
-    fn accepts_immich_people_without_asset_count() {
-        let response: PeopleResponse = serde_json::from_str(
-            r#"{\"people\":[{\"id\":\"person-1\",\"name\":\"Ada\",\"thumbnailPath\":\"/person-1.jpg\"},{\"id\":\"person-2\",\"name\":null}],\"total\":2}"#,
-        )
-        .expect("Immich PersonResponseDto should deserialize");
-
-        assert_eq!(response.people[0].id, "person-1");
-        assert_eq!(response.people[0].thumbnail_path.as_deref(), Some("/person-1.jpg"));
-        assert_eq!(response.people[1].thumbnail_path, None);
-    }
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PeopleResponse {
@@ -77,5 +60,22 @@ impl ImmichClient {
             }),
             people: response.people,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PeopleResponse;
+
+    #[test]
+    fn accepts_immich_people_without_asset_count() {
+        let response: PeopleResponse = serde_json::from_str(
+            r#"{"people":[{"id":"person-1","name":"Ada","thumbnailPath":"/person-1.jpg"},{"id":"person-2","name":null}],"total":2}"#,
+        )
+        .expect("Immich PersonResponseDto should deserialize");
+
+        assert_eq!(response.people[0].id, "person-1");
+        assert_eq!(response.people[0].thumbnail_path.as_deref(), Some("/person-1.jpg"));
+        assert_eq!(response.people[1].thumbnail_path, None);
     }
 }

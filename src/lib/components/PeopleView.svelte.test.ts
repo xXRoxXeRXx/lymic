@@ -5,7 +5,7 @@ import "../i18n";
 import PeopleView from "./PeopleView.svelte";
 import type { PeopleViewState } from "../controllers/people-controller.svelte";
 
-function peopleState(thumbnailPath: string | null, onSelect = vi.fn()): PeopleViewState {
+function peopleState(thumbnailPath: string | null): PeopleViewState {
   return {
     people: [{ id: "person-1", name: "Ada", thumbnailPath }],
     isLoading: false,
@@ -16,7 +16,6 @@ function peopleState(thumbnailPath: string | null, onSelect = vi.fn()): PeopleVi
     refresh: vi.fn(),
     loadMore: vi.fn(),
     clear: vi.fn(),
-    onSelect,
   };
 }
 
@@ -26,19 +25,19 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("PeopleView thumbnails", () => {
   it("renders an available person thumbnail through the credential-safe protocol", () => {
-    render(PeopleView, { people: peopleState("/profile/person-1.jpeg") });
+    render(PeopleView, { people: peopleState("/profile/person-1.jpeg"), onSelect: vi.fn() });
 
     expect(screen.getByRole("img", { name: "Ada" })).toHaveAttribute(
       "src",
-      "lymic-thumb://person/person-1",
+      "lymic-thumb://person/person-1?v=%2Fprofile%2Fperson-1.jpeg",
     );
   });
 
   it("falls back to the neutral placeholder when the thumbnail is absent or fails", async () => {
-    const { rerender } = render(PeopleView, { people: peopleState(null) });
+    const { rerender } = render(PeopleView, { people: peopleState(null), onSelect: vi.fn() });
     expect(screen.queryByRole("img", { name: "Ada" })).not.toBeInTheDocument();
 
-    await rerender({ people: peopleState("/profile/person-1.jpeg") });
+    await rerender({ people: peopleState("/profile/person-1.jpeg"), onSelect: vi.fn() });
     await fireEvent.error(screen.getByRole("img", { name: "Ada" }));
     expect(screen.queryByRole("img", { name: "Ada" })).not.toBeInTheDocument();
   });
@@ -46,7 +45,7 @@ describe("PeopleView thumbnails", () => {
 
 it("opens the selected Recognized Person", async () => {
   const onSelect = vi.fn();
-  render(PeopleView, { people: peopleState(null, onSelect) });
+  render(PeopleView, { people: peopleState(null), onSelect });
   await fireEvent.click(screen.getByRole("button", { name: "Ada" }));
   expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "person-1" }));
 });
@@ -67,7 +66,7 @@ it("loads the next people page when the end marker enters the app scroll contain
   const main = document.createElement("main");
   document.body.append(main);
 
-  render(PeopleView, { people }, { baseElement: main });
+  render(PeopleView, { people, onSelect: vi.fn() }, { baseElement: main });
 
   expect(loadMore).toHaveBeenCalledOnce();
   expect(observedOptions?.root).toBe(main);

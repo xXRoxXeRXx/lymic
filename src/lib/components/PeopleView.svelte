@@ -1,21 +1,23 @@
 <script lang="ts">
   import { RefreshCw, UserRound } from "lucide-svelte";
   import { t } from "svelte-i18n";
+  import type { RecognizedPerson } from "../contracts";
   import type { PeopleViewState } from "../controllers/people-controller.svelte";
-  let { people }: { people: PeopleViewState } = $props();
+  let { people, onSelect }: { people: PeopleViewState; onSelect: (person: RecognizedPerson) => void } = $props();
   let failedThumbnailIds = $state(new Set<string>());
 
-  function thumbnailSrc(personId: string) {
-    const encodedId = encodeURIComponent(personId);
+  function thumbnailSrc(person: RecognizedPerson) {
+    const encodedId = encodeURIComponent(person.id);
+    const version = encodeURIComponent(person.thumbnailPath ?? "");
     const convertFileSrc = (
       globalThis as typeof globalThis & {
         __TAURI_INTERNALS__?: { convertFileSrc?: (filePath: string, protocol?: string) => string };
       }
     ).__TAURI_INTERNALS__?.convertFileSrc;
     if (typeof convertFileSrc === "function") {
-      return `${convertFileSrc("", "lymic-thumb").replace(/\/$/, "")}/person/${encodedId}`;
+      return `${convertFileSrc("", "lymic-thumb").replace(/\/$/, "")}/person/${encodedId}?v=${version}`;
     }
-    return `lymic-thumb://person/${encodedId}`;
+    return `lymic-thumb://person/${encodedId}?v=${version}`;
   }
 
   function hideThumbnail(personId: string) {
@@ -43,10 +45,10 @@
   {:else if people.people.length === 0}<p>{$t("people_empty")}</p>
   {:else}<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
     {#each people.people as person (person.id)}
-      <button type="button" class="rounded-xl border border-slate-200 p-4 text-left dark:border-zinc-700" aria-label={person.name ?? $t("people_unnamed")} onclick={() => people.onSelect?.(person)}>
+      <button type="button" class="rounded-xl border border-slate-200 p-4 text-left dark:border-zinc-700" aria-label={person.name ?? $t("people_unnamed")} onclick={() => onSelect(person)}>
         <div class="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-zinc-800">
           {#if person.thumbnailPath && !failedThumbnailIds.has(person.id)}
-            <img class="h-full w-full object-cover" src={thumbnailSrc(person.id)} alt={person.name ?? $t("people_unnamed")} onerror={() => hideThumbnail(person.id)} />
+            <img class="h-full w-full object-cover" src={thumbnailSrc(person)} alt={person.name ?? $t("people_unnamed")} onerror={() => hideThumbnail(person.id)} />
           {:else}
             <UserRound class="h-12 w-12 text-slate-400" />
           {/if}

@@ -70,10 +70,31 @@
     void personTimeline.refresh();
   }
 
-  function returnToPeople() {
+  const pageTitle = $derived.by(() => {
+    switch (currentView) {
+      case "photos": return $t("timeline_title");
+      case "people": return $t("people_title");
+      case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
+      case "dashboard": return $t("dashboard");
+      case "logs": return $t("logs");
+      case "settings": return $t("settings");
+      default: return $t("info");
+    }
+  });
+
+  function closePersonTimeline() {
     personTimeline?.clear();
     personTimeline = null;
     selectedPerson = null;
+  }
+
+  function openPeople() {
+    currentView = "people";
+    void people.refresh();
+  }
+
+  function returnToPeople() {
+    closePersonTimeline();
     currentView = "people";
     queueMicrotask(() => { if (content) content.scrollTop = peopleScrollTop; });
   }
@@ -95,9 +116,7 @@
       watchedFolders.clear();
       timeline.clear();
       people.clear();
-      personTimeline?.clear();
-      personTimeline = null;
-      selectedPerson = null;
+      closePersonTimeline();
       currentView = "photos";
     },
   });
@@ -220,7 +239,7 @@
           <button
             type="button"
             class="nav-item {currentView === 'people' ? 'active' : ''}"
-            onclick={() => { currentView = "people"; if (people.people.length === 0) void people.refresh(); }}
+            onclick={openPeople}
             aria-label={$t('people_title')}
           >
             <Users class="w-4 h-4 shrink-0 {currentView === 'people' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
@@ -296,7 +315,7 @@
       <header class="h-12 px-8 flex items-center justify-between shrink-0 z-10">
         <div class="flex items-center gap-4">
           <h1 class="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {currentView === "photos" ? $t('timeline_title') : currentView === "people" ? $t('people_title') : currentView === "person-timeline" ? (selectedPerson?.name ?? $t('people_unnamed')) : currentView === "dashboard" ? $t('dashboard') : currentView === "logs" ? $t('logs') : currentView === "settings" ? $t('settings') : $t('info')}
+            {pageTitle}
           </h1>
         </div>
       </header>
@@ -330,7 +349,7 @@
         {#if currentView === "photos"}
           <TimelineView {timeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} />
         {:else if currentView === "people"}
-          <PeopleView people={{ ...people, onSelect: selectPerson }} />
+          <PeopleView {people} onSelect={selectPerson} />
         {:else if currentView === "person-timeline" && personTimeline}
           <div class="flex h-full min-h-0 flex-col gap-2">
             <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToPeople}>
