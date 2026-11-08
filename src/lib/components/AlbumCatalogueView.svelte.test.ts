@@ -31,4 +31,21 @@ describe("AlbumCatalogueView", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(refresh).toHaveBeenCalledOnce();
   });
+
+  it("renders missing covers and an empty catalogue without attempting a thumbnail request", () => {
+    const { rerender } = render(AlbumCatalogueView, {
+      catalogue: {
+        ...catalogueState(),
+        albums: [{ id: "empty", albumName: "Empty album", albumThumbnailAssetId: null, assetCount: 0, isShared: false, order: null }],
+      },
+      onSelect: vi.fn(),
+    });
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByText("Empty album")).toBeInTheDocument();
+    expect(screen.getByText("0 assets")).toBeInTheDocument();
+
+    rerender({ catalogue: { ...catalogueState(), albums: [] }, onSelect: vi.fn() });
+    expect(screen.getByText("No accessible albums yet.")).toBeInTheDocument();
+  });
 });
