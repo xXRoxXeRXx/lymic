@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/svelte";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import PeopleView from "./PeopleView.svelte";
 import type { PeopleViewState } from "../controllers/people-controller.svelte";
@@ -11,14 +11,14 @@ function peopleState(thumbnailPath: string | null, onSelect = vi.fn()): PeopleVi
     isLoading: false,
     isRefreshing: false,
     isOffline: false,
-    hasNextPage: false,
     error: null,
     refresh: vi.fn(),
-    loadMore: vi.fn(),
     clear: vi.fn(),
     onSelect,
   };
 }
+
+afterEach(cleanup);
 
 describe("PeopleView thumbnails", () => {
   it("renders an available person thumbnail through the credential-safe protocol", () => {

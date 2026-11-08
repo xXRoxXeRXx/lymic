@@ -3,7 +3,7 @@ import { createPeopleController } from "./people-controller.svelte";
 import type { PeopleDesktopAdapter } from "../tauri/desktop-adapter";
 
 describe("People controller", () => {
-  it("loads pages in server order and retains cached people when refresh fails", async () => {
+  it("loads every server page automatically and retains cached people when refresh fails", async () => {
     const adapter: PeopleDesktopAdapter = {
       getPeople: vi.fn()
         .mockResolvedValueOnce({ people: [{ id: "one", name: "Ada", thumbnailPath: null }], hasNextPage: true })
@@ -14,12 +14,11 @@ describe("People controller", () => {
     };
     const people = createPeopleController(adapter);
     await people.refresh();
-    await people.loadMore();
     await people.refresh();
     expect(people.people.map((person) => person.id)).toEqual(["one", "two"]);
     expect(people.isOffline).toBe(true);
-    expect(adapter.getPeople).toHaveBeenNthCalledWith(1, 1, 50);
-    expect(adapter.getPeople).toHaveBeenNthCalledWith(2, 2, 50);
+    expect(adapter.getPeople).toHaveBeenNthCalledWith(1, 1, 100);
+    expect(adapter.getPeople).toHaveBeenNthCalledWith(2, 2, 100);
   });
 
   it("shows the capability state when Tauri rejects a permission error string", async () => {

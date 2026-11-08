@@ -6,38 +6,43 @@ export interface PeopleViewState {
   readonly isLoading: boolean;
   readonly isRefreshing: boolean;
   readonly isOffline: boolean;
-  readonly hasNextPage: boolean;
   readonly error: "unavailable" | "error" | null;
   onSelect?: (person: RecognizedPerson) => void;
   refresh(): Promise<void>;
-  loadMore(): Promise<void>;
   clear(): void;
 }
+
+const PAGE_SIZE = 100;
 
 export function createPeopleController(adapter: PeopleDesktopAdapter): PeopleViewState {
   let people = $state<RecognizedPerson[]>([]);
   let isLoading = $state(false);
   let isRefreshing = $state(false);
   let isOffline = $state(false);
-  let hasNextPage = $state(false);
   let error = $state<"unavailable" | "error" | null>(null);
-  let page = 0;
   let generation = 0;
   let pending: Promise<void> | null = null;
 
-  async function load(nextPage: number, replace: boolean) {
+  async function refresh() {
     if (pending) return pending;
     const requestGeneration = generation;
     isLoading = people.length === 0;
-    isRefreshing = replace;
-    const request = adapter.getPeople(nextPage, 50).then((result) => {
-      if (requestGeneration !== generation) return;
-      people = replace ? result.people : [...people, ...result.people];
-      page = nextPage;
-      hasNextPage = result.hasNextPage;
+    isRefreshing = true;
+    const request = (async () => {
+      let page = 1;
+      let hasNextPage = true;
+      const loaded: RecognizedPerson[] = [];
+      while (hasNextPage) {
+        const result = await adapter.getPeople(page, PAGE_SIZE);
+        if (requestGeneration !== generation) return;
+        loaded.push(...result.people);
+        hasNextPage = result.hasNextPage;
+        page += 1;
+      }
+      people = loaded;
       error = null;
       isOffline = false;
-    }).catch((reason: unknown) => {
+    })().catch((reason: unknown) => {
       if (requestGeneration !== generation) return;
       const message = (typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "").toLowerCase();
       error = people.length === 0 ? (message.includes("permission") || message.includes("unavailable") ? "unavailable" : "error") : null;
@@ -50,8 +55,7 @@ export function createPeopleController(adapter: PeopleDesktopAdapter): PeopleVie
     return request;
   }
 
-  function refresh() { generation += 1; pending = null; return load(1, true); }
-  function loadMore() { return hasNextPage ? load(page + 1, false) : Promise.resolve(); }
-  function clear() { generation += 1; pending = null; people = []; page = 0; hasNextPage = false; isLoading = false; isRefreshing = false; isOffline = false; error = null; }
-  return { get people() { return people; }, get isLoading() { return isLoading; }, get isRefreshing() { return isRefreshing; }, get isOffline() { return isOffline; }, get hasNextPage() { return hasNextPage; }, get error() { return error; }, refresh, loadMore, clear };
+  function startRefresh() { generation += 1; pending = null; return refresh(); }
+  function clear() { generation += 1; pending = null; people = []; isLoading = false; isRefreshing = false; isOffline = false; error = null; }
+  return { get people() { return people; }, get isLoading() { return isLoading; }, get isRefreshing() { return isRefreshing; }, get isOffline() { return isOffline; }, get error() { return error; }, refresh: startRefresh, clear };
 }

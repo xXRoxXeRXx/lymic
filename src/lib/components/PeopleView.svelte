@@ -46,6 +46,5 @@
       </button>
     {/each}
   </div>
-  {#if people.hasNextPage}<button type="button" class="self-center rounded-lg border px-4 py-2" onclick={() => void people.loadMore()}>{$t("people_load_more")}</button>{/if}
   {/if}
 </div>
