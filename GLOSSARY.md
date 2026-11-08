@@ -92,6 +92,10 @@ _Avoid_: download, fetch, caching
 
 ## Photo Timeline
 
+**Recognized Person**:
+An identity group created by Immich that has an optional assigned name and associated Remote Assets.
+_Avoid_: person, face, face group
+
 **Photo Timeline**:
 The chronological presentation of Remote Assets in the Immich Library grouped into time buckets.
 _Avoid_: gallery, photo feed, media stream
