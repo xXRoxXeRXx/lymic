@@ -5,6 +5,7 @@
 # Lymic — Desktop upload client for Immich
 
 [![License](https://img.shields.io/github/license/xXRoxXeRXx/lymic?style=for-the-badge)](LICENSE)
+[![Microsoft Store](https://img.shields.io/badge/Microsoft_Store-Lymic-%230078D4.svg?style=for-the-badge&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDBoMTF2MTFIMHpNMTMgMGgxMXYxMUgxM3pNMCAxM2gxMXYxMUgwek0xMyAxM2gxMXYxMUgxM3oiLz48L3N2Zz4=)](https://apps.microsoft.com/store/detail/9NLQWHTHR1FZ?cid=DevShareMCLPCS)
 [![Snapcraft](https://img.shields.io/badge/Snapcraft-lymic-%23E95420.svg?style=for-the-badge&logo=snapcraft&logoColor=white)](https://snapcraft.io/lymic)
 [![Built with Tauri](https://img.shields.io/badge/Built%20with-Tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
 [![SvelteKit](https://img.shields.io/badge/Frontend-SvelteKit-%23FF3E00.svg?style=for-the-badge&logo=svelte&logoColor=white)](https://kit.svelte.dev/)
@@ -57,6 +58,16 @@
 ### Download
 
 Download the latest installer for your operating system from the [Lymic releases](https://github.com/xXRoxXeRXx/lymic/releases) page.
+
+#### Windows (Microsoft Store)
+
+Windows users can install and update Lymic directly from the Microsoft Store:
+
+[![Download from Microsoft Store](https://get.microsoft.com/images/en-us%20dark.svg)](https://apps.microsoft.com/store/detail/9NLQWHTHR1FZ?cid=DevShareMCLPCS)
+
+```powershell
+winget install 9NLQWHTHR1FZ
+```
 
 #### Linux (Snap)
 
