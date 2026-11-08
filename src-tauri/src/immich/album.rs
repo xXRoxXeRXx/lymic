@@ -12,7 +12,44 @@ pub struct Album {
     pub album_name: String,
 }
 
+/// Read-only display data returned by Immich's album catalogue endpoint.
+///
+/// This intentionally stays separate from `Album`: Target Album selection only
+/// needs an id and name, while the catalogue must retain Immich's response
+/// order and presentation metadata.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumCatalogueItem {
+    pub id: super::ids::AlbumId,
+    pub album_name: String,
+    pub album_thumbnail_asset_id: Option<String>,
+    pub asset_count: u64,
+    pub is_shared: bool,
+    pub order: Option<String>,
+}
+
 impl ImmichClient {
+    pub async fn get_album_catalogue(&self) -> Result<Vec<AlbumCatalogueItem>, String> {
+        let response = self
+            .client
+            .get(self.endpoint_url("albums"))
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to fetch album catalogue: {}", error))?;
+
+        if !response.status().is_success() {
+            return Err(format!(
+                "Failed to fetch album catalogue: {}",
+                response_status_error(response).await?
+            ));
+        }
+
+        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
+        serde_json::from_slice(&body)
+            .map_err(|error| format!("Invalid album catalogue response: {}", error))
+    }
+
     pub async fn get_albums(&self) -> Result<Vec<Album>, String> {
         let response = self
             .client
@@ -232,6 +269,50 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn get_album_catalogue_preserves_immich_order_and_exposes_display_metadata() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let req = read_http_request(&mut stream).await;
+            assert!(req.starts_with("GET /api/albums HTTP/1.1"));
+            let response = r#"[{"id":"shared","albumName":"Shared memories","albumThumbnailAssetId":"cover-1","assetCount":12,"isShared":true,"order":"z"},{"id":"empty","albumName":"Empty album","albumThumbnailAssetId":null,"assetCount":0,"isShared":false,"order":"a"}]"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        response.len(),
+                        response
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+        });
+
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+
+        let albums = client.get_album_catalogue().await.unwrap();
+        assert_eq!(albums[0].id, AlbumId::new("shared"));
+        assert_eq!(
+            albums[0].album_thumbnail_asset_id.as_deref(),
+            Some("cover-1")
+        );
+        assert_eq!(albums[0].asset_count, 12);
+        assert!(albums[0].is_shared);
+        assert_eq!(albums[0].order.as_deref(), Some("z"));
+        assert_eq!(albums[1].id, AlbumId::new("empty"));
+        assert_eq!(albums[1].album_thumbnail_asset_id, None);
+        assert_eq!(albums[1].asset_count, 0);
+        assert!(!albums[1].is_shared);
+        assert!(!serde_json::to_string(&albums).unwrap().contains("test-key"));
     }
 
     #[tokio::test]

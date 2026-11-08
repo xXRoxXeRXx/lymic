@@ -7,7 +7,7 @@ mod response;
 mod timeline;
 mod upload;
 
-pub(crate) use album::Album;
+pub(crate) use album::{Album, AlbumCatalogueItem};
 pub(crate) use bulk_check::BulkCheckDuplicate;
 pub(crate) use client::{AssetResponse, ImmichClient};
 pub(crate) use ids::{AlbumId, RemoteAssetId};

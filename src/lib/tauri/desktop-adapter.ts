@@ -9,6 +9,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import type {
   Album,
+  AlbumCatalogueItem,
   CurrentUser,
   DatabaseRecoveryNotice,
   FailedSyncEntry,
@@ -57,6 +58,10 @@ export interface WatchedFoldersDesktopAdapter {
 export interface AlbumsDesktopAdapter {
   getAlbums(): Promise<Album[]>;
   createAlbum(name: string): Promise<Album>;
+}
+
+export interface AlbumCatalogueDesktopAdapter {
+  getAlbumCatalogue(): Promise<AlbumCatalogueItem[]>;
 }
 
 export interface TimelineDesktopAdapter {
@@ -110,6 +115,7 @@ export interface DesktopAdapter
     SyncDesktopAdapter,
     WatchedFoldersDesktopAdapter,
     AlbumsDesktopAdapter,
+    AlbumCatalogueDesktopAdapter,
     TimelineDesktopAdapter,
     PeopleDesktopAdapter,
     PreferencesDesktopAdapter,
@@ -150,6 +156,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   confirm,
 
   getAlbums: () => invoke<Album[]>("get_albums"),
+  getAlbumCatalogue: () => invoke<AlbumCatalogueItem[]>("get_album_catalogue"),
   createAlbum: (name) => invoke<Album>("create_album", { name }),
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
