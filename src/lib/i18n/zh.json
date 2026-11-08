@@ -221,4 +221,5 @@
   ,"hero_landscape": "主视觉风景"
   ,"lymic_logo": "Lymic 徽标"
   ,"main_navigation": "主导航"
+  ,"people_title": "人物", "people_loading": "正在加载人物…", "people_empty": "尚无已识别人物。", "people_unnamed": "未命名人物", "people_asset_count": "{count} 个项目", "people_load_more": "加载更多", "people_refresh": "刷新人物", "people_retry": "重试", "people_offline": "人物离线。正在显示缓存数据。", "people_error": "无法加载人物。", "people_unavailable": "人物不可用。请检查人脸识别和 API 权限。"
 }

@@ -221,4 +221,5 @@
   ,"hero_landscape": "منظر رئيسي"
   ,"lymic_logo": "شعار Lymic"
   ,"main_navigation": "التنقل الرئيسي"
+  ,"people_title": "الأشخاص", "people_loading": "جارٍ تحميل الأشخاص…", "people_empty": "لا يوجد أشخاص معروفون بعد.", "people_unnamed": "شخص بلا اسم", "people_asset_count": "{count} عناصر", "people_load_more": "تحميل المزيد", "people_refresh": "تحديث الأشخاص", "people_retry": "إعادة المحاولة", "people_offline": "الأشخاص غير متصلين. يتم عرض البيانات المخزنة.", "people_error": "تعذر تحميل الأشخاص.", "people_unavailable": "الأشخاص غير متاحين. تحقق من التعرف على الوجوه وأذونات API."
 }

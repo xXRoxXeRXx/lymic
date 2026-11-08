@@ -221,4 +221,5 @@
   ,"hero_landscape": "Paisaje de portada"
   ,"lymic_logo": "Logotipo de Lymic"
   ,"main_navigation": "Navegación principal"
+  ,"people_title": "Personas", "people_loading": "Cargando personas…", "people_empty": "Aún no hay personas reconocidas.", "people_unnamed": "Persona sin nombre", "people_asset_count": "{count} elementos", "people_load_more": "Cargar más", "people_refresh": "Actualizar personas", "people_retry": "Reintentar", "people_offline": "Personas sin conexión. Mostrando datos guardados.", "people_error": "No se pudieron cargar las personas.", "people_unavailable": "Personas no disponibles. Compruebe el reconocimiento facial y los permisos de API."
 }
