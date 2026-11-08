@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images, Users } from "lucide-svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, ArrowLeft, X, FolderSync, ScrollText, User, Images, Users } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
@@ -333,8 +333,11 @@
           <PeopleView people={{ ...people, onSelect: selectPerson }} />
         {:else if currentView === "person-timeline" && personTimeline}
           <div class="flex h-full min-h-0 flex-col gap-2">
-            <button type="button" class="self-start rounded-lg px-2 py-1" onclick={returnToPeople}>{$t('people_return')}</button>
-            <TimelineView timeline={personTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} showScrubber={false} emptyMessage={$t('people_timeline_empty')} />
+            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToPeople}>
+              <ArrowLeft class="h-4 w-4" />
+              {$t('people_return')}
+            </button>
+            <TimelineView timeline={personTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} emptyMessage={$t('people_timeline_empty')} />
           </div>
         {:else if currentView === "dashboard"}
           <DashboardView

@@ -64,11 +64,6 @@ export interface PeoplePage {
   hasNextPage: boolean;
 }
 
-export interface PersonTimelinePage {
-  assets: TimelineAsset[];
-  hasNextPage: boolean;
-}
-
 export interface UiLogMessage {
   level?: string;
   message?: string;

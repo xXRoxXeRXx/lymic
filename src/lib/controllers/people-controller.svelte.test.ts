@@ -9,7 +9,8 @@ describe("People controller", () => {
         .mockResolvedValueOnce({ people: [{ id: "one", name: "Ada", thumbnailPath: null }], hasNextPage: true })
         .mockResolvedValueOnce({ people: [{ id: "two", name: null, thumbnailPath: null }], hasNextPage: false })
         .mockRejectedValueOnce("recognized_people_permission_denied:people"),
-      getPersonTimelineAssets: vi.fn(),
+      getPersonTimelineBuckets: vi.fn(),
+      getPersonTimelineBucketAssets: vi.fn(),
     };
     const people = createPeopleController(adapter);
     await people.refresh();
@@ -24,7 +25,8 @@ describe("People controller", () => {
   it("shows the capability state when Tauri rejects a permission error string", async () => {
     const adapter: PeopleDesktopAdapter = {
       getPeople: vi.fn().mockRejectedValue("recognized_people_permission_denied:people"),
-      getPersonTimelineAssets: vi.fn(),
+      getPersonTimelineBuckets: vi.fn(),
+      getPersonTimelineBucketAssets: vi.fn(),
     };
 
     const people = createPeopleController(adapter);

@@ -26,7 +26,7 @@
 <div class="flex min-h-0 flex-1 flex-col gap-4" aria-label={$t("people_title")}>
   <div class="flex items-center justify-end gap-3">
     {#if people.isOffline}<p role="status" class="text-sm text-amber-700 dark:text-amber-300">{$t("people_offline")}</p>{/if}
-    <button type="button" class="rounded-lg p-2" aria-label={$t("people_refresh")} aria-busy={people.isRefreshing} disabled={people.isRefreshing} onclick={() => void people.refresh()}><RefreshCw class={`h-4 w-4 ${people.isRefreshing ? "animate-spin" : ""}`} /></button>
+    <button type="button" class="rounded-lg p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" aria-label={$t("people_refresh")} aria-busy={people.isRefreshing} disabled={people.isRefreshing} onclick={() => void people.refresh()}><RefreshCw class={`h-4 w-4 ${people.isRefreshing ? "animate-spin" : ""}`} /></button>
   </div>
   {#if people.isLoading}<p role="status">{$t("people_loading")}</p>
   {:else if people.error === "unavailable"}<div role="alert"><p>{$t("people_unavailable")}</p><button type="button" onclick={() => void people.refresh()}>{$t("people_retry")}</button></div>

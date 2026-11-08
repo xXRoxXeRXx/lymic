@@ -26,13 +26,6 @@ pub struct TimelineAsset {
     pub duration: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct PersonTimelinePage {
-    pub assets: Vec<TimelineAsset>,
-    pub has_next_page: bool,
-}
-
 fn recognized_people_access_error(status: StatusCode, resource: &str) -> String {
     match status {
         StatusCode::UNAUTHORIZED => format!("recognized_people_authentication_required:{resource}"),
@@ -153,21 +146,19 @@ fn dimensions_from_ratio(ratio: Option<f64>) -> (u32, u32) {
 }
 
 impl ImmichClient {
-    pub async fn get_person_timeline_assets(
+    pub async fn get_person_timeline_buckets(
         &self,
         person_id: &str,
-        page: u32,
-        size: u32,
-    ) -> Result<PersonTimelinePage, String> {
+    ) -> Result<Vec<TimelineBucket>, String> {
         Self::validate_path_segment(person_id, "person ID")?;
         let response = self
             .client
-            .post(self.endpoint_url("search/metadata"))
+            .get(self.endpoint_url("timeline/buckets"))
             .header("x-api-key", &self.api_key)
-            .json(&serde_json::json!({ "personIds": [person_id], "size": size, "page": page }))
+            .query(&[("size", "MONTH"), ("personId", person_id)])
             .send()
             .await
-            .map_err(|_| "Unable to load recognized person assets".to_string())?;
+            .map_err(|_| "Unable to load recognized person timeline".to_string())?;
         if !response.status().is_success() {
             return Err(recognized_people_access_error(
                 response.status(),
@@ -175,48 +166,39 @@ impl ImmichClient {
             ));
         }
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
-        let value: serde_json::Value = serde_json::from_slice(&body)
-            .map_err(|_| "Invalid recognized person assets response".to_string())?;
-        let response_assets = value.get("assets");
-        let assets = response_assets
-            .and_then(|assets| assets.get("items"))
-            .or(response_assets)
-            .unwrap_or(&value);
-        let assets: Vec<TimelineAssetResponse> = serde_json::from_value(assets.clone())
-            .map_err(|_| "Invalid recognized person assets response".to_string())?;
-        let has_next_page = response_assets
-            .and_then(|assets| {
-                assets
-                    .get("hasNextPage")
-                    .and_then(serde_json::Value::as_bool)
-            })
-            .or_else(|| {
-                response_assets
-                    .and_then(|assets| assets.get("nextPage"))
-                    .and_then(serde_json::Value::as_bool)
-            })
-            .unwrap_or_else(|| {
-                response_assets
-                    .and_then(|assets| assets.get("total").and_then(serde_json::Value::as_u64))
-                    .is_some_and(|total| u64::from(page) * u64::from(size) < total)
-            });
-        Ok(PersonTimelinePage {
-            assets: assets
-                .into_iter()
-                .map(|asset| TimelineAsset {
-                    id: asset.id,
-                    width: asset.exif.width,
-                    height: asset.exif.height,
-                    r#type: asset.asset_type,
-                    taken_at: asset.exif.taken_at,
-                    camera_make: asset.exif.make,
-                    camera_model: asset.exif.model,
-                    file_size: asset.exif.file_size,
-                    duration: asset.duration,
-                })
-                .collect(),
-            has_next_page,
-        })
+        let mut buckets: Vec<TimelineBucket> = serde_json::from_slice(&body)
+            .map_err(|_| "Invalid recognized person timeline response".to_string())?;
+        buckets.sort_by(|a, b| b.time_bucket.cmp(&a.time_bucket));
+        Ok(buckets)
+    }
+
+    pub async fn get_person_timeline_bucket_assets(
+        &self,
+        person_id: &str,
+        time_bucket: &str,
+    ) -> Result<Vec<TimelineAsset>, String> {
+        Self::validate_path_segment(person_id, "person ID")?;
+        let response = self
+            .client
+            .get(self.endpoint_url("timeline/bucket"))
+            .query(&[
+                ("size", "MONTH"),
+                ("timeBucket", time_bucket),
+                ("personId", person_id),
+            ])
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|_| "Unable to load recognized person timeline assets".to_string())?;
+        if !response.status().is_success() {
+            return Err(recognized_people_access_error(
+                response.status(),
+                "timeline",
+            ));
+        }
+        parse_timeline_bucket_assets(
+            read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?,
+        )
     }
 
     pub async fn get_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
@@ -261,62 +243,67 @@ impl ImmichClient {
                 response_status_error(response).await?
             ));
         }
-        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
-        let payload: TimelineBucketPayload = serde_json::from_slice(&body)
-            .map_err(|error| format!("Invalid timeline bucket response: {error}"))?;
-        Ok(match payload {
-            TimelineBucketPayload::Sequence(assets) => assets
-                .into_iter()
-                .map(|asset| TimelineAsset {
-                    id: asset.id,
-                    width: asset.exif.width,
-                    height: asset.exif.height,
-                    r#type: asset.asset_type,
-                    taken_at: asset.exif.taken_at,
-                    camera_make: asset.exif.make,
-                    camera_model: asset.exif.model,
-                    file_size: asset.exif.file_size,
-                    duration: asset.duration,
-                })
-                .collect(),
-            TimelineBucketPayload::Columnar(columnar) => columnar
-                .id
-                .into_iter()
-                .enumerate()
-                .map(|(index, id)| {
-                    let (width, height) =
-                        dimensions_from_ratio(columnar.ratio.get(index).copied().flatten());
-                    let is_image = columnar.is_image.get(index).copied().unwrap_or(true);
-                    let taken_at = columnar
-                        .file_created_at
-                        .get(index)
-                        .cloned()
-                        .flatten()
-                        .or_else(|| columnar.created_at.get(index).cloned().flatten());
-                    let duration = columnar
-                        .duration
-                        .get(index)
-                        .and_then(|value| value.as_ref())
-                        .and_then(parse_duration_value);
-                    TimelineAsset {
-                        id,
-                        width,
-                        height,
-                        r#type: if is_image {
-                            "IMAGE".to_string()
-                        } else {
-                            "VIDEO".to_string()
-                        },
-                        taken_at,
-                        camera_make: None,
-                        camera_model: None,
-                        file_size: None,
-                        duration,
-                    }
-                })
-                .collect(),
-        })
+        parse_timeline_bucket_assets(
+            read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?,
+        )
     }
+}
+
+fn parse_timeline_bucket_assets(body: Vec<u8>) -> Result<Vec<TimelineAsset>, String> {
+    let payload: TimelineBucketPayload = serde_json::from_slice(&body)
+        .map_err(|error| format!("Invalid timeline bucket response: {error}"))?;
+    Ok(match payload {
+        TimelineBucketPayload::Sequence(assets) => assets
+            .into_iter()
+            .map(|asset| TimelineAsset {
+                id: asset.id,
+                width: asset.exif.width,
+                height: asset.exif.height,
+                r#type: asset.asset_type,
+                taken_at: asset.exif.taken_at,
+                camera_make: asset.exif.make,
+                camera_model: asset.exif.model,
+                file_size: asset.exif.file_size,
+                duration: asset.duration,
+            })
+            .collect(),
+        TimelineBucketPayload::Columnar(columnar) => columnar
+            .id
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| {
+                let (width, height) =
+                    dimensions_from_ratio(columnar.ratio.get(index).copied().flatten());
+                let is_image = columnar.is_image.get(index).copied().unwrap_or(true);
+                let taken_at = columnar
+                    .file_created_at
+                    .get(index)
+                    .cloned()
+                    .flatten()
+                    .or_else(|| columnar.created_at.get(index).cloned().flatten());
+                let duration = columnar
+                    .duration
+                    .get(index)
+                    .and_then(|value| value.as_ref())
+                    .and_then(parse_duration_value);
+                TimelineAsset {
+                    id,
+                    width,
+                    height,
+                    r#type: if is_image {
+                        "IMAGE".to_string()
+                    } else {
+                        "VIDEO".to_string()
+                    },
+                    taken_at,
+                    camera_make: None,
+                    camera_model: None,
+                    file_size: None,
+                    duration,
+                }
+            })
+            .collect(),
+    })
 }
 
 #[cfg(test)]
@@ -446,7 +433,7 @@ mod tests {
         assert_eq!(assets[0].height, 1000);
         assert_eq!(assets[0].r#type, "IMAGE");
         assert_eq!(
-            assets.assets[0].taken_at.as_deref(),
+            assets[0].taken_at.as_deref(),
             Some("2026-11-04T19:47:41.29")
         );
         assert_eq!(assets[0].duration, None);
@@ -466,20 +453,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fetches_assets_filtered_to_a_recognized_person() {
+    async fn fetches_timeline_buckets_and_assets_filtered_to_a_recognized_person() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut request = [0_u8; 4096];
             let read = stream.read(&mut request).await.unwrap();
-            let request = String::from_utf8_lossy(&request[..read]);
-            assert!(request.starts_with("POST /api/search/metadata HTTP/1.1"));
-            assert!(request.contains("x-api-key: test-key"));
-            assert!(request.contains("\"personIds\":[\"person-1\"]"));
-            let body = br#"{"assets":{"items":[{"id":"asset-1","type":"IMAGE","exifInfo":{"imageWidth":640,"imageHeight":480,"dateTimeOriginal":"2025-03-01T12:30:00.000Z"}}]}}"#;
-            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n", body.len()).as_bytes()).await.unwrap();
-            stream.write_all(body).await.unwrap();
+            let request_text = String::from_utf8_lossy(&request[..read]);
+            assert!(request_text
+                .starts_with("GET /api/timeline/buckets?size=MONTH&personId=person-1 HTTP/1.1"));
+            assert!(request_text.contains("x-api-key: test-key"));
+            let buckets = br#"[{"timeBucket":"2025-03-01T00:00:00.000Z","count":1}]"#;
+            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", buckets.len()).as_bytes()).await.unwrap();
+            stream.write_all(buckets).await.unwrap();
+
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let read = stream.read(&mut request).await.unwrap();
+            let request_text = String::from_utf8_lossy(&request[..read]);
+            assert!(request_text.starts_with("GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&personId=person-1 HTTP/1.1"));
+            assert!(request_text.contains("x-api-key: test-key"));
+            let assets = br#"[{"id":"asset-1","type":"IMAGE","exifInfo":{"imageWidth":640,"imageHeight":480,"dateTimeOriginal":"2025-03-01T12:30:00.000Z"}}]"#;
+            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", assets.len()).as_bytes()).await.unwrap();
+            stream.write_all(assets).await.unwrap();
         });
         let client = ImmichClient::new(
             format!("http://{address}"),
@@ -490,14 +486,19 @@ mod tests {
         )
         .unwrap();
 
+        let buckets = client
+            .get_person_timeline_buckets("person-1")
+            .await
+            .unwrap();
         let assets = client
-            .get_person_timeline_assets("person-1", 1, 250)
+            .get_person_timeline_bucket_assets("person-1", "2025-03-01T00:00:00.000Z")
             .await
             .unwrap();
 
-        assert_eq!(assets.assets.len(), 1);
-        assert_eq!(assets.assets[0].id, "asset-1");
-        assert!(!assets.has_next_page);
+        assert_eq!(buckets.len(), 1);
+        assert_eq!(buckets[0].count, 1);
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].id, "asset-1");
         assert_eq!(
             assets[0].taken_at.as_deref(),
             Some("2025-03-01T12:30:00.000Z")

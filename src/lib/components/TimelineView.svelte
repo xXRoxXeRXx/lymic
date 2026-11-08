@@ -242,7 +242,7 @@
 <svelte:window onkeydown={handleKeydown} onresize={handleWindowResize} />
 
 <div class="relative flex h-full min-h-0 flex-col">
-  <div class="-mt-10 mb-2 flex shrink-0 items-center justify-end gap-3 z-20">
+  <div class="mb-2 flex shrink-0 items-center justify-end gap-3">
     {#if timeline.isOffline}
       <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
         <span>{$t("timeline_offline")}</span>
