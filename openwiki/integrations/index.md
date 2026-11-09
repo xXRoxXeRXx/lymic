@@ -1,3 +1,3 @@
 # Files
 
-- [Immich API Integration](immich-api.md) - The authenticated, typed boundary between Lymic and Immich, covering URL and credential safeguards, duplicate detection, streamed uploads, album API calls, and the handoff to local synchronization state.
+- [Immich API Integration](immich-api.md) - The authenticated, typed boundary between Lymic and Immich, covering transport safeguards, endpoint contracts, bounded responses, media delivery, and the distinction between browsing albums and selecting upload targets.

@@ -1,12 +1,14 @@
 ---
 type: architecture
 title: Desktop Runtime Architecture
-description: Tauri process composition, recovery-first startup, managed Rust services, background consumers, shell behavior, and the Svelte webview boundary. Use this page when changing initialization order, native controls, or Rust-to-webview commands and events.
+description: Tauri process composition, recovery-first startup, managed Rust services, native protocols and controls, and the Svelte webview boundary. Use this page when changing initialization order, native integration, or Rust-to-webview commands and events.
 tags: [architecture, tauri, svelte, runtime]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-11-04T15:53:48.838Z
+    at: 2026-11-09T18:02:27.157Z
 sources:
+  - id: openwiki-source-1fcd4acb19ae27b109afe923
+    resource: repo://src-tauri/src/app/asset_protocol.rs
   - id: openwiki-source-3638749eb6f61a23896edb4d
     resource: repo://src-tauri/src/app/background.rs
   - id: openwiki-source-11d0a4fc3a0d3b69fb50a64d
@@ -15,19 +17,23 @@ sources:
     resource: repo://src-tauri/src/app/mod.rs
   - id: openwiki-source-2fd48a041dfbcb39bc092be1
     resource: repo://src-tauri/src/app/startup.rs
+  - id: openwiki-source-9a3cab9533821b7e851a3e27
+    resource: repo://src-tauri/src/app/thumbnail_protocol.rs
   - id: openwiki-source-ccc0cb371a1c02a3941c4ffb
     resource: repo://src-tauri/src/app/tray.rs
   - id: openwiki-source-d86d6ce7cb2c85ce2672a18b
     resource: repo://src-tauri/src/sync/service.rs
   - id: openwiki-source-9a712a1a91500c698b23fdc0
     resource: repo://src-tauri/src/watcher/ingestion.rs
+  - id: openwiki-source-0abfee918aaf0d7e3ea712fc
+    resource: repo://src-tauri/tauri.conf.json
   - id: openwiki-source-9d08ef4075c63d08906a8b88
     resource: repo://src/lib/controllers/sync-controller.svelte.ts
   - id: openwiki-source-88425a733aa79bac537f50d8
     resource: repo://src/lib/tauri/sync-event-subscription.ts
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
-generated: { by: "openwiki/0.7.2", at: "2026-11-04T15:53:48.838Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-09T18:02:27.157Z" }
 ---
 
 # Desktop Runtime Architecture
@@ -36,32 +42,32 @@ Lymic is a Tauri desktop application. The Svelte 5 webview owns presentation and
 
 ## Composition root and startup order
 
-`src-tauri/src/main.rs` enters `lib::run`, which delegates to `app::run`. The Tauri builder installs opener, notification, autostart, dialog, process, and updater plugins. Its `setup` callback is the composition root: it decides whether an autostart launch remains hidden, initializes host state, spawns background consumers, creates the tray, and, when needed, queues showing the main window on the native main thread. The invoke handler is the authoritative command registry for authentication, albums, folders and removable-media acceptance, synchronization, settings, webview startup probes, and the database-recovery notice.
+`src-tauri/src/main.rs` enters `lib::run`, which delegates to `app::run`. The Tauri builder first registers the `lymic-thumb` and `lymic-asset` URI protocols, then installs opener, notification, autostart, dialog, process, and updater plugins. Its `setup` callback is the composition root: it decides whether an autostart launch remains hidden, initializes host state, spawns background consumers, creates the tray, and, when needed, queues showing the main window on the native main thread. The invoke handler is the authoritative command registry for authentication, album, timeline, people, folder and removable-media acceptance, synchronization, settings, webview startup probes, recovery notices, and release-channel operations.
 
-The ordering is an invariant: `startup::initialize` completes and manages shared state before `background::spawn` starts tasks that retrieve that state from `AppHandle`. Tray setup follows background spawning. Initialization and tray-build errors propagate from `setup`; the runtime does not reach a healthy event loop. Audited startup phases record readiness and failure milestones, tray setup, main-window display, and event-loop readiness.
+The ordering is an invariant: `startup::initialize` completes and manages shared state before `background::spawn` starts tasks that retrieve it from `AppHandle`. Tray setup follows background spawning. Initialization and tray-build errors propagate from `setup`; the runtime does not reach a healthy event loop. Audited startup phases record readiness and failure milestones, tray setup, main-window display, and event-loop readiness.
 
 ```mermaid
 sequenceDiagram
     participant Host as Tauri host
     participant Init as startup initialize
-    participant State as database and managed state
+    participant Managed as managed state
     participant Workers as background consumers
     participant Tray as native tray
     participant Web as Svelte webview
 
     Host->>Init: setup callback
-    Init->>State: initialize audit watcher database and recovery
-    Init->>State: manage shared services and monitor state
+    Init->>Managed: initialize audit watcher database and recovery
+    Init->>Managed: manage services and monitor state
     Init-->>Host: StartupContext
     Host->>Workers: spawn scans and receiver consumers
     Host->>Tray: build menu and icon
     Host->>Host: queue main window display when required
     Web->>Host: invoke hydration commands
-    Web->>Host: register live listeners after sync hydration
+    Web->>Host: register listeners after sync hydration
     Workers-->>Web: emit sync and log events
 ```
 
-This sequence shows the startup and background handoff: the host state exists before workers use it, while the webview hydrates durable state before following later event updates.
+This sequence shows the startup handoff: managed host state exists before workers use it, while the webview hydrates durable state before accepting later event updates.
 
 ### Required startup and recovery
 
@@ -77,11 +83,11 @@ This sequence shows the startup and background handoff: the host state exists be
 
 For persistence and repair semantics, see [Local Persistence and Recovery](../data/local-state.md).
 
-### Visibility and lifetime
+### Visibility, exit, and observability
 
 The autostart plugin supplies `--autostart`. The main window stays hidden only when that argument is present **and** credentials can be read and are stored. A manual launch, absent credentials, or a credential-read error queues showing and focusing the `main` window on the native main thread. Scheduling avoids blocking the Windows event loop during setup.
 
-A close request hides the window and prevents it from closing, leaving background tasks and tray controls available. The tray Show action—and a non-macOS left-click—shows and focuses the window; Quit calls `app.exit(0)`. When Tauri emits `RunEvent::Exit`, the host appends `app.shutdown` to the audit log and attempts to flush it.
+A close request hides the window and prevents it from closing, leaving background tasks and tray controls available. The tray Show action—and a non-macOS left-click—shows and focuses the window; Quit calls `app.exit(0)`. When Tauri emits `RunEvent::Exit`, the host appends `app.shutdown` to the audit log and attempts to flush it. See [Audit Logging](../operations/audit-logging.md).
 
 ## Managed state and background consumers
 
@@ -101,9 +107,9 @@ The watcher channel is bounded by design. On overflow, the watcher requests a re
 
 ## Webview bootstrapping and IPC
 
-The root route creates feedback, target-album, removable-volume, watched-folder, synchronization, authentication, preferences, and update controllers once. On mount it starts the synchronization, watched-folder, updater, and preference lifecycles; begins removable-volume subscriptions; then independently hydrates authentication, watched folders, synchronization, and preferences. Synchronization event subscriptions are installed only after `sync.hydrate()` resolves; authentication hydration refreshes failed uploads only for an authenticated user. Updater startup also records webview update and version phase probes through a command.
+The root route creates feedback, target-album, removable-volume, watched-folder, synchronization, authentication, preferences, updater, timeline, people, album-catalogue, album-timeline, and person-timeline controllers. On mount it starts the synchronization, watched-folder, updater, and preference lifecycles; begins removable-volume subscriptions; then independently hydrates authentication, watched folders, synchronization, and preferences. Synchronization event subscriptions are installed only after `sync.hydrate()` resolves; authentication hydration refreshes failed uploads and the timeline only for an authenticated user. Updater startup also records webview update and version phase probes through a command.
 
-The route renders login when unauthenticated and dashboard or settings when authenticated. It passes controller state and callbacks to views, keeping direct Rust invocation out of leaf presentation components. On teardown it destroys synchronization, watched-folder, updater, preferences, and removable-volume lifecycles. Sync destruction clears its timer, marks itself unmounted, and invokes the event disposer; the subscription helper also unregisters a listener that resolves after disposal or after the lifecycle becomes inactive.
+The route renders login when unauthenticated and dashboard or settings when authenticated. It passes controller state and callbacks to views, keeping direct Rust invocation out of leaf presentation components. On teardown it destroys synchronization, watched-folder, updater, preference, and removable-volume lifecycles. Sync destruction clears its timer, marks itself unmounted, and invokes the event disposer; the subscription helper also unregisters a listener that resolves after disposal or after the lifecycle becomes inactive.
 
 ### Hydrate with commands, then follow events
 
@@ -133,6 +139,12 @@ This shell and event flow distinguishes commands used to hydrate or request work
 
 The frontend subscription listens for `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `log-message`, and `sync-idle`. The tray starts synchronization directly in Rust rather than asking a live webview to do so. Event emission and native-notification failures are deliberately ignored by the helpers, so command hydration is the recovery path after reload or a missed update. Event names and payload shapes are a compatibility boundary: change the Rust producer, TypeScript subscription and controller, payload types, and tests together. See [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md).
 
+## Native protocols and webview configuration
+
+The host registers two asynchronous URI schemes before plugins and setup. `lymic-asset` validates an asset kind and identifier, reconstructs an authenticated Immich client from stored credentials, and proxies a preview or video response. Video ranges are capped at 8 MiB and selected response headers are preserved, which lets the webview seek without requesting an unbounded chunk. `lymic-thumb` uses a disk cache under the app cache directory, separated by account, and bounds foreground thumbnail downloading with a 12-permit, LIFO-priority pool; it returns HTTP-style error responses when credentials, cache paths, or thumbnail retrieval fail.
+
+`tauri.conf.json` declares the initially hidden `main` webview and its development/build frontend locations. Its production CSP admits only self-hosted scripts and the `lymic-thumb` and `lymic-asset` schemes for images and media; its connection policy admits Tauri IPC. The development CSP adds the Vite HTTP and WebSocket endpoints. This coupling means a new scheme or network origin needs both a host registration and an appropriate CSP change. See [Authentication](../security/authentication.md) for credential handling.
+
 ## Native tray control surface
 
 Tray setup creates a disabled transfer-status item plus Sync, Show, and Quit. Sync is initially enabled only if startup found folders. The Sync handler reads the persisted snapshot: `RUNNING` pauses through the internal sync service, `PAUSED` resumes through it, and every other status directly creates `Synchronization` and calls `start`. It does not depend on the webview being present. If that action fails, the host emits a UI log and `sync-error`, then refreshes its cached action from the database.
@@ -147,11 +159,13 @@ The tray keeps managed sync-status and transfer-statistics copies. Status select
 - When changing an event, update its Rust producer, `sync-event-subscription.ts`, controller cleanup, payload types, and tests together.
 - Preserve queue-before-runner ordering and the restored-pause gate for automatic scan results.
 - Keep tray behavior coherent with persisted sync state. It is a direct native control surface when the main window is hidden, not a proxy that requires a live webview.
+- Treat a protocol registration, its URI parser or responder, and the CSP allowance as one cross-runtime change.
 
-Focused Rust tests cover Tauri command registration and autostart visibility in `app/mod.rs`, synchronization lifecycle behavior in `sync/service.rs`, and tray actions and labels in `app/tray.rs`. TypeScript controller tests cover IPC and lifecycle behavior. Run the checks described in [Development and Testing](../operations/development-and-testing.md) after cross-runtime changes.
+Focused Rust tests cover Tauri command registration and autostart visibility in `app/mod.rs`, synchronization lifecycle behavior in `sync/service.rs`, protocol range and target handling in `app/asset_protocol.rs`, and tray actions and labels in `app/tray.rs`. TypeScript controller tests cover IPC and lifecycle behavior. Run the checks described in [Development and Testing](../operations/development-and-testing.md) after cross-runtime changes.
 
 ## Related pages
 
+- [Quickstart](../quickstart.md)
 - [Frontend State and Tauri IPC](../frontend/ui-and-ipc.md)
 - [Local Persistence and Recovery](../data/local-state.md)
 - [Audit Logging](../operations/audit-logging.md)

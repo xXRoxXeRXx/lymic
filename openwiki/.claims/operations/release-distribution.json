@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:96c75fbb6ba7420734bd54856e534f029bcd9b6c25458811031aa9db943562e5",
+  "pageVersion": "sha256:92bc80b8ddee8fc67f43ea578796ab81edba3933628e0efecc46a039bee6940f",
   "claims": [
     {
       "id": "claim_522bfa11d51f4b3d821a9735346a6e89",
       "statement": "Pushing a tag matching `v*` runs the publish workflow on macOS, Ubuntu, and Windows; every matrix job installs dependencies, runs frontend and Rust quality gates, and invokes the Tauri action to create a draft versioned GitHub release with generated notes and signed updater material.",
       "evidence": [
         {
-          "resource": "repo://.github/workflows/release.yml#L3-L69",
-          "version": "repo-lines-v1:sha256:fcd8aed90e7c923bbad4a0c13e45c14037f6642b50f7b407f28a443226629b1d:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5NmRjNDgxNDlmNWE4M2QxZWQ2ZGJiMzliYmM3ZTJiOTAyYWEzZDM0ZDZiZDVhZTRiMjkxYjY4ZGYwY2E3OWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNGJhNWRhNDU4MDUxMzIyZGY1OThkYmI3M2ZmNDc3M2ViMTBhOGM1MGQzZDFlZmI5YzJkMDM5ZDMyNWM0NWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI3NjhjODQwYWM0MzUzMzdjOTlhMWUwZTdhODJlMGY2MmFhOTFiMzA5NDk4NzQ3Y2JkMjY4ODA2OTlkZTYzMzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlOGRkOTRiZDFhZTQwOTM0ZTc4ODA2MjMwZTM0NDUzOGY0MmU2ZmZmNjk1Njg4MjFlMTIxYjAyN2ZmNDdkY2IifQ"
+          "resource": "repo://.github/workflows/release.yml#L3-L72",
+          "version": "repo-lines-v1:sha256:06f94b6096ee1060c2e07426d78224ef19caddc8f0d4e6d9f33ee3334abc9624:eyJzZWxlY3RlZExpbmVDb3VudCI6NzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5NmRjNDgxNDlmNWE4M2QxZWQ2ZGJiMzliYmM3ZTJiOTAyYWEzZDM0ZDZiZDVhZTRiMjkxYjY4ZGYwY2E3OWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNGJhNWRhNDU4MDUxMzIyZGY1OThkYmI3M2ZmNDc3M2ViMTBhOGM1MGQzZDFlZmI5YzJkMDM5ZDMyNWM0NWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI3NjhjODQwYWM0MzUzMzdjOTlhMWUwZTdhODJlMGY2MmFhOTFiMzA5NDk4NzQ3Y2JkMjY4ODA2OTlkZTYzMzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlOGRkOTRiZDFhZTQwOTM0ZTc4ODA2MjMwZTM0NDUzOGY0MmU2ZmZmNjk1Njg4MjFlMTIxYjAyN2ZmNDdkY2IifQ"
         }
       ]
     },
@@ -17,7 +17,7 @@
       "statement": "The Tauri updater is configured to create updater artifacts, verify them with its configured public key, use the GitHub `latest.json` endpoint, and use passive installation on Windows; the release action is supplied the corresponding signing private-key secrets and prefers NSIS in updater JSON.",
       "evidence": [
         {
-          "resource": "repo://.github/workflows/release.yml#L57-L69",
+          "resource": "repo://.github/workflows/release.yml#L60-L72",
           "version": "repo-lines-v1:sha256:3d57a4bc8bb7be24e0cd9c0184512716befc72a0d6bd2d0fc3b20b118f479b60:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjMTYyY2QzZGQ2MDEyZDJjYTE5MGRkZGIwMDNlMTBiMTU3MTYxNDgzYTg3NmQxYjM1MDBlOTM1ODYwNjQ1YTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNGJhNWRhNDU4MDUxMzIyZGY1OThkYmI3M2ZmNDc3M2ViMTBhOGM1MGQzZDFlZmI5YzJkMDM5ZDMyNWM0NWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjViMWQyYjk3MDJkMTViZDAyMTk1YTEzNmFkNGM1YjBhODYwNzhlN2IzMWM4MTU1ODcyNGMwZGJiNTU1NDg2OTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlOGRkOTRiZDFhZTQwOTM0ZTc4ODA2MjMwZTM0NDUzOGY0MmU2ZmZmNjk1Njg4MjFlMTIxYjAyN2ZmNDdkY2IifQ"
         },
         {
@@ -77,7 +77,7 @@
       "statement": "The Windows release job separately builds a Store-channel executable, packages and validates `Lymic_<version>_x64.msix`, uploads it as an artifact, and attaches it to the matching GitHub release; the normal Tauri matrix build is not given the Store environment value.",
       "evidence": [
         {
-          "resource": "repo://.github/workflows/release.yml#L71-L103",
+          "resource": "repo://.github/workflows/release.yml#L74-L106",
           "version": "repo-lines-v1:sha256:87523737285b4c0b2d3d73a1a84c5d00e3e0c29572de8fec7ddbb08ca82b7f2c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0ZTBmZDlhNzdhM2QzYzg1YTBjMGRiMmNhZTZhYTBiYmFiODIwYTcwOTExMzZlYzg2ODFiYjg0OTIwNjc5ZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2ZWI2NzIxMmU5NzdkM2E1MzgxOGRmZTAzYmRmODI4YjEzYzk5ZGM0NTZmZTY2ZWE4Nzg4MjBkODY5OGFkYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjliODI3NGFiNWM3ZjEwNjRiODhiYzE1Mjc2YTViYWU1ODZhOWQwMDhiNTQ4YmEwMjk0ZDg3NTc3Y2IzZjk1NzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI3YzE0ZjY2ZTg5YzU5ZTBhNWMyMDI4ODAxOTgwZTQ0NGUzNWYyZTRlMTc5NDVjMjg2ZGJjNzcxYjU1MTQ0YTkifQ"
         }
       ]
@@ -129,7 +129,7 @@
       "statement": "On Ubuntu, the release workflow validates Snapcraft configuration, builds a snap, uploads and attaches it to the GitHub release, and publishes the same artifact to both `candidate` and `stable` only when `SNAPCRAFT_STORE_CREDENTIALS` is nonempty.",
       "evidence": [
         {
-          "resource": "repo://.github/workflows/release.yml#L106-L139",
+          "resource": "repo://.github/workflows/release.yml#L109-L142",
           "version": "repo-lines-v1:sha256:3c533e716bc61b89b49e92c7833e9b25884aed1884634280714925577ecc48a2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwOGUzN2MwNjM0ZDEwMzM3NGU4Y2MyMTg0ZTk3YzQzNmFmZWFlZWNlOTc5OGY0ZDI3Yjk2ZjgzMDAwNjZiMTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlMmExZmIzNzEyZmM2NzZkMmM1YzBlM2M0YjQ5MGUxOTY2OTY0ZjYxY2FmYjAwMGE1OWQwZGE0NTU4NDE0MTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwNTllZDg4NWI0NDMwM2Y1NmE5MzVlMDAwNWQ4YjU4Y2UxODdlN2YyYWNiNGMwNzJhYmU0ODczM2VkNmE3ZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIifQ"
         }
       ]
@@ -140,7 +140,7 @@
       "evidence": [
         {
           "resource": "repo://snap/snapcraft.yaml#L1-L53",
-          "version": "repo-lines-v1:sha256:77c0caf67f80ed0996f009ad6ea9cc602f43db5f765784aa928999549cbd06ae:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjMWNlZmQ3NmNmOTYyNmMzNWMzNjBjZDg4ZjNlZTU3ZjdiNmZhMTZmYzQxZWEyMzA2MDdhMTNkNzhlZTFiMzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMxNDdkNDMxNmU0YzFiMjlmZmYwY2FhYmUyMWQ3ZGZkZmU3NmMzN2U4N2YzMjA1OGRiYzA1YTQ3MzJmZjlhMmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE4ZGQ1MGUwZjdlZDg1NzI4ZmIyZDJkNjZmMjMwN2NmMjA0NjUzODZiZTkxMTk2MjNhNWE4OTNhNzBlZWE5MDUifQ"
+          "version": "repo-lines-v1:sha256:193fea1903cdae9e0dc5a906569cd16cb26eaba4f4fab1ab06a260781a52a2f1:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjMWNlZmQ3NmNmOTYyNmMzNWMzNjBjZDg4ZjNlZTU3ZjdiNmZhMTZmYzQxZWEyMzA2MDdhMTNkNzhlZTFiMzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMxNDdkNDMxNmU0YzFiMjlmZmYwY2FhYmUyMWQ3ZGZkZmU3NmMzN2U4N2YzMjA1OGRiYzA1YTQ3MzJmZjlhMmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE4ZGQ1MGUwZjdlZDg1NzI4ZmIyZDJkNjZmMjMwN2NmMjA0NjUzODZiZTkxMTk2MjNhNWE4OTNhNzBlZWE5MDUifQ"
         },
         {
           "resource": "repo://snap/snapcraft.yaml#L82-L131",
@@ -150,25 +150,97 @@
     },
     {
       "id": "claim_d8e22f7e2a3d44b588b520dd8478743c",
-      "statement": "The current executable MSIX gate rejects `broadFileSystemAccess`, while the Flight and public Store release records still describe that capability and its justification; release operators must reconcile those records before treating them as current certification evidence.",
+      "statement": "The executable MSIX gate rejects `broadFileSystemAccess`, while both the Flight runbook and public Store release record still describe that capability and its justification; release operators must reconcile those historical records before treating them as current certification evidence.",
       "evidence": [
         {
           "resource": "repo://docs/store/flight-validation.md#L29-L38",
-          "version": "repo-lines-v1:sha256:44c10f153a18479d6f63d5ddb4a959b1016960c41459745be7771884e42669ec:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmM2MwZmUxM2UwMGJmOThlNmQ5MDIzZTQ0YzJjYTQxOTRhNGJkZWI4OTM1Y2ZlZmFlZGY5NDFhNGM0YWUyODUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4NGU2ZjFiZjk4ZmRkOGUzZGQxYzY2OTE3ZDIwOTk5YjAyNDU4MDkwNzI1MGI4NzcwODNhNjM4YjA1ZjkxNzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRhMjk0OWMxMzczMjY2M2UwOTNjN2YwNmIwOTgwOWFmNGJjYTVmZGI3NWUxMjhlNzRkYzg2ZTdkYzFmMDk0MDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEifQ"
+          "version": "repo-lines-v1:sha256:44c10f153a18479d6f63d5ddb4a959b1016960c41459745be7771884e42669ec:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmM2MwZmUxM2UwMGJmOThlNmQ5MDIzZTQ0YzJjYTQxOTRhNGJkZWI4OTM1Y2ZlZmFlZGY5NDFhNGM0YWUyODUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4NGU2ZjFiZjk4ZmRkOGUzZGQxYzY2OTE3ZDIwOTk5YjAyNDU4MDkwNzI1MGI4NzcwODNhNjM4YjA1ZjkxNzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzZTMwMDc1N2MwMDFmMTMwZjQ4YmVlZDk3MDRiOGUzZWJiM2YyMDRmNTI4MjM0ZjQ5MzczNzZhZDhjNjZlMTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEifQ"
         },
         {
-          "resource": "repo://docs/store/release-record.md#L43-L61",
-          "version": "repo-lines-v1:sha256:a61d3149d87aca2f953376af715ef2db874a63255cbba060122dde5792dd24b8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI0NjA5ODhkODk3Y2VlZDlmNmRkMjYyNjcwZWRjYjJjMWQxYmU4OTg0NjNiYmZlZmE2ZThkZjRiOTM3MGM4MjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc2MmFiM2E5MTcxOTQ1NjUxMGZmZDhmMjM0MmRiYTkxOWQ2YTFhMzVmMzI2ZGZiYjc3M2Y2YjdiOWFlYzhlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhlNGFjNTRhNzRjYmUzNmFlYzRmYzJjN2Q3NWIzZDIwMTlmMWVkYzk2OWI3ODIxMTA0M2FhNmFkNjU5NTdlOTEifQ"
+          "resource": "repo://docs/store/release-record.md",
+          "version": "repo-file-v1:sha256:b0b3077b8f717e896cd0e611b89ee0fa2d30f6ae2aaa16f1cb888f5030847683"
         },
         {
           "resource": "repo://scripts/validate-msix.ps1#L94-L105",
           "version": "repo-lines-v1:sha256:3349b94b7cb4bec9930f0168713cbf5225740d59780e47cecd655d46e4b8eb2a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxZDllZWI0YzJmN2U1MTQ1NTg1NTliZWJiODIxZjgyZTViMDA2ODhhODA4YmM5NzY2YzE3MTY4N2IyMGJmZmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxY2M5NTJiNzdlY2RhOWVjMDJhODQxMDRjMDZhOWI3YjBlM2YyM2UzMjczMmQ0ZjIwNmU0NTYxYWI4Nzk0OTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA4N2NkZTAxNGRhMzU5ZjgxYmU1ZWJhZjVhMjY0NzM3MDBkNGEzNjA3MGM3NWQxN2IwYzk2ZTJkMmVmYWJkMjMifQ"
         }
       ]
+    },
+    {
+      "id": "claim_f13bcd49eb6d43868d9bcc766706a6df",
+      "statement": "Release automation reads versions from different inputs: the Tauri action and MSIX steps use `src-tauri/tauri.conf.json`, Snap attachment uses `package.json`, the AUR update strips the Git tag, and Snap metadata carries its own version; maintainers must align these inputs with the release tag for downstream asset names and package metadata to agree.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L125-L132",
+          "version": "repo-lines-v1:sha256:84a95a5f709e05225928e5350c2f64aeb764b15f24c65334dfd5988d089603e0:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmZlMjkwZTFkMTIyY2EyZjUwOTZmZTQwZTJlMzMwOGI1ZjNkYjRlZTVjNGE5NGJhODZmYWI3YmM0OTIzZGViZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjA1YTAxZjk3NTg3MzkxMDFkNmI2MWE2Mjk5NmZhZGUxNjk5ZGFiYWJjZjZhMWRlM2Q0ZDU0ZTg3Y2VmMTcxMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTY2OGY2NTcyMmI3NTUxN2FiYTZlNzlmOWIwYjQ2MGZkNjJjMGE3N2U2ZDZmNDA4YjNjNGZmZmNkMTZmNmI5OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjQ3NjM0YmI5NWUzNGU5YjU2ODJhMjRlN2FkZGM2YTFkY2ZlYWUyMDU1OTJkZjZkZjg3MGFiNjYwNjY2NGM3YyJ9"
+        },
+        {
+          "resource": "repo://.github/workflows/release.yml#L168-L195",
+          "version": "repo-lines-v1:sha256:5949de18c40c357bd3e3d19f41324cff785fe1961e8ed213d79b05b2d22fd5b3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhNjZlMTVhMTJkZTlmNzhkMTA0MjVkYTEwZmUxYjViYzVlYTYzZDYzNTAxNmVjMzU3ZGM1ZDA4ZDQ1MDMzNDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE4MjVlZDRlZGNkMzdhNjZmYjkxYzQ0MWRmNGY0MjAyN2ZjODU4NzlkZjBlZGI5MDI4ZjgyYTQ4ZDA4YmFlY2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZhY2RlOWZhMzc4MGQzNGM1NzFhNTZkMTNiZjlhNDZhMDY4YWViNGNlNzc5NjIxYzc4MjIxMWE0ODIyNzFjNDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4YTIxNjkzZWVkMDUwZjVjMGEyZjkwNjE4MGZhOWRlZjg4MDQwM2NhZWJhOTc1YWE1Y2RmMWRkOTk1YTQwOWIifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/release.yml#L60-L72",
+          "version": "repo-lines-v1:sha256:3d57a4bc8bb7be24e0cd9c0184512716befc72a0d6bd2d0fc3b20b118f479b60:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjMTYyY2QzZGQ2MDEyZDJjYTE5MGRkZGIwMDNlMTBiMTU3MTYxNDgzYTg3NmQxYjM1MDBlOTM1ODYwNjQ1YTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNGJhNWRhNDU4MDUxMzIyZGY1OThkYmI3M2ZmNDc3M2ViMTBhOGM1MGQzZDFlZmI5YzJkMDM5ZDMyNWM0NWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjViMWQyYjk3MDJkMTViZDAyMTk1YTEzNmFkNGM1YjBhODYwNzhlN2IzMWM4MTU1ODcyNGMwZGJiNTU1NDg2OTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlOGRkOTRiZDFhZTQwOTM0ZTc4ODA2MjMwZTM0NDUzOGY0MmU2ZmZmNjk1Njg4MjFlMTIxYjAyN2ZmNDdkY2IifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/release.yml#L82-L88",
+          "version": "repo-lines-v1:sha256:83b5f206755dc94efdd55ebaf85e847ca29344e312aeb0ece25c8b2736aef1d3:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTM1NzIzY2Y1ZmY3M2Y1NGFiZTE4OTU1YjRjYjkzNGU3NTc1ODEyY2Y2YzM2NTQwNGYwYWM2ZTdhMjQ3Yjk2NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTVjZGM2MWFmNzEwNTFiYTc3ZjMxMjgwMzA4ZDIxMzM5M2RjMjc5MWRlZTgyZDMyZmQ5MDU4YzI1MDMzOTQwMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2QyY2M1Yzk1MDFkZjUwN2ZjMjQ0MTcyODgwNjMwOTQ2YTc3MGFkZjJkMGRhYjRmMmJhNThjMjQ5MDI2MmVhNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTRhYTI1MTRlYmE5NjA4YTNkOTMyODVhOTI3MDQzZjRiOGM5NDA2ODBmODA0YjI3M2QyYTU5YzMzYzU5NTUyZSJ9"
+        },
+        {
+          "resource": "repo://package.json#L1-L4",
+          "version": "repo-lines-v1:sha256:55a8956a3cd8672b5cfecd060a186f5369a30abc979f225287da8a73f0e8327e:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTZmYjA4ZmRhMWFjYjk1N2I2MTE2YmQzNzgxMWExZmU0MWEwMTYxMWMwNjMxZWRiZjc4NmQ2ODg5YTI3YTU1YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDUyYzkzMzgyMTVmMTA1YTE1ZTc2NWM4OTEzODk1YzdhMzk4N2MyMDYzZTIxYWE2OGEwZWY4ZGFkN2YzZTlkMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzcxODI2ODM5YjZjY2RhYjc2NjcxMzY3ZGFkYTY1OTJkMmFkZmRiMTk2ZDdmMjRmNTkxYWMyNjA5OTY4NTQ1MCJ9"
+        },
+        {
+          "resource": "repo://snap/snapcraft.yaml#L1-L5",
+          "version": "repo-lines-v1:sha256:e2f3d924da42d2a9fda66f1c696c26941d4bafedc7418374eb9be5894c80a1ea:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGMxY2VmZDc2Y2Y5NjI2YzM1YzM2MGNkODhmM2VlNTdmN2I2ZmExNmZjNDFlYTIzMDYwN2ExM2Q3OGVlMWIzMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODM4YzZhODhiZDc0NGVkOWI1MWMwYTAwOWQ1NmE4YTI2NWM0NDc2MTFmMGQ1OGMxMDY0ZDE1NWY0Mjg5MjI5OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDZjMDJmZDQzNWViN2RmMjczODQzZTZlNWYxNWQyOTFhNjM5NDBiMzAzODJhMzY5ZDczMTA3OWNlNTdmZGQ5ZSJ9"
+        },
+        {
+          "resource": "repo://src-tauri/tauri.conf.json#L1-L5",
+          "version": "repo-lines-v1:sha256:75771c9d765a79a9345ad3ea6a2830ec203b1f42feae97aed8ea429ea47df9ba:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTZmYjA4ZmRhMWFjYjk1N2I2MTE2YmQzNzgxMWExZmU0MWEwMTYxMWMwNjMxZWRiZjc4NmQ2ODg5YTI3YTU1YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQwMGY5Y2JlMTIyOTNhNjBhYTdiZmI0MGI3MGUwYTU1Njg0MGI4NWFmYjFhZWZmOWVhMDRkNzFmM2YzM2NlMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzcyZDAyYWI0N2ViMmY4ZjFiMDZkN2ZhNjYyMDU4OGI4MGIzMTRkMTgyNmU0YTYzNDNhYWNhM2RmY2YzOTdjYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_3197786fa47d42429fad0fca9b950b34",
+      "statement": "After the publish matrix, tagged releases conditionally update the external `lymic-bin` AUR repository: when `AUR_SSH_PRIVATE_KEY` is configured, the job downloads the versioned Debian release asset, computes its checksum, updates PKGBUILD and .SRCINFO from repository templates, and commits only a real diff; otherwise it explicitly skips.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L144-L205",
+          "version": "repo-lines-v1:sha256:28c0552d5d5e48f5a2fa1c1efc693140159da72233de7e6750293b23050f4fcc:eyJzZWxlY3RlZExpbmVDb3VudCI6NjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3MjBhZmVhNjcyZmI1OTQwZTA5NjI1ZDA0MGEzMzRjYWZjZjBhYjIzMWNkYzEwZTZmMmNkYTU0MDQzZWNiNTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzNmYxNzkxNjY5OGNmZjczMTcxYTNlYzU3YzY2YzU4MzU2MzJjMjFjZTg3YmQ0MjI4OTg5ZmExZTVkZmU1MTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViNzU4OGZmYTU1OWQ3MDA0MTdlM2I2NWJkMDZkMTAzODI3YzIyYWIwMzQzYTk2NmIzMjM3OGYxM2QyOTFjOTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3606b0d3e4994655bc9f6a6e2df3d01f",
+      "statement": "Changes to the repository AUR package templates are independently validated in an Arch container: `makepkg --verifysource`, `namcap` for the PKGBUILD and built package, a package build, and regenerated `.SRCINFO` must all succeed and match the checked-in metadata.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/aur-package.yml#L1-L35",
+          "version": "repo-lines-v1:sha256:00ba8e8dc72893133f4cfe42f51376824ff88a93a4977a03fa9d7ecebceaf9ce:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJiNDVjMGRiNmNmMThiOWNlMTI2N2FmMzk5MjJlOWIxOTQxOTI0MDVlNDc2NGQwNDBjZTA2MDNmMzYzMDhmODgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRkZTFhZTEwNjY4NmY1MDY0NDhmMDhmYzA4YWQwNDdmYWNkNTJiOWYyMjJmYjc5MWRkNjU5YzNhZmY3M2FmMTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_40ef29f5607b41ac91871076da1921e7",
+      "statement": "A published non-prerelease GitHub release conditionally updates the external Homebrew tap: with `HOMEBREW_TAP_TOKEN`, the workflow downloads the versioned arm64 DMG, regenerates `Casks/lymic.rb`, and pushes only changes; the generator validates a three-part version and writes the Cask URL with the SHA-256 of that artifact.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/homebrew-cask.yml#L1-L52",
+          "version": "repo-lines-v1:sha256:bdc4901ccf827ced65bf3cafa77abf3ab6973e1303ea323a2903b9d5c86e8e1c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyODdkNjM4NzhjMWZhMmJiMjNiZDQzNDAzODNkMjQ3OGFlODUyYzFkMzQ5ZmU0ZmRmNjAwMDE4NzRiYzQwNjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNmZGRhNTRjOTZmMDkzYjdmNzlhMzBkNjM0ODNhNGQ2ZWViZjIxM2JiOGM0YzhkZTFkYmNmMTM4MGIyMTlhNDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://scripts/update-homebrew-cask.mjs#L26-L31",
+          "version": "repo-lines-v1:sha256:28a3afdb7b8dc6b5808df024732bc8234ed9be6b30c48852d5e977bf2c2ca0c7:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTBjNjU2NTM1ZDc0MDA1ZWQyNTYzNTRjMDA5NzM2NWY1OTgzNDkyNjNiNjEyZjY0ZmI4Mzg2MTI5YzZlNGYzOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTViMGYwYzgwNGQ2ZmE2NzU2MzBmODFmNzA5NTM3Nzk5ZWQ1MmE5NTM1NTEwN2RjZWJjODEzNTFiMWVmYWQxNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODhkMzE0NTJhZGUwOGVmYTYyNmUxYzAyYjQ3NWJkZTY3MmUyOWVkYTYzNWZmNjQyZDQ5NjY1NzkwMzU1MmEwNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2Y1ZGIwNWQyMTliNmM2YjM4Y2ZlYzI5NmUxOTIzYmY5NTM0YThkNWU2Y2ZmZjUxZDIyYzRkZTg1Y2U5NDY1OCJ9"
+        },
+        {
+          "resource": "repo://scripts/update-homebrew-cask.mjs#L57-L80",
+          "version": "repo-lines-v1:sha256:bfad16f055656f9e6979ce650bf5918ce13dc5cc2d71661a1b2e0b4de5fba734:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNlODIwMGViZDE3MDliNmE2NzViZWNiM2JlOWYzOWU1M2JiYWMwMmNjOTI3MjM0NjJjMDU0NjhlYjBkYTZhMTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY3OTc1OTVhZGIwMDU4MWYwMGYyOTAwNzAzNDE2MWJjMDliMTQxY2M4OGQ4Mjg3N2QwNjlhMjEyOTk3ZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiNTgwZTk2NGY4M2E0NzNmNDNkNDQzODQ2Mjk0OWQ2OGI1NjAwZmRhNzg3ZjE2Mzc0NWQwMGRlODljYmYzNmEifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-11-06T15:30:15.009Z"
+    "at": "2026-11-09T18:02:27.157Z"
   }
 }
