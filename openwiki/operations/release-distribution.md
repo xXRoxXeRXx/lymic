@@ -1,12 +1,16 @@
 ---
 type: operations guide
 title: Release and Distribution
-description: Explains the tagged release pipeline, signed GitHub updater path, isolated Microsoft Store MSIX channel, Snap packaging and publication, and the release evidence required before Store distribution.
-tags: [releases, distribution, updater, github, microsoft-store, msix, snap]
+description: Explains version inputs, the tagged GitHub release workflow, signed updater artifacts, Windows Store MSIX, Snap, Homebrew, and AUR handoffs. It identifies manual publication decisions and distribution steps conditional on repository secrets.
+tags: [releases, distribution, updater, github, microsoft-store, msix, snap, homebrew, aur]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-11-06T15:30:15.009Z
+    at: 2026-11-09T18:02:27.157Z
 sources:
+  - id: openwiki-source-d2673828881732005728e0ea
+    resource: repo://.github/workflows/aur-package.yml
+  - id: openwiki-source-6b8e4b75cdcae318ee61e55a
+    resource: repo://.github/workflows/homebrew-cask.yml
   - id: openwiki-source-4d1d392666be6dfdd7a91a2e
     resource: repo://.github/workflows/release.yml
   - id: openwiki-source-e3851b529bd737fe1d04d356
@@ -15,8 +19,12 @@ sources:
     resource: repo://docs/store/flight-validation.md
   - id: openwiki-source-38b0fa34fc8711d931f9e1a0
     resource: repo://docs/store/release-record.md
+  - id: openwiki-source-5b54a58d1b51cd490b0e7162
+    resource: repo://package.json
   - id: openwiki-source-79001fdd14ba41cf6a585c23
     resource: repo://scripts/package-msix.ps1
+  - id: openwiki-source-c3bf99951fd6371085b55ce7
+    resource: repo://scripts/update-homebrew-cask.mjs
   - id: openwiki-source-c6c6061a365bd472e2b54eaa
     resource: repo://scripts/validate-msix.ps1
   - id: openwiki-source-e08704f426d0f3e74f9adcb0
@@ -35,88 +43,82 @@ sources:
     resource: repo://src/lib/controllers/update-controller.svelte.ts
   - id: openwiki-source-0bd5304416d258aed033000b
     resource: repo://src/lib/release-channel.ts
-generated: { by: "openwiki/0.7.2", at: "2026-11-06T15:30:15.009Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-09T18:02:27.157Z" }
 ---
 
 # Release and Distribution
 
-Lymic distributes desktop builds through three operational paths:
+Lymic delivers the desktop application through a signed GitHub/Tauri path and several downstream channels. A GitHub release begins as a **draft**; publishing it is an operator decision. That publication is also the handoff point for the Apple Silicon Homebrew Cask. The Store MSIX is an attached, separately built Windows channel, while Snap and AUR distribution are Linux-specific handoffs.
 
-- The default **GitHub** channel produces Tauri bundles and signed updater artifacts. On Windows, NSIS is preferred as the updater artifact.
-- The **Microsoft Store** channel is a separate x64 MSIX build. Store delivery owns updates; the application must not use the GitHub/Tauri updater in this channel.
-- The Linux **Snap** path builds a strictly confined `lymic` snap, attaches it to the GitHub release, and can publish it to Canonical's candidate and stable channels when its CI credential is available.
+## Release inputs and version contract
 
-The Windows channels are intentionally isolated: the Store channel is not an NSIS migration, so the initial Store release does not migrate configuration or queued synchronizations. The rationale is recorded in the [Microsoft Store release-channel ADR](../../docs/adr/0004-microsoft-store-release-channel.md).
+The release workflow is triggered by pushing a `v*` tag or by manual dispatch. Its Tauri action names the release from the Tauri version, Windows MSIX packaging reads that same version, the Snap metadata has its own version, and the Snap attachment reads `package.json`. The AUR updater instead derives the version from the tag name. In practice, set the intended version consistently in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and `snap/snapcraft.yaml`, then create the matching `v<version>` tag. A mismatch can make attachments or downstream package metadata refer to a release asset that does not exist.
 
-## Tagged release pipeline
+The standard Tauri configuration builds all bundle targets and updater artifacts. Clients validate updater material using the embedded public key and obtain `latest.json` from the GitHub Releases endpoint. The release workflow provides the corresponding private signing key and password only to `tauri-apps/tauri-action`; it also prefers NSIS when composing Windows updater metadata. Treat those signing secrets as release-only credentials.
 
-A push of a `v*` tag, or a manual dispatch, runs the `publish` workflow on macOS, Ubuntu, and Windows. Each matrix job checks out the source, installs Node 22 and stable Rust with Clippy and rustfmt, runs `npm ci`, frontend checking and tests, then Rust format, Clippy, and locked tests. Ubuntu also installs the native GTK/WebKit and bundling prerequisites. Matrix failures do not cancel the other platforms.
+## Tagged pipeline and publication boundary
 
-After those gates, `tauri-apps/tauri-action` builds the standard bundles with `--locked` and creates or updates a draft release named `Lymic v__VERSION__`. The action receives the GitHub token and Tauri signing-key secrets, generates release notes, and prefers NSIS in updater metadata. The Tauri configuration enables updater artifacts, embeds the updater public key, and points clients at the GitHub `latest.json` endpoint; the release-only private key signs the material clients verify.
+The `publish` job is a three-platform matrix: `macos-latest`, `ubuntu-22.04`, and `windows-latest`. Each job checks out the tag, installs Node 22 and stable Rust with Clippy and rustfmt, runs `npm ci`, frontend checking, frontend tests and build, then Rust format, Clippy, and locked tests. Ubuntu additionally installs the GTK, WebKit, appindicator, SVG, and `patchelf` prerequisites. `fail-fast: false` lets the other platform jobs continue after a failure, but a release should not be published until all required outputs have passed.
+
+After those checks, each matrix member invokes `tauri-apps/tauri-action` with `--locked`. The action creates or updates the draft `Lymic v__VERSION__` release, generates notes, and uploads normal platform bundles and signed updater material. The Windows and Ubuntu members then add their channel-specific artifacts. `gh release upload --clobber` replaces an existing MSIX or Snap asset on a rerun.
 
 ```mermaid
 flowchart TD
-    Tag["Push v tag or manual dispatch"] --> Matrix["macOS Ubuntu Windows quality gates"]
-    Matrix --> Tauri["Tauri action builds standard bundles"]
-    Tauri --> Draft["Draft GitHub release and signed updater artifacts"]
-    Matrix --> Win["Windows Store executable build"]
-    Win --> Msix["Package and validate x64 MSIX"]
-    Msix --> StoreAsset["Upload artifact and attach to draft release"]
-    Matrix --> Linux["Ubuntu Snap validation and build"]
-    Linux --> SnapAsset["Upload and attach snap"]
-    SnapAsset --> SnapStore["Publish candidate and stable when credential exists"]
-    StoreAsset --> Flight["Partner Center private Flight and public Store decision"]
+    Trigger["Push v tag or manual dispatch"] --> Matrix["Publish matrix on macOS Ubuntu and Windows"]
+    Matrix --> Standard["Tauri action builds bundles and signed updater artifacts"]
+    Standard --> Draft["Draft GitHub release"]
+    Matrix --> StoreBuild["Windows builds Store channel executable"]
+    StoreBuild --> Msix["Package validate and attach MSIX"]
+    Matrix --> SnapBuild["Ubuntu validates builds and attaches Snap"]
+    SnapBuild --> SnapStore["Publish Snap candidate and stable when credential exists"]
+    Matrix --> Aur["Tagged run updates AUR when SSH key exists"]
+    Draft --> Publish["Operator publishes stable GitHub release"]
+    Publish --> Cask["Update Homebrew Cask when tap token exists"]
 ```
 
-*The tagged workflow creates the normal signed release on all platforms, with additional Windows Store and Ubuntu Snap artifacts and publication paths.*
+*The workflow creates a draft first; Store, Snap, and AUR steps are distinct handoffs, while Homebrew starts only after a stable release is published.*
 
-A tag therefore creates a **draft**, not an automatically public GitHub release. An operator must review its notes and artifacts before publishing it. The Windows and Ubuntu attachment steps use `gh release upload ... --clobber`, so a rerun replaces an existing MSIX or snap asset for that tag.
+Review the draft's notes, standard bundles, signed updater artifacts, MSIX, and Snap before publishing. In particular, do not equate a successful build with Store certification or a public release.
 
-## GitHub updater and release-channel boundary
+## Windows channels and MSIX validation
 
-`LYMIC_RELEASE_CHANNEL` is a compile-time selection in the Rust backend. Only the exact value `store` selects Store; unset, `github`, and unknown values resolve to `github`. The `get_release_channel` command exposes that effective value to the webview. The frontend uses the same rule, reading `VITE_LYMIC_RELEASE_CHANNEL` before `LYMIC_RELEASE_CHANNEL` as its build-time fallback.
+The Windows Store is deliberately isolated from the GitHub/NSIS channel. The normal Tauri matrix build is not given `LYMIC_RELEASE_CHANNEL=store`; a later Windows-only step sets it, rebuilds the frontend and creates the locked release executable with `custom-protocol`. The job packages `dist/msix/Lymic_<version>_x64.msix`, validates it, saves it as the `lymic-store-msix` workflow artifact, and attaches it to the GitHub release.
 
-At startup, the update controller asks the desktop adapter for the backend-selected channel. In the GitHub channel it records the update-check phases, checks the Tauri updater, opens a dialog when an update is found, and separately loads the application version. Installation is blocked when there is no available update, synchronization is active, or a download or installation is already in progress. A failed install sets the install state to `error` and does not relaunch.
+`package-msix.ps1` is the packaging entrypoint. It obtains a version from `tauri.conf.json` when none is given, removes an optional leading `v`, pads it to four MSIX components, finds x64 `makeappx.exe` through `PATH` or a Windows SDK, and requires the explicitly supplied or a recognized release executable. It recreates `target/msix-staging`, copies that executable as `Lymic.exe` and the four Store logos, fills the manifest template, and fails if `makeappx pack` fails.
 
-For `store`, channel selection is an update-authority invariant rather than presentation metadata:
+The package defaults to identity `xXRoxXeRXx.Lymic` and publisher `CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC`. The validator reads `AppxManifest.xml` from the archive and aggregates errors for missing or mismatched identity, publisher, x64 architecture, normalized version, and `runFullTrust`. It also rejects `broadFileSystemAccess`; any accumulated errors exit with code 1. The executable manifest/validator gate is therefore more authoritative than historical release documentation: the public Store record still describes `broadFileSystemAccess` as justified. Reconcile that discrepancy before using the record as certification evidence or changing package capabilities.
 
-- Startup returns before update-check probes or an updater request, although the version load still runs.
-- Explicit check and install requests also return without contacting the updater or relaunching.
-- `isUpdatesSupported` is false. Both the Settings Updates section and the update dialog are gated on that value, so Store users are not offered a competing GitHub updater path.
+The Store channel is update-authority isolation, not just a packaging flag. Store builds report that in-app updates are unsupported, and startup, explicit checks, and installs return before contacting or relaunching the Tauri updater. Settings and update UI are hidden on that condition, leaving Microsoft Store as the update owner. The initial Store release does not migrate configuration or queued synchronization from an NSIS installation; see the [release-channel ADR](../../docs/adr/0004-microsoft-store-release-channel.md).
 
-The focused controller test verifies the Store startup and install behavior, while the Rust unit test covers the resolver's default, unknown, GitHub, and Store cases. Preserve these tests whenever adding a channel or changing updater initialization.
+## Snap build and conditional publication
 
-## Windows Store MSIX
+On Ubuntu, the release workflow runs the focused Snapcraft validator test and calls `snapcore/action-build`. It uploads the resulting file as `lymic-snap` and attaches the same artifact to the GitHub release. `snapcore/action-publish` runs only when `SNAPCRAFT_STORE_CREDENTIALS` is nonempty, publishing that file to both `candidate` and `stable`. Thus, missing credentials skip Snap Store publication but do not prevent building or attaching the Snap.
 
-Only the Windows matrix job builds the Store executable. It sets `LYMIC_RELEASE_CHANNEL=store`, runs `npm run build`, and invokes locked release `cargo build` with `custom-protocol`; the normal Tauri matrix build does not receive that environment variable. It then packages and validates `dist/msix/Lymic_<version>_x64.msix`, uploads it as the `lymic-store-msix` workflow artifact, and attaches it to the corresponding GitHub release.
+The Snap definition is `core22`, `strict`, and GNOME-extended. Its desktop app declares desktop/display plugs plus `network`, `home`, `removable-media`, and `password-manager-service`; it also binds the GNOME platform WebKitGTK 4.1 locations under confinement. The build reuses a discovered Debian bundle where available, otherwise performs the Tauri Debian build, extracts it, and fails if no recognized executable can be installed as `bin/lymic`. Keep these plugs and layout bindings aligned with actual runtime needs rather than treating them as optional metadata.
 
-`package-msix.ps1` is the packaging entrypoint. It reads the Tauri version if none is supplied, strips an optional leading `v`, pads to four MSIX version components, and finds an x64 `makeappx.exe` from `PATH` or the installed Windows SDK. It requires the supplied release executable (the workflow uses `src-tauri/target/release/lymic-desktop.exe`) or chooses the newest recognized release executable. The script recreates `target/msix-staging`, copies the executable as `Lymic.exe` and four logo assets, substitutes the manifest template, then fails on a nonzero `makeappx pack` exit code.
+## AUR handoff
 
-The package defaults to identity `xXRoxXeRXx.Lymic` and publisher `CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC`. Its template defines an x64 `Windows.FullTrustApplication`, Windows Desktop minimum `10.0.17763.0`, `runFullTrust`, and Internet/private-network capabilities. The package validator opens the MSIX archive and aggregates errors for a missing manifest; identity name, publisher, architecture, or normalized-version mismatches; a missing `runFullTrust`; or the presence of `broadFileSystemAccess`, which it explicitly rejects as unnecessary for this full-trust app and a Store-certification risk. Any errors exit with code 1.
+A tagged workflow run starts `update-aur` only after the complete `publish` matrix succeeds. With no `AUR_SSH_PRIVATE_KEY`, it explicitly logs a skip. With the key, it configures SSH for `aur.archlinux.org`, downloads `Lymic_<tag version>_amd64.deb` from the release, computes its SHA-256, copies the repository's `PKGBUILD` and `.SRCINFO` templates into the `lymic-bin` AUR checkout, substitutes the package version, source URL, and checksum, and commits only when there is a diff.
 
-This means the current implementation deliberately **does not** declare `broadFileSystemAccess`. The Flight and public Store record documents still describe that capability and its justification; reconcile those records before using them as release evidence. The validator and manifest are the executable release gate.
+The repository also validates modifications to `packaging/arch/lymic-bin` on pushes and pull requests. The validation runs inside an Arch container, verifies sources, runs `namcap` on the PKGBUILD and built package, builds with `makepkg`, regenerates `.SRCINFO`, and requires it to match the checked-in file. This protects the template consumed by the handoff; it does not publish to AUR itself.
 
-## Snap build and publication
+## Homebrew Cask handoff
 
-On Ubuntu, the workflow first runs the Snapcraft validator test, then uses `snapcore/action-build` to produce the snap. The output is uploaded as `lymic-snap` and attached to the tag's GitHub release. If `SNAPCRAFT_STORE_CREDENTIALS` is nonempty, `snapcore/action-publish` publishes that same artifact to both `candidate` and `stable`; without the secret, the build and GitHub-release attachment still occur but Store publishing is skipped.
+`Update Homebrew Cask` runs from the GitHub `release: published` event only for non-prereleases. It checks out the released tag, and, only when `HOMEBREW_TAP_TOKEN` exists, downloads `Lymic_<version>_aarch64.dmg`, clones `xXRoxXeRXx/homebrew-tap`, regenerates `Casks/lymic.rb`, and pushes a commit if it changed. A missing token intentionally makes both the download and tap-update steps no-ops.
 
-`snap/snapcraft.yaml` defines `lymic` version `0.23.1` on the `core22` base with `strict` confinement and the GNOME extension. It declares the network, home, removable-media, and password-manager-service plugs. Its build part either reuses an available Debian bundle or builds one with Tauri, extracts it, and requires a discovered executable before installing `bin/lymic`. WebKitGTK 4.1 layout bindings and the listed interface plugs are part of the confinement contract. `scripts/validate-snapcraft.ps1` can validate the configuration, version alignment, metadata, extension, plugs, WebKit layout, desktop file, and icon; the release workflow currently runs the corresponding Vitest validator instead.
+`scripts/update-homebrew-cask.mjs` accepts only stable three-part semantic versions. It uses a provided asset or downloads the release DMG, computes its SHA-256, and emits a Cask whose URL and checksum both describe that versioned artifact. The generated Cask is arm64-only and installs `Lymic.app`. For local validation and installation instructions, see the [Homebrew Cask guide](../../docs/homebrew-cask.md). The guide notes that the app is not notarized, so macOS may require Control-click **Open** on first launch.
 
-For CI setup and Snap release sign-off, maintainers should retain the [Snap release record](../../docs/store/snap-release-record.md), including the documented `SNAPCRAFT_STORE_CREDENTIALS` setup procedure.
+## Store evidence and operator checklist
 
-## Store Flight and required records
+Attaching an MSIX to GitHub is traceability, not Microsoft Store publication. Submit it through Partner Center for Store signing and private Flight distribution. The [Flight validation runbook](../../docs/store/flight-validation.md) remains an open checklist for certification, clean-install and watched-folder behavior, synchronization, Store-only update behavior, and required-access denial. Record real outcomes before public rollout, then update the [Microsoft Store release record](../../docs/store/release-record.md) with the validated package, listing, rating, capability decision, and privacy/support endpoints.
 
-The MSIX attachment is traceability evidence, not Microsoft Store publication. Submit it through Partner Center for Store signing and Flight distribution. The [Flight validation runbook](../../docs/store/flight-validation.md) records the intended private-Flight scope and its pending acceptance checks: certification approval, a clean install with persisted watched folders, media synchronization, absence of GitHub update controls, and the hard block if required access is denied. Its status is open, so it does not authorize public release.
+Before releasing:
 
-Before a public Store rollout, update and retain the [Microsoft Store release record](../../docs/store/release-record.md) with the Flight-validated package, listing and localization details, content rating, Store-only updater verification, capability approval, and public privacy/support endpoints. Update the Flight record with actual outcomes as well. Because those records currently contain historical capability assertions that differ from the manifest validator, resolve that discrepancy before sign-off rather than treating checkboxes as proof.
+1. Align the four version inputs and push the corresponding `v<version>` tag.
+2. Require all three matrix quality gates, the MSIX validation, and the Snap validation/build to pass; inspect platform-specific failures despite `fail-fast: false`.
+3. Review the draft assets and release notes, then intentionally publish the stable GitHub release. This is what can trigger the Homebrew workflow.
+4. Verify the Store executable was built with `LYMIC_RELEASE_CHANNEL=store`, retain the MSIX validation result, and do not add `broadFileSystemAccess` without changing the validator and reassessing certification.
+5. Provide `SNAPCRAFT_STORE_CREDENTIALS`, `AUR_SSH_PRIVATE_KEY`, and `HOMEBREW_TAP_TOKEN` only for the respective Store publication, AUR update, and tap update you intend to authorize. Their absence has the documented skip behavior.
+6. Complete the actual private Flight and the release-record sign-off before Microsoft Store public rollout.
 
-## Operator checklist
-
-1. Set and commit the intended version in `src-tauri/tauri.conf.json`; keep the Snap version aligned when producing a Snap release, then push a `v*` tag or manually dispatch the workflow.
-2. Require all matrix quality gates and the Windows MSIX/Snap build steps to pass. Investigate an OS-specific failure even though the matrix continues.
-3. Review the draft GitHub release, signed updater artifacts, standard bundles, MSIX, and snap before making the release public.
-4. Verify the extra Windows build used `LYMIC_RELEASE_CHANNEL=store`, MSIX validation passed, and the artifact was attached. Do not introduce `broadFileSystemAccess` without changing the validator and re-evaluating Store certification.
-5. For Snap publication, configure `SNAPCRAFT_STORE_CREDENTIALS` only when the operator intends the workflow to publish to both candidate and stable.
-6. For Microsoft Store publication, complete and record the real private Flight, capability/certification decision, and public-release checklist before rollout.
-
-For local prerequisites and general verification, see [Development and Testing](development-and-testing.md). The Tauri/webview boundary is covered in [Runtime Architecture](../architecture/runtime.md), and frontend adapter and UI wiring are covered in [UI and IPC](../frontend/ui-and-ipc.md).
+For local prerequisites and routine checks, see [Development and Testing](development-and-testing.md). The desktop/webview boundary is covered in [Runtime Architecture](../architecture/runtime.md), and UI and IPC integration in [UI and IPC](../frontend/ui-and-ipc.md).
