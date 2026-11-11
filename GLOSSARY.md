@@ -92,9 +92,17 @@ _Avoid_: cloud file, virtual file, stub
 
 **Hydration**:
 The process of downloading the full content of a Remote Asset into a Virtual Placeholder upon user access or pinning.
-_Avoid_: download, fetch, caching
+_Avoid_: fetch, caching
 
 ## Photo Timeline
+
+**Download**:
+The user-initiated retrieval and saving of a Remote Asset's original file to a designated local file path.
+_Avoid_: export, save image, rip
+
+**Favorite**:
+A user-toggled status marking a Remote Asset as favored in the Immich Library.
+_Avoid_: star, bookmark, like
 
 **Recognized Person**:
 An identity group created by Immich that has an optional assigned name and associated Remote Assets.
