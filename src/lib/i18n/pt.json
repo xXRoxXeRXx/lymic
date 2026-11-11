@@ -231,4 +231,10 @@
   ,"timeline_download_original": "Transferir original"
   ,"timeline_download_saved": "Transferência guardada"
   ,"timeline_download_failed": "Não foi possível transferir o original"
+  ,"timeline_add_to_album": "Adicionar ao álbum"
+  ,"timeline_add_to_album_modal_title": "Adicionar ao álbum"
+  ,"timeline_add_to_album_modal_subtitle": "Selecione um álbum para este recurso"
+  ,"timeline_add_to_album_confirm": "Adicionar ao álbum"
+  ,"timeline_add_to_album_success": "Adicionado ao álbum"
+  ,"timeline_add_to_album_failed": "Não foi possível adicionar o recurso ao álbum"
 }

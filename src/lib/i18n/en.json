@@ -231,4 +231,10 @@
   ,"timeline_download_original": "Download original"
   ,"timeline_download_saved": "Download saved"
   ,"timeline_download_failed": "Could not download original"
+  ,"timeline_add_to_album": "Add to album"
+  ,"timeline_add_to_album_modal_title": "Add to album"
+  ,"timeline_add_to_album_modal_subtitle": "Select an album for this asset"
+  ,"timeline_add_to_album_confirm": "Add to album"
+  ,"timeline_add_to_album_success": "Added to album"
+  ,"timeline_add_to_album_failed": "Could not add asset to album"
 }

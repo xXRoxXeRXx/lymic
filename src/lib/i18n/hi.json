@@ -231,4 +231,10 @@
   ,"timeline_download_original": "मूल फ़ाइल डाउनलोड करें"
   ,"timeline_download_saved": "डाउनलोड सहेजा गया"
   ,"timeline_download_failed": "मूल फ़ाइल डाउनलोड नहीं की जा सकी"
+  ,"timeline_add_to_album": "Add to album"
+  ,"timeline_add_to_album_modal_title": "Add to album"
+  ,"timeline_add_to_album_modal_subtitle": "Select an album for this asset"
+  ,"timeline_add_to_album_confirm": "Add to album"
+  ,"timeline_add_to_album_success": "Added to album"
+  ,"timeline_add_to_album_failed": "Could not add asset to album"
 }

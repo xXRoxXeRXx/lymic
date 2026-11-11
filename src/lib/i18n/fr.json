@@ -231,4 +231,10 @@
   ,"timeline_download_original": "Télécharger l’original"
   ,"timeline_download_saved": "Téléchargement enregistré"
   ,"timeline_download_failed": "Impossible de télécharger l’original"
+  ,"timeline_add_to_album": "Ajouter à l’album"
+  ,"timeline_add_to_album_modal_title": "Ajouter à l’album"
+  ,"timeline_add_to_album_modal_subtitle": "Sélectionnez un album pour cet élément"
+  ,"timeline_add_to_album_confirm": "Ajouter à l’album"
+  ,"timeline_add_to_album_success": "Ajouté à l’album"
+  ,"timeline_add_to_album_failed": "Impossible d’ajouter l’élément à l’album"
 }

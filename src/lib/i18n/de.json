@@ -231,4 +231,10 @@
   ,"timeline_download_original": "Original herunterladen"
   ,"timeline_download_saved": "Download gespeichert"
   ,"timeline_download_failed": "Original konnte nicht heruntergeladen werden"
+  ,"timeline_add_to_album": "Zum Album hinzufügen"
+  ,"timeline_add_to_album_modal_title": "Album auswählen"
+  ,"timeline_add_to_album_modal_subtitle": "Wähle ein Album für dieses Medium aus"
+  ,"timeline_add_to_album_confirm": "Zum Album hinzufügen"
+  ,"timeline_add_to_album_success": "Zum Album hinzugefügt"
+  ,"timeline_add_to_album_failed": "Medium konnte nicht zum Album hinzugefügt werden"
 }

@@ -231,4 +231,10 @@
   ,"timeline_download_original": "下载原始文件"
   ,"timeline_download_saved": "下载已保存"
   ,"timeline_download_failed": "无法下载原始文件"
+  ,"timeline_add_to_album": "添加到相册"
+  ,"timeline_add_to_album_modal_title": "添加到相册"
+  ,"timeline_add_to_album_modal_subtitle": "为此资源选择一个相册"
+  ,"timeline_add_to_album_confirm": "添加到相册"
+  ,"timeline_add_to_album_success": "已添加到相册"
+  ,"timeline_add_to_album_failed": "无法将资源添加到相册"
 }

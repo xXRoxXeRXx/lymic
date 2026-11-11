@@ -1,9 +1,10 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import TimelineView from "./TimelineView.svelte";
 import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
+import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
 vi.stubGlobal("ResizeObserver", class {
   observe() {}
@@ -36,6 +37,22 @@ const timeline: TimelineViewState = {
   refresh: vi.fn(),
   clear: vi.fn(),
 };
+
+function albumCatalogue(albums = [
+  { id: "album-summer", albumName: "Summer" },
+  { id: "album-work", albumName: "Work" },
+]): TargetAlbumCatalogue {
+  return {
+    albums,
+    isLoading: false,
+    error: null,
+    hasRequested: false,
+    refresh: vi.fn().mockResolvedValue(undefined),
+    clear: vi.fn(),
+    create: vi.fn().mockImplementation(async (name: string) => ({ id: "album-created", albumName: name })),
+    nameFor: (id) => albums.find((album) => album.id === id)?.albumName,
+  };
+}
 
 afterEach(cleanup);
 
@@ -120,6 +137,59 @@ describe("TimelineView scrubber", () => {
     expect(chooseDownloadDestination).toHaveBeenCalledWith("IMG_0001.CR3");
     await waitFor(() => expect(downloadAsset).toHaveBeenCalledWith("photo-1", "C:/Downloads/IMG_0001.CR3"));
     expect(screen.getByRole("status")).toHaveTextContent("Download saved");
+  });
+
+  it("assigns the open asset to a searched album and confirms success", async () => {
+    const catalogue = albumCatalogue();
+    const addAssetToAlbum = vi.fn().mockResolvedValue(undefined);
+    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetToAlbum });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Add to album" });
+    expect(catalogue.refresh).toHaveBeenCalledOnce();
+    await fireEvent.input(screen.getByPlaceholderText("Search albums..."), { target: { value: "summer" } });
+    expect(dialog).toHaveTextContent("Summer");
+    expect(dialog).not.toHaveTextContent("Work");
+    await fireEvent.click(screen.getByRole("button", { name: "Summer" }));
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Add to album" }));
+
+    await waitFor(() => expect(addAssetToAlbum).toHaveBeenCalledWith("photo-1", "album-summer"));
+    expect(screen.queryByRole("dialog", { name: "Add to album" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Added to album");
+  });
+
+  it("creates and selects a new album before assigning the open asset", async () => {
+    const catalogue = albumCatalogue();
+    const addAssetToAlbum = vi.fn().mockResolvedValue(undefined);
+    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetToAlbum });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
+    const dialog = screen.getByRole("dialog", { name: "Add to album" });
+    await fireEvent.click(screen.getByRole("button", { name: "Create new album" }));
+    await fireEvent.input(screen.getByPlaceholderText("Album name..."), { target: { value: "Holiday" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Add to album" }));
+
+    await waitFor(() => expect(catalogue.create).toHaveBeenCalledWith("Holiday"));
+    await waitFor(() => expect(addAssetToAlbum).toHaveBeenCalledWith("photo-1", "album-created"));
+  });
+
+  it("keeps the album picker open and reports a failed assignment", async () => {
+    const catalogue = albumCatalogue();
+    const addAssetToAlbum = vi.fn().mockRejectedValue(new Error("Network unavailable"));
+    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetToAlbum });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
+    const dialog = screen.getByRole("dialog", { name: "Add to album" });
+    await fireEvent.click(screen.getByRole("button", { name: "Summer" }));
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Add to album" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not add asset to album"));
+    expect(screen.getByRole("dialog", { name: "Add to album" })).toBeInTheDocument();
   });
 
   it("shows download progress and reports a failed original download", async () => {

@@ -62,6 +62,10 @@ export interface AlbumsDesktopAdapter {
   createAlbum(name: string): Promise<Album>;
 }
 
+export interface AlbumAssignmentDesktopAdapter {
+  addAssetToAlbum(assetId: string, albumId: string): Promise<void>;
+}
+
 export interface AlbumCatalogueDesktopAdapter {
   getAlbumCatalogue(): Promise<AlbumCatalogueItem[]>;
 }
@@ -128,6 +132,7 @@ export interface DesktopAdapter
     SyncDesktopAdapter,
     WatchedFoldersDesktopAdapter,
     AlbumsDesktopAdapter,
+    AlbumAssignmentDesktopAdapter,
     AlbumCatalogueDesktopAdapter,
     TimelineDesktopAdapter,
     AssetDesktopAdapter,
@@ -173,6 +178,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getAlbums: () => invoke<Album[]>("get_albums"),
   getAlbumCatalogue: () => invoke<AlbumCatalogueItem[]>("get_album_catalogue"),
   createAlbum: (name) => invoke<Album>("create_album", { name }),
+  addAssetToAlbum: (assetId, albumId) => invoke<void>("add_asset_to_album", { assetId, albumId }),
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),

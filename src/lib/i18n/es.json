@@ -231,4 +231,10 @@
   ,"timeline_download_original": "Descargar original"
   ,"timeline_download_saved": "Descarga guardada"
   ,"timeline_download_failed": "No se pudo descargar el original"
+  ,"timeline_add_to_album": "Añadir al álbum"
+  ,"timeline_add_to_album_modal_title": "Añadir al álbum"
+  ,"timeline_add_to_album_modal_subtitle": "Selecciona un álbum para este recurso"
+  ,"timeline_add_to_album_confirm": "Añadir al álbum"
+  ,"timeline_add_to_album_success": "Añadido al álbum"
+  ,"timeline_add_to_album_failed": "No se pudo añadir el recurso al álbum"
 }

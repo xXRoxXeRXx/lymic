@@ -231,4 +231,10 @@
   ,"timeline_download_original": "Скачать оригинал"
   ,"timeline_download_saved": "Загрузка сохранена"
   ,"timeline_download_failed": "Не удалось скачать оригинал"
+  ,"timeline_add_to_album": "Добавить в альбом"
+  ,"timeline_add_to_album_modal_title": "Добавить в альбом"
+  ,"timeline_add_to_album_modal_subtitle": "Выберите альбом для этого объекта"
+  ,"timeline_add_to_album_confirm": "Добавить в альбом"
+  ,"timeline_add_to_album_success": "Добавлено в альбом"
+  ,"timeline_add_to_album_failed": "Не удалось добавить объект в альбом"
 }

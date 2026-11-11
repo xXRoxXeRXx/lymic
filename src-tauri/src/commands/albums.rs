@@ -1,5 +1,5 @@
 use crate::auth;
-use crate::immich::{Album, AlbumCatalogueItem, ImmichClient};
+use crate::immich::{Album, AlbumCatalogueItem, AlbumId, ImmichClient, RemoteAssetId};
 
 fn authenticated_client() -> Result<ImmichClient, String> {
     let credentials = auth::get_credentials()
@@ -33,4 +33,16 @@ pub(crate) async fn create_album(name: String) -> Result<Album, String> {
     }
 
     authenticated_client()?.create_album(trimmed).await
+}
+
+#[tauri::command]
+pub(crate) async fn add_asset_to_album(asset_id: String, album_id: String) -> Result<(), String> {
+    let asset_id = asset_id.trim();
+    if asset_id.is_empty() {
+        return Err("Asset ID cannot be empty".to_string());
+    }
+
+    authenticated_client()?
+        .add_assets_to_album(&AlbumId::new(album_id), &[RemoteAssetId::new(asset_id)])
+        .await
 }

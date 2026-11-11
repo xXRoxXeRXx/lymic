@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { untrack } from "svelte";
-  import { ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Play, RefreshCw, X } from "lucide-svelte";
+  import { onDestroy, untrack } from "svelte";
+  import { Album, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
   import type { AssetDetails, TimelineAsset } from "../contracts";
   import { calculateMasonryLayout } from "./timeline-masonry";
+  import AddToAlbumModal from "./AddToAlbumModal.svelte";
+  import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
   interface Props {
     timeline: TimelineViewState;
@@ -16,6 +18,8 @@
     setAssetFavorite?(assetId: string, isFavorite: boolean): Promise<void>;
     chooseDownloadDestination?(originalFileName: string): Promise<string | null>;
     downloadAsset?(assetId: string, destinationPath: string): Promise<void>;
+    albumCatalogue?: TargetAlbumCatalogue;
+    addAssetToAlbum?(assetId: string, albumId: string): Promise<void>;
     showScrubber?: boolean;
     emptyMessage?: string;
     loadErrorMessage?: string;
@@ -29,6 +33,8 @@
     setAssetFavorite = async () => {},
     chooseDownloadDestination = async () => null,
     downloadAsset = async () => {},
+    albumCatalogue,
+    addAssetToAlbum = async () => {},
     showScrubber = true,
     emptyMessage = "",
     loadErrorMessage = "",
@@ -53,6 +59,11 @@
   let downloadingAssetId = $state<string | null>(null);
   let downloadMessage = $state("");
   let downloadError = $state("");
+  let isAddToAlbumOpen = $state(false);
+  let isAddingToAlbum = $state(false);
+  let addToAlbumMessage = $state("");
+  let addToAlbumError = $state("");
+  let addToAlbumMessageTimeout: ReturnType<typeof setTimeout> | null = null;
   let selectedIndex = $state(-1);
   let opener = $state<HTMLElement | null>(null);
 
@@ -258,12 +269,55 @@
     }
   }
 
+  function openAddToAlbum() {
+    if (!selectedAsset || !albumCatalogue) return;
+    addToAlbumMessage = "";
+    addToAlbumError = "";
+    isAddToAlbumOpen = true;
+  }
+
+  async function assignSelectedAssetToAlbum(albumId: string) {
+    if (!selectedAsset || isAddingToAlbum) return;
+
+    const assetId = selectedAsset.id;
+    addToAlbumError = "";
+    isAddingToAlbum = true;
+    try {
+      await addAssetToAlbum(assetId, albumId);
+      if (selectedAsset?.id === assetId) {
+        isAddToAlbumOpen = false;
+        showAddToAlbumMessage();
+      }
+    } catch {
+      if (selectedAsset?.id === assetId) addToAlbumError = $t("timeline_add_to_album_failed");
+    } finally {
+      isAddingToAlbum = false;
+    }
+  }
+
+  function clearAddToAlbumMessage() {
+    if (addToAlbumMessageTimeout !== null) clearTimeout(addToAlbumMessageTimeout);
+    addToAlbumMessageTimeout = null;
+    addToAlbumMessage = "";
+  }
+
+  function showAddToAlbumMessage() {
+    clearAddToAlbumMessage();
+    addToAlbumMessage = $t("timeline_add_to_album_success");
+    addToAlbumMessageTimeout = setTimeout(clearAddToAlbumMessage, 3_000);
+  }
+
+  onDestroy(clearAddToAlbumMessage);
+
   function openLightbox(asset: TimelineAsset, source: HTMLElement) {
     selectedIndex = lightboxAssets.findIndex((candidate) => candidate.id === asset.id);
     selectedAsset = asset;
     opener = source;
     downloadMessage = "";
     downloadError = "";
+    isAddToAlbumOpen = false;
+    clearAddToAlbumMessage();
+    addToAlbumError = "";
     loadAssetDetails(asset);
   }
 
@@ -287,6 +341,9 @@
     favoriteError = "";
     downloadMessage = "";
     downloadError = "";
+    isAddToAlbumOpen = false;
+    clearAddToAlbumMessage();
+    addToAlbumError = "";
     selectedIndex = -1;
     queueMicrotask(() => opener?.focus());
   }
@@ -302,6 +359,7 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (!selectedAsset) return;
+    if (isAddToAlbumOpen) return;
     if (event.key === "Escape") {
       event.preventDefault();
       closeLightbox();
@@ -489,6 +547,9 @@
           {#if assetDetails?.originalFileName}
             <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:cursor-wait disabled:opacity-50" aria-label={$t("timeline_download_original")} aria-busy={downloadingAssetId === selectedAsset.id} disabled={downloadingAssetId !== null} onclick={() => void downloadOriginal()}><Download class="h-5 w-5 {downloadingAssetId === selectedAsset.id ? 'animate-spin' : ''}" /></button>
           {/if}
+          {#if albumCatalogue}
+            <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:opacity-50" aria-label={$t("timeline_add_to_album")} disabled={isAddingToAlbum} onclick={openAddToAlbum}><Album class="h-5 w-5" /></button>
+          {/if}
           <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:opacity-50" aria-label={assetDetails?.isFavorite ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={assetDetails?.isFavorite ?? false} disabled={!assetDetails || Boolean(updatingFavoriteAssetIds[selectedAsset.id])} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {assetDetails?.isFavorite ? 'fill-current' : ''}" /></button>
           <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 disabled:opacity-50" aria-label={$t("timeline_open_in_immich")} disabled={!serverUrl.trim()} onclick={() => selectedAsset && serverUrl.trim() && onOpenExternalUrl(assetUrl(selectedAsset))}>{$t("timeline_open_in_immich")} <ExternalLink class="h-4 w-4" /></button>
         </div>
@@ -501,7 +562,20 @@
         {#if downloadError}
           <p class="w-full text-red-300" role="alert">{downloadError}</p>
         {/if}
+        {#if addToAlbumMessage}
+          <p class="w-full text-emerald-300" role="status">{addToAlbumMessage}</p>
+        {/if}
       </div>
     </dialog>
   </div>
+  {#if albumCatalogue}
+    <AddToAlbumModal
+      isOpen={isAddToAlbumOpen}
+      catalogue={albumCatalogue}
+      isAssigning={isAddingToAlbum}
+      assignmentError={addToAlbumError}
+      onConfirm={(albumId) => void assignSelectedAssetToAlbum(albumId)}
+      onCancel={() => { if (!isAddingToAlbum) { isAddToAlbumOpen = false; addToAlbumError = ""; } }}
+    />
+  {/if}
 {/if}

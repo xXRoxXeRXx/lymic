@@ -29,6 +29,11 @@ pub struct AlbumCatalogueItem {
     pub order: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct AlbumAssetAssignmentResult {
+    success: bool,
+}
+
 impl ImmichClient {
     pub async fn get_album_catalogue(&self) -> Result<Vec<AlbumCatalogueItem>, String> {
         let response = self
@@ -130,6 +135,16 @@ impl ImmichClient {
                 "Failed to assign assets to album: {}",
                 response_status_error(response).await?
             ));
+        }
+
+        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
+        let results: Vec<AlbumAssetAssignmentResult> = serde_json::from_slice(&body)
+            .map_err(|error| format!("Invalid album assignment response: {}", error))?;
+        if results.len() != asset_ids.len() {
+            return Err("Immich returned an incomplete album assignment response".to_string());
+        }
+        if results.iter().any(|result| !result.success) {
+            return Err("Immich rejected album assignment".to_string());
         }
 
         Ok(())
@@ -406,6 +421,40 @@ mod tests {
             .add_assets_to_album(&AlbumId::new("album-123"), &ids)
             .await
             .is_ok());
+    }
+
+    #[tokio::test]
+    async fn add_assets_to_album_rejects_unsuccessful_asset_results() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut stream).await;
+            let response = r#"[{"id":"asset-1","success":false}]"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        response.len(),
+                        response
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+        });
+
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+
+        let err = client
+            .add_assets_to_album(&AlbumId::new("album-123"), &[RemoteAssetId::new("asset-1")])
+            .await
+            .unwrap_err();
+        assert!(err.contains("Immich rejected album assignment"));
     }
 
     #[tokio::test]

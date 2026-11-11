@@ -29,6 +29,7 @@ vi.mock("@tauri-apps/plugin-updater", () => ({ check }));
 
 import {
   tauriDesktopAdapter,
+  type AlbumAssignmentDesktopAdapter,
   type AlbumsDesktopAdapter,
   type AlbumCatalogueDesktopAdapter,
   type AlbumTimelineDesktopAdapter,
@@ -46,6 +47,7 @@ describe("tauriDesktopAdapter", () => {
   const syncAdapter: SyncDesktopAdapter = tauriDesktopAdapter;
   const foldersAdapter: WatchedFoldersDesktopAdapter = tauriDesktopAdapter;
   const albumsAdapter: AlbumsDesktopAdapter = tauriDesktopAdapter;
+  const albumAssignmentAdapter: AlbumAssignmentDesktopAdapter = tauriDesktopAdapter;
   const albumCatalogueAdapter: AlbumCatalogueDesktopAdapter = tauriDesktopAdapter;
   const timelineAdapter: TimelineDesktopAdapter = tauriDesktopAdapter;
   const albumTimelineAdapter: AlbumTimelineDesktopAdapter = tauriDesktopAdapter;
@@ -87,6 +89,7 @@ describe("tauriDesktopAdapter", () => {
     await albumsAdapter.getAlbums();
     await albumCatalogueAdapter.getAlbumCatalogue();
     await albumsAdapter.createAlbum("Summer");
+    await albumAssignmentAdapter.addAssetToAlbum("asset-1", "album-1");
     await timelineAdapter.getTimelineBuckets();
     await timelineAdapter.getTimelineBucketAssets("2025-03-01T00:00:00.000Z");
     await tauriDesktopAdapter.getAssetDetails("asset-1");
@@ -145,6 +148,7 @@ describe("tauriDesktopAdapter", () => {
       ["get_albums"],
       ["get_album_catalogue"],
       ["create_album", { name: "Summer" }],
+      ["add_asset_to_album", { assetId: "asset-1", albumId: "album-1" }],
       ["get_timeline_buckets"],
       ["get_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
       ["get_asset_details", { assetId: "asset-1" }],
