@@ -16,8 +16,6 @@
   "timeline_close_lightbox": "Vollbildansicht schließen",
   "timeline_video_preview": "Videovorschau",
   "timeline_photo_preview": "Fotovorschau",
-  "timeline_unknown_date": "Unbekanntes Datum",
-  "timeline_unknown_camera": "Unbekannte Kamera",
   "timeline_previous_asset": "Vorheriges Medium",
   "timeline_previous": "Zurück",
   "timeline_next_asset": "Nächstes Medium",
@@ -237,4 +235,19 @@
   ,"timeline_add_to_album_confirm": "Zum Album hinzufügen"
   ,"timeline_add_to_album_success": "Zum Album hinzugefügt"
   ,"timeline_add_to_album_failed": "Medium konnte nicht zum Album hinzugefügt werden"
+  ,"timeline_favorite_marker": "Favorit"
+  ,"timeline_info": "Informationen"
+  ,"timeline_close_info": "Informationen schließen"
+  ,"timeline_info_loading": "Informationen werden geladen"
+  ,"timeline_info_unavailable": "Informationen sind nicht verfügbar."
+  ,"timeline_info_capture": "Aufnahme"
+  ,"timeline_info_date": "Datum"
+  ,"timeline_info_location": "Ort"
+  ,"timeline_info_camera": "Kamera"
+  ,"timeline_info_lens": "Objektiv"
+  ,"timeline_info_exposure": "Belichtung"
+  ,"timeline_info_file": "Datei"
+  ,"timeline_info_filename": "Dateiname"
+  ,"timeline_info_dimensions": "Abmessungen"
+  ,"timeline_info_size": "Dateigröße"
 }

@@ -3,6 +3,7 @@ import type { TimelineDesktopAdapter } from "../tauri/desktop-adapter";
 
 export interface TimelineViewState {
   readonly buckets: TimelineBucket[];
+  readonly refreshGeneration: number;
   readonly isLoading: boolean;
   readonly isRefreshing: boolean;
   readonly isOffline: boolean;
@@ -19,6 +20,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   let isRefreshing = $state(false);
   let isOffline = $state(false);
   let hasInitialLoadError = $state(false);
+  let refreshGeneration = $state(0);
   let latestRequest = 0;
   let assetGeneration = 0;
   let assetsByBucket = $state<Record<string, TimelineAsset[]>>({});
@@ -36,6 +38,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
       if (request === latestRequest) {
         const list = Array.isArray(loaded) ? loaded : [];
         buckets = [...list].sort((a, b) => b.timeBucket.localeCompare(a.timeBucket));
+        refreshGeneration += 1;
         // Keep rendered assets visible while fresh bucket details arrive. A
         // generation makes requests started before this refresh unable to
         // overwrite the newer session view.
@@ -62,6 +65,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   function clear() {
     latestRequest += 1;
     buckets = [];
+    refreshGeneration += 1;
     isLoading = false;
     isRefreshing = false;
     isOffline = false;
@@ -98,6 +102,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
 
   return {
     get buckets() { return buckets; },
+    get refreshGeneration() { return refreshGeneration; },
     get isLoading() { return isLoading; },
     get isRefreshing() { return isRefreshing; },
     get isOffline() { return isOffline; },

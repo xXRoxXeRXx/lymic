@@ -26,6 +26,7 @@ pub struct TimelineAsset {
     pub camera_model: Option<String>,
     pub file_size: Option<u64>,
     pub duration: Option<u64>,
+    pub is_favorite: bool,
 }
 
 /// A complete, locally indexed Album Timeline. Unlike the library timeline,
@@ -72,6 +73,8 @@ struct TimelineAssetResponse {
     created_at: Option<String>,
     #[serde(default, deserialize_with = "deserialize_duration")]
     duration: Option<u64>,
+    #[serde(rename = "isFavorite", default)]
+    is_favorite: bool,
 }
 
 #[derive(Deserialize)]
@@ -126,6 +129,8 @@ struct ColumnarTimelineBucketResponse {
     ratio: Vec<Option<f64>>,
     #[serde(default)]
     duration: Vec<Option<serde_json::Value>>,
+    #[serde(rename = "isFavorite", default)]
+    is_favorite: Vec<Option<bool>>,
     #[serde(rename = "fileCreatedAt", default)]
     file_created_at: Vec<Option<String>>,
     #[serde(rename = "createdAt", default)]
@@ -396,6 +401,11 @@ fn parse_timeline_bucket_assets(body: Vec<u8>) -> Result<Vec<TimelineAsset>, Str
                     camera_model: None,
                     file_size: None,
                     duration,
+                    is_favorite: columnar
+                        .is_favorite
+                        .get(index)
+                        .and_then(|value| *value)
+                        .unwrap_or(false),
                 }
             })
             .collect(),
@@ -426,6 +436,7 @@ fn timeline_asset_from_response(asset: TimelineAssetResponse) -> TimelineAsset {
         camera_model: asset.exif.model,
         file_size: asset.exif.file_size,
         duration: asset.duration,
+        is_favorite: asset.is_favorite,
     }
 }
 
@@ -486,6 +497,7 @@ mod tests {
                 camera_model: None,
                 file_size: None,
                 duration: None,
+                is_favorite: false,
             },
             TimelineAsset {
                 id: "dateless".to_string(),
@@ -497,6 +509,7 @@ mod tests {
                 camera_model: None,
                 file_size: None,
                 duration: None,
+                is_favorite: false,
             },
         ]);
 
@@ -578,7 +591,7 @@ mod tests {
             let request = String::from_utf8_lossy(&request[..read]);
             assert!(request.starts_with("GET /api/assets/asset-1 HTTP/1.1"));
             assert!(request.contains("x-api-key: test-key"));
-            let body = br#"{"originalFileName":"IMG_0001.CR3","isFavorite":true,"exifInfo":{"fNumber":2.8,"exposureTime":"1/250","iso":100,"focalLength":50,"lensModel":"RF50mm F1.8 STM"}}"#;
+            let body = br#"{"originalFileName":"IMG_0001.CR3","isFavorite":true,"exifInfo":{"make":"Canon","model":"EOS R6","city":"Berlin","state":"Berlin","country":"Germany","fNumber":2.8,"exposureTime":"1/250","iso":100,"focalLength":50,"lensModel":"RF50mm F1.8 STM","exifImageWidth":6048,"exifImageHeight":4024,"fileSizeInByte":12345678}}"#;
             stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n", body.len()).as_bytes()).await.unwrap();
             stream.write_all(body).await.unwrap();
         });
@@ -595,11 +608,19 @@ mod tests {
 
         assert_eq!(details.original_file_name.as_deref(), Some("IMG_0001.CR3"));
         assert!(details.is_favorite);
+        assert_eq!(details.camera_make.as_deref(), Some("Canon"));
+        assert_eq!(details.camera_model.as_deref(), Some("EOS R6"));
+        assert_eq!(details.city.as_deref(), Some("Berlin"));
+        assert_eq!(details.state.as_deref(), Some("Berlin"));
+        assert_eq!(details.country.as_deref(), Some("Germany"));
         assert_eq!(details.f_number, Some(2.8));
         assert_eq!(details.exposure_time.as_deref(), Some("1/250"));
         assert_eq!(details.iso, Some(100));
         assert_eq!(details.focal_length, Some(50.0));
         assert_eq!(details.lens_model.as_deref(), Some("RF50mm F1.8 STM"));
+        assert_eq!(details.image_width, Some(6048));
+        assert_eq!(details.image_height, Some(4024));
+        assert_eq!(details.file_size, Some(12345678));
         server.await.unwrap();
     }
 
@@ -637,11 +658,19 @@ mod tests {
                 AssetDetails {
                     original_file_name: None,
                     is_favorite: false,
+                    camera_make: None,
+                    camera_model: None,
+                    city: None,
+                    state: None,
+                    country: None,
                     f_number: None,
                     exposure_time: None,
                     iso: None,
                     focal_length: None,
                     lens_model: None,
+                    image_width: None,
+                    image_height: None,
+                    file_size: None,
                 }
             );
         }
@@ -791,7 +820,7 @@ mod tests {
             assert!(request
                 .starts_with("GET /api/timeline/bucket?size=MONTH&timeBucket=2026-11-01 HTTP/1.1"));
             assert!(request.contains("x-api-key: test-key"));
-            let assets_body = br#"{"id":["photo-1","video-1","video-2","video-3"],"isImage":[true,false,false,false],"ratio":[0.67,1.7778,1.7778,1.7778],"duration":[null,"0:01:05.000",2205,"5231"],"fileCreatedAt":["2026-11-04T19:47:41.29","2026-11-03T10:00:00.000Z","2026-11-02T10:00:00.000Z","2026-11-01T10:00:00.000Z"]}"#;
+            let assets_body = br#"{"id":["photo-1","video-1","video-2","video-3"],"isImage":[true,false,false,false],"isFavorite":[false,true,false,false],"ratio":[0.67,1.7778,1.7778,1.7778],"duration":[null,"0:01:05.000",2205,"5231"],"fileCreatedAt":["2026-11-04T19:47:41.29","2026-11-03T10:00:00.000Z","2026-11-02T10:00:00.000Z","2026-11-01T10:00:00.000Z"]}"#;
             stream
                 .write_all(
                     format!(
@@ -832,10 +861,12 @@ mod tests {
             Some("2026-11-04T19:47:41.29")
         );
         assert_eq!(assets[0].duration, None);
+        assert!(!assets[0].is_favorite);
 
         assert_eq!(assets[1].id, "video-1");
         assert_eq!(assets[1].width, 1778);
         assert_eq!(assets[1].height, 1000);
+        assert!(assets[1].is_favorite);
         assert_eq!(assets[1].r#type, "VIDEO");
         assert_eq!(assets[1].duration, Some(65));
 

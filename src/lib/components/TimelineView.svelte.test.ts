@@ -5,6 +5,7 @@ import "../i18n";
 import TimelineView from "./TimelineView.svelte";
 import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
 import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
+import type { AssetDetails } from "../contracts";
 
 vi.stubGlobal("ResizeObserver", class {
   observe() {}
@@ -25,18 +26,40 @@ const timeline: TimelineViewState = {
     { timeBucket: "2025-02-01T00:00:00.000Z", count: 3 },
     { timeBucket: "2024-12-01T00:00:00.000Z", count: 1 },
   ],
+  refreshGeneration: 0,
   isLoading: false,
   isRefreshing: false,
   isOffline: false,
   hasInitialLoadError: false,
   assetsFor: (timeBucket) => timeBucket === "2025-03-01T00:00:00.000Z" ? [
-    { id: "photo-1", width: 4032, height: 3024, type: "IMAGE", takenAt: "2025-03-05T12:34:56.000Z", cameraMake: "Canon", cameraModel: "EOS R6", fileSize: 1234567, duration: null },
-    { id: "video-1", width: 1920, height: 1080, type: "VIDEO", takenAt: "2025-03-04T12:34:56.000Z", cameraMake: null, cameraModel: null, fileSize: 2345678, duration: 65 },
+    { id: "photo-1", width: 4032, height: 3024, type: "IMAGE", takenAt: "2025-03-05T12:34:56.000Z", cameraMake: "Canon", cameraModel: "EOS R6", fileSize: 1234567, duration: null, isFavorite: false },
+    { id: "video-1", width: 1920, height: 1080, type: "VIDEO", takenAt: "2025-03-04T12:34:56.000Z", cameraMake: null, cameraModel: null, fileSize: 2345678, duration: 65, isFavorite: true },
   ] : [],
   activateBucket: vi.fn(),
   refresh: vi.fn(),
   clear: vi.fn(),
 };
+
+function assetDetails(overrides: Partial<AssetDetails> = {}): AssetDetails {
+  return {
+    originalFileName: null,
+    isFavorite: false,
+    cameraMake: null,
+    cameraModel: null,
+    city: null,
+    state: null,
+    country: null,
+    fNumber: null,
+    exposureTime: null,
+    iso: null,
+    focalLength: null,
+    lensModel: null,
+    imageWidth: null,
+    imageHeight: null,
+    fileSize: null,
+    ...overrides,
+  };
+}
 
 function albumCatalogue(albums = [
   { id: "album-summer", albumName: "Summer" },
@@ -92,11 +115,19 @@ describe("TimelineView scrubber", () => {
   it("opens a photo in a lightbox with metadata and restores focus after closing", async () => {
     const getAssetDetails = vi.fn().mockResolvedValue({
       originalFileName: "IMG_0001.CR3",
+      cameraMake: "Canon",
+      cameraModel: "Canon EOS R6",
+      city: "Berlin",
+      state: "Berlin",
+      country: "Germany",
       fNumber: 2.8,
       exposureTime: "1/250",
       iso: 100,
       focalLength: 50,
       lensModel: "RF50mm F1.8 STM",
+      imageWidth: 6048,
+      imageHeight: 4024,
+      fileSize: 12_345_678,
       isFavorite: false,
     });
     render(TimelineView, { timeline, serverUrl: "https://immich.example", onOpenExternalUrl: vi.fn().mockResolvedValue(undefined), getAssetDetails });
@@ -105,12 +136,17 @@ describe("TimelineView scrubber", () => {
     await fireEvent.click(thumbnail);
     expect(screen.getByRole("dialog", { name: "Media lightbox" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/photo-1");
-    expect(screen.getByText("Canon EOS R6")).toBeInTheDocument();
-    expect(screen.getByText("4,032 × 3,024")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("IMG_0001.CR3")).toBeInTheDocument());
-    expect(screen.getByText("f/2.8 · 1/250s · ISO 100 · 50mm")).toBeInTheDocument();
-    expect(screen.getByText("RF50mm F1.8 STM")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    const infoPanel = screen.getByRole("complementary", { name: "Info" });
+    expect(within(infoPanel).getByText("Canon EOS R6")).toBeInTheDocument();
+    expect(infoPanel).toHaveTextContent("Berlin, Germany");
+    expect(infoPanel).toHaveTextContent("6,048");
+    await waitFor(() => expect(within(infoPanel).getByText("IMG_0001.CR3")).toBeInTheDocument());
+    expect(within(infoPanel).getByText("f/2.8 · 1/250s · ISO 100 · 50mm")).toBeInTheDocument();
+    expect(within(infoPanel).getByText("RF50mm F1.8 STM")).toBeInTheDocument();
     expect(getAssetDetails).toHaveBeenCalledWith("photo-1");
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("dialog", { name: "Media lightbox" })).toBeInTheDocument();
     await fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
     expect(thumbnail).toHaveFocus();
@@ -121,11 +157,19 @@ describe("TimelineView scrubber", () => {
     const downloadAsset = vi.fn().mockResolvedValue(undefined);
     const getAssetDetails = vi.fn().mockResolvedValue({
       originalFileName: "IMG_0001.CR3",
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
       fNumber: null,
       exposureTime: null,
       iso: null,
       focalLength: null,
       lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
       isFavorite: false,
     });
     render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
@@ -200,11 +244,19 @@ describe("TimelineView scrubber", () => {
     }));
     const getAssetDetails = vi.fn().mockResolvedValue({
       originalFileName: "IMG_0001.CR3",
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
       fNumber: null,
       exposureTime: null,
       iso: null,
       focalLength: null,
       lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
       isFavorite: false,
     });
     render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
@@ -227,11 +279,19 @@ describe("TimelineView scrubber", () => {
     }));
     const getAssetDetails = vi.fn().mockResolvedValue({
       originalFileName: "IMG_0001.CR3",
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
       fNumber: null,
       exposureTime: null,
       iso: null,
       focalLength: null,
       lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
       isFavorite: false,
     });
     render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
@@ -278,11 +338,19 @@ describe("TimelineView scrubber", () => {
     const downloadAsset = vi.fn();
     const getAssetDetails = vi.fn().mockResolvedValue({
       originalFileName: "IMG_0001.CR3",
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
       fNumber: null,
       exposureTime: null,
       iso: null,
       focalLength: null,
       lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
       isFavorite: false,
     });
     render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
@@ -297,11 +365,19 @@ describe("TimelineView scrubber", () => {
   it("omits unavailable asset details from the lightbox footer", async () => {
     const getAssetDetails = vi.fn().mockResolvedValue({
       originalFileName: null,
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
       fNumber: null,
       exposureTime: null,
       iso: null,
       focalLength: null,
       lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
       isFavorite: false,
     });
     render(TimelineView, { timeline, getAssetDetails });
@@ -317,11 +393,19 @@ describe("TimelineView scrubber", () => {
     const onOpenExternalUrl = vi.fn().mockResolvedValue(undefined);
     const getAssetDetails = vi.fn().mockResolvedValue({
       originalFileName: null,
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
       fNumber: null,
       exposureTime: null,
       iso: null,
       focalLength: null,
       lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
       isFavorite: false,
     });
     render(TimelineView, { timeline, serverUrl: "https://immich.example/", onOpenExternalUrl, getAssetDetails });
@@ -330,6 +414,8 @@ describe("TimelineView scrubber", () => {
     const previousButton = screen.getByRole("button", { name: "Previous asset" });
     expect(nextButton).toHaveTextContent("");
     expect(previousButton).toHaveTextContent("");
+    expect(nextButton).toHaveClass("z-30");
+    expect(previousButton).toHaveClass("z-30");
     await fireEvent.click(nextButton);
     expect(screen.getByLabelText("Video preview")).toHaveAttribute("src", "lymic-asset://video/video-1");
     expect(screen.getByText("1:05")).toBeInTheDocument();
@@ -337,6 +423,7 @@ describe("TimelineView scrubber", () => {
     expect(screen.getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/photo-1");
     expect(getAssetDetails).toHaveBeenCalledTimes(2);
     await fireEvent.keyDown(window, { key: "ArrowRight" });
+    await fireEvent.click(screen.getByRole("button", { name: "Info" }));
     await fireEvent.click(screen.getByRole("button", { name: "Open in Immich" }));
     expect(onOpenExternalUrl).toHaveBeenCalledWith("https://immich.example/photos/video-1");
   });
@@ -348,20 +435,31 @@ describe("TimelineView scrubber", () => {
     }));
     const getAssetDetails = vi.fn().mockResolvedValue({
       originalFileName: null,
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
       fNumber: null,
       exposureTime: null,
       iso: null,
       focalLength: null,
       lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
       isFavorite: false,
     });
     render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
+
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(1);
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Add to favorites" })).toBeInTheDocument());
     await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
 
     expect(screen.getByRole("button", { name: "Remove from favorites" })).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(2);
     expect(setAssetFavorite).toHaveBeenCalledWith("photo-1", true);
     resolveFavorite?.();
   });
@@ -370,11 +468,19 @@ describe("TimelineView scrubber", () => {
     const setAssetFavorite = vi.fn().mockRejectedValue(new Error("Network unavailable"));
     const getAssetDetails = vi.fn().mockResolvedValue({
       originalFileName: null,
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
       fNumber: null,
       exposureTime: null,
       iso: null,
       focalLength: null,
       lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
       isFavorite: false,
     });
     render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
@@ -396,11 +502,19 @@ describe("TimelineView scrubber", () => {
     }));
     const getAssetDetails = vi.fn((assetId: string) => Promise.resolve({
       originalFileName: null,
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
       fNumber: null,
       exposureTime: null,
       iso: null,
       focalLength: null,
       lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
       isFavorite: assetId === "video-1",
     }));
     render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
@@ -418,6 +532,101 @@ describe("TimelineView scrubber", () => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
   });
+
+  it("restores the last confirmed favorite state without discarding newly loaded details", async () => {
+    let rejectRemoval: ((reason?: unknown) => void) | undefined;
+    const setAssetFavorite = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectRemoval = reject; }));
+    const getAssetDetails = vi.fn().mockResolvedValue(assetDetails({ originalFileName: "IMG_0001.CR3" }));
+    render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add to favorites" })).toBeEnabled());
+    await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove from favorites" })).toBeEnabled());
+    await fireEvent.click(screen.getByRole("button", { name: "Remove from favorites" }));
+    rejectRemoval?.(new Error("Network unavailable"));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove from favorites" })).toBeEnabled());
+    await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    expect(screen.getByRole("complementary", { name: "Info" })).toHaveTextContent("IMG_0001.CR3");
+  });
+
+  it("keeps the Info drawer open while navigation waits for the newly selected details", async () => {
+    let resolvePhoto: ((details: AssetDetails | null) => void) | undefined;
+    let resolveVideo: ((details: AssetDetails | null) => void) | undefined;
+    const getAssetDetails = vi.fn((assetId: string) => new Promise<AssetDetails | null>((resolve) => {
+      if (assetId === "photo-1") resolvePhoto = resolve;
+      else resolveVideo = resolve;
+    }));
+    render(TimelineView, { timeline, getAssetDetails });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Loading info");
+    await fireEvent.click(screen.getByRole("button", { name: "Next asset" }));
+    expect(screen.getByRole("complementary", { name: "Info" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading info");
+    resolvePhoto?.(assetDetails({ originalFileName: "photo.CR3" }));
+    await Promise.resolve();
+    expect(screen.queryByText("photo.CR3")).not.toBeInTheDocument();
+    resolveVideo?.(assetDetails({ originalFileName: "video.mp4" }));
+    await waitFor(() => expect(screen.getByRole("complementary", { name: "Info" })).toHaveTextContent("video.mp4"));
+
+    await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    expect(screen.queryByRole("complementary", { name: "Info" })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Close info" }));
+    expect(screen.queryByRole("complementary", { name: "Info" })).not.toBeInTheDocument();
+  });
+
+  it("keeps opening Immich available when the metadata request fails", async () => {
+    const onOpenExternalUrl = vi.fn().mockResolvedValue(undefined);
+    render(TimelineView, {
+      timeline,
+      serverUrl: "https://immich.example",
+      onOpenExternalUrl,
+      getAssetDetails: vi.fn().mockRejectedValue(new Error("Unavailable")),
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    const openInImmich = await screen.findByRole("button", { name: "Open in Immich" });
+    await fireEvent.click(openInImmich);
+    expect(onOpenExternalUrl).toHaveBeenCalledWith("https://immich.example/photos/photo-1");
+  });
+
+  it("invalidates cached details and favorite overrides after a timeline refresh", async () => {
+    const getAssetDetails = vi.fn()
+      .mockResolvedValueOnce(assetDetails({ originalFileName: "before-refresh.CR3", isFavorite: true }))
+      .mockResolvedValueOnce(assetDetails({ originalFileName: "after-refresh.CR3", isFavorite: false }));
+    const view = render(TimelineView, { timeline, getAssetDetails });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    await waitFor(() => expect(screen.getByRole("complementary", { name: "Info" })).toHaveTextContent("before-refresh.CR3"));
+    view.rerender({ timeline: { ...timeline, refreshGeneration: 1 }, getAssetDetails });
+
+    await waitFor(() => expect(screen.getByRole("complementary", { name: "Info" })).toHaveTextContent("after-refresh.CR3"));
+    expect(getAssetDetails).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the download action stable and disables it until the next details resolve", async () => {
+    let resolveVideo: ((details: AssetDetails | null) => void) | undefined;
+    const getAssetDetails = vi.fn((assetId: string) => assetId === "photo-1"
+      ? Promise.resolve(assetDetails({ originalFileName: "photo.CR3" }))
+      : new Promise<AssetDetails | null>((resolve) => { resolveVideo = resolve; }));
+    render(TimelineView, { timeline, getAssetDetails });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await screen.findByRole("button", { name: "Download original" });
+    fireEvent.click(screen.getByRole("button", { name: "Next asset" }));
+
+    expect(screen.getByRole("button", { name: "Download original" })).toBeDisabled();
+    resolveVideo?.(assetDetails());
+  });
+
   it("renders year and month indicators and jumps to a clicked month", async () => {
     render(TimelineView, { timeline });
     const target = document.getElementById("timeline-bucket-2025-02-01T00-00-00-000Z")!;

@@ -16,8 +16,6 @@
   "timeline_close_lightbox": "Закрыть просмотр",
   "timeline_video_preview": "Предпросмотр видео",
   "timeline_photo_preview": "Предпросмотр фото",
-  "timeline_unknown_date": "Неизвестная дата",
-  "timeline_unknown_camera": "Неизвестная камера",
   "timeline_previous_asset": "Предыдущий объект",
   "timeline_previous": "Назад",
   "timeline_next_asset": "Следующий объект",
@@ -237,4 +235,19 @@
   ,"timeline_add_to_album_confirm": "Добавить в альбом"
   ,"timeline_add_to_album_success": "Добавлено в альбом"
   ,"timeline_add_to_album_failed": "Не удалось добавить объект в альбом"
+  ,"timeline_favorite_marker": "Favorite"
+  ,"timeline_info": "Info"
+  ,"timeline_close_info": "Close info"
+  ,"timeline_info_loading": "Loading info"
+  ,"timeline_info_unavailable": "Info is unavailable."
+  ,"timeline_info_capture": "Capture"
+  ,"timeline_info_date": "Date"
+  ,"timeline_info_location": "Location"
+  ,"timeline_info_camera": "Camera"
+  ,"timeline_info_lens": "Lens"
+  ,"timeline_info_exposure": "Exposure"
+  ,"timeline_info_file": "File"
+  ,"timeline_info_filename": "File name"
+  ,"timeline_info_dimensions": "Dimensions"
+  ,"timeline_info_size": "File size"
 }

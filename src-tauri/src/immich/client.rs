@@ -65,11 +65,19 @@ pub(crate) struct AssetResponse {
 pub(crate) struct AssetDetails {
     pub original_file_name: Option<String>,
     pub is_favorite: bool,
+    pub camera_make: Option<String>,
+    pub camera_model: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub country: Option<String>,
     pub f_number: Option<f64>,
     pub exposure_time: Option<String>,
     pub iso: Option<u32>,
     pub focal_length: Option<f64>,
     pub lens_model: Option<String>,
+    pub image_width: Option<u32>,
+    pub image_height: Option<u32>,
+    pub file_size: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -84,6 +92,16 @@ struct AssetDetailsResponse {
 
 #[derive(Default, Deserialize)]
 struct AssetDetailsExif {
+    #[serde(default)]
+    make: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    city: Option<String>,
+    #[serde(default)]
+    state: Option<String>,
+    #[serde(default)]
+    country: Option<String>,
     #[serde(rename = "fNumber", default)]
     f_number: Option<f64>,
     #[serde(rename = "exposureTime", default)]
@@ -94,6 +112,12 @@ struct AssetDetailsExif {
     focal_length: Option<f64>,
     #[serde(rename = "lensModel", default)]
     lens_model: Option<String>,
+    #[serde(rename = "exifImageWidth", default)]
+    image_width: Option<u32>,
+    #[serde(rename = "exifImageHeight", default)]
+    image_height: Option<u32>,
+    #[serde(rename = "fileSizeInByte", default)]
+    file_size: Option<u64>,
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {
@@ -118,11 +142,19 @@ impl From<AssetDetailsResponse> for AssetDetails {
         Self {
             original_file_name: original_file_name(response.original_file_name),
             is_favorite: response.is_favorite,
+            camera_make: non_empty(exif.make),
+            camera_model: non_empty(exif.model),
+            city: non_empty(exif.city),
+            state: non_empty(exif.state),
+            country: non_empty(exif.country),
             f_number: exif.f_number,
             exposure_time: non_empty(exif.exposure_time),
             iso: exif.iso,
             focal_length: exif.focal_length,
             lens_model: non_empty(exif.lens_model),
+            image_width: exif.image_width,
+            image_height: exif.image_height,
+            file_size: exif.file_size,
         }
     }
 }

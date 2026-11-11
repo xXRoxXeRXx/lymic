@@ -16,8 +16,6 @@
   "timeline_close_lightbox": "Fechar visualizador",
   "timeline_video_preview": "Pré-visualização de vídeo",
   "timeline_photo_preview": "Pré-visualização de foto",
-  "timeline_unknown_date": "Data desconhecida",
-  "timeline_unknown_camera": "Câmera desconhecida",
   "timeline_previous_asset": "Item anterior",
   "timeline_previous": "Anterior",
   "timeline_next_asset": "Próximo item",
@@ -237,4 +235,19 @@
   ,"timeline_add_to_album_confirm": "Adicionar ao álbum"
   ,"timeline_add_to_album_success": "Adicionado ao álbum"
   ,"timeline_add_to_album_failed": "Não foi possível adicionar o recurso ao álbum"
+  ,"timeline_favorite_marker": "Favorite"
+  ,"timeline_info": "Info"
+  ,"timeline_close_info": "Close info"
+  ,"timeline_info_loading": "Loading info"
+  ,"timeline_info_unavailable": "Info is unavailable."
+  ,"timeline_info_capture": "Capture"
+  ,"timeline_info_date": "Date"
+  ,"timeline_info_location": "Location"
+  ,"timeline_info_camera": "Camera"
+  ,"timeline_info_lens": "Lens"
+  ,"timeline_info_exposure": "Exposure"
+  ,"timeline_info_file": "File"
+  ,"timeline_info_filename": "File name"
+  ,"timeline_info_dimensions": "Dimensions"
+  ,"timeline_info_size": "File size"
 }

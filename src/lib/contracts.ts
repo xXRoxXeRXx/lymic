@@ -54,20 +54,29 @@ export interface TimelineAsset {
   height: number;
   type: "IMAGE" | "VIDEO";
   takenAt: string | null;
-  cameraMake: string | null;
-  cameraModel: string | null;
+  cameraMake?: string | null;
+  cameraModel?: string | null;
   fileSize: number | null;
   duration: number | null;
+  isFavorite: boolean;
 }
 
 export interface AssetDetails {
   originalFileName: string | null;
   isFavorite: boolean;
+  cameraMake: string | null;
+  cameraModel: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
   fNumber: number | null;
   exposureTime: string | null;
   iso: number | null;
   focalLength: number | null;
   lensModel: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  fileSize: number | null;
 }
 
 export interface AlbumTimeline {

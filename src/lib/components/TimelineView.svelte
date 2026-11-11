@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onDestroy, untrack } from "svelte";
-  import { Album, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Play, RefreshCw, X } from "lucide-svelte";
+  import { flushSync, onDestroy, untrack } from "svelte";
+  import { Album, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
@@ -54,6 +54,9 @@
   let selectedAsset = $state<TimelineAsset | null>(null);
   let assetDetails = $state<AssetDetails | null>(null);
   const assetDetailsById = new Map<string, AssetDetails | null>();
+  let isAssetDetailsLoading = $state(false);
+  let isInfoOpen = $state(false);
+  let favoriteOverrides = $state<Record<string, boolean>>({});
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
   let favoriteError = $state("");
   let downloadingAssetId = $state<string | null>(null);
@@ -66,6 +69,7 @@
   let addToAlbumMessageTimeout: ReturnType<typeof setTimeout> | null = null;
   let selectedIndex = $state(-1);
   let opener = $state<HTMLElement | null>(null);
+  let detailsGeneration = 0;
 
   $effect(() => {
     if (!activeTimeBucket || !scrubberMonths.includes(activeTimeBucket)) {
@@ -81,6 +85,18 @@
           void Promise.resolve(timeline.activateBucket(bucket.timeBucket)).catch(() => {});
         }
       }
+    });
+  });
+
+  $effect(() => {
+    timeline.refreshGeneration;
+    untrack(() => {
+      detailsGeneration += 1;
+      assetDetailsById.clear();
+      favoriteOverrides = Object.fromEntries(
+        Object.keys(updatingFavoriteAssetIds).map((assetId) => [assetId, favoriteOverrides[assetId]]),
+      );
+      if (selectedAsset) loadAssetDetails(selectedAsset);
     });
   });
 
@@ -207,40 +223,86 @@
     return details;
   });
 
+  function cameraLabel(make: string | null | undefined, model: string | null | undefined) {
+    if (!model) return make ?? "";
+    if (!make || model.toLocaleLowerCase().startsWith(make.toLocaleLowerCase())) return model;
+    return `${make} ${model}`;
+  }
+
+  function locationLabel(...values: Array<string | null | undefined>) {
+    const seen = new Set<string>();
+    return values.filter((value): value is string => {
+      if (!value || seen.has(value.toLocaleLowerCase())) return false;
+      seen.add(value.toLocaleLowerCase());
+      return true;
+    }).join(", ");
+  }
+
+  const cameraName = $derived(cameraLabel(assetDetails?.cameraMake, assetDetails?.cameraModel));
+  const locationName = $derived(locationLabel(assetDetails?.city, assetDetails?.state, assetDetails?.country));
+  const imageWidth = $derived(assetDetails?.imageWidth ?? selectedAsset?.width ?? null);
+  const imageHeight = $derived(assetDetails?.imageHeight ?? selectedAsset?.height ?? null);
+  const fileSize = $derived(assetDetails?.fileSize ?? selectedAsset?.fileSize ?? null);
+
+  function isFavorite(asset: TimelineAsset) {
+    return favoriteOverrides[asset.id] ?? asset.isFavorite;
+  }
+
   function loadAssetDetails(asset: TimelineAsset) {
     favoriteError = "";
     if (assetDetailsById.has(asset.id)) {
       assetDetails = assetDetailsById.get(asset.id) ?? null;
+      isAssetDetailsLoading = false;
       return;
     }
     assetDetails = null;
+    isAssetDetailsLoading = true;
+    const requestGeneration = detailsGeneration;
     void getAssetDetails(asset.id)
       .then((details) => {
-        assetDetailsById.set(asset.id, details);
-        if (selectedAsset?.id === asset.id) assetDetails = details;
+        if (requestGeneration !== detailsGeneration) return;
+        const favorite = favoriteOverrides[asset.id];
+        const resolvedDetails = details && favorite === undefined ? details : details && { ...details, isFavorite: favorite };
+        assetDetailsById.set(asset.id, resolvedDetails);
+        if (selectedAsset?.id === asset.id) {
+          assetDetails = resolvedDetails;
+          isAssetDetailsLoading = false;
+        }
       })
-      // Details enhance the footer; a failure must not disrupt asset viewing.
-      .catch(() => {});
+      // Details enhance the Info drawer; a failure must not disrupt asset viewing.
+      .catch(() => {
+        if (requestGeneration === detailsGeneration && selectedAsset?.id === asset.id) isAssetDetailsLoading = false;
+      });
   }
 
   async function toggleFavorite() {
-    if (!selectedAsset || !assetDetails) return;
+    if (!selectedAsset) return;
 
     const assetId = selectedAsset.id;
     if (updatingFavoriteAssetIds[assetId]) return;
-    const previousDetails = assetDetails;
-    const updatedDetails = { ...previousDetails, isFavorite: !previousDetails.isFavorite };
-    assetDetails = updatedDetails;
-    assetDetailsById.set(assetId, updatedDetails);
+    const previousFavorite = isFavorite(selectedAsset);
+    const nextFavorite = !previousFavorite;
+    selectedAsset = { ...selectedAsset, isFavorite: nextFavorite };
+    favoriteOverrides = { ...favoriteOverrides, [assetId]: nextFavorite };
+    const currentDetails = assetDetailsById.get(assetId);
+    if (currentDetails) {
+      const updatedDetails = { ...currentDetails, isFavorite: nextFavorite };
+      assetDetailsById.set(assetId, updatedDetails);
+      assetDetails = updatedDetails;
+    }
     favoriteError = "";
     updatingFavoriteAssetIds = { ...updatingFavoriteAssetIds, [assetId]: true };
 
     try {
-      await setAssetFavorite(assetId, updatedDetails.isFavorite);
+      await setAssetFavorite(assetId, nextFavorite);
     } catch {
-      assetDetailsById.set(assetId, previousDetails);
+      favoriteOverrides = { ...favoriteOverrides, [assetId]: previousFavorite };
+      const currentDetails = assetDetailsById.get(assetId);
+      const restoredDetails = currentDetails && { ...currentDetails, isFavorite: previousFavorite };
+      if (restoredDetails) assetDetailsById.set(assetId, restoredDetails);
       if (selectedAsset?.id === assetId) {
-        assetDetails = previousDetails;
+        selectedAsset = { ...selectedAsset, isFavorite: previousFavorite };
+        if (restoredDetails) assetDetails = restoredDetails;
         favoriteError = $t("timeline_favorite_update_error");
       }
     } finally {
@@ -316,13 +378,15 @@
     downloadMessage = "";
     downloadError = "";
     isAddToAlbumOpen = false;
+    isInfoOpen = false;
     clearAddToAlbumMessage();
     addToAlbumError = "";
     loadAssetDetails(asset);
   }
 
-  function hasRealDimensions(asset: TimelineAsset) {
-    if (asset.width <= 0 || asset.height <= 0) return false;
+  function hasRealDimensions(asset: TimelineAsset, width: number | null, height: number | null) {
+    if (width === null || height === null || width <= 0 || height <= 0) return false;
+    if (assetDetails?.imageWidth !== null && assetDetails?.imageHeight !== null) return true;
     if (
       asset.height === 1000 &&
       asset.fileSize === null &&
@@ -338,6 +402,8 @@
     if (downloadingAssetId || isAddingToAlbum) return;
     selectedAsset = null;
     assetDetails = null;
+    isAssetDetailsLoading = false;
+    isInfoOpen = false;
     favoriteError = "";
     downloadMessage = "";
     downloadError = "";
@@ -348,16 +414,27 @@
     queueMicrotask(() => opener?.focus());
   }
 
+  function closeFromLightboxBackdrop() {
+    if (isInfoOpen) isInfoOpen = false;
+    else closeLightbox();
+  }
+
   function navigate(delta: number) {
     if (!selectedAsset || downloadingAssetId || isAddingToAlbum || lightboxAssets.length === 0) return;
-    selectedIndex = (selectedIndex + delta + lightboxAssets.length) % lightboxAssets.length;
-    selectedAsset = lightboxAssets[selectedIndex];
-    downloadMessage = "";
-    downloadError = "";
-    isAddToAlbumOpen = false;
-    clearAddToAlbumMessage();
-    addToAlbumError = "";
-    loadAssetDetails(selectedAsset);
+    const nextIndex = (selectedIndex + delta + lightboxAssets.length) % lightboxAssets.length;
+    const nextAsset = lightboxAssets[nextIndex];
+    flushSync(() => {
+      selectedIndex = nextIndex;
+      selectedAsset = nextAsset;
+      assetDetails = null;
+      isAssetDetailsLoading = true;
+      downloadMessage = "";
+      downloadError = "";
+      isAddToAlbumOpen = false;
+      clearAddToAlbumMessage();
+      addToAlbumError = "";
+    });
+    loadAssetDetails(nextAsset);
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -365,7 +442,8 @@
     if (isAddToAlbumOpen) return;
     if (event.key === "Escape") {
       event.preventDefault();
-      closeLightbox();
+      if (isInfoOpen) isInfoOpen = false;
+      else closeLightbox();
     } else if (event.key === "ArrowLeft") {
       event.preventDefault();
       navigate(-1);
@@ -457,6 +535,9 @@
                   {#each column as item (item.asset.id)}
                     <button type="button" class="relative overflow-hidden rounded-lg bg-slate-200 text-left dark:bg-zinc-800" aria-label={item.asset.type === "VIDEO" ? $t("timeline_open_video") : $t("timeline_open_photo")} onclick={(event) => openLightbox(item.asset, event.currentTarget)}>
                       <img src={protocolSrc("lymic-thumb", "asset", item.asset.id)} alt="" loading="lazy" width={item.asset.width} height={item.asset.height} style:height={`${item.height}px`} class="w-full object-cover" />
+                      {#if isFavorite(item.asset)}
+                        <span class="absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white" aria-label={$t("timeline_favorite_marker")}><Heart class="h-3.5 w-3.5 fill-current" /></span>
+                      {/if}
                       {#if item.asset.type === "VIDEO"}
                         <span class="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white"><Play class="h-3 w-3 fill-current" />{formatDuration(item.asset.duration)}</span>
                       {/if}
@@ -510,64 +591,70 @@
 </div>
 
 {#if selectedAsset}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" role="presentation" onclick={(event) => event.currentTarget === event.target && closeLightbox()}>
-    <dialog open aria-label={$t("timeline_lightbox_label")} aria-modal="true" class="m-0 grid h-full w-full max-h-none max-w-none grid-rows-[minmax(0,1fr)_auto] border-0 bg-transparent p-0 text-white">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" role="presentation" onclick={(event) => event.currentTarget === event.target && closeFromLightboxBackdrop()}>
+    <dialog open aria-label={$t("timeline_lightbox_label")} aria-modal="true" class="m-0 h-full w-full max-h-none max-w-none border-0 bg-transparent p-0 text-white">
       <div class="relative flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
-        <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_close_lightbox")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={closeLightbox}><X class="h-5 w-5" /></button>
-        <button type="button" class="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
-        <button type="button" class="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
+        {#if isInfoOpen}
+          <button type="button" tabindex="-1" class="absolute inset-0 z-10 cursor-default" aria-label={$t("timeline_close_info")} onclick={() => isInfoOpen = false}></button>
+        {/if}
+        <div class="absolute right-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-wrap justify-end gap-2">
+          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:cursor-not-allowed" title={$t("timeline_download_original")} aria-label={$t("timeline_download_original")} aria-busy={downloadingAssetId === selectedAsset.id} disabled={!assetDetails?.originalFileName || downloadingAssetId !== null} onclick={() => void downloadOriginal()}><Download class="h-5 w-5 {downloadingAssetId === selectedAsset.id ? 'animate-spin' : ''}" /></button>
+          {#if albumCatalogue}
+            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isAddingToAlbum} onclick={openAddToAlbum}><Album class="h-5 w-5" /></button>
+          {/if}
+          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-label={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={isFavorite(selectedAsset)} disabled={Boolean(updatingFavoriteAssetIds[selectedAsset.id])} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {isFavorite(selectedAsset) ? 'fill-current' : ''}" /></button>
+          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80" title={$t("timeline_info")} aria-label={$t("timeline_info")} aria-pressed={isInfoOpen} onclick={() => isInfoOpen = !isInfoOpen}><Info class="h-5 w-5" /></button>
+          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_close_lightbox")} aria-label={$t("timeline_close_lightbox")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={closeLightbox}><X class="h-5 w-5" /></button>
+        </div>
+        <button type="button" class="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
+        <button type="button" class="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
         {#if selectedAsset.type === "VIDEO"}
-          <video class="h-full w-full max-h-full max-w-full object-contain" controls autoplay aria-label={$t("timeline_video_preview")} src={protocolSrc("lymic-asset", "video", selectedAsset.id)}>
+          <video class="relative z-20 h-full w-full max-h-full max-w-full object-contain" controls autoplay aria-label={$t("timeline_video_preview")} src={protocolSrc("lymic-asset", "video", selectedAsset.id)}>
             <track kind="captions" />
           </video>
         {:else}
           <img class="h-full w-full max-h-full max-w-full object-contain" alt={$t("timeline_photo_preview")} src={protocolSrc("lymic-asset", "asset", selectedAsset.id)} />
         {/if}
-      </div>
-      <div class="flex flex-wrap items-center justify-between gap-3 bg-black/70 px-4 py-3 text-sm">
-        <div class="space-y-1">
-          <p>{selectedAsset.takenAt ? new Intl.DateTimeFormat(numberLocale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedAsset.takenAt)) : $t("timeline_unknown_date")}</p>
-          <p>{[selectedAsset.cameraMake, selectedAsset.cameraModel].filter(Boolean).join(" ") || $t("timeline_unknown_camera")}</p>
-          {#if assetDetails?.originalFileName}
-            <p>{assetDetails.originalFileName}</p>
-          {/if}
-          {#if exifDetails.length > 0}
-            <p>{exifDetails.join(" · ")}</p>
-          {/if}
-          {#if assetDetails?.lensModel}
-            <p>{assetDetails.lensModel}</p>
-          {/if}
-          <p>
-            {#if hasRealDimensions(selectedAsset)}
-              <span>{selectedAsset.width.toLocaleString(numberLocale)} × {selectedAsset.height.toLocaleString(numberLocale)}</span>
+        {#if isInfoOpen}
+          <aside class="absolute inset-y-0 right-0 z-20 w-[min(400px,calc(100vw-2rem))] overflow-y-auto bg-black/75 p-6 pt-20 text-sm shadow-2xl backdrop-blur-sm" aria-label={$t("timeline_info")}>
+            {#if isAssetDetailsLoading}
+              <p role="status">{$t("timeline_info_loading")}</p>
+            {:else if assetDetails}
+              <div class="space-y-6">
+                {#if selectedAsset.takenAt || cameraName || locationName || exifDetails.length > 0 || assetDetails.lensModel}
+                  <section class="space-y-3">
+                    <h2 class="font-semibold text-white">{$t("timeline_info_capture")}</h2>
+                    {#if selectedAsset.takenAt}<p><span class="text-white/60">{$t("timeline_info_date")}</span><br />{new Intl.DateTimeFormat(numberLocale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedAsset.takenAt))}</p>{/if}
+                    {#if cameraName}<p><span class="text-white/60">{$t("timeline_info_camera")}</span><br />{cameraName}</p>{/if}
+                    {#if locationName}<p><span class="text-white/60">{$t("timeline_info_location")}</span><br />{locationName}</p>{/if}
+                    {#if assetDetails.lensModel}<p><span class="text-white/60">{$t("timeline_info_lens")}</span><br />{assetDetails.lensModel}</p>{/if}
+                    {#if exifDetails.length > 0}<p><span class="text-white/60">{$t("timeline_info_exposure")}</span><br />{exifDetails.join(" · ")}</p>{/if}
+                  </section>
+                {/if}
+                {#if assetDetails.originalFileName || hasRealDimensions(selectedAsset, imageWidth, imageHeight) || fileSize !== null}
+                  <section class="space-y-3">
+                    <h2 class="font-semibold text-white">{$t("timeline_info_file")}</h2>
+                    {#if assetDetails.originalFileName}<p><span class="text-white/60">{$t("timeline_info_filename")}</span><br />{assetDetails.originalFileName}</p>{/if}
+                    {#if hasRealDimensions(selectedAsset, imageWidth, imageHeight)}<p><span class="text-white/60">{$t("timeline_info_dimensions")}</span><br />{imageWidth?.toLocaleString(numberLocale)} × {imageHeight?.toLocaleString(numberLocale)}</p>{/if}
+                    {#if fileSize !== null}<p><span class="text-white/60">{$t("timeline_info_size")}</span><br />{(fileSize / 1024 / 1024).toFixed(1)} MB</p>{/if}
+                  </section>
+                {/if}
+              </div>
+            {:else}
+              <p role="status">{$t("timeline_info_unavailable")}</p>
             {/if}
-            {#if selectedAsset.fileSize !== null}
-              <span>{hasRealDimensions(selectedAsset) ? " · " : ""}{(selectedAsset.fileSize / 1024 / 1024).toFixed(1)} MB</span>
-            {/if}
-          </p>
+            <section class="mt-6 space-y-3">
+              <h2 class="font-semibold text-white">Immich</h2>
+              <button type="button" class="inline-flex w-full items-center justify-center gap-2 rounded bg-blue-600 px-3 py-2 font-medium hover:bg-blue-500 disabled:opacity-50" disabled={!serverUrl.trim()} onclick={() => selectedAsset && serverUrl.trim() && onOpenExternalUrl(assetUrl(selectedAsset))}>{$t("timeline_open_in_immich")} <ExternalLink class="h-4 w-4" /></button>
+            </section>
+          </aside>
+        {/if}
+        <div class="absolute bottom-4 left-1/2 z-30 -translate-x-1/2 space-y-2 text-center text-sm">
+          {#if favoriteError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{favoriteError}</p>{/if}
+          {#if downloadMessage}<p class="rounded bg-emerald-950/90 px-3 py-2 text-emerald-200" role="status">{downloadMessage}</p>{/if}
+          {#if downloadError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{downloadError}</p>{/if}
+          {#if addToAlbumMessage}<p class="rounded bg-emerald-950/90 px-3 py-2 text-emerald-200" role="status">{addToAlbumMessage}</p>{/if}
         </div>
-        <div class="flex gap-2">
-          {#if assetDetails?.originalFileName}
-            <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:cursor-wait disabled:opacity-50" aria-label={$t("timeline_download_original")} aria-busy={downloadingAssetId === selectedAsset.id} disabled={downloadingAssetId !== null} onclick={() => void downloadOriginal()}><Download class="h-5 w-5 {downloadingAssetId === selectedAsset.id ? 'animate-spin' : ''}" /></button>
-          {/if}
-          {#if albumCatalogue}
-            <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:opacity-50" aria-label={$t("timeline_add_to_album")} disabled={isAddingToAlbum} onclick={openAddToAlbum}><Album class="h-5 w-5" /></button>
-          {/if}
-          <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:opacity-50" aria-label={assetDetails?.isFavorite ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={assetDetails?.isFavorite ?? false} disabled={!assetDetails || Boolean(updatingFavoriteAssetIds[selectedAsset.id])} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {assetDetails?.isFavorite ? 'fill-current' : ''}" /></button>
-          <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 disabled:opacity-50" aria-label={$t("timeline_open_in_immich")} disabled={!serverUrl.trim()} onclick={() => selectedAsset && serverUrl.trim() && onOpenExternalUrl(assetUrl(selectedAsset))}>{$t("timeline_open_in_immich")} <ExternalLink class="h-4 w-4" /></button>
-        </div>
-        {#if favoriteError}
-          <p class="w-full text-red-300" role="alert">{favoriteError}</p>
-        {/if}
-        {#if downloadMessage}
-          <p class="w-full text-emerald-300" role="status">{downloadMessage}</p>
-        {/if}
-        {#if downloadError}
-          <p class="w-full text-red-300" role="alert">{downloadError}</p>
-        {/if}
-        {#if addToAlbumMessage}
-          <p class="w-full text-emerald-300" role="status">{addToAlbumMessage}</p>
-        {/if}
       </div>
     </dialog>
   </div>

@@ -16,8 +16,6 @@
   "timeline_close_lightbox": "लाइटबॉक्स बंद करें",
   "timeline_video_preview": "वीडियो पूर्वावलोकन",
   "timeline_photo_preview": "फ़ोटो पूर्वावलोकन",
-  "timeline_unknown_date": "अज्ञात तिथि",
-  "timeline_unknown_camera": "अज्ञात कैमरा",
   "timeline_previous_asset": "पिछला आइटम",
   "timeline_previous": "पिछला",
   "timeline_next_asset": "अगला आइटम",
@@ -237,4 +235,19 @@
   ,"timeline_add_to_album_confirm": "एल्बम में जोड़ें"
   ,"timeline_add_to_album_success": "एल्बम में जोड़ दिया गया"
   ,"timeline_add_to_album_failed": "एसेट को एल्बम में नहीं जोड़ा जा सका"
+  ,"timeline_favorite_marker": "Favorite"
+  ,"timeline_info": "Info"
+  ,"timeline_close_info": "Close info"
+  ,"timeline_info_loading": "Loading info"
+  ,"timeline_info_unavailable": "Info is unavailable."
+  ,"timeline_info_capture": "Capture"
+  ,"timeline_info_date": "Date"
+  ,"timeline_info_location": "Location"
+  ,"timeline_info_camera": "Camera"
+  ,"timeline_info_lens": "Lens"
+  ,"timeline_info_exposure": "Exposure"
+  ,"timeline_info_file": "File"
+  ,"timeline_info_filename": "File name"
+  ,"timeline_info_dimensions": "Dimensions"
+  ,"timeline_info_size": "File size"
 }

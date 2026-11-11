@@ -16,8 +16,6 @@
   "timeline_close_lightbox": "关闭预览器",
   "timeline_video_preview": "视频预览",
   "timeline_photo_preview": "照片预览",
-  "timeline_unknown_date": "未知日期",
-  "timeline_unknown_camera": "未知相机",
   "timeline_previous_asset": "上一个媒体项",
   "timeline_previous": "上一个",
   "timeline_next_asset": "下一个媒体项",
@@ -237,4 +235,19 @@
   ,"timeline_add_to_album_confirm": "添加到相册"
   ,"timeline_add_to_album_success": "已添加到相册"
   ,"timeline_add_to_album_failed": "无法将资源添加到相册"
+  ,"timeline_favorite_marker": "Favorite"
+  ,"timeline_info": "Info"
+  ,"timeline_close_info": "Close info"
+  ,"timeline_info_loading": "Loading info"
+  ,"timeline_info_unavailable": "Info is unavailable."
+  ,"timeline_info_capture": "Capture"
+  ,"timeline_info_date": "Date"
+  ,"timeline_info_location": "Location"
+  ,"timeline_info_camera": "Camera"
+  ,"timeline_info_lens": "Lens"
+  ,"timeline_info_exposure": "Exposure"
+  ,"timeline_info_file": "File"
+  ,"timeline_info_filename": "File name"
+  ,"timeline_info_dimensions": "Dimensions"
+  ,"timeline_info_size": "File size"
 }

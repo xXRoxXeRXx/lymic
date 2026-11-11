@@ -16,8 +16,6 @@
   "timeline_close_lightbox": "লাইটবক্স বন্ধ করুন",
   "timeline_video_preview": "ভিডিও প্রিভিউ",
   "timeline_photo_preview": "ছবি প্রিভিউ",
-  "timeline_unknown_date": "অজানা তারিখ",
-  "timeline_unknown_camera": "অজানা ক্যামেরা",
   "timeline_previous_asset": "পূর্ববর্তী অ্যাসেট",
   "timeline_previous": "পূর্ববর্তী",
   "timeline_next_asset": "পরবর্তী অ্যাসেট",
@@ -237,4 +235,19 @@
   ,"timeline_add_to_album_confirm": "অ্যালবামে যোগ করুন"
   ,"timeline_add_to_album_success": "অ্যালবামে যোগ করা হয়েছে"
   ,"timeline_add_to_album_failed": "অ্যাসেটটি অ্যালবামে যোগ করা যায়নি"
+  ,"timeline_favorite_marker": "Favorite"
+  ,"timeline_info": "Info"
+  ,"timeline_close_info": "Close info"
+  ,"timeline_info_loading": "Loading info"
+  ,"timeline_info_unavailable": "Info is unavailable."
+  ,"timeline_info_capture": "Capture"
+  ,"timeline_info_date": "Date"
+  ,"timeline_info_location": "Location"
+  ,"timeline_info_camera": "Camera"
+  ,"timeline_info_lens": "Lens"
+  ,"timeline_info_exposure": "Exposure"
+  ,"timeline_info_file": "File"
+  ,"timeline_info_filename": "File name"
+  ,"timeline_info_dimensions": "Dimensions"
+  ,"timeline_info_size": "File size"
 }
