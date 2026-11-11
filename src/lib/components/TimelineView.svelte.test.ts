@@ -33,7 +33,6 @@ const timeline: TimelineViewState = {
     { id: "video-1", width: 1920, height: 1080, type: "VIDEO", takenAt: "2025-03-04T12:34:56.000Z", cameraMake: null, cameraModel: null, fileSize: 2345678, duration: 65 },
   ] : [],
   activateBucket: vi.fn(),
-  setAssetFavorite: vi.fn(),
   refresh: vi.fn(),
   clear: vi.fn(),
 };
@@ -192,6 +191,36 @@ describe("TimelineView scrubber", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Add to favorites" })).toBeInTheDocument();
       expect(screen.getByRole("alert")).toHaveTextContent("Could not update favorite");
+    });
+  });
+
+  it("keeps another asset interactive and error-free when a previous favorite update fails", async () => {
+    let rejectFavorite: ((reason?: unknown) => void) | undefined;
+    const setAssetFavorite = vi.fn(() => new Promise<void>((_resolve, reject) => {
+      rejectFavorite = reject;
+    }));
+    const getAssetDetails = vi.fn((assetId: string) => Promise.resolve({
+      originalFileName: null,
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+      isFavorite: assetId === "video-1",
+    }));
+    render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add to favorites" })).toBeEnabled());
+    await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Next asset" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove from favorites" })).toBeEnabled());
+    rejectFavorite?.(new Error("Network unavailable"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Remove from favorites" })).toBeEnabled();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
   });
   it("renders year and month indicators and jumps to a clicked month", async () => {

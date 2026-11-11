@@ -9,7 +9,6 @@ export interface TimelineViewState {
   readonly hasInitialLoadError: boolean;
   assetsFor(timeBucket: string): TimelineAsset[];
   activateBucket(timeBucket: string): Promise<void>;
-  setAssetFavorite(assetId: string, isFavorite: boolean): Promise<void>;
   refresh(): Promise<void>;
   clear(): void;
 }
@@ -105,7 +104,6 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     get hasInitialLoadError() { return hasInitialLoadError; },
     assetsFor,
     activateBucket,
-    setAssetFavorite: (assetId, isFavorite) => adapter.setAssetFavorite(assetId, isFavorite),
     refresh,
     clear,
   };

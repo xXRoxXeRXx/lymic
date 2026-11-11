@@ -44,7 +44,7 @@
   let selectedAsset = $state<TimelineAsset | null>(null);
   let assetDetails = $state<AssetDetails | null>(null);
   const assetDetailsById = new Map<string, AssetDetails | null>();
-  let isUpdatingFavorite = $state(false);
+  let updatingFavoriteAssetIds = $state<Record<string, true>>({});
   let favoriteError = $state("");
   let selectedIndex = $state(-1);
   let opener = $state<HTMLElement | null>(null);
@@ -206,24 +206,28 @@
   }
 
   async function toggleFavorite() {
-    if (!selectedAsset || !assetDetails || isUpdatingFavorite) return;
+    if (!selectedAsset || !assetDetails) return;
 
     const assetId = selectedAsset.id;
+    if (updatingFavoriteAssetIds[assetId]) return;
     const previousDetails = assetDetails;
     const updatedDetails = { ...previousDetails, isFavorite: !previousDetails.isFavorite };
     assetDetails = updatedDetails;
     assetDetailsById.set(assetId, updatedDetails);
     favoriteError = "";
-    isUpdatingFavorite = true;
+    updatingFavoriteAssetIds = { ...updatingFavoriteAssetIds, [assetId]: true };
 
     try {
       await setAssetFavorite(assetId, updatedDetails.isFavorite);
     } catch {
       assetDetailsById.set(assetId, previousDetails);
-      if (selectedAsset?.id === assetId) assetDetails = previousDetails;
-      favoriteError = $t("timeline_favorite_update_error");
+      if (selectedAsset?.id === assetId) {
+        assetDetails = previousDetails;
+        favoriteError = $t("timeline_favorite_update_error");
+      }
     } finally {
-      isUpdatingFavorite = false;
+      const { [assetId]: _completed, ...remainingUpdates } = updatingFavoriteAssetIds;
+      updatingFavoriteAssetIds = remainingUpdates;
     }
   }
 
@@ -448,7 +452,7 @@
           </p>
         </div>
         <div class="flex gap-2">
-          <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:opacity-50" aria-label={assetDetails?.isFavorite ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={assetDetails?.isFavorite ?? false} disabled={!assetDetails || isUpdatingFavorite} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {assetDetails?.isFavorite ? 'fill-current' : ''}" /></button>
+          <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:opacity-50" aria-label={assetDetails?.isFavorite ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={assetDetails?.isFavorite ?? false} disabled={!assetDetails || Boolean(updatingFavoriteAssetIds[selectedAsset.id])} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {assetDetails?.isFavorite ? 'fill-current' : ''}" /></button>
           <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 disabled:opacity-50" aria-label={$t("timeline_open_in_immich")} disabled={!serverUrl.trim()} onclick={() => selectedAsset && serverUrl.trim() && onOpenExternalUrl(assetUrl(selectedAsset))}>{$t("timeline_open_in_immich")} <ExternalLink class="h-4 w-4" /></button>
         </div>
         {#if favoriteError}

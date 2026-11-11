@@ -69,11 +69,11 @@ export interface AlbumCatalogueDesktopAdapter {
 export interface TimelineDesktopAdapter {
   getTimelineBuckets(): Promise<TimelineBucket[]>;
   getTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
-  setAssetFavorite(assetId: string, isFavorite: boolean): Promise<void>;
 }
 
 export interface AssetDetailsDesktopAdapter {
   getAssetDetails(assetId: string): Promise<AssetDetails>;
+  setAssetFavorite(assetId: string, isFavorite: boolean): Promise<void>;
 }
 
 export interface AlbumTimelineDesktopAdapter {
