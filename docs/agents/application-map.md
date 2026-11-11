@@ -76,13 +76,13 @@ The durable queue is the recovery boundary: `RUNNING`, `PAUSED`, and `IDLE` live
 
 ### Tauri IPC
 
-Commands are registered in `app/mod.rs`; implementations live in `commands/`. The command groups are `auth`, `albums`, `timeline`, `folders`, `sync`, and `settings`. Shared frontend IPC contracts live in `src/lib/contracts.ts`, and domain-specific adapter interfaces live in `src/lib/tauri/desktop-adapter.ts`. When changing a command, update its contract, domain adapter interface, controller caller, and tests in the same change.
+Commands are registered in `app/mod.rs`; implementations live in `commands/`. The command groups are `auth`, `albums`, `timeline`, `folders`, `sync`, and `settings`. `get_asset_details` belongs to the timeline surface and supplies the Lightbox with a Remote Asset's original filename and optional EXIF details. Shared frontend IPC contracts live in `src/lib/contracts.ts`, and domain-specific adapter interfaces live in `src/lib/tauri/desktop-adapter.ts`. When changing a command, update its contract, domain adapter interface, controller caller, and tests in the same change.
 
 The backend emits `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `log-message`, and `sync-idle`. Keep event names and serialized payloads backward-compatible within the application release.
 
 ### Immich
 
-The core API calls are `GET /api/users/me`, `POST /api/assets/bulk-upload-check`, `POST /api/assets`, `GET /api/timeline/buckets`, `GET /api/timeline/bucket`, `GET /api/assets/{id}/thumbnail`, and `GET /api/assets/{id}/original`; album behaviour is in `immich/album.rs` and timeline behaviour is in `immich/timeline.rs`. Requests use `x-api-key`; bulk checks and uploads use the SHA-1/Base64 checksum contract. Changes to endpoints or payloads require checking the supported Immich API contract rather than guessing.
+The core API calls are `GET /api/users/me`, `POST /api/assets/bulk-upload-check`, `POST /api/assets`, `GET /api/timeline/buckets`, `GET /api/timeline/bucket`, `GET /api/assets/{id}`, `GET /api/assets/{id}/thumbnail`, and `GET /api/assets/{id}/original`; album behaviour is in `immich/album.rs` and timeline behaviour is in `immich/timeline.rs`. Requests use `x-api-key`; bulk checks and uploads use the SHA-1/Base64 checksum contract. Changes to endpoints or payloads require checking the supported Immich API contract rather than guessing.
 
 ### Persistence
 

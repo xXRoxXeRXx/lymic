@@ -118,7 +118,15 @@ describe("TimelineView scrubber", () => {
 
   it("navigates with arrows and side icon buttons, renders video playback, and opens the selected asset in Immich", async () => {
     const onOpenExternalUrl = vi.fn().mockResolvedValue(undefined);
-    render(TimelineView, { timeline, serverUrl: "https://immich.example/", onOpenExternalUrl });
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: null,
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+    });
+    render(TimelineView, { timeline, serverUrl: "https://immich.example/", onOpenExternalUrl, getAssetDetails });
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     const nextButton = screen.getByRole("button", { name: "Next asset" });
     const previousButton = screen.getByRole("button", { name: "Previous asset" });
@@ -129,6 +137,7 @@ describe("TimelineView scrubber", () => {
     expect(screen.getByText("1:05")).toBeInTheDocument();
     await fireEvent.click(previousButton);
     expect(screen.getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/photo-1");
+    expect(getAssetDetails).toHaveBeenCalledTimes(2);
     await fireEvent.keyDown(window, { key: "ArrowRight" });
     await fireEvent.click(screen.getByRole("button", { name: "Open in Immich" }));
     expect(onOpenExternalUrl).toHaveBeenCalledWith("https://immich.example/photos/video-1");

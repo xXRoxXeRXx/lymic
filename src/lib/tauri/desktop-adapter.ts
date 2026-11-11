@@ -9,9 +9,9 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import type {
   Album,
-  AssetDetails,
   AlbumCatalogueItem,
   AlbumTimeline,
+  AssetDetails,
   CurrentUser,
   DatabaseRecoveryNotice,
   FailedSyncEntry,

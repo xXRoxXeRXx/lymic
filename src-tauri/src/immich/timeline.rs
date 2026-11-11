@@ -603,6 +603,88 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn omits_missing_and_blank_asset_details() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for body in [
+                br#"{"originalFileName":" "}"#.as_slice(),
+                br#"{"originalFileName":" ","exifInfo":{"exposureTime":" ","lensModel":""}}"#
+                    .as_slice(),
+            ] {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = [0_u8; 2048];
+                let read = stream.read(&mut request).await.unwrap();
+                let request = String::from_utf8_lossy(&request[..read]);
+                assert!(request.starts_with("GET /api/assets/asset-1 HTTP/1.1"));
+                stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+                stream.write_all(body).await.unwrap();
+            }
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        for _ in 0..2 {
+            assert_eq!(
+                client.get_asset_details("asset-1").await.unwrap(),
+                AssetDetails {
+                    original_file_name: None,
+                    f_number: None,
+                    exposure_time: None,
+                    iso: None,
+                    focal_length: None,
+                    lens_model: None,
+                }
+            );
+        }
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn reports_asset_detail_response_errors() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 2048];
+            let read = stream.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..read]);
+            assert!(request.starts_with("GET /api/assets/asset-1 HTTP/1.1"));
+            let body = b"server error";
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 500 Internal Server Error\r\ncontent-length: {}\r\n\r\n",
+                        body.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let error = client.get_asset_details("asset-1").await.unwrap_err();
+
+        assert!(error.starts_with("Failed to fetch asset details:"));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn fetches_buckets_with_api_key_and_parses_columnar_bucket_assets() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();

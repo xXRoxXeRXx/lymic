@@ -41,6 +41,7 @@
   let scrollRaf: number | null = null;
   let selectedAsset = $state<TimelineAsset | null>(null);
   let assetDetails = $state<AssetDetails | null>(null);
+  const assetDetailsById = new Map<string, AssetDetails | null>();
   let selectedIndex = $state(-1);
   let opener = $state<HTMLElement | null>(null);
 
@@ -185,11 +186,17 @@
   });
 
   function loadAssetDetails(asset: TimelineAsset) {
+    if (assetDetailsById.has(asset.id)) {
+      assetDetails = assetDetailsById.get(asset.id) ?? null;
+      return;
+    }
     assetDetails = null;
     void getAssetDetails(asset.id)
       .then((details) => {
+        assetDetailsById.set(asset.id, details);
         if (selectedAsset?.id === asset.id) assetDetails = details;
       })
+      // Details enhance the footer; a failure must not disrupt asset viewing.
       .catch(() => {});
   }
 
