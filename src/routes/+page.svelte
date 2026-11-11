@@ -387,7 +387,7 @@
         {/if}
 
         {#if currentView === "photos"}
-          <TimelineView {timeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} />
+          <TimelineView {timeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} setAssetFavorite={timeline.setAssetFavorite} />
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
         {:else if currentView === "albums"}
@@ -398,7 +398,7 @@
               <ArrowLeft class="h-4 w-4" />
               {$t('albums_return')}
             </button>
-            <TimelineView timeline={albumTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
+            <TimelineView timeline={albumTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} setAssetFavorite={albumTimeline.setAssetFavorite} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
           </div>
         {:else if currentView === "person-timeline" && personTimeline}
           <div class="flex h-full min-h-0 flex-col gap-2">
@@ -406,7 +406,7 @@
               <ArrowLeft class="h-4 w-4" />
               {$t('people_return')}
             </button>
-            <TimelineView timeline={personTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} emptyMessage={$t('people_timeline_empty')} />
+            <TimelineView timeline={personTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} setAssetFavorite={personTimeline.setAssetFavorite} emptyMessage={$t('people_timeline_empty')} />
           </div>
         {:else if currentView === "dashboard"}
           <DashboardView

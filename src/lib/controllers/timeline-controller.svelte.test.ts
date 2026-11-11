@@ -10,6 +10,7 @@ describe("Photo Timeline controller", () => {
         { timeBucket: "2025-03-01T00:00:00.000Z", count: 12 },
       ]),
       getTimelineBucketAssets: vi.fn(),
+      setAssetFavorite: vi.fn(),
     };
     const timeline = createTimelineController(adapter);
 
@@ -27,6 +28,7 @@ describe("Photo Timeline controller", () => {
       getTimelineBucketAssets: vi.fn().mockResolvedValue([
         { id: "asset-1", width: 640, height: 480 },
       ]),
+      setAssetFavorite: vi.fn(),
     };
     const timeline = createTimelineController(adapter);
 
@@ -45,6 +47,7 @@ describe("Photo Timeline controller", () => {
         .mockResolvedValueOnce([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 3 }])
         .mockRejectedValueOnce(new Error("Network request failed")),
       getTimelineBucketAssets: vi.fn(),
+      setAssetFavorite: vi.fn(),
     };
     const timeline = createTimelineController(adapter);
 
@@ -59,6 +62,7 @@ describe("Photo Timeline controller", () => {
     const adapter: TimelineDesktopAdapter = {
       getTimelineBuckets: vi.fn().mockRejectedValue(new Error("Connection refused")),
       getTimelineBucketAssets: vi.fn(),
+      setAssetFavorite: vi.fn(),
     };
     const timeline = createTimelineController(adapter);
 
@@ -75,6 +79,7 @@ describe("Photo Timeline controller", () => {
         .mockRejectedValueOnce(new Error("Connection refused"))
         .mockResolvedValueOnce([{ timeBucket: "2025-04-01T00:00:00.000Z", count: 1 }]),
       getTimelineBucketAssets: vi.fn(),
+      setAssetFavorite: vi.fn(),
     };
     const timeline = createTimelineController(adapter);
 
@@ -96,6 +101,7 @@ describe("Photo Timeline controller", () => {
           { id: "asset-1", width: 640, height: 480 },
           { id: "asset-2", width: 800, height: 600 },
         ]),
+      setAssetFavorite: vi.fn(),
     };
     const timeline = createTimelineController(adapter);
 
@@ -106,5 +112,18 @@ describe("Photo Timeline controller", () => {
     await timeline.activateBucket("2025-03-01T00:00:00.000Z");
     expect(adapter.getTimelineBucketAssets).toHaveBeenCalledTimes(2);
     expect(timeline.assetsFor("2025-03-01T00:00:00.000Z")).toHaveLength(2);
+  });
+
+  it("delegates favorite changes through the timeline adapter", async () => {
+    const adapter: TimelineDesktopAdapter = {
+      getTimelineBuckets: vi.fn(),
+      getTimelineBucketAssets: vi.fn(),
+      setAssetFavorite: vi.fn().mockResolvedValue(undefined),
+    };
+    const timeline = createTimelineController(adapter);
+
+    await timeline.setAssetFavorite("asset-1", true);
+
+    expect(adapter.setAssetFavorite).toHaveBeenCalledWith("asset-1", true);
   });
 });

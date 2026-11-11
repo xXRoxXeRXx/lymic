@@ -33,6 +33,7 @@ const timeline: TimelineViewState = {
     { id: "video-1", width: 1920, height: 1080, type: "VIDEO", takenAt: "2025-03-04T12:34:56.000Z", cameraMake: null, cameraModel: null, fileSize: 2345678, duration: 65 },
   ] : [],
   activateBucket: vi.fn(),
+  setAssetFavorite: vi.fn(),
   refresh: vi.fn(),
   clear: vi.fn(),
 };
@@ -80,6 +81,7 @@ describe("TimelineView scrubber", () => {
       iso: 100,
       focalLength: 50,
       lensModel: "RF50mm F1.8 STM",
+      isFavorite: false,
     });
     render(TimelineView, { timeline, serverUrl: "https://immich.example", onOpenExternalUrl: vi.fn().mockResolvedValue(undefined), getAssetDetails });
     const thumbnail = screen.getByRole("button", { name: "Open photo" });
@@ -106,6 +108,7 @@ describe("TimelineView scrubber", () => {
       iso: null,
       focalLength: null,
       lensModel: null,
+      isFavorite: false,
     });
     render(TimelineView, { timeline, getAssetDetails });
 
@@ -125,6 +128,7 @@ describe("TimelineView scrubber", () => {
       iso: null,
       focalLength: null,
       lensModel: null,
+      isFavorite: false,
     });
     render(TimelineView, { timeline, serverUrl: "https://immich.example/", onOpenExternalUrl, getAssetDetails });
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
@@ -141,6 +145,54 @@ describe("TimelineView scrubber", () => {
     await fireEvent.keyDown(window, { key: "ArrowRight" });
     await fireEvent.click(screen.getByRole("button", { name: "Open in Immich" }));
     expect(onOpenExternalUrl).toHaveBeenCalledWith("https://immich.example/photos/video-1");
+  });
+
+  it("updates the favorite icon immediately and syncs the chosen status", async () => {
+    let resolveFavorite: (() => void) | undefined;
+    const setAssetFavorite = vi.fn(() => new Promise<void>((resolve) => {
+      resolveFavorite = resolve;
+    }));
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: null,
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+      isFavorite: false,
+    });
+    render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add to favorites" })).toBeInTheDocument());
+    await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
+
+    expect(screen.getByRole("button", { name: "Remove from favorites" })).toBeInTheDocument();
+    expect(setAssetFavorite).toHaveBeenCalledWith("photo-1", true);
+    resolveFavorite?.();
+  });
+
+  it("restores the favorite status and shows an error when updating it fails", async () => {
+    const setAssetFavorite = vi.fn().mockRejectedValue(new Error("Network unavailable"));
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: null,
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+      isFavorite: false,
+    });
+    render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add to favorites" })).toBeInTheDocument());
+    await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Add to favorites" })).toBeInTheDocument();
+      expect(screen.getByRole("alert")).toHaveTextContent("Could not update favorite");
+    });
   });
   it("renders year and month indicators and jumps to a clicked month", async () => {
     render(TimelineView, { timeline });

@@ -225,4 +225,7 @@
   ,"people_return": "Back to People"
   ,"people_timeline_empty": "This person has no reachable photos yet."
   ,"albums_title": "Álbuns", "albums_loading": "A carregar álbuns…", "albums_empty": "Ainda não há álbuns acessíveis.", "albums_refresh": "Atualizar álbuns", "albums_retry": "Tentar novamente", "albums_offline": "Os álbuns estão offline. A mostrar álbuns em cache.", "albums_error": "Não foi possível carregar álbuns.", "albums_asset_count": "{count} itens", "albums_shared": "Partilhado", "albums_return": "Voltar aos álbuns", "albums_timeline_empty": "Este álbum ainda não tem fotos disponíveis."
+  ,"timeline_add_favorite": "Add to favorites"
+  ,"timeline_remove_favorite": "Remove from favorites"
+  ,"timeline_favorite_update_error": "Could not update favorite"
 }

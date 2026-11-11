@@ -225,4 +225,7 @@
   ,"people_return": "Back to People"
   ,"people_timeline_empty": "This person has no reachable photos yet."
   ,"albums_title": "相册", "albums_loading": "正在加载相册…", "albums_empty": "暂无可用相册。", "albums_refresh": "刷新相册", "albums_retry": "重试", "albums_offline": "相册离线。正在显示缓存相册。", "albums_error": "无法加载相册。", "albums_asset_count": "{count} 个项目", "albums_shared": "已共享", "albums_return": "返回相册", "albums_timeline_empty": "此相册暂无可用照片。"
+  ,"timeline_add_favorite": "Add to favorites"
+  ,"timeline_remove_favorite": "Remove from favorites"
+  ,"timeline_favorite_update_error": "Could not update favorite"
 }

@@ -225,4 +225,7 @@
   ,"people_return": "Back to People"
   ,"people_timeline_empty": "This person has no reachable photos yet."
   ,"albums_title": "الألبومات", "albums_loading": "جارٍ تحميل الألبومات…", "albums_empty": "لا توجد ألبومات متاحة بعد.", "albums_refresh": "تحديث الألبومات", "albums_retry": "إعادة المحاولة", "albums_offline": "الألبومات غير متصلة. يتم عرض الألبومات المخزنة مؤقتًا.", "albums_error": "تعذر تحميل الألبومات.", "albums_asset_count": "{count} عناصر", "albums_shared": "مشترك", "albums_return": "العودة إلى الألبومات", "albums_timeline_empty": "لا توجد صور متاحة في هذا الألبوم بعد."
+  ,"timeline_add_favorite": "Add to favorites"
+  ,"timeline_remove_favorite": "Remove from favorites"
+  ,"timeline_favorite_update_error": "Could not update favorite"
 }

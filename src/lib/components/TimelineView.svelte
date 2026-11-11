@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { ChevronLeft, ChevronRight, ExternalLink, Play, RefreshCw, X } from "lucide-svelte";
+  import { ChevronLeft, ChevronRight, ExternalLink, Heart, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
@@ -13,6 +13,7 @@
     serverUrl?: string;
     onOpenExternalUrl?(url: string): Promise<void>;
     getAssetDetails?(assetId: string): Promise<AssetDetails | null>;
+    setAssetFavorite?(assetId: string, isFavorite: boolean): Promise<void>;
     showScrubber?: boolean;
     emptyMessage?: string;
     loadErrorMessage?: string;
@@ -23,6 +24,7 @@
     serverUrl = "",
     onOpenExternalUrl = async () => {},
     getAssetDetails = async () => null,
+    setAssetFavorite = async () => {},
     showScrubber = true,
     emptyMessage = "",
     loadErrorMessage = "",
@@ -42,6 +44,8 @@
   let selectedAsset = $state<TimelineAsset | null>(null);
   let assetDetails = $state<AssetDetails | null>(null);
   const assetDetailsById = new Map<string, AssetDetails | null>();
+  let isUpdatingFavorite = $state(false);
+  let favoriteError = $state("");
   let selectedIndex = $state(-1);
   let opener = $state<HTMLElement | null>(null);
 
@@ -186,6 +190,7 @@
   });
 
   function loadAssetDetails(asset: TimelineAsset) {
+    favoriteError = "";
     if (assetDetailsById.has(asset.id)) {
       assetDetails = assetDetailsById.get(asset.id) ?? null;
       return;
@@ -198,6 +203,28 @@
       })
       // Details enhance the footer; a failure must not disrupt asset viewing.
       .catch(() => {});
+  }
+
+  async function toggleFavorite() {
+    if (!selectedAsset || !assetDetails || isUpdatingFavorite) return;
+
+    const assetId = selectedAsset.id;
+    const previousDetails = assetDetails;
+    const updatedDetails = { ...previousDetails, isFavorite: !previousDetails.isFavorite };
+    assetDetails = updatedDetails;
+    assetDetailsById.set(assetId, updatedDetails);
+    favoriteError = "";
+    isUpdatingFavorite = true;
+
+    try {
+      await setAssetFavorite(assetId, updatedDetails.isFavorite);
+    } catch {
+      assetDetailsById.set(assetId, previousDetails);
+      if (selectedAsset?.id === assetId) assetDetails = previousDetails;
+      favoriteError = $t("timeline_favorite_update_error");
+    } finally {
+      isUpdatingFavorite = false;
+    }
   }
 
   function openLightbox(asset: TimelineAsset, source: HTMLElement) {
@@ -223,6 +250,7 @@
   function closeLightbox() {
     selectedAsset = null;
     assetDetails = null;
+    favoriteError = "";
     selectedIndex = -1;
     queueMicrotask(() => opener?.focus());
   }
@@ -420,8 +448,12 @@
           </p>
         </div>
         <div class="flex gap-2">
+          <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:opacity-50" aria-label={assetDetails?.isFavorite ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={assetDetails?.isFavorite ?? false} disabled={!assetDetails || isUpdatingFavorite} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {assetDetails?.isFavorite ? 'fill-current' : ''}" /></button>
           <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 disabled:opacity-50" aria-label={$t("timeline_open_in_immich")} disabled={!serverUrl.trim()} onclick={() => selectedAsset && serverUrl.trim() && onOpenExternalUrl(assetUrl(selectedAsset))}>{$t("timeline_open_in_immich")} <ExternalLink class="h-4 w-4" /></button>
         </div>
+        {#if favoriteError}
+          <p class="w-full text-red-300" role="alert">{favoriteError}</p>
+        {/if}
       </div>
     </dialog>
   </div>

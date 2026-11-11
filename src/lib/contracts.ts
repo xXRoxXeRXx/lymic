@@ -62,6 +62,7 @@ export interface TimelineAsset {
 
 export interface AssetDetails {
   originalFileName: string | null;
+  isFavorite: boolean;
   fNumber: number | null;
   exposureTime: string | null;
   iso: number | null;

@@ -578,7 +578,7 @@ mod tests {
             let request = String::from_utf8_lossy(&request[..read]);
             assert!(request.starts_with("GET /api/assets/asset-1 HTTP/1.1"));
             assert!(request.contains("x-api-key: test-key"));
-            let body = br#"{"originalFileName":"IMG_0001.CR3","exifInfo":{"fNumber":2.8,"exposureTime":"1/250","iso":100,"focalLength":50,"lensModel":"RF50mm F1.8 STM"}}"#;
+            let body = br#"{"originalFileName":"IMG_0001.CR3","isFavorite":true,"exifInfo":{"fNumber":2.8,"exposureTime":"1/250","iso":100,"focalLength":50,"lensModel":"RF50mm F1.8 STM"}}"#;
             stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n", body.len()).as_bytes()).await.unwrap();
             stream.write_all(body).await.unwrap();
         });
@@ -594,6 +594,7 @@ mod tests {
         let details: AssetDetails = client.get_asset_details("asset-1").await.unwrap();
 
         assert_eq!(details.original_file_name.as_deref(), Some("IMG_0001.CR3"));
+        assert!(details.is_favorite);
         assert_eq!(details.f_number, Some(2.8));
         assert_eq!(details.exposure_time.as_deref(), Some("1/250"));
         assert_eq!(details.iso, Some(100));
@@ -635,6 +636,7 @@ mod tests {
                 client.get_asset_details("asset-1").await.unwrap(),
                 AssetDetails {
                     original_file_name: None,
+                    is_favorite: false,
                     f_number: None,
                     exposure_time: None,
                     iso: None,
@@ -681,6 +683,78 @@ mod tests {
         let error = client.get_asset_details("asset-1").await.unwrap_err();
 
         assert!(error.starts_with("Failed to fetch asset details:"));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn updates_an_asset_favorite_status() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 2048];
+            let read = stream.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..read]);
+            assert!(request.starts_with("PUT /api/assets/asset-1 HTTP/1.1"));
+            assert!(request.contains("x-api-key: test-key"));
+            assert!(request.contains("{\"isFavorite\":true}"));
+            stream
+                .write_all(b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n")
+                .await
+                .unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        client.set_asset_favorite("asset-1", true).await.unwrap();
+
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn reports_asset_favorite_update_response_errors() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 2048];
+            let read = stream.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..read]);
+            assert!(request.starts_with("PUT /api/assets/asset-1 HTTP/1.1"));
+            let body = b"server error";
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 500 Internal Server Error\r\ncontent-length: {}\r\n\r\n",
+                        body.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let error = client
+            .set_asset_favorite("asset-1", true)
+            .await
+            .unwrap_err();
+
+        assert!(error.starts_with("Failed to update asset favorite:"));
         server.await.unwrap();
     }
 

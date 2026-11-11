@@ -10,6 +10,15 @@ pub(crate) async fn get_asset_details(asset_id: String) -> Result<AssetDetails, 
 }
 
 #[tauri::command]
+pub(crate) async fn set_asset_favorite(asset_id: String, is_favorite: bool) -> Result<(), String> {
+    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
+    client
+        .set_asset_favorite(&asset_id, is_favorite)
+        .await
+        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
+}
+
+#[tauri::command]
 pub(crate) async fn get_album_timeline(album_id: String) -> Result<AlbumTimeline, String> {
     let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
     client

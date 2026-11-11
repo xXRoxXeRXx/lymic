@@ -225,4 +225,7 @@
   ,"people_return": "Back to People"
   ,"people_timeline_empty": "This person has no reachable photos yet."
   ,"albums_title": "Альбомы", "albums_loading": "Загрузка альбомов…", "albums_empty": "Пока нет доступных альбомов.", "albums_refresh": "Обновить альбомы", "albums_retry": "Повторить", "albums_offline": "Альбомы офлайн. Отображаются кэшированные альбомы.", "albums_error": "Не удалось загрузить альбомы.", "albums_asset_count": "{count} элементов", "albums_shared": "Общий", "albums_return": "Назад к альбомам", "albums_timeline_empty": "В этом альбоме пока нет доступных фотографий."
+  ,"timeline_add_favorite": "Add to favorites"
+  ,"timeline_remove_favorite": "Remove from favorites"
+  ,"timeline_favorite_update_error": "Could not update favorite"
 }

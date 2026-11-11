@@ -62,6 +62,7 @@ pub(crate) struct AssetResponse {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AssetDetails {
     pub original_file_name: Option<String>,
+    pub is_favorite: bool,
     pub f_number: Option<f64>,
     pub exposure_time: Option<String>,
     pub iso: Option<u32>,
@@ -73,6 +74,8 @@ pub(crate) struct AssetDetails {
 struct AssetDetailsResponse {
     #[serde(rename = "originalFileName", default)]
     original_file_name: Option<String>,
+    #[serde(rename = "isFavorite", default)]
+    is_favorite: bool,
     #[serde(rename = "exifInfo", default)]
     exif: Option<AssetDetailsExif>,
 }
@@ -100,6 +103,7 @@ impl From<AssetDetailsResponse> for AssetDetails {
         let exif = response.exif.unwrap_or_default();
         Self {
             original_file_name: non_empty(response.original_file_name),
+            is_favorite: response.is_favorite,
             f_number: exif.f_number,
             exposure_time: non_empty(exif.exposure_time),
             iso: exif.iso,
@@ -432,6 +436,29 @@ impl ImmichClient {
         serde_json::from_slice::<AssetDetailsResponse>(&body)
             .map(AssetDetails::from)
             .map_err(|error| format!("Invalid asset details response: {error}"))
+    }
+
+    pub(crate) async fn set_asset_favorite(
+        &self,
+        asset_id: &str,
+        is_favorite: bool,
+    ) -> Result<(), String> {
+        Self::validate_path_segment(asset_id, "asset ID")?;
+        let response = self
+            .client
+            .put(self.endpoint_url(&format!("assets/{asset_id}")))
+            .header("x-api-key", &self.api_key)
+            .json(&json!({ "isFavorite": is_favorite }))
+            .send()
+            .await
+            .map_err(|error| format!("Failed to update asset favorite: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Failed to update asset favorite: {}",
+                response_status_error(response).await?
+            ));
+        }
+        Ok(())
     }
 
     pub(crate) async fn get_asset(

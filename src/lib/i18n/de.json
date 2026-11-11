@@ -225,4 +225,7 @@
   ,"people_return": "Zurück zu Personen"
   ,"people_timeline_empty": "Diese Person hat noch keine erreichbaren Fotos."
   ,"albums_title": "Alben", "albums_loading": "Alben werden geladen…", "albums_empty": "Noch keine zugänglichen Alben.", "albums_refresh": "Alben aktualisieren", "albums_retry": "Erneut versuchen", "albums_offline": "Alben sind offline. Zwischengespeicherte Alben werden angezeigt.", "albums_error": "Alben konnten nicht geladen werden.", "albums_asset_count": "{count} Medien", "albums_shared": "Geteilt", "albums_return": "Zurück zu Alben", "albums_timeline_empty": "Dieses Album hat noch keine erreichbaren Fotos."
+  ,"timeline_add_favorite": "Zu Favoriten hinzufügen"
+  ,"timeline_remove_favorite": "Aus Favoriten entfernen"
+  ,"timeline_favorite_update_error": "Favorit konnte nicht aktualisiert werden"
 }

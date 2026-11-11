@@ -225,4 +225,7 @@
   ,"people_return": "Back to People"
   ,"people_timeline_empty": "This person has no reachable photos yet."
   ,"albums_title": "Albums", "albums_loading": "Loading albums…", "albums_empty": "No accessible albums yet.", "albums_refresh": "Refresh albums", "albums_retry": "Retry", "albums_offline": "Albums are offline. Showing cached albums.", "albums_error": "Albums could not be loaded.", "albums_asset_count": "{count} assets", "albums_shared": "Shared", "albums_return": "Back to Albums", "albums_timeline_empty": "This album has no reachable photos yet."
+  ,"timeline_add_favorite": "Add to favorites"
+  ,"timeline_remove_favorite": "Remove from favorites"
+  ,"timeline_favorite_update_error": "Could not update favorite"
 }

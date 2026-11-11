@@ -69,6 +69,7 @@ export interface AlbumCatalogueDesktopAdapter {
 export interface TimelineDesktopAdapter {
   getTimelineBuckets(): Promise<TimelineBucket[]>;
   getTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
+  setAssetFavorite(assetId: string, isFavorite: boolean): Promise<void>;
 }
 
 export interface AssetDetailsDesktopAdapter {
@@ -173,6 +174,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),
+  setAssetFavorite: (assetId, isFavorite) => invoke<void>("set_asset_favorite", { assetId, isFavorite }),
   getAlbumTimeline: (albumId) => invoke<AlbumTimeline>("get_album_timeline", { albumId }),
   getPeople: (page, size) => invoke<PeoplePage>("get_people", { page, size }),
   getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),
