@@ -1,28 +1,21 @@
-use crate::auth;
 use crate::immich::{Album, AlbumCatalogueItem, AlbumId, ImmichClient, RemoteAssetId};
-
-fn authenticated_client() -> Result<ImmichClient, String> {
-    let credentials = auth::get_credentials()
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Not authenticated".to_string())?;
-
-    ImmichClient::new(
-        credentials.server_url,
-        credentials.api_key,
-        credentials.allow_local_http,
-        credentials.cloudflare_client_id,
-        credentials.cloudflare_client_secret,
-    )
-}
 
 #[tauri::command]
 pub(crate) async fn get_album_catalogue() -> Result<Vec<AlbumCatalogueItem>, String> {
-    authenticated_client()?.get_album_catalogue().await
+    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
+    client
+        .get_album_catalogue()
+        .await
+        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }
 
 #[tauri::command]
 pub(crate) async fn get_albums() -> Result<Vec<Album>, String> {
-    authenticated_client()?.get_albums().await
+    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
+    client
+        .get_albums()
+        .await
+        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }
 
 #[tauri::command]
@@ -32,7 +25,11 @@ pub(crate) async fn create_album(name: String) -> Result<Album, String> {
         return Err("Album name cannot be empty".to_string());
     }
 
-    authenticated_client()?.create_album(trimmed).await
+    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
+    client
+        .create_album(trimmed)
+        .await
+        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }
 
 #[tauri::command]
@@ -42,7 +39,9 @@ pub(crate) async fn add_asset_to_album(asset_id: String, album_id: String) -> Re
         return Err("Asset ID cannot be empty".to_string());
     }
 
-    authenticated_client()?
+    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
+    client
         .add_assets_to_album(&AlbumId::new(album_id), &[RemoteAssetId::new(asset_id)])
         .await
+        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }

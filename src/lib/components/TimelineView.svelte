@@ -271,7 +271,7 @@
 
   function openAddToAlbum() {
     if (!selectedAsset || !albumCatalogue) return;
-    addToAlbumMessage = "";
+    clearAddToAlbumMessage();
     addToAlbumError = "";
     isAddToAlbumOpen = true;
   }
@@ -335,7 +335,7 @@
   }
 
   function closeLightbox() {
-    if (downloadingAssetId) return;
+    if (downloadingAssetId || isAddingToAlbum) return;
     selectedAsset = null;
     assetDetails = null;
     favoriteError = "";
@@ -349,11 +349,14 @@
   }
 
   function navigate(delta: number) {
-    if (!selectedAsset || downloadingAssetId || lightboxAssets.length === 0) return;
+    if (!selectedAsset || downloadingAssetId || isAddingToAlbum || lightboxAssets.length === 0) return;
     selectedIndex = (selectedIndex + delta + lightboxAssets.length) % lightboxAssets.length;
     selectedAsset = lightboxAssets[selectedIndex];
     downloadMessage = "";
     downloadError = "";
+    isAddToAlbumOpen = false;
+    clearAddToAlbumMessage();
+    addToAlbumError = "";
     loadAssetDetails(selectedAsset);
   }
 
@@ -510,9 +513,9 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" role="presentation" onclick={(event) => event.currentTarget === event.target && closeLightbox()}>
     <dialog open aria-label={$t("timeline_lightbox_label")} aria-modal="true" class="m-0 grid h-full w-full max-h-none max-w-none grid-rows-[minmax(0,1fr)_auto] border-0 bg-transparent p-0 text-white">
       <div class="relative flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
-        <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_close_lightbox")} disabled={downloadingAssetId !== null} onclick={closeLightbox}><X class="h-5 w-5" /></button>
-        <button type="button" class="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
-        <button type="button" class="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={downloadingAssetId !== null} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
+        <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_close_lightbox")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={closeLightbox}><X class="h-5 w-5" /></button>
+        <button type="button" class="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
+        <button type="button" class="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
         {#if selectedAsset.type === "VIDEO"}
           <video class="h-full w-full max-h-full max-w-full object-contain" controls autoplay aria-label={$t("timeline_video_preview")} src={protocolSrc("lymic-asset", "video", selectedAsset.id)}>
             <track kind="captions" />

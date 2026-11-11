@@ -248,6 +248,31 @@ describe("TimelineView scrubber", () => {
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Download saved"));
   });
 
+  it("keeps the lightbox on its current asset while adding it to an album", async () => {
+    let resolveAssignment: (() => void) | undefined;
+    const catalogue = albumCatalogue();
+    const addAssetToAlbum = vi.fn(() => new Promise<void>((resolve) => {
+      resolveAssignment = resolve;
+    }));
+    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetToAlbum });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
+    const picker = screen.getByRole("dialog", { name: "Add to album" });
+    await fireEvent.click(screen.getByRole("button", { name: "Summer" }));
+    await fireEvent.click(within(picker).getByRole("button", { name: "Add to album" }));
+
+    await waitFor(() => expect(addAssetToAlbum).toHaveBeenCalledWith("photo-1", "album-summer"));
+    expect(screen.getByRole("button", { name: "Close lightbox" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Previous asset" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next asset" })).toBeDisabled();
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("dialog", { name: "Media lightbox" })).toBeInTheDocument();
+
+    resolveAssignment?.();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Added to album"));
+  });
+
   it("reports a native save-dialog failure", async () => {
     const chooseDownloadDestination = vi.fn().mockRejectedValue(new Error("Dialog unavailable"));
     const downloadAsset = vi.fn();
