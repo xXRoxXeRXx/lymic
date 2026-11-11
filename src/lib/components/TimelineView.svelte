@@ -5,13 +5,14 @@
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
-  import type { TimelineAsset } from "../contracts";
+  import type { AssetDetails, TimelineAsset } from "../contracts";
   import { calculateMasonryLayout } from "./timeline-masonry";
 
   interface Props {
     timeline: TimelineViewState;
     serverUrl?: string;
     onOpenExternalUrl?(url: string): Promise<void>;
+    getAssetDetails?(assetId: string): Promise<AssetDetails | null>;
     showScrubber?: boolean;
     emptyMessage?: string;
     loadErrorMessage?: string;
@@ -21,6 +22,7 @@
     timeline,
     serverUrl = "",
     onOpenExternalUrl = async () => {},
+    getAssetDetails = async () => null,
     showScrubber = true,
     emptyMessage = "",
     loadErrorMessage = "",
@@ -38,6 +40,7 @@
   let isDragging = false;
   let scrollRaf: number | null = null;
   let selectedAsset = $state<TimelineAsset | null>(null);
+  let assetDetails = $state<AssetDetails | null>(null);
   let selectedIndex = $state(-1);
   let opener = $state<HTMLElement | null>(null);
 
@@ -171,10 +174,30 @@
     return hours > 0 ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
   }
 
+  const exifDetails = $derived.by(() => {
+    if (!assetDetails) return [];
+    const details: string[] = [];
+    if (assetDetails.fNumber !== null) details.push(`f/${assetDetails.fNumber.toLocaleString(numberLocale, { maximumFractionDigits: 2 })}`);
+    if (assetDetails.exposureTime) details.push(assetDetails.exposureTime.endsWith("s") ? assetDetails.exposureTime : `${assetDetails.exposureTime}s`);
+    if (assetDetails.iso !== null) details.push(`ISO ${assetDetails.iso.toLocaleString(numberLocale)}`);
+    if (assetDetails.focalLength !== null) details.push(`${assetDetails.focalLength.toLocaleString(numberLocale, { maximumFractionDigits: 2 })}mm`);
+    return details;
+  });
+
+  function loadAssetDetails(asset: TimelineAsset) {
+    assetDetails = null;
+    void getAssetDetails(asset.id)
+      .then((details) => {
+        if (selectedAsset?.id === asset.id) assetDetails = details;
+      })
+      .catch(() => {});
+  }
+
   function openLightbox(asset: TimelineAsset, source: HTMLElement) {
     selectedIndex = lightboxAssets.findIndex((candidate) => candidate.id === asset.id);
     selectedAsset = asset;
     opener = source;
+    loadAssetDetails(asset);
   }
 
   function hasRealDimensions(asset: TimelineAsset) {
@@ -192,6 +215,7 @@
 
   function closeLightbox() {
     selectedAsset = null;
+    assetDetails = null;
     selectedIndex = -1;
     queueMicrotask(() => opener?.focus());
   }
@@ -200,6 +224,7 @@
     if (!selectedAsset || lightboxAssets.length === 0) return;
     selectedIndex = (selectedIndex + delta + lightboxAssets.length) % lightboxAssets.length;
     selectedAsset = lightboxAssets[selectedIndex];
+    loadAssetDetails(selectedAsset);
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -369,6 +394,15 @@
         <div class="space-y-1">
           <p>{selectedAsset.takenAt ? new Intl.DateTimeFormat(numberLocale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedAsset.takenAt)) : $t("timeline_unknown_date")}</p>
           <p>{[selectedAsset.cameraMake, selectedAsset.cameraModel].filter(Boolean).join(" ") || $t("timeline_unknown_camera")}</p>
+          {#if assetDetails?.originalFileName}
+            <p>{assetDetails.originalFileName}</p>
+          {/if}
+          {#if exifDetails.length > 0}
+            <p>{exifDetails.join(" · ")}</p>
+          {/if}
+          {#if assetDetails?.lensModel}
+            <p>{assetDetails.lensModel}</p>
+          {/if}
           <p>
             {#if hasRealDimensions(selectedAsset)}
               <span>{selectedAsset.width.toLocaleString(numberLocale)} × {selectedAsset.height.toLocaleString(numberLocale)}</span>

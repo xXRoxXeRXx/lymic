@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import TimelineView from "./TimelineView.svelte";
@@ -73,7 +73,15 @@ describe("TimelineView scrubber", () => {
   });
 
   it("opens a photo in a lightbox with metadata and restores focus after closing", async () => {
-    render(TimelineView, { timeline, serverUrl: "https://immich.example", onOpenExternalUrl: vi.fn().mockResolvedValue(undefined) });
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: "IMG_0001.CR3",
+      fNumber: 2.8,
+      exposureTime: "1/250",
+      iso: 100,
+      focalLength: 50,
+      lensModel: "RF50mm F1.8 STM",
+    });
+    render(TimelineView, { timeline, serverUrl: "https://immich.example", onOpenExternalUrl: vi.fn().mockResolvedValue(undefined), getAssetDetails });
     const thumbnail = screen.getByRole("button", { name: "Open photo" });
     thumbnail.focus();
     await fireEvent.click(thumbnail);
@@ -81,9 +89,31 @@ describe("TimelineView scrubber", () => {
     expect(screen.getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/photo-1");
     expect(screen.getByText("Canon EOS R6")).toBeInTheDocument();
     expect(screen.getByText("4,032 × 3,024")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("IMG_0001.CR3")).toBeInTheDocument());
+    expect(screen.getByText("f/2.8 · 1/250s · ISO 100 · 50mm")).toBeInTheDocument();
+    expect(screen.getByText("RF50mm F1.8 STM")).toBeInTheDocument();
+    expect(getAssetDetails).toHaveBeenCalledWith("photo-1");
     await fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
     expect(thumbnail).toHaveFocus();
+  });
+
+  it("omits unavailable asset details from the lightbox footer", async () => {
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: null,
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+    });
+    render(TimelineView, { timeline, getAssetDetails });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await waitFor(() => expect(getAssetDetails).toHaveBeenCalledWith("photo-1"));
+
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("f/");
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("ISO");
   });
 
   it("navigates with arrows and side icon buttons, renders video playback, and opens the selected asset in Immich", async () => {

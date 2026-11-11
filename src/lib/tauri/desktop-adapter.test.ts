@@ -88,6 +88,7 @@ describe("tauriDesktopAdapter", () => {
     await albumsAdapter.createAlbum("Summer");
     await timelineAdapter.getTimelineBuckets();
     await timelineAdapter.getTimelineBucketAssets("2025-03-01T00:00:00.000Z");
+    await tauriDesktopAdapter.getAssetDetails("asset-1");
     await albumTimelineAdapter.getAlbumTimeline("album-1");
     await tauriDesktopAdapter.getPersonTimelineBuckets("person-1");
     await tauriDesktopAdapter.getPersonTimelineBucketAssets("person-1", "2025-03-01T00:00:00.000Z");
@@ -142,6 +143,7 @@ describe("tauriDesktopAdapter", () => {
       ["create_album", { name: "Summer" }],
       ["get_timeline_buckets"],
       ["get_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
+      ["get_asset_details", { assetId: "asset-1" }],
       ["get_album_timeline", { albumId: "album-1" }],
       ["get_person_timeline_buckets", { personId: "person-1" }],
       ["get_person_timeline_bucket_assets", { personId: "person-1", timeBucket: "2025-03-01T00:00:00.000Z" }],

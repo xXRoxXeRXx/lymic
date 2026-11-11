@@ -9,6 +9,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import type {
   Album,
+  AssetDetails,
   AlbumCatalogueItem,
   AlbumTimeline,
   CurrentUser,
@@ -70,6 +71,10 @@ export interface TimelineDesktopAdapter {
   getTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
 }
 
+export interface AssetDetailsDesktopAdapter {
+  getAssetDetails(assetId: string): Promise<AssetDetails>;
+}
+
 export interface AlbumTimelineDesktopAdapter {
   getAlbumTimeline(albumId: string): Promise<AlbumTimeline>;
 }
@@ -122,6 +127,7 @@ export interface DesktopAdapter
     AlbumsDesktopAdapter,
     AlbumCatalogueDesktopAdapter,
     TimelineDesktopAdapter,
+    AssetDetailsDesktopAdapter,
     AlbumTimelineDesktopAdapter,
     PeopleDesktopAdapter,
     PreferencesDesktopAdapter,
@@ -166,6 +172,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   createAlbum: (name) => invoke<Album>("create_album", { name }),
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
+  getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),
   getAlbumTimeline: (albumId) => invoke<AlbumTimeline>("get_album_timeline", { albumId }),
   getPeople: (page, size) => invoke<PeoplePage>("get_people", { page, size }),
   getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),

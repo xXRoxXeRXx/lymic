@@ -10,7 +10,7 @@ use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     Client, Response,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::{Host, Url};
 
@@ -56,6 +56,57 @@ pub(crate) struct AssetResponse {
     pub content_length: Option<String>,
     pub accept_ranges: Option<String>,
     pub body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AssetDetails {
+    pub original_file_name: Option<String>,
+    pub f_number: Option<f64>,
+    pub exposure_time: Option<String>,
+    pub iso: Option<u32>,
+    pub focal_length: Option<f64>,
+    pub lens_model: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AssetDetailsResponse {
+    #[serde(rename = "originalFileName", default)]
+    original_file_name: Option<String>,
+    #[serde(rename = "exifInfo", default)]
+    exif: Option<AssetDetailsExif>,
+}
+
+#[derive(Default, Deserialize)]
+struct AssetDetailsExif {
+    #[serde(rename = "fNumber", default)]
+    f_number: Option<f64>,
+    #[serde(rename = "exposureTime", default)]
+    exposure_time: Option<String>,
+    #[serde(default)]
+    iso: Option<u32>,
+    #[serde(rename = "focalLength", default)]
+    focal_length: Option<f64>,
+    #[serde(rename = "lensModel", default)]
+    lens_model: Option<String>,
+}
+
+fn non_empty(value: Option<String>) -> Option<String> {
+    value.and_then(|value| (!value.trim().is_empty()).then_some(value))
+}
+
+impl From<AssetDetailsResponse> for AssetDetails {
+    fn from(response: AssetDetailsResponse) -> Self {
+        let exif = response.exif.unwrap_or_default();
+        Self {
+            original_file_name: non_empty(response.original_file_name),
+            f_number: exif.f_number,
+            exposure_time: non_empty(exif.exposure_time),
+            iso: exif.iso,
+            focal_length: exif.focal_length,
+            lens_model: non_empty(exif.lens_model),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -358,6 +409,29 @@ impl ImmichClient {
             .await
             .map_err(|error| format!("Failed to fetch asset preview: {error}"))?;
         Self::read_asset_response(response, MAX_THUMBNAIL_BYTES).await
+    }
+
+    pub(crate) async fn get_asset_details(&self, asset_id: &str) -> Result<AssetDetails, String> {
+        Self::validate_path_segment(asset_id, "asset ID")?;
+        let response = self
+            .client
+            .get(self.endpoint_url(&format!("assets/{asset_id}")))
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to fetch asset details: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Failed to fetch asset details: {}",
+                response_status_error(response).await?
+            ));
+        }
+        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES)
+            .await
+            .map_err(|error| format!("Failed to read asset details: {error}"))?;
+        serde_json::from_slice::<AssetDetailsResponse>(&body)
+            .map(AssetDetails::from)
+            .map_err(|error| format!("Invalid asset details response: {error}"))
     }
 
     pub(crate) async fn get_asset(

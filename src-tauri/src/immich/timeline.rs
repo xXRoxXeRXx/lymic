@@ -469,6 +469,7 @@ fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTimeline {
 #[cfg(test)]
 mod tests {
     use super::{group_album_timeline_assets, ImmichClient, TimelineAsset};
+    use crate::immich::AssetDetails;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
@@ -563,6 +564,41 @@ mod tests {
         assert_eq!(assets[0].r#type, "VIDEO");
         assert_eq!(assets[0].duration, Some(65));
         assert_eq!(assets[0].camera_model.as_deref(), Some("EOS R6"));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetches_asset_details_with_optional_exif_metadata() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 2048];
+            let read = stream.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..read]);
+            assert!(request.starts_with("GET /api/assets/asset-1 HTTP/1.1"));
+            assert!(request.contains("x-api-key: test-key"));
+            let body = br#"{"originalFileName":"IMG_0001.CR3","exifInfo":{"fNumber":2.8,"exposureTime":"1/250","iso":100,"focalLength":50,"lensModel":"RF50mm F1.8 STM"}}"#;
+            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let details: AssetDetails = client.get_asset_details("asset-1").await.unwrap();
+
+        assert_eq!(details.original_file_name.as_deref(), Some("IMG_0001.CR3"));
+        assert_eq!(details.f_number, Some(2.8));
+        assert_eq!(details.exposure_time.as_deref(), Some("1/250"));
+        assert_eq!(details.iso, Some(100));
+        assert_eq!(details.focal_length, Some(50.0));
+        assert_eq!(details.lens_model.as_deref(), Some("RF50mm F1.8 STM"));
         server.await.unwrap();
     }
 

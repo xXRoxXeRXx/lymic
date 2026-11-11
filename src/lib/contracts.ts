@@ -60,6 +60,15 @@ export interface TimelineAsset {
   duration: number | null;
 }
 
+export interface AssetDetails {
+  originalFileName: string | null;
+  fNumber: number | null;
+  exposureTime: string | null;
+  iso: number | null;
+  focalLength: number | null;
+  lensModel: string | null;
+}
+
 export interface AlbumTimeline {
   buckets: TimelineBucket[];
   assetsByBucket: Record<string, TimelineAsset[]>;

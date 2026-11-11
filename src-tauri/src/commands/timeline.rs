@@ -1,4 +1,13 @@
-use crate::immich::{AlbumTimeline, ImmichClient, TimelineAsset, TimelineBucket};
+use crate::immich::{AlbumTimeline, AssetDetails, ImmichClient, TimelineAsset, TimelineBucket};
+
+#[tauri::command]
+pub(crate) async fn get_asset_details(asset_id: String) -> Result<AssetDetails, String> {
+    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
+    client
+        .get_asset_details(&asset_id)
+        .await
+        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
+}
 
 #[tauri::command]
 pub(crate) async fn get_album_timeline(album_id: String) -> Result<AlbumTimeline, String> {
