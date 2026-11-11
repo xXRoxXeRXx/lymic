@@ -15,6 +15,7 @@
     getAssetDetails?(assetId: string): Promise<AssetDetails | null>;
     setAssetFavorite?(assetId: string, isFavorite: boolean): Promise<void>;
     chooseDownloadDestination?(originalFileName: string): Promise<string | null>;
+    downloadAsset?(assetId: string, destinationPath: string): Promise<void>;
     showScrubber?: boolean;
     emptyMessage?: string;
     loadErrorMessage?: string;
@@ -27,6 +28,7 @@
     getAssetDetails = async () => null,
     setAssetFavorite = async () => {},
     chooseDownloadDestination = async () => null,
+    downloadAsset = async () => {},
     showScrubber = true,
     emptyMessage = "",
     loadErrorMessage = "",
@@ -247,7 +249,7 @@
     try {
       const destinationPath = await chooseDownloadDestination(originalFileName);
       if (!destinationPath) return;
-      await timeline.downloadAsset(assetId, destinationPath);
+      await downloadAsset(assetId, destinationPath);
       if (selectedAsset?.id === assetId) downloadMessage = $t("timeline_download_saved");
     } catch {
       if (selectedAsset?.id === assetId) downloadError = $t("timeline_download_failed");

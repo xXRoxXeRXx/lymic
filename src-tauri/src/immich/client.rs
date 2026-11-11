@@ -12,7 +12,7 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::path::Path;
+use std::path::{Component, Path};
 use tokio::io::AsyncWriteExt;
 use url::{Host, Url};
 
@@ -100,11 +100,23 @@ fn non_empty(value: Option<String>) -> Option<String> {
     value.and_then(|value| (!value.trim().is_empty()).then_some(value))
 }
 
+fn original_file_name(value: Option<String>) -> Option<String> {
+    non_empty(value).and_then(|value| {
+        let file_name = value.rsplit(['/', '\\']).next().unwrap_or_default();
+        (!file_name.is_empty()
+            && file_name != "."
+            && file_name != ".."
+            && !file_name.contains(':')
+            && !file_name.chars().any(char::is_control))
+        .then(|| file_name.to_string())
+    })
+}
+
 impl From<AssetDetailsResponse> for AssetDetails {
     fn from(response: AssetDetailsResponse) -> Self {
         let exif = response.exif.unwrap_or_default();
         Self {
-            original_file_name: non_empty(response.original_file_name),
+            original_file_name: original_file_name(response.original_file_name),
             is_favorite: response.is_favorite,
             f_number: exif.f_number,
             exposure_time: non_empty(exif.exposure_time),
@@ -504,24 +516,40 @@ impl ImmichClient {
             ));
         }
 
-        let mut destination = tokio::fs::File::create(destination_path)
-            .await
-            .map_err(|error| format!("Failed to create download destination: {error}"))?;
-        let mut response = response;
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|error| format!("Failed to download asset: {error}"))?
-        {
+        let temporary_path = destination_path
+            .with_file_name(format!(".lymic-download-{}.tmp", uuid::Uuid::new_v4()));
+        let result = async {
+            let mut destination = tokio::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary_path)
+                .await
+                .map_err(|error| format!("Failed to create download destination: {error}"))?;
+            let mut response = response;
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|error| format!("Failed to download asset: {error}"))?
+            {
+                destination
+                    .write_all(&chunk)
+                    .await
+                    .map_err(|error| format!("Failed to write download destination: {error}"))?;
+            }
             destination
-                .write_all(&chunk)
+                .flush()
                 .await
                 .map_err(|error| format!("Failed to write download destination: {error}"))?;
+            drop(destination);
+            tokio::fs::rename(&temporary_path, destination_path)
+                .await
+                .map_err(|error| format!("Failed to finalize download: {error}"))
         }
-        destination
-            .flush()
-            .await
-            .map_err(|error| format!("Failed to write download destination: {error}"))
+        .await;
+        if result.is_err() {
+            let _ = tokio::fs::remove_file(&temporary_path).await;
+        }
+        result
     }
 
     fn validate_download_destination(destination_path: &Path) -> Result<(), String> {
@@ -529,6 +557,9 @@ impl ImmichClient {
             || destination_path.file_name().is_none()
             || destination_path.is_dir()
             || !destination_path.parent().is_some_and(Path::is_dir)
+            || destination_path
+                .components()
+                .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
         {
             return Err("Invalid download destination path".to_string());
         }
@@ -659,8 +690,9 @@ fn is_loopback_host(host: Option<Host<&str>>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        upload_timeout, BulkCheckDuplicate, ImmichClient, SidecarDirectoryCache, GIB_BYTES,
-        LOCAL_HTTP_NOT_ALLOWED_ERROR, UPLOAD_TIMEOUT_BASE_SECONDS,
+        original_file_name, upload_timeout, BulkCheckDuplicate, ImmichClient,
+        SidecarDirectoryCache, GIB_BYTES, LOCAL_HTTP_NOT_ALLOWED_ERROR,
+        UPLOAD_TIMEOUT_BASE_SECONDS,
     };
     use reqwest::Client;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -728,6 +760,19 @@ mod tests {
         headers.insert("cf-access-client-id", "client-id".parse().unwrap());
         headers.insert("cf-access-client-secret", "client-secret".parse().unwrap());
         Client::builder().default_headers(headers).build().unwrap()
+    }
+
+    #[test]
+    fn reduces_remote_original_file_names_to_safe_basenames() {
+        assert_eq!(
+            original_file_name(Some("../../Pictures/IMG_0001.CR3".to_string())).as_deref(),
+            Some("IMG_0001.CR3")
+        );
+        assert_eq!(
+            original_file_name(Some(r"C:\Pictures\IMG_0001.CR3".to_string())).as_deref(),
+            Some("IMG_0001.CR3")
+        );
+        assert_eq!(original_file_name(Some("..".to_string())), None);
     }
 
     #[tokio::test]
@@ -807,6 +852,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn preserves_an_existing_destination_when_an_asset_stream_is_truncated() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request = read_http_request(&mut stream).await;
+            let request = String::from_utf8_lossy(&request);
+            assert!(request.starts_with("GET /api/assets/photo-1/original HTTP/1.1"));
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\ncontent-length: 12\r\nconnection: close\r\n\r\npartial",
+                )
+                .await
+                .unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+        let destination = temporary_file(b"complete-original");
+
+        let error = client
+            .download_asset("photo-1", &destination)
+            .await
+            .unwrap_err();
+
+        assert!(error.starts_with("Failed to download asset:"));
+        assert_eq!(
+            tokio::fs::read(&destination).await.unwrap(),
+            b"complete-original"
+        );
+        std::fs::remove_file(destination).unwrap();
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn rejects_invalid_download_destination_paths_before_requesting_an_asset() {
         let client = ImmichClient::new(
             "http://127.0.0.1:9".to_string(),
@@ -820,6 +905,10 @@ mod tests {
         for destination in [
             std::path::Path::new("download.jpg"),
             std::env::temp_dir().as_path(),
+            std::env::temp_dir()
+                .join("..")
+                .join("download.jpg")
+                .as_path(),
         ] {
             assert_eq!(
                 client

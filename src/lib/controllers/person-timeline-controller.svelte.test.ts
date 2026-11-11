@@ -11,7 +11,6 @@ describe("Recognized Person Photo Timeline controller", () => {
       getPersonTimelineBucketAssets: vi.fn().mockResolvedValue([
         { id: "march", width: 4032, height: 3024, type: "IMAGE", takenAt: "2025-03-10T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null },
       ]),
-      downloadAsset: vi.fn(),
     };
     const timeline = createPersonTimelineController(adapter, "person-1");
 
@@ -28,7 +27,6 @@ describe("Recognized Person Photo Timeline controller", () => {
     const adapter = {
       getPersonTimelineBuckets: vi.fn().mockResolvedValueOnce([]).mockRejectedValueOnce(new Error("network")),
       getPersonTimelineBucketAssets: vi.fn(),
-      downloadAsset: vi.fn(),
     };
     const timeline = createPersonTimelineController(adapter, "person-1");
 

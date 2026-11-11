@@ -6,7 +6,7 @@ Read this before changing Lymic application behaviour. It is the implementation-
 
 Lymic is a cross-platform Tauri desktop client that **uploads** media from local **Watched Folders** to one Immich server. It discovers and watches local files, avoids uploading assets already known to Immich, and records durable progress locally.
 
-It is not a bidirectional filesystem mirror: it neither downloads remote assets nor applies remote deletions or renames locally. Preserve that boundary unless the product decision explicitly changes it.
+It is not a bidirectional filesystem mirror: it does not automatically download Remote Assets or apply remote deletions or renames locally. A user-initiated **Download** from the Lightbox saves one Remote Asset's original file to a chosen local path; it is separate from Synchronization. Preserve that boundary unless the product decision explicitly changes it.
 
 Use the defined terms in [`GLOSSARY.md`](../../GLOSSARY.md): **Watched Folder**, **Removable Watched Folder**, **Target Album**, **Album Assignment**, and **Upload Unit**. Target-album behaviour is governed by [ADR-0001](../adr/0001-folder-target-albums.md); removable-volume behaviour is governed by [ADR-0002](../adr/0002-removable-watched-folders.md).
 
@@ -76,7 +76,7 @@ The durable queue is the recovery boundary: `RUNNING`, `PAUSED`, and `IDLE` live
 
 ### Tauri IPC
 
-Commands are registered in `app/mod.rs`; implementations live in `commands/`. The command groups are `auth`, `albums`, `timeline`, `folders`, `sync`, and `settings`. `get_asset_details` belongs to the timeline surface and supplies the Lightbox with a Remote Asset's original filename, favorite status, and optional EXIF details. `set_asset_favorite` changes a Remote Asset's favorite status. Shared frontend IPC contracts live in `src/lib/contracts.ts`, and domain-specific adapter interfaces live in `src/lib/tauri/desktop-adapter.ts`. When changing a command, update its contract, domain adapter interface, controller caller, and tests in the same change.
+Commands are registered in `app/mod.rs`; implementations live in `commands/`. The command groups are `auth`, `albums`, `timeline`, `folders`, `sync`, and `settings`. `get_asset_details` belongs to the timeline surface and supplies the Lightbox with a Remote Asset's original filename, favorite status, and optional EXIF details. `set_asset_favorite` changes a Remote Asset's favorite status. `download_asset` streams a Remote Asset's original file to the user-chosen Download path. Shared frontend IPC contracts live in `src/lib/contracts.ts`, and domain-specific adapter interfaces live in `src/lib/tauri/desktop-adapter.ts`. When changing a command, update its contract, domain adapter interface, owning caller (controller or component), and tests in the same change.
 
 The backend emits `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `log-message`, and `sync-idle`. Keep event names and serialized payloads backward-compatible within the application release.
 

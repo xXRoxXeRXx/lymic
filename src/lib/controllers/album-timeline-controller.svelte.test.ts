@@ -1,12 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AlbumTimelineDesktopAdapter, AssetDesktopAdapter } from "../tauri/desktop-adapter";
+import type { AlbumTimelineDesktopAdapter } from "../tauri/desktop-adapter";
 import { createAlbumTimelineController } from "./album-timeline-controller.svelte";
-
-type AlbumTimelineAdapter = AlbumTimelineDesktopAdapter & Pick<AssetDesktopAdapter, "downloadAsset">;
 
 describe("Album Timeline controller", () => {
   it("publishes the complete month index only after the full album result and activates cached months", async () => {
-    const adapter: AlbumTimelineAdapter = {
+    const adapter: AlbumTimelineDesktopAdapter = {
       getAlbumTimeline: vi.fn().mockResolvedValue({
         buckets: [
           { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
@@ -17,7 +15,6 @@ describe("Album Timeline controller", () => {
           "2025-02-01T00:00:00.000Z": [{ id: "february", width: 640, height: 480, type: "IMAGE", takenAt: "2025-02-02T00:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null }],
         },
       }),
-      downloadAsset: vi.fn(),
     };
     const timeline = createAlbumTimelineController(adapter, "album-1");
 
@@ -31,11 +28,10 @@ describe("Album Timeline controller", () => {
   });
 
   it("retains a usable album timeline when its refresh goes offline", async () => {
-    const adapter: AlbumTimelineAdapter = {
+    const adapter: AlbumTimelineDesktopAdapter = {
       getAlbumTimeline: vi.fn()
         .mockResolvedValueOnce({ buckets: [{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }], assetsByBucket: {} })
         .mockRejectedValueOnce(new Error("offline")),
-      downloadAsset: vi.fn(),
     };
     const timeline = createAlbumTimelineController(adapter, "album-1");
 

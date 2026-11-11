@@ -33,7 +33,6 @@ const timeline: TimelineViewState = {
     { id: "video-1", width: 1920, height: 1080, type: "VIDEO", takenAt: "2025-03-04T12:34:56.000Z", cameraMake: null, cameraModel: null, fileSize: 2345678, duration: 65 },
   ] : [],
   activateBucket: vi.fn(),
-  downloadAsset: vi.fn(),
   refresh: vi.fn(),
   clear: vi.fn(),
 };
@@ -112,7 +111,7 @@ describe("TimelineView scrubber", () => {
       lensModel: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline: { ...timeline, downloadAsset }, getAssetDetails, chooseDownloadDestination });
+    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     const downloadButton = await screen.findByRole("button", { name: "Download original" });
@@ -138,7 +137,7 @@ describe("TimelineView scrubber", () => {
       lensModel: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline: { ...timeline, downloadAsset }, getAssetDetails, chooseDownloadDestination });
+    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     const downloadButton = await screen.findByRole("button", { name: "Download original" });
@@ -165,7 +164,7 @@ describe("TimelineView scrubber", () => {
       lensModel: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline: { ...timeline, downloadAsset }, getAssetDetails, chooseDownloadDestination });
+    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Download original" }));
@@ -191,7 +190,7 @@ describe("TimelineView scrubber", () => {
       lensModel: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline: { ...timeline, downloadAsset }, getAssetDetails, chooseDownloadDestination });
+    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Download original" }));

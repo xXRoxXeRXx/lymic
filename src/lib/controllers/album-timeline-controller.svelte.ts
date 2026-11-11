@@ -1,5 +1,5 @@
 import type { TimelineAsset } from "../contracts";
-import type { AlbumTimelineDesktopAdapter, AssetDesktopAdapter } from "../tauri/desktop-adapter";
+import type { AlbumTimelineDesktopAdapter } from "../tauri/desktop-adapter";
 import { createTimelineController, type TimelineViewState } from "./timeline-controller.svelte";
 
 /**
@@ -8,7 +8,7 @@ import { createTimelineController, type TimelineViewState } from "./timeline-con
  * months then read from that already complete result rather than the network.
  */
 export function createAlbumTimelineController(
-  adapter: AlbumTimelineDesktopAdapter & Pick<AssetDesktopAdapter, "downloadAsset">,
+  adapter: AlbumTimelineDesktopAdapter,
   albumId: string,
 ): TimelineViewState {
   let assetsByBucket: Record<string, TimelineAsset[]> = {};
@@ -22,6 +22,5 @@ export function createAlbumTimelineController(
     getTimelineBucketAssets(timeBucket) {
       return Promise.resolve(assetsByBucket[timeBucket] ?? []);
     },
-    downloadAsset: adapter.downloadAsset,
   });
 }
