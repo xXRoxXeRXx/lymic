@@ -1,15 +1,21 @@
 ---
 type: integration
 title: Immich API Integration
-description: The authenticated, typed boundary between Lymic and Immich, covering URL and credential safeguards, duplicate detection, streamed uploads, album API calls, and the handoff to local synchronization state.
-tags: [immich, api, authentication, uploads, albums, synchronization]
+description: The authenticated, typed boundary between Lymic and Immich, covering transport safeguards, endpoint contracts, bounded responses, media delivery, and the distinction between browsing albums and selecting upload targets.
+tags: [immich, api, authentication, uploads, albums, timeline, media]
 sources:
+  - id: openwiki-source-1fcd4acb19ae27b109afe923
+    resource: repo://src-tauri/src/app/asset_protocol.rs
+  - id: openwiki-source-9a3cab9533821b7e851a3e27
+    resource: repo://src-tauri/src/app/thumbnail_protocol.rs
   - id: openwiki-source-d0aa70773e481ea79113c4ad
     resource: repo://src-tauri/src/auth.rs
   - id: openwiki-source-5c8cfd03344143eaad8d7595
     resource: repo://src-tauri/src/commands/albums.rs
   - id: openwiki-source-0fc5ba992451ba2dccaef07f
     resource: repo://src-tauri/src/commands/auth.rs
+  - id: openwiki-source-68f595f7eb6172e10ca02c4c
+    resource: repo://src-tauri/src/commands/timeline.rs
   - id: openwiki-source-de913ff9671222dd064e7bf7
     resource: repo://src-tauri/src/immich/album.rs
   - id: openwiki-source-27cf4cf217241afe3fc02fc8
@@ -18,8 +24,12 @@ sources:
     resource: repo://src-tauri/src/immich/client.rs
   - id: openwiki-source-a03898b4eb42efbd3eab6010
     resource: repo://src-tauri/src/immich/ids.rs
+  - id: openwiki-source-53ebad60b330b25b4ec39fd7
+    resource: repo://src-tauri/src/immich/people.rs
   - id: openwiki-source-653657bd24d2f782b8341396
     resource: repo://src-tauri/src/immich/response.rs
+  - id: openwiki-source-dfa034c9de4b4dafbc96f15f
+    resource: repo://src-tauri/src/immich/timeline.rs
   - id: openwiki-source-d21a18714fae9df82df58bf5
     resource: repo://src-tauri/src/immich/upload.rs
   - id: openwiki-source-a1c1326bfb806284fbf8343f
@@ -30,15 +40,15 @@ sources:
     resource: repo://src-tauri/src/sync/processor.rs
   - id: openwiki-source-fd5e4aa90e3b24f760c796f0
     resource: repo://src-tauri/src/sync/retry.rs
-generated: { by: "openwiki/0.7.2", at: "2026-11-04T15:53:48.838Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-09T18:02:27.157Z" }
 verified:
   - by: openwiki/0.7.2
-    at: 2026-11-04T15:53:48.838Z
+    at: 2026-11-09T18:02:27.157Z
 ---
 
 # Immich API Integration
 
-`ImmichClient` is the backend boundary for Immich REST calls. It owns normalized API URLs, the `x-api-key` header, optional Cloudflare Access headers, request construction, and defensive response handling. It does **not** own queue scheduling or terminal synchronization state: the sync processor and completion layer decide when a local upload unit is complete or failed.
+`ImmichClient` is the backend boundary for authenticated Immich REST calls. It owns normalized API URLs, the `x-api-key` header, optional Cloudflare Access headers, request construction, response limits, and compatibility decoding. It does **not** own queue scheduling or terminal synchronization state: the sync processor and completion layer decide when a local upload unit is complete or failed.
 
 ## Authentication and transport boundary
 
@@ -46,26 +56,34 @@ Credentials contain the server URL, Immich API key, an opt-in local-HTTP setting
 
 The client normalizes a server URL to an `/api/` base while retaining a configured path prefix. It accepts HTTPS, or HTTP only when `allow_local_http` is enabled **and** the host is `localhost` or a loopback IPv4/IPv6 address. URLs without a host, with embedded credentials, query parameters, or fragments are rejected. Redirects are disabled so an API-key request cannot be redirected from HTTPS to HTTP. Cloudflare Access is all-or-nothing: both configured values become default request headers, with the secret marked sensitive.
 
-Every Immich request uses `x-api-key`. The bulk-check, upload, and album methods use a 1 MiB bounded reader for successful response bodies; current-user JSON is decoded directly, so this is not a universal success-body cap. Error diagnostics are capped at 8 KiB, normalized to one line, and annotated when truncated. Profile-image retrieval is separately limited to 10 MiB by declared and received byte length, and retains a content type only when it begins with `image/`.
+Stored-credential callers use `ImmichClient::from_stored_credentials()`. It derives an account identifier, reuses a cached `Arc<ImmichClient>` only while the complete credentials match, and redacts all credential values from construction and downstream errors. Thin Tauri commands either use this helper or load credentials and construct the client directly; this keeps the UI from supplying a server URL or API key per request.
 
-### Current-user profile retrieval
+## Endpoint contracts and compatibility
 
-The `get_current_user` Tauri command loads the stored credentials and constructs an `ImmichClient`. It calls `GET users/me` for the user ID, display name, and whether `profileImagePath` is nonblank. When an image is advertised, it then calls `GET users/{userId}/profile-image`; an image-fetch failure still leaves the fetched ID and display name available to the profile-cache resolver. Client construction or current-user refresh failures are likewise passed to that resolver rather than returned as a profile-fetch error.
+Every Immich request uses `x-api-key`. The boundary uses explicit response shapes rather than passing Immich JSON through unchanged.
 
-Before resolving or persisting the result, the command rereads credentials and compares the derived account ID. A logout or account switch during the asynchronous refresh returns `Session changed during profile refresh`, preventing data fetched for one account from being written under another account's cache.
-
-## External API contract
-
-The boundary currently uses the following Immich endpoints. All endpoint paths are relative to the normalized `/api/` base.
-
-| Operation | Request and interpretation |
+| Area | Request and local contract |
 | --- | --- |
-| Connection validation | `GET users/me`; success requires a parseable user with a nonblank name or email. |
-| Duplicate check | `POST assets/bulk-upload-check` with `assets` entries whose `id` and `checksum` are both the local SHA-1 Base64 value. |
-| Upload | `POST assets` as multipart, with `x-immich-checksum` set to the image checksum. |
-| Album list/create | `GET albums` returns albums sorted case-insensitively by name in Lymic; `POST albums` sends a trimmed nonempty `albumName`. |
-| Album membership | `PUT albums/{albumId}/assets` with `{ "ids": [...] }`; an empty ID list makes no request. A successful HTTP status is the client-level success criterion—the response’s per-asset result objects are not parsed. |
-| Duplicate ID lookup | `POST search/metadata` with `{ "checksum": ... }`; zero matches means no ID, one means that ID, and more than one is an error because assignment would be ambiguous. |
+| Connection and profile | `GET users/me` supplies ID, display name, and `profileImagePath`; `GET users/{userId}/profile-image` is used only when an image is advertised. |
+| Synchronization | `POST assets/bulk-upload-check` receives local SHA-1 Base64 values as both `id` and `checksum`; `POST assets` is multipart and sends `x-immich-checksum`. |
+| Album target management | `GET albums` for `get_albums` produces sorted id/name `Album` values; `POST albums` sends a trimmed nonempty `albumName`; `PUT albums/{albumId}/assets` sends `{ "ids": [...] }`. |
+| Album catalogue | A separate `GET albums` call preserves Immich ordering and decodes presentation fields: thumbnail asset ID, count, sharing status, and order. |
+| Timeline | `GET timeline/buckets` and `GET timeline/bucket` use `size=MONTH`; album timelines use paged `POST search/metadata` with `albumIds`, `withExif`, descending order, and a size of 1,000. |
+| People and media | `GET people` is paged with `page` and `size`; thumbnail, preview, and original asset calls use the `people/{id}/thumbnail` and `assets/{id}/...` endpoints. |
+
+`Album` and `AlbumCatalogueItem` intentionally remain separate. Target-album selection needs only a typed `AlbumId` and name and is sorted case-insensitively for its established UI contract. The read-only catalogue instead retains server order and display metadata, so catalogue changes cannot alter synchronization selection behavior. `get_album_catalogue`, `get_albums`, and `create_album` are authenticated Tauri entrypoints; the latter rejects a blank name before credential lookup and the client validates it again.
+
+Compatibility decoding is deliberately localized. Timeline bucket responses accept either ordinary asset arrays or Immich's columnar form; columnar entries derive dimensions from a ratio and map `isImage` to `IMAGE` or `VIDEO`. Asset fields accept established naming variants for EXIF dimensions and timestamps, duration accepts milliseconds or colon-delimited text, and `nextPage` accepts a number or numeric string. Album search likewise accepts `assets.items`, `items`, or a bare array. Invalid pagination that does not advance is rejected rather than looping indefinitely.
+
+Recognized-people endpoints turn `401` and `403` into stable, user-actionable tokens; the latter names the required `person.read` and `asset.read` API-key permissions. Their page result uses Immich's `hasNextPage` when present, otherwise computes it from `total`, page, and size. Other endpoint failures report a status-only error after redaction.
+
+## Response and error limits
+
+Most JSON methods—including album, bulk-check, people, timeline, and upload responses—read successful bodies through the shared 1 MiB bounded reader. It rejects both an oversized declared `Content-Length` and a streamed body that crosses the limit. Current-user JSON is decoded directly, so it is not covered by that general success-body cap.
+
+The shared error-body reader caps a diagnostic read at 8 KiB, flattens whitespace, and marks truncation. However, `response_status_error` deliberately discards that server-provided detail and returns only `request failed with status ...`; endpoint errors therefore do not relay server response bodies outside the Immich boundary. Profile images independently reject declared or received bodies over 10 MiB and retain a content type only when it starts with `image/`.
+
+Media has endpoint-specific limits: asset thumbnails and previews use a 20 MiB bounded reader, person thumbnails reject received bodies over 20 MiB, and original asset responses are limited to 32 MiB. Dynamic IDs are validated as a single safe path segment before interpolation, rejecting empty, traversal-like, slash, whitespace, control, query, and fragment values.
 
 ## Duplicate detection and upload protocol
 
@@ -96,7 +114,7 @@ sequenceDiagram
     Processor->>Queue: persist remote ID and await or complete assignment
 ```
 
-This sequence shows the source-defined external calls and the point where the API boundary hands a resolved remote ID back to local completion.
+This sequence shows the source-defined duplicate-resolution and upload calls before the API boundary hands a remote ID to local completion.
 
 ## Album API versus local orchestration
 
@@ -122,6 +140,14 @@ flowchart TD
 
 This is local queue and completion control flow; grouping and failure marking are not requirements imposed by the Immich album endpoint itself. If the album request fails, every unit in that album group is marked failed, with UI and audit events. If the request succeeds but durable local completion fails, that unit is also marked failed to avoid reporting a false synchronized result. The queue remains the recovery boundary and retains its persisted remote ID, so retry processing can resume assignment without another upload.
 
+## Local media protocols
+
+The frontend does not receive authenticated Immich URLs. Tauri URI schemes obtain the stored client and proxy bytes to the webview:
+
+- `lymic-asset://asset/{id}` requests the preview thumbnail; `lymic-asset://video/{id}` requests the original asset with a `Range` header. The protocol bounds missing, malformed, open-ended, and oversized video ranges to at most 8 MiB, then preserves Immich's status and `Content-Type`, `Content-Range`, `Content-Length`, and `Accept-Ranges` headers.
+- `lymic-thumb` serves asset WebP thumbnails and person WebP or JPEG thumbnails. It validates payload signatures before returning or caching bytes. The cache is partitioned by a SHA-256-derived account directory and uses SHA-256-derived filenames, has a 2 GiB limit, and evicts least-recently-used entries based on modification time.
+- Thumbnail downloads are capped at 12 concurrent requests. A full waiter queue holds at most 256 entries, drops the oldest scrolled-past waiter, and dispatches the most recent waiter first so visible content is favored. Cache lookup is repeated after a permit is acquired, avoiding duplicate downloads after a concurrent fill.
+
 ## Failure behavior and change boundaries
 
 The processor honors pause and per-path cancellation before starting further hashes, checks, uploads, or album assignment; cancellation of an in-flight upload produces no terminal queue result. New uploads are executed with configured upload parallelism, while the batch check remains bounded at 100 units. Remote upload failure marks every asset in the upload unit failed locally. If a successful upload cannot be durably completed in local state, the production processor reports the completion failure and marks the unit failed; it does not recheck remote hashes or retry persistence in that path.
@@ -130,20 +156,17 @@ The processor honors pause and per-path cancellation before starting further has
 
 Only duplicate checks receive an explicit retry policy. `check_assets_exist_with_backoff` makes at most three attempts. Retryable failures wait one second after the first failed attempt and two seconds after the second; a third failure aborts the sync. `401 Unauthorized` and `403 Forbidden` are classified as non-retryable and abort immediately. The retry layer emits a warning UI event and a `file.bulk_check.failed` audit event for each scheduled retry; terminal or non-retryable failures are emitted as errors. It passes errors through the audit context's safe-error transformation before putting them in UI or audit payloads, so server responses cannot expose the configured server URL or credentials through those reporting paths.
 
-### UI album entrypoints
-
-The `get_albums` and `create_album` Tauri commands are thin authenticated entrypoints. Each loads the stored credentials, rejects an unauthenticated caller, constructs `ImmichClient` with the transport settings, and delegates to the matching album method. `create_album` additionally rejects a blank name before loading credentials; the client repeats the trimmed-name validation, retaining the boundary invariant for non-UI callers.
-
 When extending this integration, keep the split explicit:
 
-- Add or change an Immich endpoint in `src-tauri/src/immich/`, with endpoint-specific validation and an explicit response-size policy.
+- Add or change an Immich endpoint in `src-tauri/src/immich/`, with endpoint-specific validation, bounded success reads, and a compatibility decoder only where an observed API variation requires it.
 - Keep scheduling, duplicate-to-queue decisions, target-album grouping, audit/UI reporting, and terminal state changes in `src-tauri/src/sync/`.
 - Preserve the invariant that a target-album unit is not `SYNCED` until both a remote ID is durable locally and its album assignment has succeeded.
-- Exercise mock-server tests for request shape and error responses, parser tests for strict contracts, and completion/processor tests for local state transitions.
+- Exercise mock-server tests for request shape and error responses, parser tests for strict contracts and alternate Immich payloads, protocol tests for range and cache invariants, and completion/processor tests for local state transitions.
 
 ## Navigation
 
 - [Authentication and Credential Security](../security/authentication.md) covers credential storage and login behavior.
-- [Local State](../data/local-state.md) describes the queue and persistent synchronization state.
+- [Runtime Architecture](../architecture/runtime.md) describes Tauri runtime boundaries.
+- [UI and IPC](../frontend/ui-and-ipc.md) covers frontend-facing commands and protocols.
 - [Synchronization Workflow](../workflows/synchronization.md) places this boundary in the end-to-end pipeline.
 - [Watched Folders and Media Discovery](../workflows/watched-folders.md) explains where target-album configuration originates.

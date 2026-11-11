@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:f1079662a39cbe1e2415ebd4266f606f3b349b73d5616ec375b42c80c15778c5",
+  "pageVersion": "sha256:3b699e71b408d6650336203109f96aeaefe879ac65d491863bfd4fd96cad5eaa",
   "claims": [
     {
       "id": "claim_cfbbe8313c3d41da8e6f2258cee78de1",
@@ -28,7 +28,7 @@
       "evidence": [
         {
           "resource": "repo://docs/agents/application-map.md",
-          "version": "repo-file-v1:sha256:b06dd384febe9eac858fdba37d9488cb7874ce12e76a047878e30c5f69fa5a38"
+          "version": "repo-file-v1:sha256:f6a96a8dd77376833c3ecc4838205536033747ceffc31724dcd32b8047f292d4"
         }
       ]
     },
@@ -38,11 +38,11 @@
       "evidence": [
         {
           "resource": "repo://docs/agents/application-map.md",
-          "version": "repo-file-v1:sha256:b06dd384febe9eac858fdba37d9488cb7874ce12e76a047878e30c5f69fa5a38"
+          "version": "repo-file-v1:sha256:f6a96a8dd77376833c3ecc4838205536033747ceffc31724dcd32b8047f292d4"
         },
         {
           "resource": "repo://src-tauri/Cargo.toml",
-          "version": "repo-file-v1:sha256:a6fd664739d3b9dea4f98996973e49899187ecc0d31ce2a7dbd5eb6e119c49b0"
+          "version": "repo-file-v1:sha256:6416878ee2ce3c35cf8cc9768fa6813bf2acf8ffddaea529e6c09b8f0a43808b"
         }
       ]
     },
@@ -72,7 +72,7 @@
       "evidence": [
         {
           "resource": "repo://src-tauri/src/app/mod.rs",
-          "version": "repo-file-v1:sha256:81b3891412d1b707e168fea3ffd765a7d5832bd0b4650623400b350646ccdca8"
+          "version": "repo-file-v1:sha256:1437bc163ba3fec92922d95442822131826955644ba110902bca936a6552ad06"
         },
         {
           "resource": "repo://src-tauri/src/audit/writer.rs",
@@ -104,7 +104,7 @@
       "evidence": [
         {
           "resource": "repo://package.json",
-          "version": "repo-file-v1:sha256:64e53d401788f5632a8a306e96384a6896c34300bd6f47f46bf9ba9fc2e50add"
+          "version": "repo-file-v1:sha256:264bc31a2e252a0d493dae95bb1734f5919c726875fa640eb2c7e27357b8026a"
         },
         {
           "resource": "repo://src/lib/controllers/sync-controller.svelte.test.ts",
@@ -112,7 +112,7 @@
         },
         {
           "resource": "repo://src/lib/tauri/desktop-adapter.test.ts",
-          "version": "repo-file-v1:sha256:620014650c23bc96126b7002a419918b9011c0187474b19679983a20b6455a76"
+          "version": "repo-file-v1:sha256:a1593cfcbe9eb3f7c4763d85875a216c2a38125aa283132043ffd6d577f2b41c"
         },
         {
           "resource": "repo://vite.config.js",
@@ -136,7 +136,7 @@
       "evidence": [
         {
           "resource": "repo://.github/workflows/release.yml",
-          "version": "repo-file-v1:sha256:c8d86e8c843e6e37b2af67193a7a7926474e84f29f662618f5dff17c82a3e275"
+          "version": "repo-file-v1:sha256:87788f37ab57433cf811677d549b9bf06d937e9de5797bb4b3761f5e12a51a9f"
         }
       ]
     },
@@ -146,7 +146,7 @@
       "evidence": [
         {
           "resource": "repo://src-tauri/tauri.conf.json",
-          "version": "repo-file-v1:sha256:fd92509f55269cdfe1d218312f4c995008d8bce7b0d469b1a10caa71c8a890b1"
+          "version": "repo-file-v1:sha256:40dd37bf5651db9803327b80b15d71a8bceb463a344c7bed3b3cc4109b1430fd"
         },
         {
           "resource": "repo://src/lib/controllers/update-controller.svelte.ts",
@@ -160,11 +160,11 @@
       "evidence": [
         {
           "resource": "repo://src-tauri/src/app/mod.rs",
-          "version": "repo-file-v1:sha256:81b3891412d1b707e168fea3ffd765a7d5832bd0b4650623400b350646ccdca8"
+          "version": "repo-file-v1:sha256:1437bc163ba3fec92922d95442822131826955644ba110902bca936a6552ad06"
         },
         {
           "resource": "repo://src/lib/tauri/desktop-adapter.test.ts",
-          "version": "repo-file-v1:sha256:620014650c23bc96126b7002a419918b9011c0187474b19679983a20b6455a76"
+          "version": "repo-file-v1:sha256:a1593cfcbe9eb3f7c4763d85875a216c2a38125aa283132043ffd6d577f2b41c"
         }
       ]
     },
@@ -184,7 +184,7 @@
       "evidence": [
         {
           "resource": "repo://.github/workflows/release.yml",
-          "version": "repo-file-v1:sha256:c8d86e8c843e6e37b2af67193a7a7926474e84f29f662618f5dff17c82a3e275"
+          "version": "repo-file-v1:sha256:87788f37ab57433cf811677d549b9bf06d937e9de5797bb4b3761f5e12a51a9f"
         }
       ]
     },
@@ -204,13 +204,23 @@
       "evidence": [
         {
           "resource": "repo://.github/workflows/release.yml",
-          "version": "repo-file-v1:sha256:c8d86e8c843e6e37b2af67193a7a7926474e84f29f662618f5dff17c82a3e275"
+          "version": "repo-file-v1:sha256:87788f37ab57433cf811677d549b9bf06d937e9de5797bb4b3761f5e12a51a9f"
+        }
+      ]
+    },
+    {
+      "id": "claim_4f9362f436fd469bb2eba28869e13060",
+      "statement": "For version tags, the release workflow runs an `update-aur` job after `publish`; when AUR SSH credentials are configured, it downloads the versioned Debian asset, computes its SHA-256 checksum, updates the `lymic-bin` PKGBUILD and .SRCINFO, and pushes the AUR repository.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L144-L205",
+          "version": "repo-lines-v1:sha256:28c0552d5d5e48f5a2fa1c1efc693140159da72233de7e6750293b23050f4fcc:eyJzZWxlY3RlZExpbmVDb3VudCI6NjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3MjBhZmVhNjcyZmI1OTQwZTA5NjI1ZDA0MGEzMzRjYWZjZjBhYjIzMWNkYzEwZTZmMmNkYTU0MDQzZWNiNTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzNmYxNzkxNjY5OGNmZjczMTcxYTNlYzU3YzY2YzU4MzU2MzJjMjFjZTg3YmQ0MjI4OTg5ZmExZTVkZmU1MTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViNzU4OGZmYTU1OWQ3MDA0MTdlM2I2NWJkMDZkMTAzODI3YzIyYWIwMzQzYTk2NmIzMjM3OGYxM2QyOTFjOTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-11-06T15:30:15.009Z"
+    "at": "2026-11-09T18:02:27.157Z"
   }
 }
