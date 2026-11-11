@@ -228,4 +228,7 @@
   ,"timeline_add_favorite": "Add to favorites"
   ,"timeline_remove_favorite": "Remove from favorites"
   ,"timeline_favorite_update_error": "Could not update favorite"
+  ,"timeline_download_original": "মূল ফাইল ডাউনলোড করুন"
+  ,"timeline_download_saved": "ডাউনলোড সংরক্ষিত হয়েছে"
+  ,"timeline_download_failed": "মূল ফাইল ডাউনলোড করা যায়নি"
 }

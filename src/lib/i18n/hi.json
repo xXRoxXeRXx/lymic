@@ -228,4 +228,7 @@
   ,"timeline_add_favorite": "Add to favorites"
   ,"timeline_remove_favorite": "Remove from favorites"
   ,"timeline_favorite_update_error": "Could not update favorite"
+  ,"timeline_download_original": "मूल फ़ाइल डाउनलोड करें"
+  ,"timeline_download_saved": "डाउनलोड सहेजा गया"
+  ,"timeline_download_failed": "मूल फ़ाइल डाउनलोड नहीं की जा सकी"
 }

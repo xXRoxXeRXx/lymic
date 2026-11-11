@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::immich::{AlbumTimeline, AssetDetails, ImmichClient, TimelineAsset, TimelineBucket};
 
 #[tauri::command]
@@ -14,6 +16,18 @@ pub(crate) async fn set_asset_favorite(asset_id: String, is_favorite: bool) -> R
     let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
     client
         .set_asset_favorite(&asset_id, is_favorite)
+        .await
+        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
+}
+
+#[tauri::command]
+pub(crate) async fn download_asset(
+    asset_id: String,
+    destination_path: String,
+) -> Result<(), String> {
+    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
+    client
+        .download_asset(&asset_id, Path::new(&destination_path))
         .await
         .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }

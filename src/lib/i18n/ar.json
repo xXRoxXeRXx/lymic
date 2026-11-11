@@ -228,4 +228,7 @@
   ,"timeline_add_favorite": "Add to favorites"
   ,"timeline_remove_favorite": "Remove from favorites"
   ,"timeline_favorite_update_error": "Could not update favorite"
+  ,"timeline_download_original": "تنزيل الملف الأصلي"
+  ,"timeline_download_saved": "تم حفظ التنزيل"
+  ,"timeline_download_failed": "تعذر تنزيل الملف الأصلي"
 }

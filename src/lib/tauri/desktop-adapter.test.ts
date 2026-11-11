@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { invoke, confirm, open, disable, enable, isEnabled, getVersion, check, relaunch, listen, isPermissionGranted, sendNotification, openUrl } = vi.hoisted(() => ({
+const { invoke, confirm, open, save, disable, enable, isEnabled, getVersion, check, relaunch, listen, isPermissionGranted, sendNotification, openUrl } = vi.hoisted(() => ({
   invoke: vi.fn(),
   confirm: vi.fn(),
   open: vi.fn(),
+  save: vi.fn(),
   disable: vi.fn(),
   enable: vi.fn(),
   isEnabled: vi.fn(),
@@ -20,7 +21,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/app", () => ({ getVersion }));
 vi.mock("@tauri-apps/api/event", () => ({ listen }));
 vi.mock("@tauri-apps/plugin-autostart", () => ({ disable, enable, isEnabled }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm, open }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm, open, save }));
 vi.mock("@tauri-apps/plugin-notification", () => ({ isPermissionGranted, sendNotification }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch }));
@@ -90,6 +91,8 @@ describe("tauriDesktopAdapter", () => {
     await timelineAdapter.getTimelineBucketAssets("2025-03-01T00:00:00.000Z");
     await tauriDesktopAdapter.getAssetDetails("asset-1");
     await tauriDesktopAdapter.setAssetFavorite("asset-1", true);
+    await tauriDesktopAdapter.chooseDownloadDestination("IMG_0001.CR3");
+    await tauriDesktopAdapter.downloadAsset("asset-1", "C:/Downloads/IMG_0001.CR3");
     await albumTimelineAdapter.getAlbumTimeline("album-1");
     await tauriDesktopAdapter.getPersonTimelineBuckets("person-1");
     await tauriDesktopAdapter.getPersonTimelineBucketAssets("person-1", "2025-03-01T00:00:00.000Z");
@@ -146,6 +149,7 @@ describe("tauriDesktopAdapter", () => {
       ["get_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
       ["get_asset_details", { assetId: "asset-1" }],
       ["set_asset_favorite", { assetId: "asset-1", isFavorite: true }],
+      ["download_asset", { assetId: "asset-1", destinationPath: "C:/Downloads/IMG_0001.CR3" }],
       ["get_album_timeline", { albumId: "album-1" }],
       ["get_person_timeline_buckets", { personId: "person-1" }],
       ["get_person_timeline_bucket_assets", { personId: "person-1", timeBucket: "2025-03-01T00:00:00.000Z" }],
@@ -157,6 +161,7 @@ describe("tauriDesktopAdapter", () => {
     ]);
     expect(confirm).toHaveBeenCalledWith("Log out?", { title: "Log out", kind: "warning" });
     expect(open).toHaveBeenCalledWith({ directory: true, multiple: false, title: "Select folder" });
+    expect(save).toHaveBeenCalledWith({ defaultPath: "IMG_0001.CR3" });
     expect(isEnabled).toHaveBeenCalledOnce();
     expect(enable).toHaveBeenCalledOnce();
     expect(disable).toHaveBeenCalledOnce();

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { ChevronLeft, ChevronRight, ExternalLink, Heart, Play, RefreshCw, X } from "lucide-svelte";
+  import { ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
@@ -14,6 +14,7 @@
     onOpenExternalUrl?(url: string): Promise<void>;
     getAssetDetails?(assetId: string): Promise<AssetDetails | null>;
     setAssetFavorite?(assetId: string, isFavorite: boolean): Promise<void>;
+    chooseDownloadDestination?(originalFileName: string): Promise<string | null>;
     showScrubber?: boolean;
     emptyMessage?: string;
     loadErrorMessage?: string;
@@ -25,6 +26,7 @@
     onOpenExternalUrl = async () => {},
     getAssetDetails = async () => null,
     setAssetFavorite = async () => {},
+    chooseDownloadDestination = async () => null,
     showScrubber = true,
     emptyMessage = "",
     loadErrorMessage = "",
@@ -46,6 +48,9 @@
   const assetDetailsById = new Map<string, AssetDetails | null>();
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
   let favoriteError = $state("");
+  let downloadingAssetId = $state<string | null>(null);
+  let downloadMessage = $state("");
+  let downloadError = $state("");
   let selectedIndex = $state(-1);
   let opener = $state<HTMLElement | null>(null);
 
@@ -231,10 +236,32 @@
     }
   }
 
+  async function downloadOriginal() {
+    if (!selectedAsset || !assetDetails?.originalFileName || downloadingAssetId) return;
+
+    const assetId = selectedAsset.id;
+    const originalFileName = assetDetails.originalFileName;
+    downloadMessage = "";
+    downloadError = "";
+    downloadingAssetId = assetId;
+    try {
+      const destinationPath = await chooseDownloadDestination(originalFileName);
+      if (!destinationPath) return;
+      await timeline.downloadAsset(assetId, destinationPath);
+      if (selectedAsset?.id === assetId) downloadMessage = $t("timeline_download_saved");
+    } catch {
+      if (selectedAsset?.id === assetId) downloadError = $t("timeline_download_failed");
+    } finally {
+      downloadingAssetId = null;
+    }
+  }
+
   function openLightbox(asset: TimelineAsset, source: HTMLElement) {
     selectedIndex = lightboxAssets.findIndex((candidate) => candidate.id === asset.id);
     selectedAsset = asset;
     opener = source;
+    downloadMessage = "";
+    downloadError = "";
     loadAssetDetails(asset);
   }
 
@@ -252,17 +279,22 @@
   }
 
   function closeLightbox() {
+    if (downloadingAssetId) return;
     selectedAsset = null;
     assetDetails = null;
     favoriteError = "";
+    downloadMessage = "";
+    downloadError = "";
     selectedIndex = -1;
     queueMicrotask(() => opener?.focus());
   }
 
   function navigate(delta: number) {
-    if (!selectedAsset || lightboxAssets.length === 0) return;
+    if (!selectedAsset || downloadingAssetId || lightboxAssets.length === 0) return;
     selectedIndex = (selectedIndex + delta + lightboxAssets.length) % lightboxAssets.length;
     selectedAsset = lightboxAssets[selectedIndex];
+    downloadMessage = "";
+    downloadError = "";
     loadAssetDetails(selectedAsset);
   }
 
@@ -418,9 +450,9 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" role="presentation" onclick={(event) => event.currentTarget === event.target && closeLightbox()}>
     <dialog open aria-label={$t("timeline_lightbox_label")} aria-modal="true" class="m-0 grid h-full w-full max-h-none max-w-none grid-rows-[minmax(0,1fr)_auto] border-0 bg-transparent p-0 text-white">
       <div class="relative flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
-        <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3 text-white hover:bg-black/80" aria-label={$t("timeline_close_lightbox")} onclick={closeLightbox}><X class="h-5 w-5" /></button>
-        <button type="button" class="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80" aria-label={$t("timeline_previous_asset")} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
-        <button type="button" class="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80" aria-label={$t("timeline_next_asset")} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
+        <button type="button" class="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_close_lightbox")} disabled={downloadingAssetId !== null} onclick={closeLightbox}><X class="h-5 w-5" /></button>
+        <button type="button" class="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
+        <button type="button" class="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={downloadingAssetId !== null} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
         {#if selectedAsset.type === "VIDEO"}
           <video class="h-full w-full max-h-full max-w-full object-contain" controls autoplay aria-label={$t("timeline_video_preview")} src={protocolSrc("lymic-asset", "video", selectedAsset.id)}>
             <track kind="captions" />
@@ -452,11 +484,20 @@
           </p>
         </div>
         <div class="flex gap-2">
+          {#if assetDetails?.originalFileName}
+            <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:cursor-wait disabled:opacity-50" aria-label={$t("timeline_download_original")} aria-busy={downloadingAssetId === selectedAsset.id} disabled={downloadingAssetId !== null} onclick={() => void downloadOriginal()}><Download class="h-5 w-5 {downloadingAssetId === selectedAsset.id ? 'animate-spin' : ''}" /></button>
+          {/if}
           <button type="button" class="inline-flex items-center justify-center rounded p-2 hover:bg-white/10 disabled:opacity-50" aria-label={assetDetails?.isFavorite ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={assetDetails?.isFavorite ?? false} disabled={!assetDetails || Boolean(updatingFavoriteAssetIds[selectedAsset.id])} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {assetDetails?.isFavorite ? 'fill-current' : ''}" /></button>
           <button type="button" class="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 disabled:opacity-50" aria-label={$t("timeline_open_in_immich")} disabled={!serverUrl.trim()} onclick={() => selectedAsset && serverUrl.trim() && onOpenExternalUrl(assetUrl(selectedAsset))}>{$t("timeline_open_in_immich")} <ExternalLink class="h-4 w-4" /></button>
         </div>
         {#if favoriteError}
           <p class="w-full text-red-300" role="alert">{favoriteError}</p>
+        {/if}
+        {#if downloadMessage}
+          <p class="w-full text-emerald-300" role="status">{downloadMessage}</p>
+        {/if}
+        {#if downloadError}
+          <p class="w-full text-red-300" role="alert">{downloadError}</p>
         {/if}
       </div>
     </dialog>

@@ -1,5 +1,5 @@
 import type { TimelineAsset, TimelineBucket } from "../contracts";
-import type { TimelineDesktopAdapter } from "../tauri/desktop-adapter";
+import type { AssetDesktopAdapter, TimelineDesktopAdapter } from "../tauri/desktop-adapter";
 
 export interface TimelineViewState {
   readonly buckets: TimelineBucket[];
@@ -9,11 +9,14 @@ export interface TimelineViewState {
   readonly hasInitialLoadError: boolean;
   assetsFor(timeBucket: string): TimelineAsset[];
   activateBucket(timeBucket: string): Promise<void>;
+  downloadAsset(assetId: string, destinationPath: string): Promise<void>;
   refresh(): Promise<void>;
   clear(): void;
 }
 
-export function createTimelineController(adapter: TimelineDesktopAdapter): TimelineViewState {
+export function createTimelineController(
+  adapter: TimelineDesktopAdapter & Pick<AssetDesktopAdapter, "downloadAsset">,
+): TimelineViewState {
   let buckets = $state<TimelineBucket[]>([]);
   let isLoading = $state(false);
   let isRefreshing = $state(false);
@@ -104,6 +107,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     get hasInitialLoadError() { return hasInitialLoadError; },
     assetsFor,
     activateBucket,
+    downloadAsset: adapter.downloadAsset,
     refresh,
     clear,
   };

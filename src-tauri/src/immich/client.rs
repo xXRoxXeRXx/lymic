@@ -12,6 +12,8 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::path::Path;
+use tokio::io::AsyncWriteExt;
 use url::{Host, Url};
 
 const UPLOAD_TIMEOUT_BASE_SECONDS: u64 = 5 * 60;
@@ -481,6 +483,58 @@ impl ImmichClient {
         Self::read_asset_response(response, MAX_ASSET_RESPONSE_BYTES).await
     }
 
+    pub(crate) async fn download_asset(
+        &self,
+        asset_id: &str,
+        destination_path: &Path,
+    ) -> Result<(), String> {
+        Self::validate_path_segment(asset_id, "asset ID")?;
+        Self::validate_download_destination(destination_path)?;
+        let response = self
+            .client
+            .get(self.endpoint_url(&format!("assets/{asset_id}/original")))
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to download asset: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Failed to download asset: {}",
+                response_status_error(response).await?
+            ));
+        }
+
+        let mut destination = tokio::fs::File::create(destination_path)
+            .await
+            .map_err(|error| format!("Failed to create download destination: {error}"))?;
+        let mut response = response;
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|error| format!("Failed to download asset: {error}"))?
+        {
+            destination
+                .write_all(&chunk)
+                .await
+                .map_err(|error| format!("Failed to write download destination: {error}"))?;
+        }
+        destination
+            .flush()
+            .await
+            .map_err(|error| format!("Failed to write download destination: {error}"))
+    }
+
+    fn validate_download_destination(destination_path: &Path) -> Result<(), String> {
+        if !destination_path.is_absolute()
+            || destination_path.file_name().is_none()
+            || destination_path.is_dir()
+            || !destination_path.parent().is_some_and(Path::is_dir)
+        {
+            return Err("Invalid download destination path".to_string());
+        }
+        Ok(())
+    }
+
     async fn read_asset_response(
         response: reqwest::Response,
         max_bytes: usize,
@@ -708,6 +762,73 @@ mod tests {
         assert_eq!(response.content_range.as_deref(), Some("bytes 10-19/100"));
         assert_eq!(response.accept_ranges.as_deref(), Some("bytes"));
         server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn streams_an_original_asset_to_a_valid_destination_path() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request = read_http_request(&mut stream).await;
+            let request = String::from_utf8_lossy(&request);
+            assert!(request.starts_with("GET /api/assets/photo-1/original HTTP/1.1"));
+            assert!(request.contains("x-api-key: test-key"));
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\ncontent-length: 12\r\nconnection: close\r\n\r\nfirst-",
+                )
+                .await
+                .unwrap();
+            tokio::task::yield_now().await;
+            stream.write_all(b"second").await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+        let destination = temporary_file(b"stale");
+
+        client
+            .download_asset("photo-1", &destination)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            tokio::fs::read(&destination).await.unwrap(),
+            b"first-second"
+        );
+        std::fs::remove_file(destination).unwrap();
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rejects_invalid_download_destination_paths_before_requesting_an_asset() {
+        let client = ImmichClient::new(
+            "http://127.0.0.1:9".to_string(),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        for destination in [
+            std::path::Path::new("download.jpg"),
+            std::env::temp_dir().as_path(),
+        ] {
+            assert_eq!(
+                client
+                    .download_asset("photo-1", destination)
+                    .await
+                    .unwrap_err(),
+                "Invalid download destination path"
+            );
+        }
     }
 
     #[tokio::test]

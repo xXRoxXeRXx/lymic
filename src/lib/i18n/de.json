@@ -228,4 +228,7 @@
   ,"timeline_add_favorite": "Zu Favoriten hinzufügen"
   ,"timeline_remove_favorite": "Aus Favoriten entfernen"
   ,"timeline_favorite_update_error": "Favorit konnte nicht aktualisiert werden"
+  ,"timeline_download_original": "Original herunterladen"
+  ,"timeline_download_saved": "Download gespeichert"
+  ,"timeline_download_failed": "Original konnte nicht heruntergeladen werden"
 }

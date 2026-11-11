@@ -228,4 +228,7 @@
   ,"timeline_add_favorite": "Add to favorites"
   ,"timeline_remove_favorite": "Remove from favorites"
   ,"timeline_favorite_update_error": "Could not update favorite"
+  ,"timeline_download_original": "下载原始文件"
+  ,"timeline_download_saved": "下载已保存"
+  ,"timeline_download_failed": "无法下载原始文件"
 }

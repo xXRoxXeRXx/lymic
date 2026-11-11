@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { confirm, open } from "@tauri-apps/plugin-dialog";
+import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import { isPermissionGranted, sendNotification } from "@tauri-apps/plugin-notification";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -71,9 +71,11 @@ export interface TimelineDesktopAdapter {
   getTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
 }
 
-export interface AssetDetailsDesktopAdapter {
+export interface AssetDesktopAdapter {
   getAssetDetails(assetId: string): Promise<AssetDetails>;
   setAssetFavorite(assetId: string, isFavorite: boolean): Promise<void>;
+  chooseDownloadDestination(originalFileName: string): Promise<string | null>;
+  downloadAsset(assetId: string, destinationPath: string): Promise<void>;
 }
 
 export interface AlbumTimelineDesktopAdapter {
@@ -128,7 +130,7 @@ export interface DesktopAdapter
     AlbumsDesktopAdapter,
     AlbumCatalogueDesktopAdapter,
     TimelineDesktopAdapter,
-    AssetDetailsDesktopAdapter,
+    AssetDesktopAdapter,
     AlbumTimelineDesktopAdapter,
     PeopleDesktopAdapter,
     PreferencesDesktopAdapter,
@@ -175,6 +177,8 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),
   setAssetFavorite: (assetId, isFavorite) => invoke<void>("set_asset_favorite", { assetId, isFavorite }),
+  chooseDownloadDestination: (originalFileName) => save({ defaultPath: originalFileName }),
+  downloadAsset: (assetId, destinationPath) => invoke<void>("download_asset", { assetId, destinationPath }),
   getAlbumTimeline: (albumId) => invoke<AlbumTimeline>("get_album_timeline", { albumId }),
   getPeople: (page, size) => invoke<PeoplePage>("get_people", { page, size }),
   getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),

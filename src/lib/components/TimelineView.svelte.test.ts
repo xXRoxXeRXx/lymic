@@ -33,6 +33,7 @@ const timeline: TimelineViewState = {
     { id: "video-1", width: 1920, height: 1080, type: "VIDEO", takenAt: "2025-03-04T12:34:56.000Z", cameraMake: null, cameraModel: null, fileSize: 2345678, duration: 65 },
   ] : [],
   activateBucket: vi.fn(),
+  downloadAsset: vi.fn(),
   refresh: vi.fn(),
   clear: vi.fn(),
 };
@@ -97,6 +98,106 @@ describe("TimelineView scrubber", () => {
     await fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
     expect(thumbnail).toHaveFocus();
+  });
+
+  it("saves an original through the chosen native-dialog path and confirms completion", async () => {
+    const chooseDownloadDestination = vi.fn().mockResolvedValue("C:/Downloads/IMG_0001.CR3");
+    const downloadAsset = vi.fn().mockResolvedValue(undefined);
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: "IMG_0001.CR3",
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+      isFavorite: false,
+    });
+    render(TimelineView, { timeline: { ...timeline, downloadAsset }, getAssetDetails, chooseDownloadDestination });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    const downloadButton = await screen.findByRole("button", { name: "Download original" });
+    await fireEvent.click(downloadButton);
+
+    expect(chooseDownloadDestination).toHaveBeenCalledWith("IMG_0001.CR3");
+    await waitFor(() => expect(downloadAsset).toHaveBeenCalledWith("photo-1", "C:/Downloads/IMG_0001.CR3"));
+    expect(screen.getByRole("status")).toHaveTextContent("Download saved");
+  });
+
+  it("shows download progress and reports a failed original download", async () => {
+    let rejectDownload: ((reason?: unknown) => void) | undefined;
+    const chooseDownloadDestination = vi.fn().mockResolvedValue("C:/Downloads/IMG_0001.CR3");
+    const downloadAsset = vi.fn(() => new Promise<void>((_resolve, reject) => {
+      rejectDownload = reject;
+    }));
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: "IMG_0001.CR3",
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+      isFavorite: false,
+    });
+    render(TimelineView, { timeline: { ...timeline, downloadAsset }, getAssetDetails, chooseDownloadDestination });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    const downloadButton = await screen.findByRole("button", { name: "Download original" });
+    await fireEvent.click(downloadButton);
+
+    expect(downloadButton).toBeDisabled();
+    expect(downloadButton.querySelector("svg")).toHaveClass("animate-spin");
+    rejectDownload?.(new Error("Network unavailable"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not download original"));
+  });
+
+  it("keeps the lightbox open until an in-flight download can report completion", async () => {
+    let resolveDownload: (() => void) | undefined;
+    const chooseDownloadDestination = vi.fn().mockResolvedValue("C:/Downloads/IMG_0001.CR3");
+    const downloadAsset = vi.fn(() => new Promise<void>((resolve) => {
+      resolveDownload = resolve;
+    }));
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: "IMG_0001.CR3",
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+      isFavorite: false,
+    });
+    render(TimelineView, { timeline: { ...timeline, downloadAsset }, getAssetDetails, chooseDownloadDestination });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Download original" }));
+
+    expect(screen.getByRole("button", { name: "Next asset" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close lightbox" })).toBeDisabled();
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("dialog", { name: "Media lightbox" })).toBeInTheDocument();
+
+    resolveDownload?.();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Download saved"));
+  });
+
+  it("reports a native save-dialog failure", async () => {
+    const chooseDownloadDestination = vi.fn().mockRejectedValue(new Error("Dialog unavailable"));
+    const downloadAsset = vi.fn();
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: "IMG_0001.CR3",
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+      isFavorite: false,
+    });
+    render(TimelineView, { timeline: { ...timeline, downloadAsset }, getAssetDetails, chooseDownloadDestination });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Download original" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not download original"));
+    expect(downloadAsset).not.toHaveBeenCalled();
   });
 
   it("omits unavailable asset details from the lightbox footer", async () => {
