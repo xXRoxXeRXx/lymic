@@ -4,6 +4,7 @@ use super::response::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -29,8 +30,16 @@ pub struct AlbumCatalogueItem {
     pub order: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumAssignmentResult {
+    pub succeeded: usize,
+    pub failed: usize,
+}
+
 #[derive(Deserialize)]
-struct AlbumAssetAssignmentResult {
+struct AlbumAssetAssignmentResponse {
+    id: String,
     success: bool,
 }
 
@@ -115,9 +124,31 @@ impl ImmichClient {
         album_id: &super::ids::AlbumId,
         asset_ids: &[super::ids::RemoteAssetId],
     ) -> Result<(), String> {
+        let result = self
+            .add_assets_to_album_with_result(album_id, asset_ids)
+            .await?;
+        if result.failed > 0 {
+            return Err("Immich rejected album assignment".to_string());
+        }
+
+        Ok(())
+    }
+
+    pub async fn add_assets_to_album_with_result(
+        &self,
+        album_id: &super::ids::AlbumId,
+        asset_ids: &[super::ids::RemoteAssetId],
+    ) -> Result<AlbumAssignmentResult, String> {
         Self::validate_path_segment(album_id.as_str(), "album ID")?;
         if asset_ids.is_empty() {
-            return Ok(());
+            return Ok(AlbumAssignmentResult {
+                succeeded: 0,
+                failed: 0,
+            });
+        }
+        let requested_ids: HashSet<&str> = asset_ids.iter().map(|id| id.as_str()).collect();
+        if requested_ids.len() != asset_ids.len() {
+            return Err("Asset IDs for album assignment must be unique".to_string());
         }
 
         let endpoint = format!("albums/{}/assets", album_id);
@@ -138,16 +169,21 @@ impl ImmichClient {
         }
 
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
-        let results: Vec<AlbumAssetAssignmentResult> = serde_json::from_slice(&body)
+        let results: Vec<AlbumAssetAssignmentResponse> = serde_json::from_slice(&body)
             .map_err(|error| format!("Invalid album assignment response: {}", error))?;
         if results.len() != asset_ids.len() {
             return Err("Immich returned an incomplete album assignment response".to_string());
         }
-        if results.iter().any(|result| !result.success) {
-            return Err("Immich rejected album assignment".to_string());
+        let returned_ids: HashSet<&str> = results.iter().map(|result| result.id.as_str()).collect();
+        if returned_ids.len() != results.len() || returned_ids != requested_ids {
+            return Err("Immich returned unexpected album assignment results".to_string());
         }
 
-        Ok(())
+        let succeeded = results.iter().filter(|result| result.success).count();
+        Ok(AlbumAssignmentResult {
+            succeeded,
+            failed: results.len() - succeeded,
+        })
     }
 
     pub async fn search_asset_by_checksum(
@@ -455,6 +491,49 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("Immich rejected album assignment"));
+    }
+
+    #[tokio::test]
+    async fn add_assets_to_album_with_result_preserves_partial_success() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut stream).await;
+            let response = r#"[{"id":"asset-1","success":true},{"id":"asset-2","success":false}]"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        response.len(),
+                        response
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+        });
+
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+
+        let result = client
+            .add_assets_to_album_with_result(
+                &AlbumId::new("album-123"),
+                &[RemoteAssetId::new("asset-1"), RemoteAssetId::new("asset-2")],
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            result,
+            AlbumAssignmentResult {
+                succeeded: 1,
+                failed: 1
+            }
+        );
     }
 
     #[tokio::test]

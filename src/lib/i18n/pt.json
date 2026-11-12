@@ -250,4 +250,13 @@
   ,"timeline_info_filename": "File name"
   ,"timeline_info_dimensions": "Dimensions"
   ,"timeline_info_size": "File size"
+  ,"timeline_selection_count": "{count} selected"
+  ,"timeline_selection_finish": "Done"
+  ,"timeline_select_asset": "Select asset"
+  ,"timeline_selection_favorite_success": "Updated {count} assets"
+  ,"timeline_selection_favorite_partial": "Updated {succeeded} of {count} assets"
+  ,"timeline_selection_favorite_failed": "Could not update selected assets"
+  ,"timeline_selection_album_success": "Added {count} assets to album"
+  ,"timeline_selection_album_partial": "Added {succeeded} of {count} assets to album"
+  ,"timeline_selection_album_failed": "Could not add selected assets to album"
 }

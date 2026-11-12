@@ -250,4 +250,13 @@
   ,"timeline_info_filename": "Dateiname"
   ,"timeline_info_dimensions": "Abmessungen"
   ,"timeline_info_size": "Dateigröße"
+  ,"timeline_selection_count": "{count} ausgewählt"
+  ,"timeline_selection_finish": "Fertig"
+  ,"timeline_select_asset": "Medium auswählen"
+  ,"timeline_selection_favorite_success": "{count} Medien aktualisiert"
+  ,"timeline_selection_favorite_partial": "{succeeded} von {count} Medien aktualisiert"
+  ,"timeline_selection_favorite_failed": "Ausgewählte Medien konnten nicht aktualisiert werden"
+  ,"timeline_selection_album_success": "{count} Medien zum Album hinzugefügt"
+  ,"timeline_selection_album_partial": "{succeeded} von {count} Medien zum Album hinzugefügt"
+  ,"timeline_selection_album_failed": "Ausgewählte Medien konnten nicht zum Album hinzugefügt werden"
 }

@@ -89,7 +89,7 @@ describe("tauriDesktopAdapter", () => {
     await albumsAdapter.getAlbums();
     await albumCatalogueAdapter.getAlbumCatalogue();
     await albumsAdapter.createAlbum("Summer");
-    await albumAssignmentAdapter.addAssetToAlbum("asset-1", "album-1");
+    await albumAssignmentAdapter.addAssetsToAlbum(["asset-1", "asset-2"], "album-1");
     await timelineAdapter.getTimelineBuckets();
     await timelineAdapter.getTimelineBucketAssets("2025-03-01T00:00:00.000Z");
     await tauriDesktopAdapter.getAssetDetails("asset-1");
@@ -148,7 +148,7 @@ describe("tauriDesktopAdapter", () => {
       ["get_albums"],
       ["get_album_catalogue"],
       ["create_album", { name: "Summer" }],
-      ["add_asset_to_album", { assetId: "asset-1", albumId: "album-1" }],
+      ["add_assets_to_album", { assetIds: ["asset-1", "asset-2"], albumId: "album-1" }],
       ["get_timeline_buckets"],
       ["get_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
       ["get_asset_details", { assetId: "asset-1" }],

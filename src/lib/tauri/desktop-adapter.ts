@@ -9,6 +9,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import type {
   Album,
+  AlbumAssignmentResult,
   AlbumCatalogueItem,
   AlbumTimeline,
   AssetDetails,
@@ -63,7 +64,7 @@ export interface AlbumsDesktopAdapter {
 }
 
 export interface AlbumAssignmentDesktopAdapter {
-  addAssetToAlbum(assetId: string, albumId: string): Promise<void>;
+  addAssetsToAlbum(assetIds: string[], albumId: string): Promise<AlbumAssignmentResult>;
 }
 
 export interface AlbumCatalogueDesktopAdapter {
@@ -178,7 +179,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getAlbums: () => invoke<Album[]>("get_albums"),
   getAlbumCatalogue: () => invoke<AlbumCatalogueItem[]>("get_album_catalogue"),
   createAlbum: (name) => invoke<Album>("create_album", { name }),
-  addAssetToAlbum: (assetId, albumId) => invoke<void>("add_asset_to_album", { assetId, albumId }),
+  addAssetsToAlbum: (assetIds, albumId) => invoke<AlbumAssignmentResult>("add_assets_to_album", { assetIds, albumId }),
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),

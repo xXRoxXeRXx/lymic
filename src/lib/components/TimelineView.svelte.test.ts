@@ -112,6 +112,86 @@ describe("TimelineView scrubber", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
+  it("starts selection from a thumbnail checkbox, prevents opening media, and exits with Escape", async () => {
+    render(TimelineView, { timeline });
+    const [photoCheckbox] = screen.getAllByRole("checkbox", { name: "Select asset" });
+
+    await fireEvent.click(photoCheckbox);
+
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+
+    await fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
+    expect(photoCheckbox).not.toBeChecked();
+  });
+
+  it("updates every selected asset as a favorite and ends selection", async () => {
+    const setAssetFavorite = vi.fn().mockResolvedValue(undefined);
+    render(TimelineView, { timeline, setAssetFavorite });
+    const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
+
+    await waitFor(() => expect(setAssetFavorite).toHaveBeenCalledTimes(2));
+    expect(setAssetFavorite).toHaveBeenNthCalledWith(1, "photo-1", true);
+    expect(setAssetFavorite).toHaveBeenNthCalledWith(2, "video-1", true);
+    expect(screen.getByRole("status")).toHaveTextContent("Updated 2 assets");
+    expect(screen.queryByText("2 selected")).not.toBeInTheDocument();
+  });
+
+  it("reports partial favorite updates after ending selection", async () => {
+    const setAssetFavorite = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("Network unavailable"));
+    render(TimelineView, { timeline, setAssetFavorite });
+    const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Updated 1 of 2 assets"));
+    expect(screen.queryByText("2 selected")).not.toBeInTheDocument();
+  });
+
+  it("adds every selected asset to the album chosen in the existing dialog with one batch action", async () => {
+    const catalogue = albumCatalogue();
+    const addAssetsToAlbum = vi.fn().mockResolvedValue({ succeeded: 2, failed: 0 });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
+    const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
+    const dialog = screen.getByRole("dialog", { name: "Add to album" });
+    await fireEvent.click(screen.getByRole("button", { name: "Summer" }));
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Add to album" }));
+
+    await waitFor(() => expect(addAssetsToAlbum).toHaveBeenCalledWith(["photo-1", "video-1"], "album-summer"));
+    expect(screen.getByRole("status")).toHaveTextContent("Added 2 assets to album");
+  });
+
+  it("reports partial batch album assignments", async () => {
+    const catalogue = albumCatalogue();
+    const addAssetsToAlbum = vi.fn().mockResolvedValue({ succeeded: 1, failed: 1 });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
+    const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
+    const dialog = screen.getByRole("dialog", { name: "Add to album" });
+    await fireEvent.click(screen.getByRole("button", { name: "Summer" }));
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Add to album" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Added 1 of 2 assets to album"));
+  });
+
   it("opens a photo in a lightbox with metadata and restores focus after closing", async () => {
     const getAssetDetails = vi.fn().mockResolvedValue({
       originalFileName: "IMG_0001.CR3",
@@ -185,8 +265,8 @@ describe("TimelineView scrubber", () => {
 
   it("assigns the open asset to a searched album and confirms success", async () => {
     const catalogue = albumCatalogue();
-    const addAssetToAlbum = vi.fn().mockResolvedValue(undefined);
-    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetToAlbum });
+    const addAssetsToAlbum = vi.fn().mockResolvedValue({ succeeded: 1, failed: 0 });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
@@ -199,15 +279,15 @@ describe("TimelineView scrubber", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Summer" }));
     await fireEvent.click(within(dialog).getByRole("button", { name: "Add to album" }));
 
-    await waitFor(() => expect(addAssetToAlbum).toHaveBeenCalledWith("photo-1", "album-summer"));
+    await waitFor(() => expect(addAssetsToAlbum).toHaveBeenCalledWith(["photo-1"], "album-summer"));
     expect(screen.queryByRole("dialog", { name: "Add to album" })).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Added to album");
   });
 
   it("creates and selects a new album before assigning the open asset", async () => {
     const catalogue = albumCatalogue();
-    const addAssetToAlbum = vi.fn().mockResolvedValue(undefined);
-    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetToAlbum });
+    const addAssetsToAlbum = vi.fn().mockResolvedValue({ succeeded: 1, failed: 0 });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
@@ -218,13 +298,13 @@ describe("TimelineView scrubber", () => {
     await fireEvent.click(within(dialog).getByRole("button", { name: "Add to album" }));
 
     await waitFor(() => expect(catalogue.create).toHaveBeenCalledWith("Holiday"));
-    await waitFor(() => expect(addAssetToAlbum).toHaveBeenCalledWith("photo-1", "album-created"));
+    await waitFor(() => expect(addAssetsToAlbum).toHaveBeenCalledWith(["photo-1"], "album-created"));
   });
 
   it("keeps the album picker open and reports a failed assignment", async () => {
     const catalogue = albumCatalogue();
-    const addAssetToAlbum = vi.fn().mockRejectedValue(new Error("Network unavailable"));
-    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetToAlbum });
+    const addAssetsToAlbum = vi.fn().mockRejectedValue(new Error("Network unavailable"));
+    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
@@ -309,12 +389,12 @@ describe("TimelineView scrubber", () => {
   });
 
   it("keeps the lightbox on its current asset while adding it to an album", async () => {
-    let resolveAssignment: (() => void) | undefined;
+    let resolveAssignment: ((result: { succeeded: number; failed: number }) => void) | undefined;
     const catalogue = albumCatalogue();
-    const addAssetToAlbum = vi.fn(() => new Promise<void>((resolve) => {
+    const addAssetsToAlbum = vi.fn(() => new Promise<{ succeeded: number; failed: number }>((resolve) => {
       resolveAssignment = resolve;
     }));
-    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetToAlbum });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
@@ -322,14 +402,14 @@ describe("TimelineView scrubber", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Summer" }));
     await fireEvent.click(within(picker).getByRole("button", { name: "Add to album" }));
 
-    await waitFor(() => expect(addAssetToAlbum).toHaveBeenCalledWith("photo-1", "album-summer"));
+    await waitFor(() => expect(addAssetsToAlbum).toHaveBeenCalledWith(["photo-1"], "album-summer"));
     expect(screen.getByRole("button", { name: "Close lightbox" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Previous asset" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next asset" })).toBeDisabled();
     await fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.getByRole("dialog", { name: "Media lightbox" })).toBeInTheDocument();
 
-    resolveAssignment?.();
+    resolveAssignment?.({ succeeded: 1, failed: 0 });
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Added to album"));
   });
 

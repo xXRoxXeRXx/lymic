@@ -1,11 +1,11 @@
 <script lang="ts">
   import { flushSync, onDestroy, untrack } from "svelte";
-  import { Album, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, Play, RefreshCw, X } from "lucide-svelte";
+  import { Album, Check, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, HeartOff, Info, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
-  import type { AssetDetails, TimelineAsset } from "../contracts";
+  import type { AlbumAssignmentResult, AssetDetails, TimelineAsset } from "../contracts";
   import { calculateMasonryLayout } from "./timeline-masonry";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
@@ -19,7 +19,7 @@
     chooseDownloadDestination?(originalFileName: string): Promise<string | null>;
     downloadAsset?(assetId: string, destinationPath: string): Promise<void>;
     albumCatalogue?: TargetAlbumCatalogue;
-    addAssetToAlbum?(assetId: string, albumId: string): Promise<void>;
+    addAssetsToAlbum?(assetIds: string[], albumId: string): Promise<AlbumAssignmentResult>;
     showScrubber?: boolean;
     emptyMessage?: string;
     loadErrorMessage?: string;
@@ -34,7 +34,7 @@
     chooseDownloadDestination = async () => null,
     downloadAsset = async () => {},
     albumCatalogue,
-    addAssetToAlbum = async () => {},
+    addAssetsToAlbum = async (assetIds) => ({ succeeded: assetIds.length, failed: 0 }),
     showScrubber = true,
     emptyMessage = "",
     loadErrorMessage = "",
@@ -70,6 +70,16 @@
   let selectedIndex = $state(-1);
   let opener = $state<HTMLElement | null>(null);
   let detailsGeneration = 0;
+  let selectedAssetIds = $state<Set<string>>(new Set());
+  let isApplyingSelection = $state(false);
+  let selectionResult = $state<{ action: "favorite" | "album"; succeeded: number; total: number } | null>(null);
+  let addToAlbumSource = $state<"lightbox" | "selection" | null>(null);
+  const selectionCount = $derived(selectedAssetIds.size);
+  const isSelectionMode = $derived(selectionCount > 0);
+  const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selectedAssetIds.has(asset.id)));
+  const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => isFavorite(asset)));
+  const hasNonFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => !isFavorite(asset)));
+  const isSelectionActionBusy = $derived(isApplyingSelection || isAddingToAlbum);
 
   $effect(() => {
     if (!activeTimeBucket || !scrubberMonths.includes(activeTimeBucket)) {
@@ -96,8 +106,14 @@
       favoriteOverrides = Object.fromEntries(
         Object.keys(updatingFavoriteAssetIds).map((assetId) => [assetId, favoriteOverrides[assetId]]),
       );
+      clearSelection();
       if (selectedAsset) loadAssetDetails(selectedAsset);
     });
+  });
+
+  $effect(() => {
+    timeline;
+    untrack(clearSelection);
   });
 
   function monthLabel(timeBucket: string) {
@@ -248,6 +264,54 @@
     return favoriteOverrides[asset.id] ?? asset.isFavorite;
   }
 
+  function isAssetSelected(assetId: string) {
+    return selectedAssetIds.has(assetId);
+  }
+
+  function toggleAssetSelection(assetId: string) {
+    if (selectedAssetIds.size === 0) selectionResult = null;
+    const nextSelectedAssetIds = new Set(selectedAssetIds);
+    if (nextSelectedAssetIds.has(assetId)) nextSelectedAssetIds.delete(assetId);
+    else nextSelectedAssetIds.add(assetId);
+    selectedAssetIds = nextSelectedAssetIds;
+  }
+
+  function clearSelection() {
+    selectedAssetIds = new Set();
+  }
+
+  function updateFavoriteState(assetId: string, isFavorite: boolean) {
+    favoriteOverrides = { ...favoriteOverrides, [assetId]: isFavorite };
+    const currentDetails = assetDetailsById.get(assetId);
+    if (currentDetails) {
+      const updatedDetails = { ...currentDetails, isFavorite };
+      assetDetailsById.set(assetId, updatedDetails);
+      if (selectedAsset?.id === assetId) assetDetails = updatedDetails;
+    }
+    if (selectedAsset?.id === assetId) selectedAsset = { ...selectedAsset, isFavorite };
+  }
+
+  async function applyFavoriteToSelection(isFavorite: boolean) {
+    const assetIds = [...selectedAssetIds];
+    if (assetIds.length === 0 || isSelectionActionBusy) return;
+
+    selectionResult = null;
+    isApplyingSelection = true;
+    let succeeded = 0;
+    for (const assetId of assetIds) {
+      try {
+        await setAssetFavorite(assetId, isFavorite);
+        updateFavoriteState(assetId, isFavorite);
+        succeeded += 1;
+      } catch {
+        // Continue so the result can accurately report a partial update.
+      }
+    }
+    isApplyingSelection = false;
+    clearSelection();
+    selectionResult = { action: "favorite", succeeded, total: assetIds.length };
+  }
+
   function loadAssetDetails(asset: TimelineAsset) {
     favoriteError = "";
     if (assetDetailsById.has(asset.id)) {
@@ -282,27 +346,15 @@
     if (updatingFavoriteAssetIds[assetId]) return;
     const previousFavorite = isFavorite(selectedAsset);
     const nextFavorite = !previousFavorite;
-    selectedAsset = { ...selectedAsset, isFavorite: nextFavorite };
-    favoriteOverrides = { ...favoriteOverrides, [assetId]: nextFavorite };
-    const currentDetails = assetDetailsById.get(assetId);
-    if (currentDetails) {
-      const updatedDetails = { ...currentDetails, isFavorite: nextFavorite };
-      assetDetailsById.set(assetId, updatedDetails);
-      assetDetails = updatedDetails;
-    }
+    updateFavoriteState(assetId, nextFavorite);
     favoriteError = "";
     updatingFavoriteAssetIds = { ...updatingFavoriteAssetIds, [assetId]: true };
 
     try {
       await setAssetFavorite(assetId, nextFavorite);
     } catch {
-      favoriteOverrides = { ...favoriteOverrides, [assetId]: previousFavorite };
-      const currentDetails = assetDetailsById.get(assetId);
-      const restoredDetails = currentDetails && { ...currentDetails, isFavorite: previousFavorite };
-      if (restoredDetails) assetDetailsById.set(assetId, restoredDetails);
+      updateFavoriteState(assetId, previousFavorite);
       if (selectedAsset?.id === assetId) {
-        selectedAsset = { ...selectedAsset, isFavorite: previousFavorite };
-        if (restoredDetails) assetDetails = restoredDetails;
         favoriteError = $t("timeline_favorite_update_error");
       }
     } finally {
@@ -335,19 +387,52 @@
     if (!selectedAsset || !albumCatalogue) return;
     clearAddToAlbumMessage();
     addToAlbumError = "";
+    addToAlbumSource = "lightbox";
+    isAddToAlbumOpen = true;
+  }
+
+  function openAddSelectionToAlbum() {
+    if (selectionCount === 0 || !albumCatalogue || isSelectionActionBusy) return;
+    selectionResult = null;
+    addToAlbumError = "";
+    addToAlbumSource = "selection";
     isAddToAlbumOpen = true;
   }
 
   async function assignSelectedAssetToAlbum(albumId: string) {
-    if (!selectedAsset || isAddingToAlbum) return;
+    if (isAddingToAlbum || !addToAlbumSource) return;
+
+    if (addToAlbumSource === "selection") {
+      const assetIds = [...selectedAssetIds];
+      if (assetIds.length === 0) return;
+
+      isAddingToAlbum = true;
+      let succeeded = 0;
+      try {
+        const result = await addAssetsToAlbum(assetIds, albumId);
+        succeeded = result.succeeded;
+      } catch {
+        // Transport failures leave every selected asset unassigned.
+      }
+      isAddingToAlbum = false;
+      isAddToAlbumOpen = false;
+      addToAlbumSource = null;
+      clearSelection();
+      selectionResult = { action: "album", succeeded, total: assetIds.length };
+      return;
+    }
+
+    if (!selectedAsset) return;
 
     const assetId = selectedAsset.id;
     addToAlbumError = "";
     isAddingToAlbum = true;
     try {
-      await addAssetToAlbum(assetId, albumId);
+      const result = await addAssetsToAlbum([assetId], albumId);
+      if (result.succeeded !== 1 || result.failed !== 0) throw new Error("Album assignment was not completed");
       if (selectedAsset?.id === assetId) {
         isAddToAlbumOpen = false;
+        addToAlbumSource = null;
         showAddToAlbumMessage();
       }
     } catch {
@@ -384,6 +469,11 @@
     loadAssetDetails(asset);
   }
 
+  function openAsset(asset: TimelineAsset, source: HTMLElement) {
+    if (isSelectionMode) return;
+    openLightbox(asset, source);
+  }
+
   function hasRealDimensions(asset: TimelineAsset, width: number | null, height: number | null) {
     if (width === null || height === null || width <= 0 || height <= 0) return false;
     if (assetDetails?.imageWidth !== null && assetDetails?.imageHeight !== null) return true;
@@ -408,6 +498,7 @@
     downloadMessage = "";
     downloadError = "";
     isAddToAlbumOpen = false;
+    addToAlbumSource = null;
     clearAddToAlbumMessage();
     addToAlbumError = "";
     selectedIndex = -1;
@@ -438,8 +529,13 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (!selectedAsset) return;
     if (isAddToAlbumOpen) return;
+    if (isSelectionMode && event.key === "Escape") {
+      event.preventDefault();
+      clearSelection();
+      return;
+    }
+    if (!selectedAsset) return;
     if (event.key === "Escape") {
       event.preventDefault();
       if (isInfoOpen) isInfoOpen = false;
@@ -514,6 +610,33 @@
       <RefreshCw class="h-4 w-4 {timeline.isRefreshing ? 'animate-spin' : ''}" />
     </button>
   </div>
+  {#if isSelectionMode}
+    <div class="mb-3 mr-16 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 shadow-sm dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-100 sm:flex sm:flex-wrap">
+      <span class="min-w-0 truncate font-medium sm:mr-auto">{$t("timeline_selection_count", { values: { count: selectionCount.toLocaleString(numberLocale) } })}</span>
+      <div class="col-span-2 flex flex-wrap justify-end gap-1 border-t border-blue-200 pt-2 dark:border-blue-900/70 sm:contents sm:border-0 sm:pt-0">
+        {#if hasNonFavoriteSelection}
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_favorite")} aria-label={$t("timeline_add_favorite")} disabled={isSelectionActionBusy} onclick={() => void applyFavoriteToSelection(true)}><Heart class="h-4 w-4" /></button>
+        {/if}
+        {#if hasFavoriteSelection}
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_remove_favorite")} aria-label={$t("timeline_remove_favorite")} disabled={isSelectionActionBusy} onclick={() => void applyFavoriteToSelection(false)}><HeartOff class="h-4 w-4" /></button>
+        {/if}
+        {#if albumCatalogue}
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isSelectionActionBusy} onclick={openAddSelectionToAlbum}><Album class="h-4 w-4" /></button>
+        {/if}
+        <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_finish")} aria-label={$t("timeline_selection_finish")} disabled={isSelectionActionBusy} onclick={clearSelection}><X class="h-4 w-4" /></button>
+      </div>
+    </div>
+  {/if}
+  {#if selectionResult}
+    {@const resultKey = selectionResult.succeeded === selectionResult.total
+      ? `timeline_selection_${selectionResult.action}_success`
+      : selectionResult.succeeded === 0
+        ? `timeline_selection_${selectionResult.action}_failed`
+        : `timeline_selection_${selectionResult.action}_partial`}
+    <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {selectionResult.succeeded === 0 ? 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'}" role={selectionResult.succeeded === 0 ? "alert" : "status"}>
+      {$t(resultKey, { values: { count: selectionResult.total.toLocaleString(numberLocale), succeeded: selectionResult.succeeded.toLocaleString(numberLocale) } })}
+    </p>
+  {/if}
   <div bind:this={viewport} use:measureViewport class="min-h-0 flex-1 overflow-y-auto pr-16 scrollbar-none" aria-label={$t("timeline_title")} onscroll={syncActiveBucket}>
     <div class="space-y-8">
       {#each timeline.buckets as bucket (bucket.timeBucket)}
@@ -533,7 +656,8 @@
               {#each layout.columns as column, columnIndex (columnIndex)}
                 <div class="flex min-w-0 flex-1 flex-col gap-2">
                   {#each column as item (item.asset.id)}
-                    <button type="button" class="relative overflow-hidden rounded-lg bg-slate-200 text-left dark:bg-zinc-800" aria-label={item.asset.type === "VIDEO" ? $t("timeline_open_video") : $t("timeline_open_photo")} onclick={(event) => openLightbox(item.asset, event.currentTarget)}>
+                    <div class="group relative overflow-hidden rounded-lg bg-slate-200 dark:bg-zinc-800">
+                      <button type="button" class="block w-full text-left" aria-label={item.asset.type === "VIDEO" ? $t("timeline_open_video") : $t("timeline_open_photo")} onclick={(event) => openAsset(item.asset, event.currentTarget)}>
                       <img src={protocolSrc("lymic-thumb", "asset", item.asset.id)} alt="" loading="lazy" width={item.asset.width} height={item.asset.height} style:height={`${item.height}px`} class="w-full object-cover" />
                       {#if isFavorite(item.asset)}
                         <span class="absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white" aria-label={$t("timeline_favorite_marker")}><Heart class="h-3.5 w-3.5 fill-current" /></span>
@@ -541,7 +665,14 @@
                       {#if item.asset.type === "VIDEO"}
                         <span class="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white"><Play class="h-3 w-3 fill-current" />{formatDuration(item.asset.duration)}</span>
                       {/if}
-                    </button>
+                      </button>
+                      <label class="absolute left-0 top-0 z-10 flex h-11 w-11 cursor-pointer items-center justify-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 {isSelectionMode || isAssetSelected(item.asset.id) ? 'opacity-100' : ''}">
+                        <input type="checkbox" class="peer sr-only" aria-label={$t("timeline_select_asset")} checked={isAssetSelected(item.asset.id)} onchange={() => toggleAssetSelection(item.asset.id)} />
+                        <span class="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-black/45 text-white shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 peer-focus-visible:ring-offset-2 {isAssetSelected(item.asset.id) ? 'border-blue-600 bg-blue-600 dark:border-sky-500 dark:bg-sky-500' : ''}">
+                          {#if isAssetSelected(item.asset.id)}<Check class="h-3 w-3 stroke-[3]" />{/if}
+                        </span>
+                      </label>
+                    </div>
                   {/each}
                 </div>
               {/each}
@@ -658,14 +789,15 @@
       </div>
     </dialog>
   </div>
-  {#if albumCatalogue}
-    <AddToAlbumModal
-      isOpen={isAddToAlbumOpen}
-      catalogue={albumCatalogue}
-      isAssigning={isAddingToAlbum}
-      assignmentError={addToAlbumError}
-      onConfirm={(albumId) => void assignSelectedAssetToAlbum(albumId)}
-      onCancel={() => { if (!isAddingToAlbum) { isAddToAlbumOpen = false; addToAlbumError = ""; } }}
-    />
-  {/if}
+{/if}
+
+{#if albumCatalogue}
+  <AddToAlbumModal
+    isOpen={isAddToAlbumOpen}
+    catalogue={albumCatalogue}
+    isAssigning={isAddingToAlbum}
+    assignmentError={addToAlbumError}
+    onConfirm={(albumId) => void assignSelectedAssetToAlbum(albumId)}
+    onCancel={() => { if (!isAddingToAlbum) { isAddToAlbumOpen = false; addToAlbumSource = null; addToAlbumError = ""; } }}
+  />
 {/if}

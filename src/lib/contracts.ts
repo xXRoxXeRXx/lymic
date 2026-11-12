@@ -36,6 +36,11 @@ export interface Album {
   albumName: string;
 }
 
+export interface AlbumAssignmentResult {
+  succeeded: number;
+  failed: number;
+}
+
 export interface AlbumCatalogueItem extends Album {
   albumThumbnailAssetId: string | null;
   assetCount: number;
