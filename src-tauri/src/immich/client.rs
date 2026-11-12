@@ -60,6 +60,27 @@ pub(crate) struct AssetResponse {
     pub body: Vec<u8>,
 }
 
+pub(crate) struct ArchiveDownload {
+    response: Response,
+    suggested_file_name: String,
+}
+
+impl ArchiveDownload {
+    pub(crate) fn suggested_file_name(&self) -> &str {
+        &self.suggested_file_name
+    }
+
+    pub(crate) async fn save_to(self, destination_path: &Path) -> Result<(), String> {
+        ImmichClient::validate_download_destination(destination_path)?;
+        stream_response_to_destination(
+            self.response,
+            destination_path,
+            "Failed to download archive",
+        )
+        .await
+    }
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AssetDetails {
@@ -134,6 +155,60 @@ fn original_file_name(value: Option<String>) -> Option<String> {
             && !file_name.chars().any(char::is_control))
         .then(|| file_name.to_string())
     })
+}
+
+fn content_disposition_file_name(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(reqwest::header::CONTENT_DISPOSITION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| {
+            value.split(';').find_map(|parameter| {
+                let (name, value) = parameter.trim().split_once('=')?;
+                name.eq_ignore_ascii_case("filename")
+                    .then(|| value.trim().trim_matches('"').to_string())
+            })
+        })
+        .and_then(|value| original_file_name(Some(value)))
+}
+
+async fn stream_response_to_destination(
+    mut response: Response,
+    destination_path: &Path,
+    error_prefix: &str,
+) -> Result<(), String> {
+    let temporary_path =
+        destination_path.with_file_name(format!(".lymic-download-{}.tmp", uuid::Uuid::new_v4()));
+    let result = async {
+        let mut destination = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary_path)
+            .await
+            .map_err(|error| format!("Failed to create download destination: {error}"))?;
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|error| format!("{error_prefix}: {error}"))?
+        {
+            destination
+                .write_all(&chunk)
+                .await
+                .map_err(|error| format!("Failed to write download destination: {error}"))?;
+        }
+        destination
+            .flush()
+            .await
+            .map_err(|error| format!("Failed to write download destination: {error}"))?;
+        drop(destination);
+        tokio::fs::rename(&temporary_path, destination_path)
+            .await
+            .map_err(|error| format!("Failed to finalize download: {error}"))
+    }
+    .await;
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(&temporary_path).await;
+    }
+    result
 }
 
 impl From<AssetDetailsResponse> for AssetDetails {
@@ -548,40 +623,40 @@ impl ImmichClient {
             ));
         }
 
-        let temporary_path = destination_path
-            .with_file_name(format!(".lymic-download-{}.tmp", uuid::Uuid::new_v4()));
-        let result = async {
-            let mut destination = tokio::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&temporary_path)
-                .await
-                .map_err(|error| format!("Failed to create download destination: {error}"))?;
-            let mut response = response;
-            while let Some(chunk) = response
-                .chunk()
-                .await
-                .map_err(|error| format!("Failed to download asset: {error}"))?
-            {
-                destination
-                    .write_all(&chunk)
-                    .await
-                    .map_err(|error| format!("Failed to write download destination: {error}"))?;
-            }
-            destination
-                .flush()
-                .await
-                .map_err(|error| format!("Failed to write download destination: {error}"))?;
-            drop(destination);
-            tokio::fs::rename(&temporary_path, destination_path)
-                .await
-                .map_err(|error| format!("Failed to finalize download: {error}"))
+        stream_response_to_destination(response, destination_path, "Failed to download asset").await
+    }
+
+    pub(crate) async fn prepare_archive_download(
+        &self,
+        asset_ids: &[String],
+    ) -> Result<ArchiveDownload, String> {
+        if asset_ids.is_empty() {
+            return Err("At least one asset is required for an archive download".to_string());
         }
-        .await;
-        if result.is_err() {
-            let _ = tokio::fs::remove_file(&temporary_path).await;
+        for asset_id in asset_ids {
+            Self::validate_path_segment(asset_id, "asset ID")?;
         }
-        result
+        let response = self
+            .client
+            .post(self.endpoint_url("download/archive"))
+            .header("x-api-key", &self.api_key)
+            .header(reqwest::header::ACCEPT, "application/octet-stream")
+            .json(&json!({ "assetIds": asset_ids }))
+            .send()
+            .await
+            .map_err(|error| format!("Failed to download archive: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Failed to download archive: {}",
+                response_status_error(response).await?
+            ));
+        }
+        let suggested_file_name = content_disposition_file_name(response.headers())
+            .unwrap_or_else(|| "immich-download.zip".to_string());
+        Ok(ArchiveDownload {
+            response,
+            suggested_file_name,
+        })
     }
 
     fn validate_download_destination(destination_path: &Path) -> Result<(), String> {
@@ -874,6 +949,49 @@ mod tests {
             .download_asset("photo-1", &destination)
             .await
             .unwrap();
+
+        assert_eq!(
+            tokio::fs::read(&destination).await.unwrap(),
+            b"first-second"
+        );
+        std::fs::remove_file(destination).unwrap();
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn streams_an_immich_archive_to_a_valid_destination_path() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request = read_http_request(&mut stream).await;
+            let request = String::from_utf8_lossy(&request);
+            assert!(request.starts_with("POST /api/download/archive HTTP/1.1"));
+            assert!(request.contains("x-api-key: test-key"));
+            assert!(request.contains("{\"assetIds\":[\"photo-1\",\"video-1\"]}"));
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\ncontent-type: application/octet-stream\r\ncontent-disposition: attachment; filename=../../Pictures/immich-export.zip\r\ncontent-length: 12\r\nconnection: close\r\n\r\nfirst-second",
+                )
+                .await
+                .unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+        let destination = temporary_file(b"stale");
+
+        let archive = client
+            .prepare_archive_download(&["photo-1".to_string(), "video-1".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(archive.suggested_file_name(), "immich-export.zip");
+        archive.save_to(&destination).await.unwrap();
 
         assert_eq!(
             tokio::fs::read(&destination).await.unwrap(),

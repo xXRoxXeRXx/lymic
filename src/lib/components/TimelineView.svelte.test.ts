@@ -128,6 +128,110 @@ describe("TimelineView scrubber", () => {
     expect(photoCheckbox).not.toBeChecked();
   });
 
+  it("downloads one selected asset through the existing original-download path", async () => {
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: "IMG_0001.CR3",
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
+      isFavorite: false,
+    });
+    const chooseDownloadDestination = vi.fn().mockResolvedValue("C:/Downloads/IMG_0001.CR3");
+    const downloadAsset = vi.fn().mockResolvedValue(undefined);
+    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
+
+    await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
+    await fireEvent.click(screen.getByRole("button", { name: "Download" }));
+
+    await waitFor(() => expect(downloadAsset).toHaveBeenCalledWith("photo-1", "C:/Downloads/IMG_0001.CR3"));
+    expect(chooseDownloadDestination).toHaveBeenCalledWith("IMG_0001.CR3");
+    expect(screen.getByRole("status")).toHaveTextContent("Downloaded 1 assets");
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+  });
+
+  it("reuses cached details when downloading one selected asset", async () => {
+    const getAssetDetails = vi.fn().mockResolvedValue({
+      originalFileName: "IMG_0001.CR3",
+      cameraMake: null,
+      cameraModel: null,
+      city: null,
+      state: null,
+      country: null,
+      fNumber: null,
+      exposureTime: null,
+      iso: null,
+      focalLength: null,
+      lensModel: null,
+      imageWidth: null,
+      imageHeight: null,
+      fileSize: null,
+      isFavorite: false,
+    });
+    const chooseDownloadDestination = vi.fn().mockResolvedValue("C:/Downloads/IMG_0001.CR3");
+    const downloadAsset = vi.fn().mockResolvedValue(undefined);
+    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    await screen.findByRole("button", { name: "Download original" });
+    await fireEvent.click(screen.getByRole("button", { name: "Close lightbox" }));
+    await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
+    await fireEvent.click(screen.getByRole("button", { name: "Download" }));
+
+    await waitFor(() => expect(downloadAsset).toHaveBeenCalledWith("photo-1", "C:/Downloads/IMG_0001.CR3"));
+    expect(getAssetDetails).toHaveBeenCalledOnce();
+  });
+
+  it("downloads multiple selected assets as an Immich archive", async () => {
+    const downloadArchive = vi.fn().mockResolvedValue(undefined);
+    render(TimelineView, { timeline, downloadArchive });
+
+    const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+    await fireEvent.click(screen.getByRole("button", { name: "Download" }));
+
+    await waitFor(() => expect(downloadArchive).toHaveBeenCalledWith(["photo-1", "video-1"]));
+    expect(screen.getByRole("status")).toHaveTextContent("Downloaded 2 assets");
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+  });
+
+  it("does not start a selected single-asset download when the save dialog is cancelled", async () => {
+    const getAssetDetails = vi.fn().mockResolvedValue({ originalFileName: "IMG_0001.CR3" });
+    const chooseDownloadDestination = vi.fn().mockResolvedValue(null);
+    const downloadAsset = vi.fn();
+    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
+
+    await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
+    await fireEvent.click(screen.getByRole("button", { name: "Download" }));
+
+    await waitFor(() => expect(chooseDownloadDestination).toHaveBeenCalledWith("IMG_0001.CR3"));
+    expect(downloadAsset).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("reports a failed selected archive download", async () => {
+    const downloadArchive = vi.fn().mockRejectedValue(new Error("Network unavailable"));
+    render(TimelineView, { timeline, downloadArchive });
+
+    const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+    await fireEvent.click(screen.getByRole("button", { name: "Download" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not download selected assets"));
+  });
+
   it("updates every selected asset as a favorite and ends selection", async () => {
     const setAssetFavorite = vi.fn().mockResolvedValue(undefined);
     render(TimelineView, { timeline, setAssetFavorite });

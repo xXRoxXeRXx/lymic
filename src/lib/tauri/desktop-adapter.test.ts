@@ -96,6 +96,7 @@ describe("tauriDesktopAdapter", () => {
     await tauriDesktopAdapter.setAssetFavorite("asset-1", true);
     await tauriDesktopAdapter.chooseDownloadDestination("IMG_0001.CR3");
     await tauriDesktopAdapter.downloadAsset("asset-1", "C:/Downloads/IMG_0001.CR3");
+    await tauriDesktopAdapter.downloadArchive(["asset-1", "asset-2"]);
     await albumTimelineAdapter.getAlbumTimeline("album-1");
     await tauriDesktopAdapter.getPersonTimelineBuckets("person-1");
     await tauriDesktopAdapter.getPersonTimelineBucketAssets("person-1", "2025-03-01T00:00:00.000Z");
@@ -154,6 +155,7 @@ describe("tauriDesktopAdapter", () => {
       ["get_asset_details", { assetId: "asset-1" }],
       ["set_asset_favorite", { assetId: "asset-1", isFavorite: true }],
       ["download_asset", { assetId: "asset-1", destinationPath: "C:/Downloads/IMG_0001.CR3" }],
+      ["download_archive", { assetIds: ["asset-1", "asset-2"] }],
       ["get_album_timeline", { albumId: "album-1" }],
       ["get_person_timeline_buckets", { personId: "person-1" }],
       ["get_person_timeline_bucket_assets", { personId: "person-1", timeBucket: "2025-03-01T00:00:00.000Z" }],

@@ -81,6 +81,7 @@ export interface AssetDesktopAdapter {
   setAssetFavorite(assetId: string, isFavorite: boolean): Promise<void>;
   chooseDownloadDestination(originalFileName: string): Promise<string | null>;
   downloadAsset(assetId: string, destinationPath: string): Promise<void>;
+  downloadArchive(assetIds: string[]): Promise<void>;
 }
 
 export interface AlbumTimelineDesktopAdapter {
@@ -186,6 +187,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   setAssetFavorite: (assetId, isFavorite) => invoke<void>("set_asset_favorite", { assetId, isFavorite }),
   chooseDownloadDestination: (originalFileName) => save({ defaultPath: originalFileName }),
   downloadAsset: (assetId, destinationPath) => invoke<void>("download_asset", { assetId, destinationPath }),
+  downloadArchive: (assetIds) => invoke<void>("download_archive", { assetIds }),
   getAlbumTimeline: (albumId) => invoke<AlbumTimeline>("get_album_timeline", { albumId }),
   getPeople: (page, size) => invoke<PeoplePage>("get_people", { page, size }),
   getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),

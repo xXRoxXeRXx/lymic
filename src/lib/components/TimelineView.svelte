@@ -18,6 +18,7 @@
     setAssetFavorite?(assetId: string, isFavorite: boolean): Promise<void>;
     chooseDownloadDestination?(originalFileName: string): Promise<string | null>;
     downloadAsset?(assetId: string, destinationPath: string): Promise<void>;
+    downloadArchive?(assetIds: string[]): Promise<void>;
     albumCatalogue?: TargetAlbumCatalogue;
     addAssetsToAlbum?(assetIds: string[], albumId: string): Promise<AlbumAssignmentResult>;
     showScrubber?: boolean;
@@ -33,6 +34,7 @@
     setAssetFavorite = async () => {},
     chooseDownloadDestination = async () => null,
     downloadAsset = async () => {},
+    downloadArchive = async () => {},
     albumCatalogue,
     addAssetsToAlbum = async (assetIds) => ({ succeeded: assetIds.length, failed: 0 }),
     showScrubber = true,
@@ -72,14 +74,15 @@
   let detailsGeneration = 0;
   let selectedAssetIds = $state<Set<string>>(new Set());
   let isApplyingSelection = $state(false);
-  let selectionResult = $state<{ action: "favorite" | "album"; succeeded: number; total: number } | null>(null);
+  let isDownloadingSelection = $state(false);
+  let selectionResult = $state<{ action: "favorite" | "album" | "download"; succeeded: number; total: number } | null>(null);
   let addToAlbumSource = $state<"lightbox" | "selection" | null>(null);
   const selectionCount = $derived(selectedAssetIds.size);
   const isSelectionMode = $derived(selectionCount > 0);
   const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selectedAssetIds.has(asset.id)));
   const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => isFavorite(asset)));
   const hasNonFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => !isFavorite(asset)));
-  const isSelectionActionBusy = $derived(isApplyingSelection || isAddingToAlbum);
+  const isSelectionActionBusy = $derived(isApplyingSelection || isAddingToAlbum || isDownloadingSelection);
 
   $effect(() => {
     if (!activeTimeBucket || !scrubberMonths.includes(activeTimeBucket)) {
@@ -269,7 +272,7 @@
   }
 
   function toggleAssetSelection(assetId: string) {
-    if (selectedAssetIds.size === 0) selectionResult = null;
+    selectionResult = null;
     const nextSelectedAssetIds = new Set(selectedAssetIds);
     if (nextSelectedAssetIds.has(assetId)) nextSelectedAssetIds.delete(assetId);
     else nextSelectedAssetIds.add(assetId);
@@ -310,6 +313,35 @@
     isApplyingSelection = false;
     clearSelection();
     selectionResult = { action: "favorite", succeeded, total: assetIds.length };
+  }
+
+  async function downloadSelection() {
+    const assetIds = [...selectedAssetIds];
+    if (assetIds.length === 0 || isSelectionActionBusy) return;
+
+    selectionResult = null;
+    isDownloadingSelection = true;
+    try {
+      if (assetIds.length === 1) {
+        const assetId = assetIds[0];
+        let details = assetDetailsById.get(assetId);
+        if (!assetDetailsById.has(assetId)) {
+          details = await getAssetDetails(assetId);
+          assetDetailsById.set(assetId, details);
+        }
+        if (!details?.originalFileName) throw new Error("Original file name is unavailable");
+        const destinationPath = await chooseDownloadDestination(details.originalFileName);
+        if (!destinationPath) return;
+        await downloadAsset(assetId, destinationPath);
+      } else {
+        await downloadArchive(assetIds);
+      }
+      selectionResult = { action: "download", succeeded: assetIds.length, total: assetIds.length };
+    } catch {
+      selectionResult = { action: "download", succeeded: 0, total: assetIds.length };
+    } finally {
+      isDownloadingSelection = false;
+    }
   }
 
   function loadAssetDetails(asset: TimelineAsset) {
@@ -614,6 +646,7 @@
     <div class="mb-3 mr-16 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 shadow-sm dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-100 sm:flex sm:flex-wrap">
       <span class="min-w-0 truncate font-medium sm:mr-auto">{$t("timeline_selection_count", { values: { count: selectionCount.toLocaleString(numberLocale) } })}</span>
       <div class="col-span-2 flex flex-wrap justify-end gap-1 border-t border-blue-200 pt-2 dark:border-blue-900/70 sm:contents sm:border-0 sm:pt-0">
+        <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_download")} aria-label={$t("timeline_selection_download")} disabled={isSelectionActionBusy} onclick={() => void downloadSelection()}><Download class="h-4 w-4 {isDownloadingSelection ? 'animate-spin' : ''}" /></button>
         {#if hasNonFavoriteSelection}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_favorite")} aria-label={$t("timeline_add_favorite")} disabled={isSelectionActionBusy} onclick={() => void applyFavoriteToSelection(true)}><Heart class="h-4 w-4" /></button>
         {/if}
