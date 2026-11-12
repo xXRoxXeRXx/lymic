@@ -41,9 +41,6 @@ sources:
   - id: openwiki-source-fd5e4aa90e3b24f760c796f0
     resource: repo://src-tauri/src/sync/retry.rs
 generated: { by: "openwiki/0.7.2", at: "2026-11-09T18:02:27.157Z" }
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-11-09T18:02:27.157Z
 ---
 
 # Immich API Integration

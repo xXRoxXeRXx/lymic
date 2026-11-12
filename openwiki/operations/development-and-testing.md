@@ -3,9 +3,6 @@ type: operations guide
 title: Development and Testing
 description: Narrow-to-broad development verification for the SvelteKit and Rust/Tauri desktop application. Covers local toolchains, test-layer boundaries, IPC contracts, desktop smoke tests, and release CI gates.
 tags: [development, testing, validation, tauri, operations]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-11-09T18:02:27.157Z
 sources:
   - id: openwiki-source-4d1d392666be6dfdd7a91a2e
     resource: repo://.github/workflows/release.yml
