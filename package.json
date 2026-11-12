@@ -39,6 +39,7 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.14.1",
     "lucide-svelte": "^1.0.1",
+    "maplibre-gl": "^6.18.0",
     "svelte-i18n": "^4.0.1"
   },
   "devDependencies": {

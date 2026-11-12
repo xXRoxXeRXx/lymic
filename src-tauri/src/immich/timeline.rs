@@ -656,6 +656,7 @@ mod tests {
             assert_eq!(
                 client.get_asset_details("asset-1").await.unwrap(),
                 AssetDetails {
+                    asset_type: None,
                     original_file_name: None,
                     is_favorite: false,
                     camera_make: None,

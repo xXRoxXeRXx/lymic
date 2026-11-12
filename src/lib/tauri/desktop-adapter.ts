@@ -8,6 +8,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import type {
+  MapMarker,
   Album,
   AlbumAssignmentResult,
   AlbumCatalogueItem,
@@ -69,6 +70,10 @@ export interface AlbumAssignmentDesktopAdapter {
 
 export interface AlbumCatalogueDesktopAdapter {
   getAlbumCatalogue(): Promise<AlbumCatalogueItem[]>;
+}
+
+export interface MapDesktopAdapter {
+  getMapMarkers(): Promise<MapMarker[]>;
 }
 
 export interface TimelineDesktopAdapter {
@@ -137,6 +142,7 @@ export interface DesktopAdapter
     AlbumAssignmentDesktopAdapter,
     AlbumCatalogueDesktopAdapter,
     TimelineDesktopAdapter,
+    MapDesktopAdapter,
     AssetDesktopAdapter,
     AlbumTimelineDesktopAdapter,
     PeopleDesktopAdapter,
@@ -181,6 +187,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getAlbumCatalogue: () => invoke<AlbumCatalogueItem[]>("get_album_catalogue"),
   createAlbum: (name) => invoke<Album>("create_album", { name }),
   addAssetsToAlbum: (assetIds, albumId) => invoke<AlbumAssignmentResult>("add_assets_to_album", { assetIds, albumId }),
+  getMapMarkers: () => invoke<MapMarker[]>("get_map_markers"),
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),

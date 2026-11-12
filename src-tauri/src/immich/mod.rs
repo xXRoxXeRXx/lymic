@@ -14,3 +14,6 @@ pub(crate) use ids::{AlbumId, RemoteAssetId};
 pub(crate) use people::PeoplePage;
 pub(crate) use timeline::{AlbumTimeline, TimelineAsset, TimelineBucket};
 pub(crate) use upload::SidecarDirectoryCache;
+
+mod map;
+pub(crate) use map::MapMarker;

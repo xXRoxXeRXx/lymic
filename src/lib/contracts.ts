@@ -67,6 +67,7 @@ export interface TimelineAsset {
 }
 
 export interface AssetDetails {
+  assetType?: string | null;
   originalFileName: string | null;
   isFavorite: boolean;
   cameraMake: string | null;
@@ -165,3 +166,5 @@ export interface LoginRequest {
 }
 
 export type ReleaseChannel = "github" | "store";
+
+export interface MapMarker { id: string; lat: number; lon: number; }

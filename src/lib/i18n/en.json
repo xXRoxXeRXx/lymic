@@ -1,4 +1,12 @@
 {
+  "map_title": "Map",
+  "map_open_asset": "Open asset",
+  "map_loading": "Loading map locations...",
+  "map_permission": "Map access denied. Configure your API key with map.read and asset.read permissions.",
+  "map_error": "Could not load map locations.",
+  "map_stale": "Showing previous locations.",
+  "map_empty": "No assets with locations found.",
+  "map_provider_error": "The background map could not be loaded.",
   "dashboard": "Synchronization",
   "timeline_title": "Photos",
   "timeline_offline": "Photo Timeline is offline. Showing cached photos.",
