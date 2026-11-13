@@ -1,8 +1,11 @@
 ---
 type: operations guide
-title: Development and Testing
-description: Narrow-to-broad development verification for the SvelteKit and Rust/Tauri desktop application. Covers local toolchains, test-layer boundaries, IPC contracts, desktop smoke tests, and release CI gates.
-tags: [development, testing, validation, tauri, operations]
+title: Development, Verification, and Contract Tests
+description: Executable contributor workflow for the SvelteKit and Rust/Tauri application, from local checks through IPC contracts, desktop smoke tests, fixtures, and release validation.
+tags: [development, testing, validation, contracts, tauri, operations]
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-11-13T15:48:39.594Z
 sources:
   - id: openwiki-source-4d1d392666be6dfdd7a91a2e
     resource: repo://.github/workflows/release.yml
@@ -10,6 +13,10 @@ sources:
     resource: repo://docs/agents/application-map.md
   - id: openwiki-source-5b54a58d1b51cd490b0e7162
     resource: repo://package.json
+  - id: openwiki-source-70a86944cdf6e56b53b5d31a
+    resource: repo://scripts/map-fixtures/README.md
+  - id: openwiki-source-74824d3a283d494eca30fc02
+    resource: repo://scripts/map-fixtures/serve.mjs
   - id: openwiki-source-00ff4b2512b6dbfa268cbfa4
     resource: repo://src-tauri/capabilities/default.json
   - id: openwiki-source-ca67060e890937010b96de80
@@ -38,10 +45,10 @@ sources:
     resource: repo://src/site.test.ts
   - id: openwiki-source-581dc5746c844c4ee0b781c7
     resource: repo://vite.config.js
-generated: { by: "openwiki/0.7.2", at: "2026-11-09T18:02:27.157Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-13T15:48:39.594Z" }
 ---
 
-# Development and Testing
+# Development, Verification, and Contract Tests
 
 Lymic has two executable layers: a SvelteKit/TypeScript webview built by Vite and a Rust/Tauri desktop host in `src-tauri/`. Start with the narrowest test that can falsify a change, then cross the desktop boundary when correctness depends on native commands, permissions, the filesystem, credentials, or packaging.
 
@@ -53,7 +60,7 @@ Install the lockfile-resolved frontend dependencies:
 npm ci
 ```
 
-The Rust crate is `src-tauri/Cargo.toml`; commands must name that manifest. The frontend scripts provide static checking, one-shot Vitest, Vite development, and the Tauri CLI:
+The repository manifest defines the npm scripts below and declares the Tauri CLI as a development dependency. `src-tauri/Cargo.toml` is the Rust crate manifest. The handoff commands also assume a locally available Rust toolchain with `cargo`, `rustfmt`, and Clippy; the manifest does not install those tools or establish that they are available on a contributor's machine.
 
 | Need | Command | Boundary covered |
 | --- | --- | --- |
@@ -105,6 +112,26 @@ Vitest runs in `jsdom`. Controller tests inject mocked desktop adapters and Taur
 
 `src/site.test.ts` is also a repository-content suite: it reads the landing, privacy, support, Store listing, Flight-validation, and release-record files and checks required copy, links, metadata, and assets. It protects release collateral, not browser rendering or Store submission.
 
+## Map fixtures and manual performance probing
+
+The map-fixture generator produces deterministic UTF-8 Immich marker responses with 300,000 valid, uniquely identified locations. `distributed` exercises global distribution, zero coordinates, both sides of the antimeridian, and high latitudes; `regional` clusters points around Berlin; `identical` puts every point at one coordinate, while `dense` remains its alias. These synthetic datasets are for functional and profiling exploration, not a frame-rate or memory guarantee; invalid coordinates require separate tests.
+
+On Windows PowerShell, retain `cmd /c` when redirecting the generator so the JSON fixture is UTF-8 rather than PowerShell's UTF-16 output:
+
+```powershell
+cmd /c "node scripts/map-fixtures/generate.mjs distributed > distributed.json"
+cmd /c "node scripts/map-fixtures/generate.mjs regional > regional.json"
+cmd /c "node scripts/map-fixtures/generate.mjs identical > identical.json"
+```
+
+Run the loopback-only server against a generated fixture, optionally with a non-private MP4 for odd-numbered video assets:
+
+```powershell
+node scripts/map-fixtures/serve.mjs "$env:TEMP\identical.json" "$env:TEMP\fixture.mp4"
+```
+
+Test a packaged application in an isolated OS user profile against `http://127.0.0.1:3001`, explicitly allowing loopback HTTP and using API key `fixture-key`. The server implements only the current-user, marker, asset-detail, thumbnail, original-media, and favorite endpoints; it returns empty timeline and album data and returns 404 for other endpoints. Favorite state lasts only for the server process. Its request and thumbnail-concurrency counters help inspect the test run, but cannot observe WebView work or cache hits. Do not use a real account's location data as a fixture.
+
 ## Durable synchronization and removable-media tests
 
 Database tests create isolated, single-connection in-memory SQLite pools with foreign keys enabled; tests that need schema behavior run the production migrations. They cover observable persistence contracts such as recovery of `RUNNING` work as `PAUSED`, ordered queue admission and duplicate handling, retry and terminal accounting, transactional rollback of uploaded-unit persistence, and repair of a migration-incompatible database while preserving salvageable folder settings and removable bindings.
@@ -141,7 +168,7 @@ Run `npm run tauri dev` when changing IPC, startup, native permissions, dialogs,
 
 The repository identifies migrations, pause/recovery, credential handling, queue retry, duplicates, and target-album failures as high-risk behavior. Validate the observable outcome for those paths, not only compilation. For watched folders and removable media, test a changed mount location, removal, return, watcher reconciliation, and rescan. For synchronization, include unavailable or invalid credentials, a failed upload followed by retry, duplicate candidates, and target-album failure. Related operational behavior is described in [Synchronization](../workflows/synchronization.md) and [Watched Folders](../workflows/watched-folders.md).
 
-Review configuration with its dependent code: `vite.config.js` owns Tauri-facing Vite server behavior and the `jsdom` test environment; `src-tauri/tauri.conf.json` couples frontend commands and output to packaging; and `src-tauri/capabilities/default.json` is the native permission boundary. JavaScript imports do not themselves grant a Tauri plugin permission.
+Review configuration with its dependent code: `vite.config.js` owns Tauri-facing Vite server behavior and the `jsdom` test environment; `src-tauri/tauri.conf.json` couples frontend commands and output to packaging; and `src-tauri/capabilities/default.json` is the native permission boundary. JavaScript imports do not themselves grant a Tauri plugin permission. The default capability is assigned to the `main` window and permits core defaults, open/save/confirm dialogs, process restart, updater, and opener access; review that file when a native-plugin feature requires a new permission.
 
 For updater work, distinguish channels. The updater configuration uses a public key and GitHub latest-release endpoint. The frontend loads the release channel at startup and bypasses in-app checks and installation on `store`; on other channels, an available update opens its dialog. Installation refuses while synchronization is active or an installation is already underway, tracks download progress, installs, and relaunches. See [Release and Distribution](release-distribution.md) and [Frontend UI and IPC](../frontend/ui-and-ipc.md).
 

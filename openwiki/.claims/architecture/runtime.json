@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:f0bec571d144dfca444dc7327725a74a455bfc74c345a56157eeb002cffb0473",
+  "pageVersion": "sha256:50aff54dcdf972f4917e91957fdf378bb2ed807201e16f75b3366c17ac6409d9",
   "claims": [
     {
       "id": "claim_99287093a01f4ccfb333967e8eab9e3d",
       "statement": "The Tauri composition root registers the thumbnail and asset protocols, installs desktop plugins, initializes startup state, then spawns background work and sets up the tray; it registers the command surface and hides the main window on a close request.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L23-L130",
-          "version": "repo-lines-v1:sha256:13bdcb7550a6dcb9fdc6e07a52c8efd38d04ccd01f66e1e5532bc0bec5e83526:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhM2E1MTc5ODU4ZTI2NDVmZTJlNGEyNzNlNzUzM2ZkYzRjYWE2NzAyN2VkOGY3MmRmNzYyMTU5YmE4YTFmYzFmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI2ZTNmMmQyYTNlNTlmMWU1MzVhOWNlYzNmZmY5ZDMxMThhYTQ5ZmFiZjJmMjlkMzYxNTY1ZTU4YjE2M2Q1NmY3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyMmZhM2FjYzgwMjA0MTY2ZWE4ZDRkN2E2OTk0NjczYjFkMjA0NTc2Y2JmMTI1YWNhNzU0OWY3YTIxNDBjYTEzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI2MTg3NmNlZjUzYTgyNDgzNWJkNWZhNzgxNTI0NDJlYzM3MjkyZGYyMjU4YzVkYTE2ZmY4NGU5NjQ2Mjk5YTBjIn0"
+          "resource": "repo://src-tauri/src/app/mod.rs#L23-L136",
+          "version": "repo-lines-v1:sha256:fe4ae5e3fa8cbb5f86f1b9b29934e05a82a0d52b054be3ca00b1880fd7ddabc0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhM2E1MTc5ODU4ZTI2NDVmZTJlNGEyNzNlNzUzM2ZkYzRjYWE2NzAyN2VkOGY3MmRmNzYyMTU5YmE4YTFmYzFmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI2ZTNmMmQyYTNlNTlmMWU1MzVhOWNlYzNmZmY5ZDMxMThhYTQ5ZmFiZjJmMjlkMzYxNTY1ZTU4YjE2M2Q1NmY3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyMmZhM2FjYzgwMjA0MTY2ZWE4ZDRkN2E2OTk0NjczYjFkMjA0NTc2Y2JmMTI1YWNhNzU0OWY3YTIxNDBjYTEzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI2MTg3NmNlZjUzYTgyNDgzNWJkNWZhNzgxNTI0NDJlYzM3MjkyZGYyMjU4YzVkYTE2ZmY4NGU5NjQ2Mjk5YTBjIn0"
         },
         {
           "resource": "repo://src-tauri/src/app/tray.rs#L156-L220",
@@ -22,19 +22,19 @@
     },
     {
       "id": "claim_fd760f7b1e0a45cf8791178d3029709e",
-      "statement": "The root Svelte route creates controllers for feedback, target albums, removable volumes, watched folders, synchronization, authentication, preferences, updates, timelines, people, and album views; on mount it starts relevant lifecycles, hydrates host state independently, and installs synchronization subscriptions after sync hydration.",
+      "statement": "The root Svelte route creates feedback, target-album, removable-volume, watched-folder, synchronization, authentication, preferences, updater, timeline, map, people, and album controllers; on mount it starts relevant lifecycles, independently hydrates host state, and installs synchronization subscriptions after sync hydration.",
       "evidence": [
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L136-L204",
-          "version": "repo-lines-v1:sha256:30a09118b525399f7eefa9d63273998627439084bf7c7be32ac7c426ffb9a686:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4OWIwMmU4MGE1ZTg0YWJiYjFjMTg5MDI3ZDlhOWEwYjE1MzFiOTY1YWZkZTJiNWI3MmJmOTY2OTUyZjRlMjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5YjFkMGQ5NGE0MGM1NjZmNTFhMmE0ZjFhMDIzYjMzNTgzMTUyYjQxN2RjZGY4ZWNjYTIzOGFkODcxYTU3YTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk5YjgwOTg1NDBiNzcwZWU5NjFlZGU3ZDFhOTdkNjAzYmEyMDg0ZTU1OTZhMjRjNDI3Nzc5MDA1YmQzYWUzOTkifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L148-L220",
+          "version": "repo-lines-v1:sha256:5bff4e921959e4cbcd37c151042cfebfc7a0be74eeda28c05d1dc352374ad1a2:eyJzZWxlY3RlZExpbmVDb3VudCI6NzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4OWIwMmU4MGE1ZTg0YWJiYjFjMTg5MDI3ZDlhOWEwYjE1MzFiOTY1YWZkZTJiNWI3MmJmOTY2OTUyZjRlMjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5YjFkMGQ5NGE0MGM1NjZmNTFhMmE0ZjFhMDIzYjMzNTgzMTUyYjQxN2RjZGY4ZWNjYTIzOGFkODcxYTU3YTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk5YjgwOTg1NDBiNzcwZWU5NjFlZGU3ZDFhOTdkNjAzYmEyMDg0ZTU1OTZhMjRjNDI3Nzc5MDA1YmQzYWUzOTkifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L18-L32",
-          "version": "repo-lines-v1:sha256:d611fef8bdeff158418a0c000e5d64abb3c23b5f7a454f9344c166fcd11e3667:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmYTU2OWQ5OTE4YzA2NTdjZmVjMjFhMTNlNjU4MmU1MGRiMDUxMGRjOWM3YzVhOTYyODFjMzViMzdiOGJmZTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYwZWNiMmQzYjI0MjJjMTFjYWU5NzAzY2IyYWUwNWMwNzMxM2FkNjJmZWNhNjBiMDBkYTVjMzNkMDhmOWM2M2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2ZDZiYmRhOTA4NTVhMWRhNmFmZGRiODc5MzVjMjQxNjUxMzMyYzA4OWJjMDVkMmE1ZWYwODRjYWViZDQwYjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1NDVhYjlmNTk1NDM0ZTE3NTkwYjUyMmY5OTU5ZTRkMDJkZTg4NDJkYzg5NTcxNTM5M2Q4MTIyMzY3YjA4MDMifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L19-L34",
+          "version": "repo-lines-v1:sha256:a485374b5c9a653c700c04735d8bc309dac08c4527bf20e09246202ed9d9cb72:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmYTU2OWQ5OTE4YzA2NTdjZmVjMjFhMTNlNjU4MmU1MGRiMDUxMGRjOWM3YzVhOTYyODFjMzViMzdiOGJmZTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYwZWNiMmQzYjI0MjJjMTFjYWU5NzAzY2IyYWUwNWMwNzMxM2FkNjJmZWNhNjBiMDBkYTVjMzNkMDhmOWM2M2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2ZDZiYmRhOTA4NTVhMWRhNmFmZGRiODc5MzVjMjQxNjUxMzMyYzA4OWJjMDVkMmE1ZWYwODRjYWViZDQwYjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1NDVhYjlmNTk1NDM0ZTE3NTkwYjUyMmY5OTU5ZTRkMDJkZTg4NDJkYzg5NTcxNTM5M2Q4MTIyMzY3YjA4MDMifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L36-L67",
-          "version": "repo-lines-v1:sha256:5d2d4e68e0d760a319c54bbbce97b3a971daf6f8067551a98098f00fc7180d91:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkOWYxNTkxNTI4MjJlOWQ2YzdhZGE2NzA3MzhiYmExODgxNWY0ZjRmODBjMTNkYTFjYWQxNzM1OWY5YjA3YjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5YzMyN2JlM2JkMTMzNDAzYWU3ZmMwMDk5MDNkZWYxODIwZjk5ZDdlMzcwMzJiMjdmMGZmMTFkMjFmYTlmODUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE1NDVhYjlmNTk1NDM0ZTE3NTkwYjUyMmY5OTU5ZTRkMDJkZTg4NDJkYzg5NTcxNTM5M2Q4MTIyMzY3YjA4MDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllYjk1YjFlNzJhZWVhYjU2MWNiNDk3ZTgyODZiNDM5NDExMWIwYzAyMmY4M2Q5YmM5OTViZmFlZWE3NjFlZDUifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L36-L71",
+          "version": "repo-lines-v1:sha256:cbf1c9d4c9855a69a87220a3d030690e99e2376d1428e2d86121304689e5a74f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmYWEzNDcyZWZmMDEyY2QyOWE2NmJiZTg3Mjc1Y2MyZjc5OTQ0YmUzNjE3YzM3MDU1ZjM5N2UyNjI0ODk2MTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5YzMyN2JlM2JkMTMzNDAzYWU3ZmMwMDk5MDNkZWYxODIwZjk5ZDdlMzcwMzJiMjdmMGZmMTFkMjFmYTlmODUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFhYTc3OWM4MjRmNTQwOTQxNDJjZWIyYmU1MjYyNGU1MjMwNTU5ZDkyMzIxOGQ4ZjE4YjBhZGQ1MTM4ZGVhOWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllYjk1YjFlNzJhZWVhYjU2MWNiNDk3ZTgyODZiNDM5NDExMWIwYzAyMmY4M2Q5YmM5OTViZmFlZWE3NjFlZDUifQ"
         }
       ]
     },
@@ -61,7 +61,7 @@
       "statement": "`app::run` initializes managed startup state before spawning background services and setting up the tray, schedules showing the main window when the launch is not credentialed autostart, records event-loop readiness, and appends and flushes an audit shutdown event on process exit.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L131-L158",
+          "resource": "repo://src-tauri/src/app/mod.rs#L137-L164",
           "version": "repo-lines-v1:sha256:92af43e16677fabf388d120f81cb6d90eae5684baeb17c2ee857ce3bce05b50f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiOGUyNjUwNTQ5YjhjZDU0ZjFhMWRiNWMxM2Y4MzE5YzgzMmNlNDBlZmU1MDNmMDk3MGU5ZTFkOGU0MDkxNmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5YzEzNTkwNjY1NjMyM2QxYzVlYTQxNjU0ZWU2NmFmYjU4NWFjZGNmYWVhY2ExMjFkNWUzMGJmMTkzZWVkZDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkwZTQ4ZGU2NjVlNGE1YTNmMTZkZTkwYjQ5MjI5YTU4ZTcyNWQwNTkwZjA2ZTljYzYzMjdhOWZkMGQ5Nzg3N2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
         },
         {
@@ -93,7 +93,7 @@
           "version": "repo-lines-v1:sha256:736dce70cbf4b7bec25cf71a84692ade727c2af1f1d71d25af6c933ecdcb9009:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmUwYTM5N2EwNDZmNzUzZGE1ZjhmYmFlMGIwNDVlODgwYjJlYjVmMDM3NWZlZjBkNDcxNjgzZGUzOTljNDVhNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGVlZGQ0ZmYzMDdhYmQyZjI0NDc1OGU1NzViOWJjODZiNzAyNjdjNzZjMDliMTE3OGYzNWMxZGUzOWQ4ZGVkZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzgyMjcxMDBlZTU2N2E0NTlkNGJkZThlOTI0ZTM4NTUwMGUzOWEzNDkxM2Y0NjY1N2RmY2M3MTE4NWZiNjQwZSJ9"
         },
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L214-L247",
+          "resource": "repo://src-tauri/src/app/mod.rs#L226-L259",
           "version": "repo-lines-v1:sha256:6ae3abd2f88828d09a95e19bffb7ea8cc326d7b341c1b92c9a26dd5dc3724989:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyYjVlZGY1OTQ5Y2ZlYTY3ODIyY2Y2OTExMzIzNjNkNjhkNmYxZTE2OWY1ZTBkNGY3YzE0ZTVmYTFlNmQ0ZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4YzAxYjExZWE5YjEzZmM4MmRhYzgwYjkzYzUwMjM4OWZkY2EwNmEzNDJlZmM2YTdlMjRhZWU5YjM1MWQxMzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ5ZWMzYjNmYzljZWRmMDgyMDRiY2M0YWUwYTVmMTMwYzhkODEzYjgxNTQ0ZWQ0NGVhYWJjYTA4ODEzOTg2MzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTRkMDJhODEyMTk0NGQxNzZkMjY1ZTliYjljYzU5ZjZhYjg5MGJjYWRmOGFlZmRlYmRiYmI0ZjJlYTg0NDQifQ"
         },
         {
@@ -175,7 +175,7 @@
       "statement": "Startup records audited phase outcomes for host readiness, failures, tray setup, queued and completed main-window display, and event-loop readiness; on exit it records and flushes an `app.shutdown` audit event when the logger is managed.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L131-L157",
+          "resource": "repo://src-tauri/src/app/mod.rs#L137-L163",
           "version": "repo-lines-v1:sha256:3be98d9f2b4ec71386fa21888c72c8f3c96c595f43efde87c80e14cd9b658dd6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiOGUyNjUwNTQ5YjhjZDU0ZjFhMWRiNWMxM2Y4MzE5YzgzMmNlNDBlZmU1MDNmMDk3MGU5ZTFkOGU0MDkxNmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MjJjNDJjZDE5YzZkMDNkODA4YzQ1MjcyMDU1MjgyNWI3ZWExYzViNDkxYjIxODUxMWNhYzc0MTVjZjlkOWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkwZTQ4ZGU2NjVlNGE1YTNmMTZkZTkwYjQ5MjI5YTU4ZTcyNWQwNTkwZjA2ZTljYzYzMjdhOWZkMGQ5Nzg3N2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI0NjFkNDcxZTE1ZDg2MDVjN2Y5MjI1MjJlNWE2ZjFkNjgyNDZjMDMzODhmYWQwYmY3NmZiZDY4OWU3Yzg2MWQifQ"
         },
         {
@@ -193,7 +193,7 @@
       "statement": "After database repair, startup retains a managed recovery notice with repair details, emits a localized native notification and audit event, and exposes the notice through the registered `get_database_recovery_notice` command.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L122-L125",
+          "resource": "repo://src-tauri/src/app/mod.rs#L128-L131",
           "version": "repo-lines-v1:sha256:41768ba1c13c195d52fd93aa084ff86da029f44132e21d7170e43a0df548196b:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTg3ZTNhZTg1MTQzYmMwMmU1ZWI4NTA5MjExZWM2OWJjMzhmZTUxZDY3NmY5OWM3ODA5OWFiZGNiN2I2ZjgwZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNThjNWU1Y2NjY2EzYzJlNGY1ZDZlZTIzN2EzNTljNGU5MjFlNzg4ZmUwNzRhMzY3NjMyMjJjYzFmZDgxM2Y5ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWY5YmU4ZmYyNzdhYTc2OWVkMzU3NmU2MTc1NDYxZGFkOGE2YTE0N2FmZGI3NTljNTY5NDhjYWYwYWViNzUyOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzQ2OWI4Y2RjODhmY2YzYjZmYWZkYjY3ZDQ2YjQ5NzhjMDlhMGM2N2IwM2MyZGFlOTI0MTdiMjAxNjc4MDQ5ZCJ9"
         },
         {
@@ -223,7 +223,7 @@
           "version": "repo-lines-v1:sha256:7a8f4a0c1ee52840c4e84494f34601b5942dd0040fc77b4383c3a3a527479579:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4NzE4ZjJjOTU4ZGIxYWJmNmNiYzU4YzEzMGQwMjliZThhYTcyM2FjYTZjOGZiMDM0Y2QxNjRkMTBhY2FmMGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyYTJjYjI1YTEyMmI0NDIyMWE2MjM0ZWM2NjBhN2I1ZmI3ZjliZGU3YjNiOWUyYjNjNTU5YTBkOTZmYWM3MzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzMjYxNTUwNDc3YjBkZjU5YTdiNDM4OGEwMmExOGVmZDc0NDUyYmI2Y2Q3ZjczMWVlZTAzODZhZmNjM2I0NmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L177-L205",
+          "resource": "repo://src/routes/%2Bpage.svelte#L193-L221",
           "version": "repo-lines-v1:sha256:6ccc0c54ec4a67b1a4d4d6ab36a727a3b7e111e915450e408a4ea4891ccfce83:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZjVmYTE1OTFmN2RiOTQ2YjVhMjQ4NmYwY2NjNTY2NmY4MDM5YThlMjJhNDc2NjQ1MDUzYzY3NjNjYmFkZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyMGZjOWU2N2RiMDdlZDIzOWJiM2FkMjMxMmVhYWI5YTcwZTFmNmZiYTAxMjg4YjBiYTZlNjFkN2Y4ZWU3ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxOGZlZThlYTdkNWQ3MzNhNTc1MjA0NzRiMWQ4MTk0NWJiYmQ3OWE5NjRlZWMxZmUzMWRkZmUyM2QyOWU3MDIifQ"
         }
       ]
@@ -276,17 +276,31 @@
     },
     {
       "id": "claim_0134a691cbfe4f08999c9098cd3b8147",
-      "statement": "The Tauri configuration defines an initially hidden `main` window and a CSP that permits the two custom schemes for image and media loading while restricting connections to Tauri IPC; development additionally permits the Vite HTTP and WebSocket endpoints.",
+      "statement": "The Tauri configuration defines an initially hidden `main` window. Its production CSP permits the custom thumbnail and asset schemes and the OpenFreeMap tile origin, including IPC and the tile origin for connections; development additionally permits the Vite HTTP and WebSocket endpoints.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/tauri.conf.json#L6-L25",
-          "version": "repo-lines-v1:sha256:f37a42b30412577e0038db2c200438759b72e30ad9e225a7c924faaab806297a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiMDcyMDFiZGI2YmMwNTkyMDg0OTYzNjgxODYxYTRmYTE0YWZkYTU5MWI2ZDU2NjFiNzQ1OGQ5MjFkNWQwZWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjMTk2OWM1N2U5MTBiMmJlNTNlNGI2MzdhM2UxNTAyZDNmOGZiNzBkZjQ0NmY4ZDFlMmEzNmY2MTFjMDE1ZTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NjgwZjc5NWMwOTI4MmMxNGZiYWY4NjM0OWY5MDgzNjk3ODQwMDU2OWQwOTIxZWU3ZmE2ZmMyYjVlN2NkZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFmMTE4N2QwOThmZjhkNGQwMTYwMjE1ZjQ1ZTRmN2ZkOGU2M2RmNzRmZTlmNmZmYzQ1MjQ2NTU3ZmE1YzM0MmUifQ"
+          "resource": "repo://src-tauri/tauri.conf.json#L6-L27",
+          "version": "repo-lines-v1:sha256:6995ca9ee0baf1008d21514b2f3e043f14e7ca016fd30cba402547c3d7820cac:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiMDcyMDFiZGI2YmMwNTkyMDg0OTYzNjgxODYxYTRmYTE0YWZkYTU5MWI2ZDU2NjFiNzQ1OGQ5MjFkNWQwZWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFjZGRjNjkwOTc2YTMyY2IzOTUzODViYzlmNGM5YTcxOTg4YTEzMGRmMGM3NDkzZTE0YTFjNWQzZmFjZDg0YjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkZmVmMjU5ZWQyYzYwODFlNjcxZmVkYTQyNjE4OGU3ZTM5NDQ0NDhiYzVlMjJiN2MyN2UzNzllYzIzMDI3NmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_29d76efe267a456196dea42f36e779ea",
+      "statement": "The native executable enters `lymic_desktop_lib::run`, which delegates to `app::run` as the Tauri composition root.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/lib.rs#L1-L15",
+          "version": "repo-lines-v1:sha256:4de174d4f27ec90c542753d5dbd498e0194e26b8c9a764cccf6b60c742795ee2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiNDA4NjI1ZjJiY2NhZjUwNGY1OTE0NWI2YTg5YzM4NWM1ODhjMGU5ZGZmNDM5MTliYWJkNTJmZTBlZjQ0YmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/main.rs#L1-L6",
+          "version": "repo-lines-v1:sha256:09f80bc5e6cf8fedbf67c818dd55e1288969081ffb8aa70463d551b7c970ccc0:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzM0OGZlZTUzMzEwNmE0Nzg3MTBmNWEzNDkzNzY5YTc1YmQ5NTZmZDI3Y2Q1MTQ5MmE1YTMwNTRiYzhhNDNiYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-11-09T18:02:27.157Z"
+    "at": "2026-11-13T15:48:39.594Z"
   }
 }

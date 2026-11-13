@@ -1,9 +1,11 @@
 ---
 type: integration
 title: Immich API Integration
-description: The authenticated, typed boundary between Lymic and Immich, covering transport safeguards, endpoint contracts, bounded responses, media delivery, and the distinction between browsing albums and selecting upload targets.
-tags: [immich, api, authentication, uploads, albums, timeline, media]
+description: The authenticated, typed boundary between Lymic and Immich, covering transport safeguards, endpoint contracts, bounded responses, media delivery, and compatibility handling for albums, timelines, people, and map data.
+tags: [immich, api, authentication, uploads, albums, timeline, maps, media]
 sources:
+  - id: openwiki-source-1431e56e5c3d1bbc28f18de9
+    resource: repo://docs/map-api-compatibility.md
   - id: openwiki-source-1fcd4acb19ae27b109afe923
     resource: repo://src-tauri/src/app/asset_protocol.rs
   - id: openwiki-source-9a3cab9533821b7e851a3e27
@@ -24,6 +26,8 @@ sources:
     resource: repo://src-tauri/src/immich/client.rs
   - id: openwiki-source-a03898b4eb42efbd3eab6010
     resource: repo://src-tauri/src/immich/ids.rs
+  - id: openwiki-source-be1aad624e2f8672d7416d9e
+    resource: repo://src-tauri/src/immich/map.rs
   - id: openwiki-source-53ebad60b330b25b4ec39fd7
     resource: repo://src-tauri/src/immich/people.rs
   - id: openwiki-source-653657bd24d2f782b8341396
@@ -40,7 +44,10 @@ sources:
     resource: repo://src-tauri/src/sync/processor.rs
   - id: openwiki-source-fd5e4aa90e3b24f760c796f0
     resource: repo://src-tauri/src/sync/retry.rs
-generated: { by: "openwiki/0.7.2", at: "2026-11-09T18:02:27.157Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-13T15:48:39.594Z" }
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-11-13T15:48:39.594Z
 ---
 
 # Immich API Integration
@@ -67,12 +74,13 @@ Every Immich request uses `x-api-key`. The boundary uses explicit response shape
 | Album catalogue | A separate `GET albums` call preserves Immich ordering and decodes presentation fields: thumbnail asset ID, count, sharing status, and order. |
 | Timeline | `GET timeline/buckets` and `GET timeline/bucket` use `size=MONTH`; album timelines use paged `POST search/metadata` with `albumIds`, `withExif`, descending order, and a size of 1,000. |
 | People and media | `GET people` is paged with `page` and `size`; thumbnail, preview, and original asset calls use the `people/{id}/thumbnail` and `assets/{id}/...` endpoints. |
+| Map | `GET map/markers` returns marker IDs and coordinates for the map view; malformed, missing, non-finite, or out-of-range coordinates are excluded locally. |
 
 `Album` and `AlbumCatalogueItem` intentionally remain separate. Target-album selection needs only a typed `AlbumId` and name and is sorted case-insensitively for its established UI contract. The read-only catalogue instead retains server order and display metadata, so catalogue changes cannot alter synchronization selection behavior. `get_album_catalogue`, `get_albums`, and `create_album` are authenticated Tauri entrypoints; the latter rejects a blank name before credential lookup and the client validates it again.
 
 Compatibility decoding is deliberately localized. Timeline bucket responses accept either ordinary asset arrays or Immich's columnar form; columnar entries derive dimensions from a ratio and map `isImage` to `IMAGE` or `VIDEO`. Asset fields accept established naming variants for EXIF dimensions and timestamps, duration accepts milliseconds or colon-delimited text, and `nextPage` accepts a number or numeric string. Album search likewise accepts `assets.items`, `items`, or a bare array. Invalid pagination that does not advance is rejected rather than looping indefinitely.
 
-Recognized-people endpoints turn `401` and `403` into stable, user-actionable tokens; the latter names the required `person.read` and `asset.read` API-key permissions. Their page result uses Immich's `hasNextPage` when present, otherwise computes it from `total`, page, and size. Other endpoint failures report a status-only error after redaction.
+Recognized-people endpoints turn `401` and `403` into stable, user-actionable tokens; the latter names the required `person.read` and `asset.read` API-key permissions. Their page result uses Immich's `hasNextPage` when present, otherwise computes it from `total`, page, and size. The map endpoint similarly normalizes transport and non-success results to `map_unavailable`, with distinct authentication and permission tokens; a `403` tells the user to configure `map.read`, `asset.read`, and `asset.view`. It accepts a large (128 MiB) marker list but filters each coordinate to finite latitude `[-90, 90]` and longitude `[-180, 180]`. The compatibility evidence records that the inspected upstream v2.4.1 route had no dedicated permission whereas v2.5.0 requires `map.read`; Lymic does not declare a minimum supported Immich version, so supported releases must be tested before claiming a compatibility range. Other endpoint failures report a redacted status-only error.
 
 ## Response and error limits
 
@@ -81,6 +89,37 @@ Most JSON methods—including album, bulk-check, people, timeline, and upload re
 The shared error-body reader caps a diagnostic read at 8 KiB, flattens whitespace, and marks truncation. However, `response_status_error` deliberately discards that server-provided detail and returns only `request failed with status ...`; endpoint errors therefore do not relay server response bodies outside the Immich boundary. Profile images independently reject declared or received bodies over 10 MiB and retain a content type only when it starts with `image/`.
 
 Media has endpoint-specific limits: asset thumbnails and previews use a 20 MiB bounded reader, person thumbnails reject received bodies over 20 MiB, and original asset responses are limited to 32 MiB. Dynamic IDs are validated as a single safe path segment before interpolation, rejecting empty, traversal-like, slash, whitespace, control, query, and fragment values.
+
+## Authenticated request and failure propagation
+
+Tauri commands obtain the stored client rather than accepting transport credentials from the frontend. They delegate the endpoint call and redact the returned error with the same credentials before returning it across IPC. Within most client methods, an unsuccessful HTTP response is converted to a status-only error; people and map calls instead return their documented stable access tokens.
+
+```mermaid
+sequenceDiagram
+    participant UI as Frontend
+    participant Cmd as Tauri command
+    participant Client as ImmichClient
+    participant API as Immich API
+
+    UI->>Cmd: invoke command with endpoint input
+    Cmd->>Client: from_stored_credentials
+    Client-->>Cmd: authenticated client and credentials
+    Cmd->>Client: endpoint method
+    Client->>API: authenticated request with x-api-key
+    alt successful response
+        API-->>Client: success body
+        Client-->>Cmd: typed result
+        Cmd-->>UI: typed IPC result
+    else transport or HTTP failure
+        API-->>Client: failure or no response
+        Client-->>Cmd: normalized endpoint error
+        Cmd->>Client: redact_error with credentials
+        Client-->>Cmd: safe error
+        Cmd-->>UI: error string
+    end
+```
+
+This sequence shows stored-credential authentication and the normalized, redacted failure path used by Tauri-facing Immich operations.
 
 ## Duplicate detection and upload protocol
 
@@ -117,7 +156,7 @@ This sequence shows the source-defined duplicate-resolution and upload calls bef
 
 `AlbumId` and `RemoteAssetId` are separate transparent string newtypes, including in serialization and SQLite bindings. Keep the distinction at integration boundaries: album API methods consume `AlbumId`, whereas queue completion and membership batching carry `RemoteAssetId`, avoiding accidental interchange of the two remote identifiers.
 
-Album methods are API primitives: fetch, create, add IDs, and checksum search. They do not know about watched folders, queues, retries, or synchronization state. Conversely, the sync pipeline carries the target album selected for an asset into the queued work and invokes the client only after it has a remote asset ID.
+Album methods are API primitives: fetch, create, add IDs, and checksum search. Assignment validates a safe album path segment and requires nonempty, unique asset IDs. On a successful `PUT albums/{albumId}/assets`, it decodes one `{ id, success }` result per requested ID, rejects incomplete, duplicate, or unexpected result sets, and returns success and failure counts; the convenience method treats any failed item as an error. They do not know about watched folders, queues, retries, or synchronization state. Conversely, the sync pipeline carries the target album selected for an asset into the queued work and invokes the client only after it has a remote asset ID.
 
 That ID can originate from a fresh upload, a previously persisted queue ID, or a duplicate. For a duplicate, Lymic uses the bulk-check `assetId` when available; otherwise it performs the checksum search and requires exactly one match. Failure to resolve a unique ID fails the local upload unit rather than silently treating it as complete.
 

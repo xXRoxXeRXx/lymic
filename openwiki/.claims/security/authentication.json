@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:4bb4cab320a330c1aaabb19821727851656868c1dd04c1c62400ab620ae5790d",
+  "pageVersion": "sha256:f973ac5df3fac91110ac090a77afa320a7f7718f654a63a57c3d22ec60c0f5d7",
   "claims": [
     {
       "id": "claim_afeedd4cb859431c9a37bc5a7e691a7d",
@@ -18,7 +18,7 @@
       "evidence": [
         {
           "resource": "repo://src-tauri/src/immich/client.rs",
-          "version": "repo-file-v1:sha256:9ed5a06840d9989eb16bdd394f3f9201ba8c38c447e57a57facdb3d930e17590"
+          "version": "repo-file-v1:sha256:0bdd4cff96633fa50c0255a4961f82ed2b43c8c4b05d286ea01ca164ce364c3f"
         }
       ]
     },
@@ -63,7 +63,7 @@
           "version": "repo-lines-v1:sha256:830f803cddd6eb85a43f10ff6f2283ebdd85a0f1bbdf8fc084f9c7e04bd2d23c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjMTBjYmJhMjAzNDdlMTAzZTE3MzNlMDU2NjczNjFhNWU1NTI2ZDA3ZTMwMWI2ZDRjOTc2OGE1YjZjNzk5MTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg0Yzk3MTM0NzZjY2Y0YmMzZWRkODYyYmQ3ZGUyNDkyNmU2NTY5YTNmMTc3NDhhYzQ3Yjg2NWUxZWRiOGMxZTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlNmRjMTUwZmIwZjg2NzVkM2U2YTVlNTdjNTlhODM5NWIyMjQ1NDJhMTExMWJhZDBmMDZmNTlhMDA5ZGJhZWEifQ"
         },
         {
-          "resource": "repo://src-tauri/src/immich/client.rs#L121-L143",
+          "resource": "repo://src-tauri/src/immich/client.rs#L308-L330",
           "version": "repo-lines-v1:sha256:7ffd0d19b52b4916ca43532d902045d82ed311aa13f3d32d7b4d2b584d0bf178:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzNTg4M2FkNTJjNjU4YTg4Mzk2NTY0YjNkYjIyYTNhNzA3ODQ5MzkxZDdlOTdmNmVjNjk0Zjk0ZTZiYzA1ZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1Y2RlZjgwODVhZTc0YWI2MzZkNjQ1OWY1YzZkNWZiZmIwZGIyNjRmMWIwZDc1YmFjNTE5YzliM2Y2NzE3YWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk1Y2NlNDYwMjM5MjFlM2EzN2IyZDYxMDVmMjA0YmQ2MmIyNGJhYjExZjIxMDk5YTYwODk3NjY4NjM3NGQ3OGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM5ZDY4YzY3ODlkNjZmY2NjZTUzOTFhYzJjZWE4ZWM1YTg2ZDkyMmE0ZmUxYjlhZDc2MzYxNjk0OWYzODE5MzQifQ"
         },
         {
@@ -93,7 +93,7 @@
           "version": "repo-lines-v1:sha256:24eeea383b7fe2a89d8e1da1f0bbb4e96e23cda7235a7f9f371fcb8c7a50e783:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExZGY4N2E0NzMxNmM3MDhjNTUwMjA5OGU5YWY2YzQ0NTM0ZWI4MGJlYWRjZjYwNjMwMjhlZmNhODU5MzdhYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM5YjI4MWNmMzcyYTk0ZjkyZGQ3YTQ2ODlmYzFkZDY4MzE5MjNlY2VmOGMwMGEzNDljODBiNGY2NjFjMjNmNzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljYWM2ZjIwODkyMWJmMDc1ZjI0NjEyOTA2YTRjMzQwMjMzOWI4NzM0MWE4MmRiNjBiNmU1NjI2MjFjNDJjYzQifQ"
         },
         {
-          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L32-L36",
+          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L35-L39",
           "version": "repo-lines-v1:sha256:d56607f2f3c6152679a3b4db2124e0f4e8e3f7045004f5755b82fbc5ec7e36de:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmFkOWViMDYyYzIwZjBkZTkyZDlkNGRlYjZmOTM4YzQxM2U0NTcxM2RmZjdmOTVlMzA2YWJhY2ZmZWNmN2U4ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWYyMTYxYzk0NmU3ZmYzOTFkZmQ3NjA5NjJjN2Q2YTJmNzBkNTE5YjNiYmUzNzVkM2QyYTNjYmM0NjY5NDE3NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmU0Yjc5YmI2MmZkNGEwZmE2OGQwNjM0YTFjMGE3Y2QzNmYxYTE1OWM4NDI3MmZiY2QzNWUwNzE0MDhkNjcxMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzU2YjlhZDJhNGQ4OGE3MjMzMjk2ZDFjMDY1ZTI0MTExZDE0MGEyMzEwZTA4NDYxMjY4NTk5NDUwNmQ4NjdiYSJ9"
         }
       ]
@@ -161,8 +161,8 @@
       "statement": "The default Tauri capability applies to the main window and declares core defaults plus dialog, restart, updater, and opener plugin permissions.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/capabilities/default.json#L1-L15",
-          "version": "repo-lines-v1:sha256:cb60f01402ae200d29f676efb0f8aa0e9f648a007635fa448dd7a01a2ed09515:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwNjQ4Zjc3ZmQ1YTljNjNiM2NkZDBhZjQ5ZGFhMTI5OTIyMGI3NTQxZTg4Y2ExN2VmZTFhNmExMTRiOWZmMmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+          "resource": "repo://src-tauri/capabilities/default.json#L1-L16",
+          "version": "repo-lines-v1:sha256:1c50b21213669c66a3358dfa216d8390dd46c2de2aafddba49aa5378d2b2e1dd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwNjQ4Zjc3ZmQ1YTljNjNiM2NkZDBhZjQ5ZGFhMTI5OTIyMGI3NTQxZTg4Y2ExN2VmZTFhNmExMTRiOWZmMmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
         }
       ]
     },
@@ -171,11 +171,11 @@
       "statement": "For accepted server URLs, ImmichClient normalizes the configured path to an `/api/` base while preserving an existing trailing `/api`, and sends the API key as `x-api-key` on current-user requests; a valid current-user response requires a nonblank name or email.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/immich/client.rs#L225-L260",
+          "resource": "repo://src-tauri/src/immich/client.rs#L412-L447",
           "version": "repo-lines-v1:sha256:dcb4102249096327ce9306a8ca1c51c22d014f91563bd1f587b6a37d13ad7b24:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyNmQ4NjI3NGJhMDIyNzliNmIyM2RiNjE0Y2UzZTYzNmNiNGI0MDQzODA1ZGQyZWJiMDlkZTgyMmRhNDUxMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5YjE5ODJlOGRkNzQ4MTE4MTQ2YjM5YTJkMDA2MmY0MDgxZTM0Nzc5Yjg2NzVjMjM0YzRmYjEyNGRjMzkzOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIwNWUwYTczYmQyYjAwYThhYjczOWJiNjdkMDc3OThmYmVmZDg3NWM3MWU5MzlhNTk4NTJhMTU0ZWY3YWY2OWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEyN2ZkZGM2NmQ2OTNkNDM5ZGVhYzJmNzcxNjA3YWZkZGVjNmE1MzJkZDdiZDNjMmEzMThjZWE5YzNjYjFhMDQifQ"
         },
         {
-          "resource": "repo://src-tauri/src/immich/client.rs#L88-L120",
+          "resource": "repo://src-tauri/src/immich/client.rs#L275-L307",
           "version": "repo-lines-v1:sha256:76ad4df06c7e8074005078796a414ce117ecaaa988b5ce7a55d1f30ad5ebc578:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjNGQ4ZDA2ZDdlZmRmZTgwMDEyYWU0Mzg3NmI0MTQ3OGVjOWNhYWQ0NTc0N2I0MjJiNmIyNTJhOWY1M2EyOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2OTcyN2M0Y2EyZTFjMjRhMzBkODQ2ZDYyNjZjMTY3Y2E3YzZmNGViMTI4MThjZGEwMDdjNTdjZTBjMThjOTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFlMWM2ZGJlNDllMmU2ZmFjMzgxNzA1NGE1YWZjMDk0YTQ0ZGM0NzY0NGJmNWUyYThmYjg4Y2I3MzBjZGEyZmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0ZDNkZDc2NDNiZTYzNGU1N2JmNjg0ZDQ3NDAzNWU3M2ViMWYxMTBmYjVhOTg4NDI3NDNlYTM3OGQzOWFkNzUifQ"
         }
       ]
@@ -189,7 +189,7 @@
           "version": "repo-lines-v1:sha256:4f1d79d92f66d6d455bc7b863da73db74c6a3f09339f10c0d201eddcae3bea75:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOTllMjhlODQ1ODE5MzBjNzA1OGRlMjZhY2YxMDc4ODZmYWU4MzZjMmJhYjRkNjhjYTU3MTRkNGQ0NjcyMTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRlYWExYTU2NTU1Y2RkNDg4ZmMyNmQyNzA0ZGM3OGVkMzNhMGUzYjFmNzBkMDU4NzE4ODQ2N2M0Yjg5MjMxM2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlOTQzYzEwNzFlOTg1NTM1NDU2ZTQzYzYwOTI2Nzk3NzI4NzQ4YTliMTU1Y2IyNWM1ZDBiN2ZjNWMxZGM1MzcifQ"
         },
         {
-          "resource": "repo://src-tauri/src/immich/client.rs#L263-L301",
+          "resource": "repo://src-tauri/src/immich/client.rs#L450-L488",
           "version": "repo-lines-v1:sha256:32a79c498d0ca52d18e727b54528981dc8b15debf826663872756ef7b5a4cb48:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM2OTUzM2FiN2ExOTdhY2Q1OGZiZDBiNzYyZmVkMTY1ZmIyZTBkMzA4MzU3NThjMmM1YjdlOGIxNTIwNWJlNTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYWRmZWQ4M2NiYjYxMDRlMjI3ZDViN2E2NzBkNTRkZWM0ODk0NThiODUwNDhlMWQ0Zjg1MDQ4ZmY2N2E3MWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViOWEwOGJjMjlmNmViZWJlOWE1ZjAxOTAzZDk4NDVkYmNiNTg0MmE0NTVmMDdkNWY0MDAyZGFjMzJhNWM2MDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYzMzA2MzA4MzRjYTcwNWYwMTliZWJhNmY0YTg3MGY5ODU0NTE3MWNiZTc3MWQ2MjBlOGVkNGU5NjBjNDE5ZWEifQ"
         }
       ]
@@ -218,15 +218,23 @@
     },
     {
       "id": "claim_fd3975507e434d4d95b110c4e91e1485",
-      "statement": "Authenticated backend operations load stored credentials first and reuse an Arc ImmichClient only when the entire AuthConfig matches the cached configuration; otherwise they construct and cache a client and derived account ID for the current configuration.",
+      "statement": "Commands that use ImmichClient::from_stored_credentials load stored credentials first and reuse an Arc client only when the complete AuthConfig matches the cached configuration; otherwise the helper constructs and caches a client with the derived account ID.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/immich/client.rs#L162-L188",
-          "version": "repo-lines-v1:sha256:d88277d0138d2066e785375bd299b4531ad55ba4aa18286b14b7d71345d7f873:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJjNWMxMjk1NTFiMGYxOWU2ODBiYTUzNzY1NDI0ZTU5OTRiNTU0YjEzMTg2MWY1MjBmMzc5MDMwNzExMzU4ZjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYxMjA2YWI2YTdlNTA3YjE1MjVmMmM1YTJjYWJiNzczYWY3MjhjMDE4NmIwZjE1MzFlMDc5MjI1YTlkYjE3M2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhmNGZkOWM3OThlOTMzMWJhMWVjMjQ1YjZkZDRhOWZmZTU5YmYwM2ZhZmM5ZjIxZjgzODU5Y2RkNmRmYzZiN2MifQ"
+          "resource": "repo://src-tauri/src/commands/albums.rs#L1-L58",
+          "version": "repo-lines-v1:sha256:2cee6e6d1b2aa79a165627f4564e833bb9fb2c1b6fe34ed0886adb3053a88ce3:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NzdmMDZiZmQ3ZTU2ZDk5Y2QyN2VmNWQ4MDdmMGNkNDI0ODVlZWU3NmZjNmE0NTc4ZWZlNTI2MmViZTFmZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU3NjAzZjRkYTU0MTVjZTU1YjI0NjJiYThkMzllNjY5NWJkZjc5ZGNkYjQ5NWRlZDY0NTExMmQzZmJkMzNhNzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdhNDNiY2Q0Y2U2ZTVhMjY1OGZmYjY0MmFlY2RiZWI1MjI3YWI2MDg5MTk3MDZjYjZmZjNjMzQ5MjIzZTgzMWUifQ"
         },
         {
-          "resource": "repo://src-tauri/src/immich/client.rs#L24-L34",
+          "resource": "repo://src-tauri/src/commands/timeline.rs#L1-L18",
+          "version": "repo-lines-v1:sha256:99c2284d4fa48fcbb7660d9d34c5b48ad42e1c776fcb1004320e66abb71a16e0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2YjFiMTZjOWYwNDVhYTNmMDFhNTg4YTYyODljMmRkZTgxNmVkZTE0MTBmNWZjMTRkYjc2ZDU0M2JhNmQwNDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwZjc5OWM0ODc0NjUwMjYzYTIwYWMwNGM1NjFiYmUxODAwNDI0ODE5YzRjMGY4YWUzZjlmZTljZmNhM2UwOWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2MWMwOTUwZjE4ODYyMWRiYTZkNjkzMTlmNjkzMTAzMzhiOTQ4YjEzNTE3MWU5NzI3NDAwM2Q3ODAwNzJmYzEifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/immich/client.rs#L26-L36",
           "version": "repo-lines-v1:sha256:18ef1b831822a2632cfec0dd50920534d95f818ee30a96c49ae83cf3ad7896e3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJiNzQwMzI3NTVkM2ViMzljNmQzYTg3YWE1MWQwNDBlY2E5OGNmZjdiNTNlMWJkOTg3ZTRhYTRlMzIyNjk5ZmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQwYmIyOWZkNDg4NWI0MWI4ZTI3YzE5NjMzODBiMGMyMmExNTFjMWFhYTZhMTMwY2M0MjM1Mzg0YzQ5MmFlNzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFlMzFkZGM3OTUwOTJlMjYxN2IyZDIwODRhOTkxZWI0MjAzM2U1YzAzODhlNDE5OTRmMDAwOTE0ZmYxZDEzYjgifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/immich/client.rs#L349-L375",
+          "version": "repo-lines-v1:sha256:d88277d0138d2066e785375bd299b4531ad55ba4aa18286b14b7d71345d7f873:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJjNWMxMjk1NTFiMGYxOWU2ODBiYTUzNzY1NDI0ZTU5OTRiNTU0YjEzMTg2MWY1MjBmMzc5MDMwNzExMzU4ZjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYxMjA2YWI2YTdlNTA3YjE1MjVmMmM1YTJjYWJiNzczYWY3MjhjMDE4NmIwZjE1MzFlMDc5MjI1YTlkYjE3M2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhmNGZkOWM3OThlOTMzMWJhMWVjMjQ1YjZkZDRhOWZmZTU5YmYwM2ZhZmM5ZjIxZjgzODU5Y2RkNmRmYzZiN2MifQ"
         }
       ]
     },
@@ -239,10 +247,54 @@
           "version": "repo-lines-v1:sha256:8570590eeec10bbff704d234b1d07a4011b0beb0be5d9c43a5d2ba84dc2b37a1:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllMWVlMzNlZTk1ZmFlZTFjMTBlOWViZjNkM2RlNDFiYjE5MjUxNWNhZDc3Y2RhMjA1ZTU0NmRhMTcwMDFhNjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlY2UxMWZmY2E4ZmJlZmViODgwZjI2MmI2MTJlZWM0Yjg5MTc5NGZkMWU4YTY2NjY2MDgxYjQyYWZhYmM2N2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAzYTEwMzdmMDcxOTYxZmIzYjEzYTdkYWZmNjlhY2MyYmFiODEwZmU4YmRhMTZhMmIyMjcxNTU0MzcxNGNjNzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJlYzA5YTk5MGFhODBmMjE3YWJhYjE0YWZkYTcxZjc5Yzk0OTc3ZmI3MjZjYjMzZjcwZGZkMzczNWFmNjAwODgifQ"
         }
       ]
+    },
+    {
+      "id": "claim_a5022cbb85d14014a6f5d17f4e535d7e",
+      "statement": "Synchronization admits work and claims its lifecycle before its credential gate; absent or unreadable credentials or invalid client configuration fail the run through the durable failure path, which marks the sync FAILED without discarding queued work and records a sync-aborted audit event.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L231-L260",
+          "version": "repo-lines-v1:sha256:56523bfa5abf32c4a777535427b98e4e892a0dc1aaa46ecac022ea37f2794919:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZjFjZGEyZWE4ODU2YjgyNGM5ZWEwODUxOTI2YmZmNTMwZDg3YjBhOTE0N2ZhOGJlNTI4YjBjYzZkM2MzM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1Y2RlZjgwODVhZTc0YWI2MzZkNjQ1OWY1YzZkNWZiZmIwZGIyNjRmMWIwZDc1YmFjNTE5YzliM2Y2NzE3YWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY1ZTFjZGZmNDYyMjc0NzczOWYxOTkyYjY5NWZmNGIwZDE0ODNmNTk3NjVkNDAzNmU3MDk1MWIxNTFhYmI2YjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI2ODAwMzNmMDUzZjg5ZDcyMDU1OGFiMTEwODZhYThhYjk4OTI1ODQyOGJjNjM4NmI0NzQ0N2RhMTdmZjM3ZWIifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L291-L301",
+          "version": "repo-lines-v1:sha256:175e535824b353edff7b37c751286e35ab063dc442c6fe327d8e2b2cfc29f773:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI5MjA3ODRmMzUwYjE2YWQwZGY2ZjIzYmFiOTM1ZWJhZjc4MjFjY2M4MzVkNTk5ZDI1Y2YyNjlhMWY4NWM3MTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0ODdiOGM1Mjg0Mzk2Zjk2M2Q0YzE4ZThjYTFiMWU4ODljZTExMDY1ODczZTk3MjYxZjNmOGI1ZDIyZjljYzMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OWJkZWZlZWFjYTYzNDBlMDI5MGRjODZlODg5Yzg5ZDVlMTg5YWE1YmE0NGI1ODViM2I3MDczNGY0YTYyZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEwZDJlNTZkZGViNjllZTEzNjFhMTg0YWY4YTFkNzQ5NWU2MzI3MTgwOGE1NzliMGVjOTQ3NzA2NzUzMDk4MGQifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L412-L440",
+          "version": "repo-lines-v1:sha256:69d8f1b12ad56cb2dbb488f9c1ba3656551d8f9d1ed1e5db9f732999de4921d3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0MTMyOGIyMTFhMGExOThkODJmMDNkOWFiZTA5ZWUyNzA5Y2Q1NGY4Mzk0YWQzYjMxOWY0NmQ0OWUzZjU1MGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmYWI3MTBkZGY3ODU5ZTU3NTc2NGE5MTNhMDAyYzc0NTg1ZmZhNzAwMTUxMGNiODgxMWRhODNkMmNmNzRiMzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2YmY4MWQ4NTNjNTgzMjI3NzQ0NjFkNWNlYWIxYzE1YWY2MDQ1YjRkYmE2ZmU3MTUxN2VmZGQ4NGQ3NTI4OGMifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L653-L682",
+          "version": "repo-lines-v1:sha256:337e3b0766805dcb8fe1265365c448a1e7a68a0662bf8b3e41462d38cbb95891:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxY2M0MDY4N2QyNDRlOWRhZjkxY2VkNDY1MjMyNjU2OWE0ZmI2ZGZjODFkMDNmYmU3MjNhNWVhM2NjYmU5ZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY1NDZmNmM5ZGY3ZTllZDI5ZmMyNGFkMjJhNGUzMTIyYWU1ZjAyMGEwZDRlZGU0MzIxMDdlNTZhNjJkY2IxODAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIxZDQ5NWFlMGNkMTNhNzlhYzczYjQ5OTU2ZjE5ZDcxOWFkNjE2Y2NjZjIyZDQzOThhNjNhY2FhMzhhM2UxOTQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_030eee27c57d4e21a7a9b43e67ab2623",
+      "statement": "Background startup launches a startup-sync task that waits two seconds, loads and scans watched folders, and submits the result as SyncSource::Startup, so startup synchronization reaches the same credential gate as other synchronization sources.",
+      "evidence": [
+        {
+          "resource": "repo://src-tauri/src/app/background.rs#L14-L24",
+          "version": "repo-lines-v1:sha256:8c5b44e7af5bd3c6afcb9c13ab84911548f601397405813ad03512c7bca33235:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5YjhmNzQwNDIyZjQwMDkzYzk0YmVkMTE2M2U0ZTJlMTQwMWVhYjAzMGRiOGZiZWIxYzFkYzBmNTdlZmUyNzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmZjFiZTI5MGU1OWFjN2U0NmYwZDRjYTg2MTZkNmQyZTVjZTAyMmIzOWM5ZmUzNTU2YjVlZjE0NTk3ZDBlYmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4Yzk2ZTY4NzBmZjZhYmI5MmZjODBiZjA2NTVhYzEwOTEwMGVjNDc2YzFlOWZkZWE2OGJjY2QxYjdiMDE3M2YifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/app/background.rs#L192-L232",
+          "version": "repo-lines-v1:sha256:5bff2265690101c375f215e429d816689a633ef39437aab330dde439b684de99:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzZjIzYmEwYjg0ZmFiYjY1ZDU4MGZmODVkYmFmMzdiNjA3YmEzZTAxYzQ2OGYxOWMxMGYyOTNkMTEyODVlMzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmYWI3MTBkZGY3ODU5ZTU3NTc2NGE5MTNhMDAyYzc0NTg1ZmZhNzAwMTUxMGNiODgxMWRhODNkMmNmNzRiMzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYwMDhkNmJmODQyMTNhYzlhZmFhNjI1OGYzZDAwZWJkMTA5YTdhNGNmMjY5NjBiY2FjYjg2ZDA2MzA1ZWNlYTUifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L18-L47",
+          "version": "repo-lines-v1:sha256:e923e7807c7bcbb1d699aa17908a3070abd32009eca3dac6d751318fb842f038:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEwY2E3MzA4YzY3MmY4ZGJkZDhiZmUzNjMzYTVhZmZkYmZiYzc2ZjAyMGZhNjgwM2RlMTllNWY0YzljYmY4YzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzMjA2ODkxNzY1MmNiYmVlZGQwNWZmMWMwNzliOTk4Zjg3NzhhY2ZlMGRmODkxNDBkMGNjOWY5MGM5NjcwMGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImExYjFmNTlmODkxMTdlZTVkMTBhNzExOWI3NmU5NWQ5NTk3ODJiMzRiNjM5NDVkZGUxMzM1ZmZhNTkxOGVlYjYifQ"
+        },
+        {
+          "resource": "repo://src-tauri/src/sync/service.rs#L557-L575",
+          "version": "repo-lines-v1:sha256:225c14eb1ae8b60315534659baa0c3e8b9ef18232cf69b11fba7f132576e9304:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0NWJlMDFkZWUyNjg4NmRjYjIzZGFjY2ZjZjc4NWY5MjE1OTYyM2IwOGM3MTIwZDFkYjE5ZGRiZGMwOGIxMWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZTc2MzU1Y2YxMTk5NDgwYzNmOTk4MzZiMTQ4NmM4NDFkODkxZmFhZDkwNGM2MDhlMDkzMDIyZDM3NTdhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiYzk4ZDZiMGRjNDkyYzUwMTZkZjEwODA1YTNhNTRlYjljMTg0YTVhNjEzN2U3ZjRiZWNmYTBjMjIwNTUwZDAifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-11-09T18:02:27.157Z"
+    "at": "2026-11-13T15:48:39.594Z"
   }
 }
