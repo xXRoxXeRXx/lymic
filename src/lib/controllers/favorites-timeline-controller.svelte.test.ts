@@ -98,6 +98,19 @@ describe("Favorites Timeline controller", () => {
     favorites.removeAsset("fav-2");
     expect(favorites.buckets).toEqual([]);
     expect(favorites.assetsFor("2025-03-01T00:00:00.000Z")).toEqual([]);
+
+    favorites.restoreAsset("fav-2");
+    expect(favorites.buckets).toEqual([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]);
+    expect(favorites.assetsFor("2025-03-01T00:00:00.000Z").map((asset) => asset.id)).toEqual(["fav-2"]);
+
+    favorites.restoreAsset("fav-3");
+    favorites.restoreAsset("fav-1");
+    expect(favorites.buckets).toEqual([
+      { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
+      { timeBucket: "2025-02-01T00:00:00.000Z", count: 1 },
+    ]);
+    expect(favorites.assetsFor("2025-03-01T00:00:00.000Z").map((asset) => asset.id)).toEqual(["fav-1", "fav-2"]);
+    expect(favorites.assetsFor("2025-02-01T00:00:00.000Z").map((asset) => asset.id)).toEqual(["fav-3"]);
   });
 });
 

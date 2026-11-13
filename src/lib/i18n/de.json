@@ -228,56 +228,76 @@
   "hide_secret": "Geheimnis ausblenden",
   "log_duplicate_resolve_failed": "Duplikat {file} konnte nicht aufgelöst werden: {error}",
   "log_upload_completion_persist_failed": "Synchronisierung für {file} konnte nicht abgeschlossen werden: {error}",
-  "log_removable_volume_error": "Fehler bei der Verarbeitung des Wechseldatenträgerereignisses: {error}"
-  ,"hero_landscape": "Titelbild-Landschaft"
-  ,"lymic_logo": "Lymic-Logo"
-  ,"main_navigation": "Hauptnavigation"
-  ,"people_title": "Personen", "people_loading": "Personen werden geladen…", "people_empty": "Noch keine erkannten Personen.", "people_unnamed": "Unbenannte Person", "people_asset_count": "{count} Medien", "people_load_more": "Mehr laden", "people_refresh": "Personen aktualisieren", "people_retry": "Erneut versuchen", "people_offline": "Personen sind offline. Zwischengespeicherte Personen werden angezeigt.", "people_error": "Personen konnten nicht geladen werden.", "people_unavailable": "Personen sind nicht verfügbar. Prüfen Sie Gesichtserkennung und API-Berechtigungen."
-  ,"people_return": "Zurück zu Personen"
-  ,"people_timeline_empty": "Diese Person hat noch keine erreichbaren Fotos."
-  ,"albums_title": "Alben", "albums_loading": "Alben werden geladen…", "albums_empty": "Noch keine zugänglichen Alben.", "albums_refresh": "Alben aktualisieren", "albums_retry": "Erneut versuchen", "albums_offline": "Alben sind offline. Zwischengespeicherte Alben werden angezeigt.", "albums_error": "Alben konnten nicht geladen werden.", "albums_asset_count": "{count} Medien", "albums_shared": "Geteilt", "albums_return": "Zurück zu Alben", "albums_timeline_empty": "Dieses Album hat noch keine erreichbaren Fotos."
-  ,"timeline_add_favorite": "Zu Favoriten hinzufügen"
-  ,"timeline_remove_favorite": "Aus Favoriten entfernen"
-  ,"timeline_favorite_update_error": "Favorit konnte nicht aktualisiert werden"
-  ,"timeline_download_original": "Original herunterladen"
-  ,"timeline_download_saved": "Download gespeichert"
-  ,"timeline_download_failed": "Original konnte nicht heruntergeladen werden"
-  ,"timeline_add_to_album": "Zum Album hinzufügen"
-  ,"timeline_add_to_album_modal_title": "Album auswählen"
-  ,"timeline_add_to_album_modal_subtitle": "Wähle ein Album für dieses Medium aus"
-  ,"timeline_add_to_album_confirm": "Zum Album hinzufügen"
-  ,"timeline_add_to_album_success": "Zum Album hinzugefügt"
-  ,"timeline_add_to_album_failed": "Medium konnte nicht zum Album hinzugefügt werden"
-  ,"timeline_favorite_marker": "Favorit"
-  ,"timeline_info": "Informationen"
-  ,"timeline_close_info": "Informationen schließen"
-  ,"timeline_info_loading": "Informationen werden geladen"
-  ,"timeline_info_unavailable": "Informationen sind nicht verfügbar."
-  ,"timeline_info_capture": "Aufnahme"
-  ,"timeline_info_date": "Datum"
-  ,"timeline_info_location": "Ort"
-  ,"timeline_info_camera": "Kamera"
-  ,"timeline_info_lens": "Objektiv"
-  ,"timeline_info_exposure": "Belichtung"
-  ,"timeline_info_file": "Datei"
-  ,"timeline_info_filename": "Dateiname"
-  ,"timeline_info_dimensions": "Abmessungen"
-  ,"timeline_info_size": "Dateigröße"
-  ,"timeline_selection_count": "{count} ausgewählt"
-  ,"timeline_selection_finish": "Fertig"
-  ,"timeline_selection_download": "Auswahl herunterladen"
-  ,"timeline_selection_download_success": "{count} Medien heruntergeladen"
-  ,"timeline_selection_download_failed": "Ausgewählte Medien konnten nicht heruntergeladen werden"
-  ,"timeline_select_asset": "Medium auswählen"
-  ,"timeline_selection_favorite_success": "{count} Medien aktualisiert"
-  ,"timeline_selection_favorite_partial": "{succeeded} von {count} Medien aktualisiert"
-  ,"timeline_selection_favorite_failed": "Ausgewählte Medien konnten nicht aktualisiert werden"
-  ,"timeline_selection_album_success": "{count} Medien zum Album hinzugefügt"
-  ,"timeline_selection_album_partial": "{succeeded} von {count} Medien zum Album hinzugefügt"
-  ,"timeline_selection_album_failed": "Ausgewählte Medien konnten nicht zum Album hinzugefügt werden"
-  ,"favorites_title": "Favoriten"
-  ,"favorites_loading": "Favoriten werden geladen…"
-  ,"favorites_empty": "Noch keine Favoriten. Markiere Fotos oder Videos als Favorit, um sie hier zu sehen."
-  ,"favorites_error": "Favoriten konnten nicht geladen werden."
-  ,"favorites_offline": "Favoriten-Timeline ist offline. Zwischengespeicherte Favoriten werden angezeigt."
+  "log_removable_volume_error": "Fehler bei der Verarbeitung des Wechseldatenträgerereignisses: {error}",
+  "hero_landscape": "Titelbild-Landschaft",
+  "lymic_logo": "Lymic-Logo",
+  "main_navigation": "Hauptnavigation",
+  "people_title": "Personen",
+  "people_loading": "Personen werden geladen…",
+  "people_empty": "Noch keine erkannten Personen.",
+  "people_unnamed": "Unbenannte Person",
+  "people_asset_count": "{count} Medien",
+  "people_load_more": "Mehr laden",
+  "people_refresh": "Personen aktualisieren",
+  "people_retry": "Erneut versuchen",
+  "people_offline": "Personen sind offline. Zwischengespeicherte Personen werden angezeigt.",
+  "people_error": "Personen konnten nicht geladen werden.",
+  "people_unavailable": "Personen sind nicht verfügbar. Prüfen Sie Gesichtserkennung und API-Berechtigungen.",
+  "people_return": "Zurück zu Personen",
+  "people_timeline_empty": "Diese Person hat noch keine erreichbaren Fotos.",
+  "albums_title": "Alben",
+  "albums_loading": "Alben werden geladen…",
+  "albums_empty": "Noch keine zugänglichen Alben.",
+  "albums_refresh": "Alben aktualisieren",
+  "albums_retry": "Erneut versuchen",
+  "albums_offline": "Alben sind offline. Zwischengespeicherte Alben werden angezeigt.",
+  "albums_error": "Alben konnten nicht geladen werden.",
+  "albums_asset_count": "{count} Medien",
+  "albums_shared": "Geteilt",
+  "albums_return": "Zurück zu Alben",
+  "albums_timeline_empty": "Dieses Album hat noch keine erreichbaren Fotos.",
+  "timeline_add_favorite": "Zu Favoriten hinzufügen",
+  "timeline_remove_favorite": "Aus Favoriten entfernen",
+  "timeline_favorite_update_error": "Favorit konnte nicht aktualisiert werden",
+  "timeline_download_original": "Original herunterladen",
+  "timeline_download_saved": "Download gespeichert",
+  "timeline_download_failed": "Original konnte nicht heruntergeladen werden",
+  "timeline_add_to_album": "Zum Album hinzufügen",
+  "timeline_add_to_album_modal_title": "Album auswählen",
+  "timeline_add_to_album_modal_subtitle": "Wähle ein Album für dieses Medium aus",
+  "timeline_add_to_album_confirm": "Zum Album hinzufügen",
+  "timeline_add_to_album_success": "Zum Album hinzugefügt",
+  "timeline_add_to_album_failed": "Medium konnte nicht zum Album hinzugefügt werden",
+  "timeline_favorite_marker": "Favorit",
+  "timeline_info": "Informationen",
+  "timeline_close_info": "Informationen schließen",
+  "timeline_info_loading": "Informationen werden geladen",
+  "timeline_info_unavailable": "Informationen sind nicht verfügbar.",
+  "timeline_info_capture": "Aufnahme",
+  "timeline_info_date": "Datum",
+  "timeline_info_location": "Ort",
+  "timeline_info_camera": "Kamera",
+  "timeline_info_lens": "Objektiv",
+  "timeline_info_exposure": "Belichtung",
+  "timeline_info_file": "Datei",
+  "timeline_info_filename": "Dateiname",
+  "timeline_info_dimensions": "Abmessungen",
+  "timeline_info_size": "Dateigröße",
+  "timeline_selection_count": "{count} ausgewählt",
+  "timeline_selection_finish": "Fertig",
+  "timeline_selection_download": "Auswahl herunterladen",
+  "timeline_selection_download_success": "{count} Medien heruntergeladen",
+  "timeline_selection_download_failed": "Ausgewählte Medien konnten nicht heruntergeladen werden",
+  "timeline_select_asset": "Medium auswählen",
+  "timeline_selection_favorite_success": "{count} Medien aktualisiert",
+  "timeline_selection_favorite_partial": "{succeeded} von {count} Medien aktualisiert",
+  "timeline_selection_favorite_failed": "Ausgewählte Medien konnten nicht aktualisiert werden",
+  "timeline_selection_album_success": "{count} Medien zum Album hinzugefügt",
+  "timeline_selection_album_partial": "{succeeded} von {count} Medien zum Album hinzugefügt",
+  "timeline_selection_album_failed": "Ausgewählte Medien konnten nicht zum Album hinzugefügt werden",
+  "favorites_title": "Favoriten",
+  "favorites_loading": "Favoriten werden geladen…",
+  "favorites_empty": "Noch keine Favoriten. Markiere Fotos oder Videos als Favorit, um sie hier zu sehen.",
+  "favorites_error": "Favoriten konnten nicht geladen werden.",
+  "favorites_offline": "Favoriten-Zeitachse ist offline. Zwischengespeicherte Favoriten werden angezeigt."
 }

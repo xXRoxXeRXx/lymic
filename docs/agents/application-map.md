@@ -33,8 +33,8 @@ Rust application services
 
 | Area | Start here | Responsibility |
 | --- | --- | --- |
-| UI composition | `src/routes/+page.svelte` | Creates controllers, hydrates them, and selects login, photo timeline, dashboard, or settings views. |
-| UI state and IPC callers | `src/lib/controllers/` | One controller per concern: auth, timeline, sync, watched folders, preferences, update, and feedback. |
+| UI composition | `src/routes/+page.svelte` | Creates controllers, hydrates them, and selects login, photo timeline, favorites, map, albums, people, dashboard, logs, settings, or info views. |
+| UI state and IPC callers | `src/lib/controllers/` | One controller per concern: auth, timeline, favorites timeline, sync, watched folders, preferences, update, and feedback. |
 | UI components and translations | `src/lib/components/`, `src/lib/i18n/` | Present controller state; locale files are the UI strings. |
 | Frontend IPC contracts and adapters | `src/lib/contracts.ts`, `src/lib/tauri/desktop-adapter.ts` | Shared frontend DTOs/state types and domain-split Tauri command adapters. |
 | UI event bridge | `src/lib/tauri/sync-event-subscription.ts` | Stable frontend subscriptions and event payload expectations. |
@@ -78,7 +78,7 @@ The map controller (`src/lib/controllers/map-controller.svelte.ts`) owns the ses
 
 ### Tauri IPC
 
-Commands are registered in `app/mod.rs`; implementations live in `commands/`. The command groups are `auth`, `albums`, `timeline`, `folders`, `sync`, and `settings`. `get_asset_details` belongs to the timeline surface and supplies the Lightbox with a Remote Asset's original filename, favorite status, and optional EXIF details. `set_asset_favorite` changes a Remote Asset's favorite status. `download_asset` streams a Remote Asset's original file to the user-chosen Download path. `download_archive` retrieves Immich's ZIP archive, opens the native save dialog with Immich's safe suggested filename, and streams it to the selected path. `add_assets_to_album` adds one or more Remote Assets to an existing Album and reports successful and failed assignments. Shared frontend IPC contracts live in `src/lib/contracts.ts`, and domain-specific adapter interfaces live in `src/lib/tauri/desktop-adapter.ts`. When changing a command, update its contract, domain adapter interface, owning caller (controller or component), and tests in the same change.
+Commands are registered in `app/mod.rs`; implementations live in `commands/`. The command groups are `auth`, `albums`, `timeline`, `folders`, `sync`, and `settings`. `get_favorites_timeline_buckets` and `get_favorites_timeline_bucket_assets` belong to the timeline surface and supply the Favorites Timeline with favorite buckets and per-bucket Remote Assets. `get_asset_details` belongs to the timeline surface and supplies the Lightbox with a Remote Asset's original filename, favorite status, and optional EXIF details. `set_asset_favorite` changes a Remote Asset's favorite status. `download_asset` streams a Remote Asset's original file to the user-chosen Download path. `download_archive` retrieves Immich's ZIP archive, opens the native save dialog with Immich's safe suggested filename, and streams it to the selected path. `add_assets_to_album` adds one or more Remote Assets to an existing Album and reports successful and failed assignments. Shared frontend IPC contracts live in `src/lib/contracts.ts`, and domain-specific adapter interfaces live in `src/lib/tauri/desktop-adapter.ts`. When changing a command, update its contract, domain adapter interface, owning caller (controller or component), and tests in the same change.
 
 The backend emits `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `log-message`, and `sync-idle`. Keep event names and serialized payloads backward-compatible within the application release.
 

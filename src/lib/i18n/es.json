@@ -228,56 +228,76 @@
   "hide_secret": "Ocultar secreto",
   "log_duplicate_resolve_failed": "No se pudo resolver el duplicado {file}: {error}",
   "log_upload_completion_persist_failed": "No se pudo completar la sincronización de {file}: {error}",
-  "log_removable_volume_error": "Error al procesar el evento del volumen extraíble: {error}"
-  ,"hero_landscape": "Paisaje de portada"
-  ,"lymic_logo": "Logotipo de Lymic"
-  ,"main_navigation": "Navegación principal"
-  ,"people_title": "Personas", "people_loading": "Cargando personas…", "people_empty": "Aún no hay personas reconocidas.", "people_unnamed": "Persona sin nombre", "people_asset_count": "{count} elementos", "people_load_more": "Cargar más", "people_refresh": "Actualizar personas", "people_retry": "Reintentar", "people_offline": "Personas sin conexión. Mostrando datos guardados.", "people_error": "No se pudieron cargar las personas.", "people_unavailable": "Personas no disponibles. Compruebe el reconocimiento facial y los permisos de API."
-  ,"people_return": "Volver a Personas"
-  ,"people_timeline_empty": "Esta persona todavía no tiene fotos disponibles."
-  ,"albums_title": "Álbumes", "albums_loading": "Cargando álbumes…", "albums_empty": "Aún no hay álbumes accesibles.", "albums_refresh": "Actualizar álbumes", "albums_retry": "Reintentar", "albums_offline": "Los álbumes están sin conexión. Mostrando álbumes en caché.", "albums_error": "No se pudieron cargar los álbumes.", "albums_asset_count": "{count} elementos", "albums_shared": "Compartido", "albums_return": "Volver a Álbumes", "albums_timeline_empty": "Este álbum todavía no tiene fotos disponibles."
-  ,"timeline_add_favorite": "Add to favorites"
-  ,"timeline_remove_favorite": "Remove from favorites"
-  ,"timeline_favorite_update_error": "Could not update favorite"
-  ,"timeline_download_original": "Descargar original"
-  ,"timeline_download_saved": "Descarga guardada"
-  ,"timeline_download_failed": "No se pudo descargar el original"
-  ,"timeline_add_to_album": "Añadir al álbum"
-  ,"timeline_add_to_album_modal_title": "Añadir al álbum"
-  ,"timeline_add_to_album_modal_subtitle": "Selecciona un álbum para este recurso"
-  ,"timeline_add_to_album_confirm": "Añadir al álbum"
-  ,"timeline_add_to_album_success": "Añadido al álbum"
-  ,"timeline_add_to_album_failed": "No se pudo añadir el recurso al álbum"
-  ,"timeline_favorite_marker": "Favorite"
-  ,"timeline_info": "Info"
-  ,"timeline_close_info": "Close info"
-  ,"timeline_info_loading": "Loading info"
-  ,"timeline_info_unavailable": "Info is unavailable."
-  ,"timeline_info_capture": "Capture"
-  ,"timeline_info_date": "Date"
-  ,"timeline_info_location": "Location"
-  ,"timeline_info_camera": "Camera"
-  ,"timeline_info_lens": "Lens"
-  ,"timeline_info_exposure": "Exposure"
-  ,"timeline_info_file": "File"
-  ,"timeline_info_filename": "File name"
-  ,"timeline_info_dimensions": "Dimensions"
-  ,"timeline_info_size": "File size"
-  ,"timeline_selection_count": "{count} selected"
-  ,"timeline_selection_finish": "Done"
-  ,"timeline_selection_download": "Descargar selección"
-  ,"timeline_selection_download_success": "Se descargaron {count} archivos"
-  ,"timeline_selection_download_failed": "No se pudieron descargar los archivos seleccionados"
-  ,"timeline_select_asset": "Select asset"
-  ,"timeline_selection_favorite_success": "Updated {count} assets"
-  ,"timeline_selection_favorite_partial": "Updated {succeeded} of {count} assets"
-  ,"timeline_selection_favorite_failed": "Could not update selected assets"
-  ,"timeline_selection_album_success": "Added {count} assets to album"
-  ,"timeline_selection_album_partial": "Added {succeeded} of {count} assets to album"
-  ,"timeline_selection_album_failed": "Could not add selected assets to album"
-  ,"favorites_title": "Favoritos"
-  ,"favorites_loading": "Cargando favoritos…"
-  ,"favorites_empty": "Aún no hay favoritos. Marca fotos o videos como favoritos para verlos aquí."
-  ,"favorites_error": "No se pudieron cargar los favoritos."
-  ,"favorites_offline": "La cronología de favoritos está sin conexión. Mostrando favoritos en caché."
+  "log_removable_volume_error": "Error al procesar el evento del volumen extraíble: {error}",
+  "hero_landscape": "Paisaje de portada",
+  "lymic_logo": "Logotipo de Lymic",
+  "main_navigation": "Navegación principal",
+  "people_title": "Personas",
+  "people_loading": "Cargando personas…",
+  "people_empty": "Aún no hay personas reconocidas.",
+  "people_unnamed": "Persona sin nombre",
+  "people_asset_count": "{count} elementos",
+  "people_load_more": "Cargar más",
+  "people_refresh": "Actualizar personas",
+  "people_retry": "Reintentar",
+  "people_offline": "Personas sin conexión. Mostrando datos guardados.",
+  "people_error": "No se pudieron cargar las personas.",
+  "people_unavailable": "Personas no disponibles. Compruebe el reconocimiento facial y los permisos de API.",
+  "people_return": "Volver a Personas",
+  "people_timeline_empty": "Esta persona todavía no tiene fotos disponibles.",
+  "albums_title": "Álbumes",
+  "albums_loading": "Cargando álbumes…",
+  "albums_empty": "Aún no hay álbumes accesibles.",
+  "albums_refresh": "Actualizar álbumes",
+  "albums_retry": "Reintentar",
+  "albums_offline": "Los álbumes están sin conexión. Mostrando álbumes en caché.",
+  "albums_error": "No se pudieron cargar los álbumes.",
+  "albums_asset_count": "{count} elementos",
+  "albums_shared": "Compartido",
+  "albums_return": "Volver a Álbumes",
+  "albums_timeline_empty": "Este álbum todavía no tiene fotos disponibles.",
+  "timeline_add_favorite": "Add to favorites",
+  "timeline_remove_favorite": "Remove from favorites",
+  "timeline_favorite_update_error": "Could not update favorite",
+  "timeline_download_original": "Descargar original",
+  "timeline_download_saved": "Descarga guardada",
+  "timeline_download_failed": "No se pudo descargar el original",
+  "timeline_add_to_album": "Añadir al álbum",
+  "timeline_add_to_album_modal_title": "Añadir al álbum",
+  "timeline_add_to_album_modal_subtitle": "Selecciona un álbum para este recurso",
+  "timeline_add_to_album_confirm": "Añadir al álbum",
+  "timeline_add_to_album_success": "Añadido al álbum",
+  "timeline_add_to_album_failed": "No se pudo añadir el recurso al álbum",
+  "timeline_favorite_marker": "Favorite",
+  "timeline_info": "Info",
+  "timeline_close_info": "Close info",
+  "timeline_info_loading": "Loading info",
+  "timeline_info_unavailable": "Info is unavailable.",
+  "timeline_info_capture": "Capture",
+  "timeline_info_date": "Date",
+  "timeline_info_location": "Location",
+  "timeline_info_camera": "Camera",
+  "timeline_info_lens": "Lens",
+  "timeline_info_exposure": "Exposure",
+  "timeline_info_file": "File",
+  "timeline_info_filename": "File name",
+  "timeline_info_dimensions": "Dimensions",
+  "timeline_info_size": "File size",
+  "timeline_selection_count": "{count} selected",
+  "timeline_selection_finish": "Done",
+  "timeline_selection_download": "Descargar selección",
+  "timeline_selection_download_success": "Se descargaron {count} archivos",
+  "timeline_selection_download_failed": "No se pudieron descargar los archivos seleccionados",
+  "timeline_select_asset": "Select asset",
+  "timeline_selection_favorite_success": "Updated {count} assets",
+  "timeline_selection_favorite_partial": "Updated {succeeded} of {count} assets",
+  "timeline_selection_favorite_failed": "Could not update selected assets",
+  "timeline_selection_album_success": "Added {count} assets to album",
+  "timeline_selection_album_partial": "Added {succeeded} of {count} assets to album",
+  "timeline_selection_album_failed": "Could not add selected assets to album",
+  "favorites_title": "Favoritos",
+  "favorites_loading": "Cargando favoritos…",
+  "favorites_empty": "Aún no hay favoritos. Marca fotos o vídeos como favoritos para verlos aquí.",
+  "favorites_error": "No se pudieron cargar los favoritos.",
+  "favorites_offline": "La línea de tiempo de favoritos está sin conexión. Mostrando favoritos en caché."
 }

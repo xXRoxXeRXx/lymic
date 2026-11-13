@@ -228,56 +228,76 @@
   "hide_secret": "إخفاء السر",
   "log_duplicate_resolve_failed": "تعذر حل النسخة المكررة {file}: {error}",
   "log_upload_completion_persist_failed": "تعذر إكمال مزامنة {file}: {error}",
-  "log_removable_volume_error": "خطأ في معالجة حدث وحدة التخزين القابلة للإزالة: {error}"
-  ,"hero_landscape": "منظر رئيسي"
-  ,"lymic_logo": "شعار Lymic"
-  ,"main_navigation": "التنقل الرئيسي"
-  ,"people_title": "الأشخاص", "people_loading": "جارٍ تحميل الأشخاص…", "people_empty": "لا يوجد أشخاص معروفون بعد.", "people_unnamed": "شخص بلا اسم", "people_asset_count": "{count} عناصر", "people_load_more": "تحميل المزيد", "people_refresh": "تحديث الأشخاص", "people_retry": "إعادة المحاولة", "people_offline": "الأشخاص غير متصلين. يتم عرض البيانات المخزنة.", "people_error": "تعذر تحميل الأشخاص.", "people_unavailable": "الأشخاص غير متاحين. تحقق من التعرف على الوجوه وأذونات API."
-  ,"people_return": "Back to People"
-  ,"people_timeline_empty": "This person has no reachable photos yet."
-  ,"albums_title": "الألبومات", "albums_loading": "جارٍ تحميل الألبومات…", "albums_empty": "لا توجد ألبومات متاحة بعد.", "albums_refresh": "تحديث الألبومات", "albums_retry": "إعادة المحاولة", "albums_offline": "الألبومات غير متصلة. يتم عرض الألبومات المخزنة مؤقتًا.", "albums_error": "تعذر تحميل الألبومات.", "albums_asset_count": "{count} عناصر", "albums_shared": "مشترك", "albums_return": "العودة إلى الألبومات", "albums_timeline_empty": "لا توجد صور متاحة في هذا الألبوم بعد."
-  ,"timeline_add_favorite": "Add to favorites"
-  ,"timeline_remove_favorite": "Remove from favorites"
-  ,"timeline_favorite_update_error": "Could not update favorite"
-  ,"timeline_download_original": "تنزيل الملف الأصلي"
-  ,"timeline_download_saved": "تم حفظ التنزيل"
-  ,"timeline_download_failed": "تعذر تنزيل الملف الأصلي"
-  ,"timeline_add_to_album": "إضافة إلى ألبوم"
-  ,"timeline_add_to_album_modal_title": "إضافة إلى ألبوم"
-  ,"timeline_add_to_album_modal_subtitle": "اختر ألبومًا لهذا الأصل"
-  ,"timeline_add_to_album_confirm": "إضافة إلى ألبوم"
-  ,"timeline_add_to_album_success": "تمت الإضافة إلى الألبوم"
-  ,"timeline_add_to_album_failed": "تعذرت إضافة الأصل إلى الألبوم"
-  ,"timeline_favorite_marker": "Favorite"
-  ,"timeline_info": "Info"
-  ,"timeline_close_info": "Close info"
-  ,"timeline_info_loading": "Loading info"
-  ,"timeline_info_unavailable": "Info is unavailable."
-  ,"timeline_info_capture": "Capture"
-  ,"timeline_info_date": "Date"
-  ,"timeline_info_location": "Location"
-  ,"timeline_info_camera": "Camera"
-  ,"timeline_info_lens": "Lens"
-  ,"timeline_info_exposure": "Exposure"
-  ,"timeline_info_file": "File"
-  ,"timeline_info_filename": "File name"
-  ,"timeline_info_dimensions": "Dimensions"
-  ,"timeline_info_size": "File size"
-  ,"timeline_selection_count": "{count} selected"
-  ,"timeline_selection_finish": "Done"
-  ,"timeline_selection_download": "تنزيل المحدد"
-  ,"timeline_selection_download_success": "تم تنزيل {count} عنصرًا"
-  ,"timeline_selection_download_failed": "تعذر تنزيل العناصر المحددة"
-  ,"timeline_select_asset": "Select asset"
-  ,"timeline_selection_favorite_success": "Updated {count} assets"
-  ,"timeline_selection_favorite_partial": "Updated {succeeded} of {count} assets"
-  ,"timeline_selection_favorite_failed": "Could not update selected assets"
-  ,"timeline_selection_album_success": "Added {count} assets to album"
-  ,"timeline_selection_album_partial": "Added {succeeded} of {count} assets to album"
-  ,"timeline_selection_album_failed": "Could not add selected assets to album"
-  ,"favorites_title": "المفضلة"
-  ,"favorites_loading": "جارٍ تحميل المفضلة…"
-  ,"favorites_empty": "لا توجد عناصر مفضلة بعد. أضف صورًا أو مقاطع فيديو إلى المفضلة لعرضها هنا."
-  ,"favorites_error": "تعذر تحميل المفضلة."
-  ,"favorites_offline": "الجدول الزمني للمفضلة غير متصل. يتم عرض المفضلة المخزنة مؤقتًا."
+  "log_removable_volume_error": "خطأ في معالجة حدث وحدة التخزين القابلة للإزالة: {error}",
+  "hero_landscape": "منظر رئيسي",
+  "lymic_logo": "شعار Lymic",
+  "main_navigation": "التنقل الرئيسي",
+  "people_title": "الأشخاص",
+  "people_loading": "جارٍ تحميل الأشخاص…",
+  "people_empty": "لا يوجد أشخاص معروفون بعد.",
+  "people_unnamed": "شخص بلا اسم",
+  "people_asset_count": "{count} عناصر",
+  "people_load_more": "تحميل المزيد",
+  "people_refresh": "تحديث الأشخاص",
+  "people_retry": "إعادة المحاولة",
+  "people_offline": "الأشخاص غير متصلين. يتم عرض البيانات المخزنة.",
+  "people_error": "تعذر تحميل الأشخاص.",
+  "people_unavailable": "الأشخاص غير متاحين. تحقق من التعرف على الوجوه وأذونات API.",
+  "people_return": "Back to People",
+  "people_timeline_empty": "This person has no reachable photos yet.",
+  "albums_title": "الألبومات",
+  "albums_loading": "جارٍ تحميل الألبومات…",
+  "albums_empty": "لا توجد ألبومات متاحة بعد.",
+  "albums_refresh": "تحديث الألبومات",
+  "albums_retry": "إعادة المحاولة",
+  "albums_offline": "الألبومات غير متصلة. يتم عرض الألبومات المخزنة مؤقتًا.",
+  "albums_error": "تعذر تحميل الألبومات.",
+  "albums_asset_count": "{count} عناصر",
+  "albums_shared": "مشترك",
+  "albums_return": "العودة إلى الألبومات",
+  "albums_timeline_empty": "لا توجد صور متاحة في هذا الألبوم بعد.",
+  "timeline_add_favorite": "Add to favorites",
+  "timeline_remove_favorite": "Remove from favorites",
+  "timeline_favorite_update_error": "Could not update favorite",
+  "timeline_download_original": "تنزيل الملف الأصلي",
+  "timeline_download_saved": "تم حفظ التنزيل",
+  "timeline_download_failed": "تعذر تنزيل الملف الأصلي",
+  "timeline_add_to_album": "إضافة إلى ألبوم",
+  "timeline_add_to_album_modal_title": "إضافة إلى ألبوم",
+  "timeline_add_to_album_modal_subtitle": "اختر ألبومًا لهذا الأصل",
+  "timeline_add_to_album_confirm": "إضافة إلى ألبوم",
+  "timeline_add_to_album_success": "تمت الإضافة إلى الألبوم",
+  "timeline_add_to_album_failed": "تعذرت إضافة الأصل إلى الألبوم",
+  "timeline_favorite_marker": "Favorite",
+  "timeline_info": "Info",
+  "timeline_close_info": "Close info",
+  "timeline_info_loading": "Loading info",
+  "timeline_info_unavailable": "Info is unavailable.",
+  "timeline_info_capture": "Capture",
+  "timeline_info_date": "Date",
+  "timeline_info_location": "Location",
+  "timeline_info_camera": "Camera",
+  "timeline_info_lens": "Lens",
+  "timeline_info_exposure": "Exposure",
+  "timeline_info_file": "File",
+  "timeline_info_filename": "File name",
+  "timeline_info_dimensions": "Dimensions",
+  "timeline_info_size": "File size",
+  "timeline_selection_count": "{count} selected",
+  "timeline_selection_finish": "Done",
+  "timeline_selection_download": "تنزيل المحدد",
+  "timeline_selection_download_success": "تم تنزيل {count} عنصرًا",
+  "timeline_selection_download_failed": "تعذر تنزيل العناصر المحددة",
+  "timeline_select_asset": "Select asset",
+  "timeline_selection_favorite_success": "Updated {count} assets",
+  "timeline_selection_favorite_partial": "Updated {succeeded} of {count} assets",
+  "timeline_selection_favorite_failed": "Could not update selected assets",
+  "timeline_selection_album_success": "Added {count} assets to album",
+  "timeline_selection_album_partial": "Added {succeeded} of {count} assets to album",
+  "timeline_selection_album_failed": "Could not add selected assets to album",
+  "favorites_title": "المفضلة",
+  "favorites_loading": "جارٍ تحميل المفضلة…",
+  "favorites_empty": "لا توجد عناصر مفضلة بعد. أضف صورًا أو مقاطع فيديو إلى المفضلة لعرضها هنا.",
+  "favorites_error": "تعذر تحميل المفضلة.",
+  "favorites_offline": "الخط الزمني للمفضلة غير متصل. يتم عرض المفضلة المخزنة مؤقتًا."
 }
