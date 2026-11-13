@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { protocolSrc } from "../tauri/protocol-src";
   import { ImageOff, RefreshCw, Users } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import type { AlbumCatalogueItem } from "../contracts";
@@ -8,16 +9,7 @@
   let failedCoverIds = $state(new Set<string>());
 
   function coverSrc(album: AlbumCatalogueItem) {
-    const encodedId = encodeURIComponent(album.albumThumbnailAssetId!);
-    const convertFileSrc = (
-      globalThis as typeof globalThis & {
-        __TAURI_INTERNALS__?: { convertFileSrc?: (filePath: string, protocol?: string) => string };
-      }
-    ).__TAURI_INTERNALS__?.convertFileSrc;
-    if (typeof convertFileSrc === "function") {
-      return `${convertFileSrc("", "lymic-thumb").replace(/\/$/, "")}/asset/${encodedId}`;
-    }
-    return `lymic-thumb://asset/${encodedId}`;
+    return protocolSrc("lymic-thumb", "asset", album.albumThumbnailAssetId!);
   }
 
   function hideCover(albumId: string) {

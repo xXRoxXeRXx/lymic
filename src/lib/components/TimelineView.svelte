@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { protocolSrc } from "../tauri/protocol-src";
   import { untrack } from "svelte";
   import { Album, Check, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, HeartOff, Info, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
@@ -342,19 +343,7 @@
     }
   }
 
-  function protocolSrc(protocol: "lymic-thumb" | "lymic-asset", kind: "asset" | "video", id: string) {
-    const encodedId = encodeURIComponent(id);
-    const convertFileSrc = (
-      globalThis as typeof globalThis & {
-        __TAURI_INTERNALS__?: { convertFileSrc?: (filePath: string, protocol?: string) => string };
-      }
-    ).__TAURI_INTERNALS__?.convertFileSrc;
-    if (typeof convertFileSrc === "function") {
-      const base = convertFileSrc("", protocol).replace(/\/$/, "");
-      return `${base}/${kind}/${encodedId}`;
-    }
-    return `${protocol}://${kind}/${encodedId}`;
-  }
+
 </script>
 
 <svelte:window onkeydown={handleKeydown} onresize={handleWindowResize} />

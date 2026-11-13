@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { protocolSrc } from "../tauri/protocol-src";
   import { flushSync, onDestroy, untrack } from "svelte";
   import { Album, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
@@ -244,19 +245,7 @@
     return `${serverUrl.replace(/\/$/, "")}/photos/${encodeURIComponent(asset.id)}`;
   }
 
-  function protocolSrc(protocol: "lymic-thumb" | "lymic-asset", kind: "asset" | "video", id: string) {
-    const encodedId = encodeURIComponent(id);
-    const convertFileSrc = (
-      globalThis as typeof globalThis & {
-        __TAURI_INTERNALS__?: { convertFileSrc?: (filePath: string, protocol?: string) => string };
-      }
-    ).__TAURI_INTERNALS__?.convertFileSrc;
-    if (typeof convertFileSrc === "function") {
-      const base = convertFileSrc("", protocol).replace(/\/$/, "");
-      return `${base}/${kind}/${encodedId}`;
-    }
-    return `${protocol}://${kind}/${encodedId}`;
-  }
+
   let initialGeneration = true;
   $effect(() => {
     refreshGeneration;
