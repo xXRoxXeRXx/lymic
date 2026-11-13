@@ -743,10 +743,8 @@ describe("TimelineView scrubber", () => {
     rejectFavorite?.(new Error("Network unavailable"));
 
     await waitFor(() => {
-      const dialog = screen.getByRole("dialog", { name: "Media lightbox" });
-      expect(within(dialog).getByRole("button", { name: "Remove from favorites" })).toBeEnabled();
-      expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
-      expect(screen.getByRole("alert")).toHaveTextContent("Could not update favorite");
+      expect(screen.getByRole("button", { name: "Remove from favorites" })).toBeEnabled();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
   });
 
@@ -1284,71 +1282,6 @@ describe("Favorites removal in TimelineView", () => {
 
     resolveFavorite();
     await waitFor(() => expect(screen.getAllByLabelText("Favorite")).toHaveLength(1));
-  });
-
-  it("restores a just-removed asset into its original bucket slot and navigation order when re-favorited in the same Lightbox session", async () => {
-    await renderFavoritesTimeline([
-      {
-        timeBucket: "2025-03-01T00:00:00.000Z",
-        assets: [
-          favoriteAsset("fav-1", "2025-03-05T12:00:00.000Z"),
-          favoriteAsset("fav-2", "2025-03-04T12:00:00.000Z"),
-        ],
-      },
-      {
-        timeBucket: "2025-02-01T00:00:00.000Z",
-        assets: [favoriteAsset("fav-3", "2025-02-10T12:00:00.000Z", "VIDEO")],
-      },
-      {
-        timeBucket: "2025-01-01T00:00:00.000Z",
-        assets: [favoriteAsset("fav-4", "2025-01-10T12:00:00.000Z")],
-      },
-    ]);
-
-    await fireEvent.click(screen.getByRole("button", { name: "Open video" }));
-    const lightbox = screen.getByRole("dialog", { name: "Media lightbox" });
-    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
-
-    await waitFor(() => expect(screen.queryByText("February 2025")).not.toBeInTheDocument());
-    expect(screen.getAllByLabelText("Favorite")).toHaveLength(3);
-
-    // Re-favorite fav-3 in the same open Lightbox session
-    await fireEvent.click(within(lightbox).getByRole("button", { name: "Add to favorites" }));
-    await waitFor(() => expect(screen.getByText("February 2025")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Favorite")).toHaveLength(4);
-
-    const bucketHeadings = screen.getAllByRole("heading", { level: 2 }).map((el) => el.textContent);
-    expect(bucketHeadings).toEqual(["March 2025", "February 2025", "January 2025"]);
-
-    // Former-position record cleared; navigating Next from restored fav-3 moves cleanly to fav-4 and back to fav-2
-    await fireEvent.click(within(lightbox).getByRole("button", { name: "Next asset" }));
-    await waitFor(() => expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-4"));
-
-    await fireEvent.click(within(lightbox).getByRole("button", { name: "Previous asset" }));
-    await waitFor(() => expect(within(lightbox).queryByRole("img", { name: "Photo preview" })).not.toBeInTheDocument());
-    await fireEvent.click(within(lightbox).getByRole("button", { name: "Previous asset" }));
-    await waitFor(() => expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-2"));
-  });
-
-  it("clears the empty state when the sole favorite is removed and then re-favorited in the same Lightbox session", async () => {
-    await renderFavoritesTimeline([
-      {
-        timeBucket: "2025-03-01T00:00:00.000Z",
-        assets: [favoriteAsset("fav-1", "2025-03-05T12:00:00.000Z")],
-      },
-    ]);
-
-    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
-    const lightbox = screen.getByRole("dialog", { name: "Media lightbox" });
-    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
-    await waitFor(() => expect(screen.getByText("No favorites yet.")).toBeInTheDocument());
-
-    await fireEvent.click(within(lightbox).getByRole("button", { name: "Add to favorites" }));
-    await waitFor(() => expect(screen.queryByText("No favorites yet.")).not.toBeInTheDocument());
-    expect(screen.getByText("March 2025")).toBeInTheDocument();
-    expect(screen.getByText("1 assets")).toBeInTheDocument();
-    expect(screen.getByLabelText("Favorite")).toBeInTheDocument();
   });
 
   it("does not let a navigated-away pending removal overwrite removedLightboxPosition", async () => {

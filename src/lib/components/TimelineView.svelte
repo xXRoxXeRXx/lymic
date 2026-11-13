@@ -10,6 +10,7 @@
   import { calculateMasonryLayout } from "./timeline-masonry";
   import Lightbox from "./Lightbox.svelte";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
+  import { createFavoritesLightboxState } from "./favorites-lightbox-state.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
   interface Props {
@@ -66,13 +67,10 @@
   let isDragging = false;
   let scrollRaf: number | null = null;
   let selectedAsset = $state<TimelineAsset | null>(null);
-  let activeLightboxAssetId = $state<string | null>(null);
-  let lightboxNavigationGeneration = 0;
-  let removedLightboxPosition = $state<{ assetId: string; timeBucket: string; index: number } | null>(null);
+  const favoritesLightbox = createFavoritesLightboxState(() => timeline);
   const assetDetailsById = new Map<string, AssetDetails | null>();
   let favoriteOverrides = $state<Record<string, boolean>>({});
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
-  let favoriteUpdateError = $state("");
   let isAddToAlbumOpen = $state(false);
   let isAddingToAlbum = $state(false);
   let addToAlbumError = $state("");
@@ -114,7 +112,7 @@
           .filter((assetId) => assetId in favoriteOverrides)
           .map((assetId) => [assetId, favoriteOverrides[assetId]]),
       );
-      favoriteUpdateError = "";
+      favoritesLightbox.clearError();
       clearSelection();
     });
   });
@@ -123,9 +121,7 @@
     timeline;
     untrack(() => {
       clearSelection();
-      activeLightboxAssetId = null;
-      removedLightboxPosition = null;
-      favoriteUpdateError = "";
+      favoritesLightbox.reset();
     });
   });
 
@@ -251,7 +247,6 @@
   }
 
   function toggleAssetSelection(assetId: string) {
-    if (isSelectionActionBusy) return;
     selectionResult = null;
     const nextSelectedAssetIds = new Set(selectedAssetIds);
     if (nextSelectedAssetIds.has(assetId)) nextSelectedAssetIds.delete(assetId);
@@ -275,20 +270,7 @@
     if (selectedAsset?.id === assetId) selectedAsset = { ...selectedAsset, isFavorite };
   }
 
-  function confirmAssetRemoval(assetId: string) {
-    const bucket = timeline.buckets.find((entry) => timeline.assetsFor(entry.timeBucket).some((candidate) => candidate.id === assetId));
-    const currentIndex = bucket ? timeline.assetsFor(bucket.timeBucket).findIndex((candidate) => candidate.id === assetId) : -1;
-    if (bucket && currentIndex !== -1) {
-      if (activeLightboxAssetId === assetId) {
-        removedLightboxPosition = { assetId, timeBucket: bucket.timeBucket, index: currentIndex };
-      } else if (removedLightboxPosition?.timeBucket === bucket.timeBucket && currentIndex < removedLightboxPosition.index) {
-        removedLightboxPosition = {
-          ...removedLightboxPosition,
-          index: Math.max(0, removedLightboxPosition.index - 1),
-        };
-      }
-    }
-    timeline.removeAsset?.(assetId);
+  function cleanupRemovedAssetState(assetId: string) {
     const { [assetId]: _removedOverride, ...remainingOverrides } = favoriteOverrides;
     favoriteOverrides = remainingOverrides;
     if (selectedAssetIds.has(assetId)) {
@@ -298,54 +280,22 @@
     }
   }
 
-  function confirmAssetRestoration(assetId: string) {
-    const wasRemovedAsset = removedLightboxPosition?.assetId === assetId;
-    timeline.restoreAsset?.(assetId);
-    if (wasRemovedAsset) {
-      removedLightboxPosition = null;
-    } else if (removedLightboxPosition) {
-      const restoredIndex = timeline.assetsFor(removedLightboxPosition.timeBucket).findIndex((candidate) => candidate.id === assetId);
-      if (restoredIndex !== -1 && restoredIndex <= removedLightboxPosition.index) {
-        removedLightboxPosition = {
-          ...removedLightboxPosition,
-          index: removedLightboxPosition.index + 1,
-        };
-      }
-    }
-    favoriteOverrides = { ...favoriteOverrides, [assetId]: true };
-    const currentDetails = assetDetailsById.get(assetId);
-    if (currentDetails) {
-      assetDetailsById.set(assetId, { ...currentDetails, isFavorite: true });
-    }
-  }
-
-  function applyConfirmedFavorite(assetId: string, isFavorite: boolean) {
-    if (!removeUnfavoritedAssets) return;
-    if (isFavorite) {
-      confirmAssetRestoration(assetId);
-    } else {
-      confirmAssetRemoval(assetId);
-    }
-  }
-
-  async function updateAssetFavorite(assetId: string, isFavorite: boolean) {
-    favoriteUpdateError = "";
-    try {
-      await setAssetFavorite(assetId, isFavorite);
-      applyConfirmedFavorite(assetId, isFavorite);
-    } catch (error) {
-      if (activeLightboxAssetId !== assetId) {
-        favoriteUpdateError = $t("timeline_favorite_update_error");
-      }
-      throw error;
-    }
+  function updateAssetFavorite(assetId: string, isFavorite: boolean) {
+    if (!removeUnfavoritedAssets) return setAssetFavorite(assetId, isFavorite);
+    return favoritesLightbox.updateFavorite(
+      assetId,
+      isFavorite,
+      setAssetFavorite,
+      () => $t("timeline_favorite_update_error"),
+      cleanupRemovedAssetState,
+    );
   }
 
   async function applyFavoriteToSelection(isFavorite: boolean) {
     const assetIds = [...selectedAssetIds];
     if (assetIds.length === 0 || isSelectionActionBusy) return;
 
-    favoriteUpdateError = "";
+    if (removeUnfavoritedAssets) favoritesLightbox.clearError();
     selectionResult = null;
     isApplyingSelection = true;
     let succeeded = 0;
@@ -353,7 +303,10 @@
       try {
         await setAssetFavorite(assetId, isFavorite);
         if (removeUnfavoritedAssets) {
-          applyConfirmedFavorite(assetId, isFavorite);
+          if (!isFavorite) {
+            favoritesLightbox.confirmRemoval(assetId);
+            cleanupRemovedAssetState(assetId);
+          }
         } else {
           updateFavoriteState(assetId, isFavorite);
         }
@@ -417,55 +370,23 @@
 
   function openAsset(asset: TimelineAsset, source: HTMLElement) {
     if (isSelectionMode) return;
-    removedLightboxPosition = null;
-    activeLightboxAssetId = asset.id;
+    if (removeUnfavoritedAssets) favoritesLightbox.open(asset.id);
     selectedAsset = { ...asset, isFavorite: isFavorite(asset) };
     opener = source;
   }
   function closeLightbox() {
-    lightboxNavigationGeneration += 1;
+    if (removeUnfavoritedAssets) favoritesLightbox.close();
     selectedAsset = null;
-    activeLightboxAssetId = null;
-    removedLightboxPosition = null;
     queueMicrotask(() => opener?.focus());
   }
-  async function navigateLightboxAsset(delta: number, current: TimelineAsset): Promise<TimelineAsset | null> {
-    const navigation = ++lightboxNavigationGeneration;
-    const buckets = timeline.buckets;
-    if (!buckets.length) return null;
-    const currentBucket = buckets.find((bucket) => timeline.assetsFor(bucket.timeBucket).some((item) => item.id === current.id));
-    const removed = removedLightboxPosition?.assetId === current.id ? removedLightboxPosition : null;
-    const anchor = currentBucket?.timeBucket ?? removed?.timeBucket;
-    const anchorIndex = anchor ? buckets.findIndex((bucket) => bucket.timeBucket === anchor) : -1;
-    if (anchorIndex !== -1) {
-      const assets = timeline.assetsFor(buckets[anchorIndex].timeBucket);
-      const index = currentBucket ? assets.findIndex((item) => item.id === current.id) + delta : (removed?.index ?? 0) + (delta < 0 ? -1 : 0);
-      if (index >= 0 && index < assets.length) {
-        const next = assets[index];
-        removedLightboxPosition = null;
-        activeLightboxAssetId = next.id;
-        return { ...next, isFavorite: isFavorite(next) };
-      }
+  function navigateLightboxAsset(delta: number, current: TimelineAsset): TimelineAsset | null | Promise<TimelineAsset | null> {
+    if (removeUnfavoritedAssets) {
+      return favoritesLightbox.navigate(delta, current, isFavorite);
     }
-    const insertion = anchor ? buckets.findIndex((bucket) => bucket.timeBucket < anchor) : -1;
-    const start = anchorIndex !== -1 ? anchorIndex + delta : delta > 0 ? (insertion < 0 ? buckets.length : insertion) : (insertion < 0 ? buckets.length : insertion) - 1;
-    for (let step = 0; step < buckets.length; step++) {
-      const index = ((start + step * delta) % buckets.length + buckets.length) % buckets.length;
-      const bucket = buckets[index];
-      try {
-        await timeline.activateBucket(bucket.timeBucket);
-      } catch {
-        return null;
-      }
-      if (navigation !== lightboxNavigationGeneration || activeLightboxAssetId !== current.id) return null;
-      const assets = timeline.assetsFor(bucket.timeBucket);
-      if (!assets.length) continue;
-      const next = delta > 0 ? assets[0] : assets[assets.length - 1];
-      removedLightboxPosition = null;
-      activeLightboxAssetId = next.id;
-      return { ...next, isFavorite: isFavorite(next) };
-    }
-    return null;
+    if (!lightboxAssets.length) return null;
+    const index = lightboxAssets.findIndex((candidate) => candidate.id === current.id);
+    const next = lightboxAssets[(index + delta + lightboxAssets.length) % lightboxAssets.length];
+    return { ...next, isFavorite: isFavorite(next) };
   }
   function handleKeydown(event: KeyboardEvent) {
     if (!selectedAsset && isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen) {
@@ -543,14 +464,14 @@
       </div>
     </div>
   {/if}
-  {#if favoriteUpdateError}
+  {#if removeUnfavoritedAssets && favoritesLightbox.updateError}
     <div class="mb-3 mr-16 flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
-      <span>{favoriteUpdateError}</span>
+      <span>{favoritesLightbox.updateError}</span>
       <button
         type="button"
         class="rounded p-1 hover:bg-red-100 dark:hover:bg-red-900/40"
         aria-label={$t("dismiss_error")}
-        onclick={() => { favoriteUpdateError = ""; }}
+        onclick={() => favoritesLightbox.clearError()}
       ><X class="h-4 w-4" /></button>
     </div>
   {/if}
@@ -560,7 +481,7 @@
       : selectionResult.succeeded === 0
         ? `timeline_selection_${selectionResult.action}_failed`
         : `timeline_selection_${selectionResult.action}_partial`}
-    <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {selectionResult.succeeded === 0 ? 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200' : selectionResult.succeeded < selectionResult.total ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'}" role={selectionResult.succeeded === 0 ? "alert" : "status"}>
+    <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {selectionResult.succeeded === 0 ? 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'}" role={selectionResult.succeeded === 0 ? "alert" : "status"}>
       {$t(resultKey, { values: { count: selectionResult.total.toLocaleString(numberLocale), succeeded: selectionResult.succeeded.toLocaleString(numberLocale) } })}
     </p>
   {/if}

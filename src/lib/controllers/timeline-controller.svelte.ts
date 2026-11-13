@@ -1,6 +1,11 @@
 import type { TimelineAsset, TimelineBucket } from "../contracts";
 import type { TimelineDesktopAdapter } from "../tauri/desktop-adapter";
 
+export interface TimelineAssetPosition {
+  timeBucket: string;
+  index: number;
+}
+
 export interface TimelineViewState {
   readonly buckets: TimelineBucket[];
   readonly refreshGeneration: number;
@@ -13,18 +18,14 @@ export interface TimelineViewState {
   refresh(): Promise<void>;
   clear(): void;
   removeAsset?(assetId: string): void;
-  restoreAsset?(assetId: string): void;
+  locateAsset?(assetId: string): TimelineAssetPosition | null;
+  stepAsset?(currentId: string, delta: number, formerPosition?: TimelineAssetPosition | null): Promise<TimelineAsset | null>;
 }
 
 export interface TimelineController extends TimelineViewState {
   removeAsset(assetId: string): void;
-  restoreAsset(assetId: string): void;
-}
-
-interface RemovedAssetEntry {
-  timeBucket: string;
-  index: number;
-  asset: TimelineAsset;
+  locateAsset(assetId: string): TimelineAssetPosition | null;
+  stepAsset(currentId: string, delta: number, formerPosition?: TimelineAssetPosition | null): Promise<TimelineAsset | null>;
 }
 
 export function createTimelineController(adapter: TimelineDesktopAdapter): TimelineController {
@@ -39,7 +40,6 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   let assetsByBucket = $state<Record<string, TimelineAsset[]>>({});
   const pendingBuckets = new Map<string, Promise<void>>();
   const staleBuckets = new Set<string>();
-  const removedAssets = new Map<string, RemovedAssetEntry[]>();
   let removalVersion = 0;
   const removalVersions = new Map<string, number>();
 
@@ -78,8 +78,8 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
         // overwrite the newer session view.
         assetGeneration += 1;
         pendingBuckets.clear();
-        for (const [id] of removedAssets) {
-          if ((removalVersions.get(id) ?? 0) <= requestVersion) removedAssets.delete(id);
+        for (const [id, version] of removalVersions) {
+          if (version <= requestVersion) removalVersions.delete(id);
         }
         isOffline = false;
         hasInitialLoadError = false;
@@ -109,7 +109,6 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     assetsByBucket = {};
     pendingBuckets.clear();
     staleBuckets.clear();
-    removedAssets.clear();
     removalVersions.clear();
     assetGeneration += 1;
   }
@@ -131,15 +130,6 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
       );
       assetsByBucket = { ...assetsByBucket, [timeBucket]: assets.filter((asset) => !removedDuringRequest.has(asset.id)) };
       staleBuckets.delete(timeBucket);
-      for (const [removedAssetId, entries] of removedAssets) {
-        if (removedDuringRequest.has(removedAssetId)) continue;
-        const remainingEntries = entries.filter((entry) => entry.timeBucket !== timeBucket);
-        if (remainingEntries.length === 0) {
-          removedAssets.delete(removedAssetId);
-        } else if (remainingEntries.length !== entries.length) {
-          removedAssets.set(removedAssetId, remainingEntries);
-        }
-      }
       isOffline = false;
     }).catch((error) => {
       isOffline = true;
@@ -155,7 +145,6 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     let changed = false;
     const nextBuckets: TimelineBucket[] = [];
     const nextAssetsByBucket: Record<string, TimelineAsset[]> = {};
-    const snapshotEntries: RemovedAssetEntry[] = [];
 
     for (const bucket of buckets) {
       const assets = assetsByBucket[bucket.timeBucket];
@@ -163,20 +152,14 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
         nextBuckets.push(bucket);
         continue;
       }
-      const removedIndex = assets.findIndex((asset) => asset.id === assetId);
-      if (removedIndex === -1) {
+      const remaining = assets.filter((asset) => asset.id !== assetId);
+      const removedCount = assets.length - remaining.length;
+      if (removedCount === 0) {
         nextBuckets.push(bucket);
         nextAssetsByBucket[bucket.timeBucket] = assets;
         continue;
       }
-      const remaining = assets.filter((asset) => asset.id !== assetId);
-      const removedCount = assets.length - remaining.length;
       changed = true;
-      snapshotEntries.push({
-        timeBucket: bucket.timeBucket,
-        index: removedIndex,
-        asset: assets[removedIndex],
-      });
       if (remaining.length === 0 && bucket.count <= removedCount) {
         staleBuckets.delete(bucket.timeBucket);
         continue;
@@ -190,62 +173,56 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
 
     if (!changed) return;
     removalVersions.set(assetId, ++removalVersion);
-    removedAssets.set(assetId, snapshotEntries);
     buckets = nextBuckets;
     assetsByBucket = nextAssetsByBucket;
   }
 
-  function restoreAsset(assetId: string) {
-    const snapshotEntries = removedAssets.get(assetId);
-    if (!snapshotEntries || snapshotEntries.length === 0) return;
-    removedAssets.delete(assetId);
-    removalVersion += 1;
-    removalVersions.delete(assetId);
-
-    let changed = false;
-    const nextBuckets = [...buckets];
-    const nextAssetsByBucket = { ...assetsByBucket };
-
-    for (const { timeBucket, index, asset } of snapshotEntries) {
-      const existingBucketIndex = nextBuckets.findIndex((bucket) => bucket.timeBucket === timeBucket);
-      if (existingBucketIndex === -1) {
-        nextBuckets.push({ timeBucket, count: 1 });
-        nextAssetsByBucket[timeBucket] = [asset];
-        staleBuckets.delete(timeBucket);
-        changed = true;
-        continue;
-      }
-
-      const currentAssets = nextAssetsByBucket[timeBucket];
-      if (!currentAssets) {
-        const existingBucket = nextBuckets[existingBucketIndex];
-        nextBuckets[existingBucketIndex] = { ...existingBucket, count: existingBucket.count + 1 };
-        staleBuckets.add(timeBucket);
-        changed = true;
-        continue;
-      }
-
-      if (currentAssets.some((candidate) => candidate.id === asset.id)) continue;
-
-      const insertIndex = Math.max(0, Math.min(index, currentAssets.length));
-      const restoredAssets = [
-        ...currentAssets.slice(0, insertIndex),
-        asset,
-        ...currentAssets.slice(insertIndex),
-      ];
-      nextAssetsByBucket[timeBucket] = restoredAssets;
-      const existingBucket = nextBuckets[existingBucketIndex];
-      nextBuckets[existingBucketIndex] = {
-        ...existingBucket,
-        count: Math.max(restoredAssets.length, existingBucket.count + 1),
-      };
-      changed = true;
+  function locateAsset(assetId: string): TimelineAssetPosition | null {
+    for (const bucket of buckets) {
+      const assets = assetsByBucket[bucket.timeBucket];
+      if (!assets) continue;
+      const index = assets.findIndex((asset) => asset.id === assetId);
+      if (index !== -1) return { timeBucket: bucket.timeBucket, index };
     }
+    return null;
+  }
 
-    if (!changed) return;
-    nextBuckets.sort((a, b) => (a.timeBucket === b.timeBucket ? 0 : b.timeBucket > a.timeBucket ? 1 : -1));
-    buckets = nextBuckets;
-    assetsByBucket = nextAssetsByBucket;
+  async function stepAsset(
+    currentId: string,
+    delta: number,
+    formerPosition: TimelineAssetPosition | null = null,
+  ): Promise<TimelineAsset | null> {
+    if (!buckets.length) return null;
+    const currentPos = locateAsset(currentId);
+    const anchor = currentPos?.timeBucket ?? formerPosition?.timeBucket ?? null;
+    const anchorIndex = anchor ? buckets.findIndex((bucket) => bucket.timeBucket === anchor) : -1;
+    if (anchorIndex !== -1) {
+      const assets = assetsFor(buckets[anchorIndex].timeBucket);
+      const index = currentPos
+        ? currentPos.index + delta
+        : (formerPosition?.index ?? 0) + (delta < 0 ? -1 : 0);
+      if (index >= 0 && index < assets.length) return assets[index];
+    }
+    const insertion = anchor ? buckets.findIndex((bucket) => bucket.timeBucket < anchor) : -1;
+    const fallbackBoundary = insertion < 0 ? buckets.length : insertion;
+    const start = anchorIndex !== -1
+      ? anchorIndex + delta
+      : delta > 0
+        ? fallbackBoundary
+        : fallbackBoundary - 1;
+    for (let step = 0; step < buckets.length; step++) {
+      const index = ((start + step * delta) % buckets.length + buckets.length) % buckets.length;
+      const bucket = buckets[index];
+      try {
+        await activateBucket(bucket.timeBucket);
+      } catch {
+        return null;
+      }
+      const assets = assetsFor(bucket.timeBucket);
+      if (!assets.length) continue;
+      return delta > 0 ? assets[0] : assets[assets.length - 1];
+    }
+    return null;
   }
 
   return {
@@ -260,6 +237,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     refresh,
     clear,
     removeAsset,
-    restoreAsset,
+    locateAsset,
+    stepAsset,
   };
 }

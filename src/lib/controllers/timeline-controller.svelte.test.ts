@@ -21,8 +21,6 @@ describe("Photo Timeline controller", () => {
     await pending;
     expect(adapter.getTimelineBuckets).toHaveBeenCalledTimes(3);
     expect(timeline.buckets).toEqual([]);
-    timeline.restoreAsset("a");
-    expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["a"]);
   });
   it("does not resurrect a confirmed removal when an older bucket request finishes", async () => {
     const month = "2025-03-01T00:00:00.000Z";
@@ -225,83 +223,40 @@ describe("Photo Timeline controller", () => {
     expect(timeline.hasInitialLoadError).toBe(false);
   });
 
-  it("restores removed assets to their original bucket slot and index, recreates emptied buckets, clamps indices, and discards snapshots on refresh and clear", async () => {
+  it("locates loaded assets and steps across buckets including unloaded months", async () => {
+    const march = "2025-03-01T00:00:00.000Z";
+    const feb = "2025-02-01T00:00:00.000Z";
+    const jan = "2025-01-01T00:00:00.000Z";
+    const asset = (id: string) => ({ id, width: 800, height: 600, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true });
     const adapter: TimelineDesktopAdapter = {
-      getTimelineBuckets: vi.fn()
-        .mockResolvedValueOnce([
-          { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
-          { timeBucket: "2025-02-01T00:00:00.000Z", count: 1 },
-          { timeBucket: "2024-12-01T00:00:00.000Z", count: 1 },
-        ])
-        .mockResolvedValueOnce([
-          { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
-        ]),
+      getTimelineBuckets: vi.fn().mockResolvedValue([
+        { timeBucket: march, count: 2 },
+        { timeBucket: feb, count: 1 },
+        { timeBucket: jan, count: 1 },
+      ]),
       getTimelineBucketAssets: vi.fn((timeBucket: string) => {
-        if (timeBucket === "2025-03-01T00:00:00.000Z") {
-          return Promise.resolve([
-            { id: "asset-1", width: 800, height: 600, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true },
-            { id: "asset-2", width: 800, height: 600, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true },
-          ]);
-        }
-        if (timeBucket === "2025-02-01T00:00:00.000Z") {
-          return Promise.resolve([
-            { id: "asset-3", width: 800, height: 600, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true },
-          ]);
-        }
-        return Promise.resolve([
-          { id: "asset-4", width: 800, height: 600, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true },
-        ]);
+        if (timeBucket === march) return Promise.resolve([asset("m1"), asset("m2")]);
+        if (timeBucket === feb) return Promise.resolve([asset("f1")]);
+        return Promise.resolve([asset("j1")]);
       }),
     };
     const timeline = createTimelineController(adapter);
 
     await timeline.refresh();
-    await timeline.activateBucket("2025-03-01T00:00:00.000Z");
-    await timeline.activateBucket("2025-02-01T00:00:00.000Z");
-    await timeline.activateBucket("2024-12-01T00:00:00.000Z");
+    await timeline.activateBucket(march);
 
-    // Removing the only asset in February drops the middle bucket; restoring recreates it in descending order
-    timeline.removeAsset("asset-3");
-    expect(timeline.buckets.map((bucket) => bucket.timeBucket)).toEqual([
-      "2025-03-01T00:00:00.000Z",
-      "2024-12-01T00:00:00.000Z",
-    ]);
+    expect(timeline.locateAsset("m2")).toEqual({ timeBucket: march, index: 1 });
+    expect(timeline.locateAsset("missing")).toBeNull();
 
-    timeline.restoreAsset("asset-3");
-    expect(timeline.buckets).toEqual([
-      { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
-      { timeBucket: "2025-02-01T00:00:00.000Z", count: 1 },
-      { timeBucket: "2024-12-01T00:00:00.000Z", count: 1 },
-    ]);
-    expect(timeline.assetsFor("2025-02-01T00:00:00.000Z").map((asset) => asset.id)).toEqual(["asset-3"]);
+    expect((await timeline.stepAsset("m1", 1))?.id).toBe("m2");
+    expect((await timeline.stepAsset("m2", 1))?.id).toBe("f1");
+    expect((await timeline.stepAsset("f1", 1))?.id).toBe("j1");
 
-    // Clamps index when bucket shrank after removal, and restores count consistently
-    timeline.removeAsset("asset-2"); // was index 1
-    timeline.removeAsset("asset-1"); // empties March
-    timeline.restoreAsset("asset-2"); // recreates March with count 1
-    expect(timeline.buckets[0]).toEqual({ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 });
-    timeline.restoreAsset("asset-1"); // restores at index 0
-    expect(timeline.buckets[0]).toEqual({ timeBucket: "2025-03-01T00:00:00.000Z", count: 2 });
-    expect(timeline.assetsFor("2025-03-01T00:00:00.000Z").map((asset) => asset.id)).toEqual(["asset-1", "asset-2"]);
-
-    // Unknown or already-restored assets are safe no-ops
-    timeline.restoreAsset("asset-1");
-    timeline.restoreAsset("missing-asset");
-    expect(timeline.buckets[0]).toEqual({ timeBucket: "2025-03-01T00:00:00.000Z", count: 2 });
-
-    // refresh() discards pre-refresh removal snapshots
-    timeline.removeAsset("asset-2");
-    await timeline.refresh();
-    timeline.restoreAsset("asset-2");
-    expect(timeline.buckets).toEqual([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]);
-    expect(timeline.assetsFor("2025-03-01T00:00:00.000Z").map((asset) => asset.id)).toEqual(["asset-1"]);
-
-    // clear() discards removal snapshots
-    await timeline.activateBucket("2025-03-01T00:00:00.000Z");
-    timeline.removeAsset("asset-1");
-    timeline.clear();
-    timeline.restoreAsset("asset-1");
-    expect(timeline.buckets).toEqual([]);
+    const formerPos = timeline.locateAsset("f1");
+    timeline.removeAsset("f1");
+    expect(timeline.buckets.map((b) => b.timeBucket)).toEqual([march, jan]);
+    expect((await timeline.stepAsset("f1", 1, formerPos))?.id).toBe("j1");
+    expect((await timeline.stepAsset("f1", -1, formerPos))?.id).toBe("m2");
   });
 
 });

@@ -1868,10 +1868,9 @@ describe("Favorites Timeline", () => {
     expect(screen.getByText("1 assets")).toBeInTheDocument();
   });
 
-  it("restores a re-favorited asset in the same Favorites Lightbox session and surfaces navigated-away rejection errors", async () => {
+  it("surfaces navigated-away favorite removal rejection errors in the Favorites view without duplicating Lightbox alerts", async () => {
     stubImmediateIntersectionObserver();
     let rejectPendingRemoval!: (error: Error) => void;
-    let callCount = 0;
 
     renderAuthenticatedPage({
       get_favorites_timeline_buckets: async () => [
@@ -1906,32 +1905,21 @@ describe("Favorites Timeline", () => {
         imageHeight: 1200,
         fileSize: 1024,
       }),
-      set_asset_favorite: () => {
-        callCount += 1;
-        if (callCount <= 2) return Promise.resolve();
-        return new Promise<void>((_, reject) => {
+      set_asset_favorite: () =>
+        new Promise<void>((_, reject) => {
           rejectPendingRemoval = reject;
-        });
-      },
+        }),
     });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
     const openButtons = await screen.findAllByRole("button", { name: "Open photo" });
     expect(openButtons).toHaveLength(2);
 
-    // Unfavorite fav-1 (bucket drops), then re-favorite in the same Lightbox session
+    // Trigger pending removal on fav-1, navigate to fav-2, then reject fav-1
     await fireEvent.click(openButtons[0]);
     const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
     await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
-    await waitFor(() => expect(screen.queryByText("March 2025")).not.toBeInTheDocument());
-
-    await fireEvent.click(within(lightbox).getByRole("button", { name: "Add to favorites" }));
-    expect(tauri.invoke).toHaveBeenCalledWith("set_asset_favorite", { assetId: "fav-1", isFavorite: true });
-    await waitFor(() => expect(screen.getByText("March 2025")).toBeInTheDocument());
-    expect(screen.getAllByLabelText("Favorite")).toHaveLength(2);
-
-    // Trigger pending removal on fav-1, navigate to fav-2, then reject fav-1
-    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    expect(tauri.invoke).toHaveBeenCalledWith("set_asset_favorite", { assetId: "fav-1", isFavorite: false });
     await fireEvent.click(within(lightbox).getByRole("button", { name: "Next asset" }));
     await waitFor(() => expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-2"));
 
