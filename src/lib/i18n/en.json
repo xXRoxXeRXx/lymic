@@ -6,7 +6,7 @@
   "map_last_page": "Last page",
   "map_open_asset": "Open asset",
   "map_loading": "Loading map locations...",
-  "map_permission": "Map access denied. Configure your API key with map.read and asset.read permissions.",
+  "map_permission": "Map access denied. Configure your API key with map.read, asset.read and asset.view permissions.",
   "map_error": "Could not load map locations.",
   "map_stale": "Showing previous locations.",
   "map_empty": "No assets with locations found.",

@@ -173,8 +173,10 @@
       const source = map.getSource("assets") as GeoJSONSource | undefined;
       if (!source) return;
       void source.setData(event.data.data);
-      if (!initialized && mapState.markers.length) {
-        map.fitBounds(event.data.bounds as [number, number, number, number], { padding: 60, maxZoom: 12, duration: 0 });
+      if (!initialized && mapState.loaded) {
+        if (mapState.markers.length) {
+          map.fitBounds(event.data.bounds as [number, number, number, number], { padding: 60, maxZoom: 12, duration: 0 });
+        }
         initialized = true;
       }
       worker?.terminate();
@@ -223,7 +225,7 @@
   });
   $effect(() => {
     if (active) { queueMicrotask(() => { map?.resize(); updatePins(); }); }
-    else removePins();
+    else { mapState.leave(); removePins(); }
   });
 </script>
 
