@@ -26,10 +26,13 @@ export function createMapController(adapter: MapDesktopAdapter) {
       if (current === generation) loading = false;
     }
   }
-  function clear() {
+  function leave() {
     generation++;
-    markers = [];
     loading = false;
+  }
+  function clear() {
+    leave();
+    markers = [];
     loaded = false;
     stale = false;
     error = null;
@@ -40,7 +43,7 @@ export function createMapController(adapter: MapDesktopAdapter) {
     get loaded() { return loaded; },
     get stale() { return stale; },
     get error() { return error; },
-    refresh, clear,
+    refresh, leave, clear,
   };
 }
 export type MapViewState = ReturnType<typeof createMapController>;

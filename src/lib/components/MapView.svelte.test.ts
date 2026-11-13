@@ -13,6 +13,7 @@ vi.mock("maplibre-gl", () => ({
     addControl() {} remove() {} resize() {} isMoving() { return false; }
     on(event: string, handler: (...args: never[]) => void) { if (typeof handler === "function") mapHarness.handlers.set(event, handler); }
     getLayer() { return {}; }
+    getSource() { return undefined; }
     queryRenderedFeatures() { return mapHarness.features; }
   },
   Marker: class {
@@ -69,5 +70,26 @@ it("limits simultaneous visible thumbnail requests", async () => {
   expect(images.filter((image) => image.hasAttribute("src"))).toHaveLength(8);
   images[0].dispatchEvent(new Event("load"));
   expect(images.filter((image) => image.hasAttribute("src"))).toHaveLength(9);
+  mapHarness.features = [];
+});
+
+it("keeps the open viewer and reports a stale snapshot when a revisit refresh fails", async () => {
+  const { fireEvent, waitFor } = await import("@testing-library/svelte");
+  mapHarness.features = [{ properties: { id: "kept" }, geometry: { type: "Point", coordinates: [13, 52] } }];
+  const state = createMapController({ getMapMarkers: vi.fn().mockResolvedValueOnce([{ id: "kept", lat: 52, lon: 13 }]).mockRejectedValueOnce("network") });
+  await state.refresh();
+  const details = { assetType: "VIDEO", imageWidth: 10, imageHeight: 10, cameraMake: null, cameraModel: null, fileSize: null, isFavorite: false, originalFileName: "kept.mp4", city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null };
+  const desktop = { getAssetDetails: vi.fn().mockResolvedValue(details), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
+  const albumCatalogue = createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() });
+  const view = render(MapView, { mapState: state, active: true, desktop, albumCatalogue, serverUrl: "" });
+  mapHarness.handlers.get("sourcedata")?.();
+  await fireEvent.click(await screen.findByRole("button", { name: "Open asset" }));
+  await waitFor(() => expect(screen.getByLabelText("Video preview")).toHaveAttribute("src", "lymic-asset://video/kept"));
+  await view.rerender({ active: false });
+  await view.rerender({ active: true });
+  await state.refresh();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Showing previous locations.");
+  expect(screen.getByLabelText("Video preview")).toHaveAttribute("src", "lymic-asset://video/kept");
+  expect(screen.queryByRole("button", { name: /refresh|reset/i })).not.toBeInTheDocument();
   mapHarness.features = [];
 });
