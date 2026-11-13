@@ -79,6 +79,10 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve([]);
       case "get_timeline_bucket_assets":
         return Promise.resolve([]);
+      case "get_favorites_timeline_buckets":
+        return Promise.resolve([]);
+      case "get_favorites_timeline_bucket_assets":
+        return Promise.resolve([]);
       case "get_album_timeline":
         return Promise.resolve({ buckets: [], assetsByBucket: {} });
       case "update_locale":
@@ -1440,5 +1444,225 @@ describe("watched folder setup flow with target album", () => {
 
     expect(tauri.invoke).not.toHaveBeenCalledWith("add_folder", expect.anything());
     expect(screen.queryByText("D:/Photos")).not.toBeInTheDocument();
+  });
+});
+
+describe("Favorites Timeline", () => {
+  function stubImmediateIntersectionObserver() {
+    vi.stubGlobal("ResizeObserver", class {
+      observe() {}
+      disconnect() {}
+    });
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+      disconnect() {}
+    });
+  }
+
+  it("opens Favorites from navigation, loads month buckets and media with scrubber, hides refresh controls, and preserves timeline actions", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_favorites_timeline_buckets: async () => [
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
+        { timeBucket: "2024-12-01T00:00:00.000Z", count: 1 },
+      ],
+      get_favorites_timeline_bucket_assets: async (args) => {
+        const { timeBucket } = args as { timeBucket: string };
+        if (timeBucket === "2025-03-01T00:00:00.000Z") {
+          return [
+            { id: "fav-photo-1", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
+            { id: "fav-video-1", width: 1920, height: 1080, type: "VIDEO", takenAt: "2025-03-04T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: 65, isFavorite: true },
+          ];
+        }
+        if (timeBucket === "2024-12-01T00:00:00.000Z") {
+          return [
+            { id: "fav-photo-2", width: 1200, height: 900, type: "IMAGE", takenAt: "2024-12-10T08:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
+          ];
+        }
+        return [];
+      },
+      get_albums: async () => [
+        { id: "album-1", albumName: "Holiday" },
+      ],
+      get_asset_details: async () => ({
+        originalFileName: "favorite.jpg",
+        isFavorite: true,
+        cameraMake: null,
+        cameraModel: null,
+        city: null,
+        state: null,
+        country: null,
+        fNumber: null,
+        exposureTime: null,
+        iso: null,
+        focalLength: null,
+        lensModel: null,
+        imageWidth: 1600,
+        imageHeight: 1200,
+        fileSize: 1024,
+      }),
+    });
+
+    expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_favorites_timeline_buckets");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
+
+    expect(await screen.findByRole("heading", { name: "Favorites" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Favorites", { selector: "div" })).toBeInTheDocument();
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByText("2 assets")).toBeInTheDocument();
+    expect(screen.getByText("December 2024")).toBeInTheDocument();
+    expect(screen.getByText("1 assets")).toBeInTheDocument();
+
+    expect(tauri.invoke).toHaveBeenCalledWith("get_favorites_timeline_buckets");
+    expect(tauri.invoke).toHaveBeenCalledWith("get_favorites_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_favorites_timeline_bucket_assets", { timeBucket: "2024-12-01T00:00:00.000Z" });
+
+    expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh timeline" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
+
+    // Selection + Download + Add to album actions remain available
+    await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
+    expect(await screen.findByText("1 selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
+    expect(await screen.findByText("Holiday")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    // Lightbox + Download original + Add to album remain available
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Add to album" })).toBeInTheDocument();
+  });
+
+  it("refreshes Favorites on every entry from another view, no-ops when already active, prunes removed buckets, and does not poll", async () => {
+    const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+    const getFavoritesBuckets = vi.fn()
+      .mockResolvedValueOnce([
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
+        { timeBucket: "2024-12-01T00:00:00.000Z", count: 1 },
+      ])
+      .mockResolvedValueOnce([
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
+      ]);
+
+    renderAuthenticatedPage({
+      get_favorites_timeline_buckets: getFavoritesBuckets,
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+    expect(await screen.findByText("December 2024")).toBeInTheDocument();
+    expect(getFavoritesBuckets).toHaveBeenCalledTimes(1);
+
+    // Clicking Favorites again while already active is a no-op
+    await fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
+    expect(getFavoritesBuckets).toHaveBeenCalledTimes(1);
+
+    // Switching away and back refreshes from Immich and removes old buckets
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
+    await waitFor(() => {
+      expect(getFavoritesBuckets).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText("December 2024")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(getFavoritesBuckets).toHaveBeenCalledTimes(2);
+    const appIntervals = setIntervalSpy.mock.calls.filter(
+      ([callback]) => typeof callback !== "function" || callback.name !== "checkRealTimersCallback",
+    );
+    expect(appIntervals).toHaveLength(0);
+    setIntervalSpy.mockRestore();
+  });
+
+  it("shows a loading state before resolving an empty Favorites state, and an error alert on initial load failure", async () => {
+    let resolveBuckets!: (value: unknown) => void;
+    const pendingBuckets = new Promise((resolve) => {
+      resolveBuckets = resolve;
+    });
+
+    renderAuthenticatedPage({
+      get_favorites_timeline_buckets: () => pendingBuckets,
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading favorites…");
+    expect(screen.queryByText("No favorites yet. Mark photos or videos as favorites to see them here.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh timeline" })).not.toBeInTheDocument();
+
+    resolveBuckets([]);
+    expect(
+      await screen.findByText("No favorites yet. Mark photos or videos as favorites to see them here."),
+    ).toHaveAttribute("role", "status");
+    expect(screen.queryByText("Loading favorites…")).not.toBeInTheDocument();
+
+    cleanup();
+
+    renderAuthenticatedPage({
+      get_favorites_timeline_buckets: () => Promise.reject(new Error("offline")),
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Favorites could not be loaded.");
+    expect(screen.queryByText("No favorites yet. Mark photos or videos as favorites to see them here.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps previously loaded favorites visible and shows an offline status banner when re-entry refresh fails", async () => {
+    const getFavoritesBuckets = vi.fn()
+      .mockResolvedValueOnce([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }])
+      .mockRejectedValueOnce(new Error("offline"));
+
+    renderAuthenticatedPage({
+      get_favorites_timeline_buckets: getFavoritesBuckets,
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Favorites Timeline is offline. Showing cached favorites.",
+    );
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh timeline" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
+  });
+
+  it("clears Favorites state on logout so the next session does not retain prior favorites", async () => {
+    const getFavoritesBuckets = vi.fn()
+      .mockResolvedValueOnce([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }])
+      .mockImplementationOnce(() => new Promise(() => {}));
+
+    renderAuthenticatedPage({
+      get_favorites_timeline_buckets: getFavoritesBuckets,
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+    expect(await screen.findByRole("heading", { name: "Login" })).toBeInTheDocument();
+
+    await fireEvent.input(screen.getByLabelText("Server URL"), { target: { value: "https://immich.example" } });
+    await fireEvent.input(screen.getByLabelText("API Key"), { target: { value: "secret-key" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Login" }));
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading favorites…");
+    expect(screen.queryByText("March 2025")).not.toBeInTheDocument();
   });
 });

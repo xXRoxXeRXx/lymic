@@ -275,4 +275,9 @@
   ,"timeline_selection_album_success": "Added {count} assets to album"
   ,"timeline_selection_album_partial": "Added {succeeded} of {count} assets to album"
   ,"timeline_selection_album_failed": "Could not add selected assets to album"
+  ,"favorites_title": "Favorites"
+  ,"favorites_loading": "Loading favorites…"
+  ,"favorites_empty": "No favorites yet. Mark photos or videos as favorites to see them here."
+  ,"favorites_error": "Favorites could not be loaded."
+  ,"favorites_offline": "Favorites Timeline is offline. Showing cached favorites."
 }

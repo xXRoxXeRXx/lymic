@@ -275,4 +275,9 @@
   ,"timeline_selection_album_success": "Added {count} assets to album"
   ,"timeline_selection_album_partial": "Added {succeeded} of {count} assets to album"
   ,"timeline_selection_album_failed": "Could not add selected assets to album"
+  ,"favorites_title": "Избранное"
+  ,"favorites_loading": "Загрузка избранного…"
+  ,"favorites_empty": "Пока нет избранного. Отметьте фото или видео как избранные, чтобы увидеть их здесь."
+  ,"favorites_error": "Не удалось загрузить избранное."
+  ,"favorites_offline": "Лента избранного офлайн. Отображается кэшированное избранное."
 }

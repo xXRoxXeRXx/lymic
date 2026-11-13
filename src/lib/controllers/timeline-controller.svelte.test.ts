@@ -108,4 +108,60 @@ describe("Photo Timeline controller", () => {
     expect(timeline.assetsFor("2025-03-01T00:00:00.000Z")).toHaveLength(2);
   });
 
+  it("keeps previously loaded buckets visible during refresh and prunes disappeared buckets afterwards", async () => {
+    let resolveSecondRefresh: ((buckets: Array<{ timeBucket: string; count: number }>) => void) | undefined;
+    const adapter: TimelineDesktopAdapter = {
+      getTimelineBuckets: vi.fn()
+        .mockResolvedValueOnce([
+          { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
+          { timeBucket: "2025-02-01T00:00:00.000Z", count: 1 },
+        ])
+        .mockImplementationOnce(() => new Promise((resolve) => { resolveSecondRefresh = resolve; })),
+      getTimelineBucketAssets: vi.fn((timeBucket: string) =>
+        Promise.resolve([{ id: `asset-${timeBucket}`, width: 640, height: 480, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true }]),
+      ),
+    };
+    const timeline = createTimelineController(adapter);
+
+    await timeline.refresh();
+    await timeline.activateBucket("2025-03-01T00:00:00.000Z");
+    await timeline.activateBucket("2025-02-01T00:00:00.000Z");
+
+    const pendingRefresh = timeline.refresh();
+    expect(timeline.isLoading).toBe(false);
+    expect(timeline.isRefreshing).toBe(true);
+    expect(timeline.buckets).toHaveLength(2);
+    expect(timeline.assetsFor("2025-02-01T00:00:00.000Z")).toHaveLength(1);
+
+    resolveSecondRefresh?.([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]);
+    await pendingRefresh;
+
+    expect(timeline.buckets).toEqual([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]);
+    expect(timeline.assetsFor("2025-02-01T00:00:00.000Z")).toEqual([]);
+    expect(timeline.assetsFor("2025-03-01T00:00:00.000Z")).toHaveLength(1);
+  });
+
+  it("clears a prior initial load error while a subsequent refresh is loading", async () => {
+    let resolveRetry: ((buckets: Array<{ timeBucket: string; count: number }>) => void) | undefined;
+    const adapter: TimelineDesktopAdapter = {
+      getTimelineBuckets: vi.fn()
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockImplementationOnce(() => new Promise((resolve) => { resolveRetry = resolve; })),
+      getTimelineBucketAssets: vi.fn(),
+    };
+    const timeline = createTimelineController(adapter);
+
+    await timeline.refresh();
+    expect(timeline.hasInitialLoadError).toBe(true);
+
+    const retry = timeline.refresh();
+    expect(timeline.isLoading).toBe(true);
+    expect(timeline.hasInitialLoadError).toBe(false);
+
+    resolveRetry?.([]);
+    await retry;
+    expect(timeline.isLoading).toBe(false);
+    expect(timeline.hasInitialLoadError).toBe(false);
+  });
+
 });

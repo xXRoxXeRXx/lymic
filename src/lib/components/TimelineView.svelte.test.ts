@@ -876,4 +876,65 @@ describe("TimelineView scrubber", () => {
       internals.__TAURI_INTERNALS__ = previous;
     }
   });
+
+  it("hides manual refresh and retry controls when showRefreshButton is false while preserving error and offline messages", () => {
+    render(TimelineView, {
+      timeline: {
+        ...timeline,
+        buckets: [],
+        hasInitialLoadError: true,
+        isOffline: true,
+      },
+      showRefreshButton: false,
+      loadErrorMessage: "Could not load favorites right now.",
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not load favorites right now.");
+    expect(screen.queryByRole("button", { name: "Refresh timeline" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
+
+    cleanup();
+
+    render(TimelineView, {
+      timeline: {
+        ...timeline,
+        isOffline: true,
+        hasInitialLoadError: false,
+      },
+      showRefreshButton: false,
+      offlineMessage: "Showing last loaded favorites while offline.",
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Showing last loaded favorites while offline.");
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh timeline" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
+  });
+
+  it("renders a distinct loading status when isLoading is true and loadingMessage is provided", () => {
+    render(TimelineView, {
+      timeline: {
+        ...timeline,
+        buckets: [],
+        isLoading: true,
+        hasInitialLoadError: true,
+      },
+      loadingMessage: "Loading favorites...",
+      emptyMessage: "No favorites yet.",
+      loadErrorMessage: "Could not load favorites.",
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading favorites...");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("No favorites yet.")).not.toBeInTheDocument();
+  });
+
+  it("uses ariaLabel for the timeline viewport when provided", () => {
+    render(TimelineView, {
+      timeline,
+      ariaLabel: "Favorites",
+    });
+
+    expect(screen.getByLabelText("Favorites")).toBeInTheDocument();
+  });
 });

@@ -275,4 +275,9 @@
   ,"timeline_selection_album_success": "Added {count} assets to album"
   ,"timeline_selection_album_partial": "Added {succeeded} of {count} assets to album"
   ,"timeline_selection_album_failed": "Could not add selected assets to album"
+  ,"favorites_title": "المفضلة"
+  ,"favorites_loading": "جارٍ تحميل المفضلة…"
+  ,"favorites_empty": "لا توجد عناصر مفضلة بعد. أضف صورًا أو مقاطع فيديو إلى المفضلة لعرضها هنا."
+  ,"favorites_error": "تعذر تحميل المفضلة."
+  ,"favorites_offline": "الجدول الزمني للمفضلة غير متصل. يتم عرض المفضلة المخزنة مؤقتًا."
 }
