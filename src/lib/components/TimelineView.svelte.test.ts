@@ -81,6 +81,36 @@ function albumCatalogue(albums = [
 afterEach(cleanup);
 
 describe("TimelineView scrubber", () => {
+  it("navigates into an unloaded favorites month after removing the open asset", async () => {
+    const originalObserver = globalThis.IntersectionObserver;
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        if (target.id.includes("2025-03")) this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+      disconnect() {}
+    });
+    try {
+      const first = "2025-03-01T00:00:00.000Z";
+      const second = "2025-02-01T00:00:00.000Z";
+      const asset = (id: string): TimelineAsset => ({ id, width: 1, height: 1, type: "IMAGE", takenAt: null, fileSize: null, duration: null, isFavorite: true });
+      const favorites = createFavoritesTimelineController({
+        getFavoritesTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: first, count: 1 }, { timeBucket: second, count: 1 }]),
+        getFavoritesTimelineBucketAssets: vi.fn(async (month: string) => [asset(month === first ? "first" : "second")]),
+      });
+      await favorites.refresh();
+      await favorites.activateBucket(first);
+      render(TimelineView, { timeline: favorites, removeUnfavoritedAssets: true, setAssetFavorite: vi.fn().mockResolvedValue(undefined) });
+      await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+      const lightbox = screen.getByRole("dialog", { name: "Media lightbox" });
+      await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+      await waitFor(() => expect(favorites.buckets).toHaveLength(1));
+      await fireEvent.click(within(lightbox).getByRole("button", { name: "Next asset" }));
+      await waitFor(() => expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/second"));
+    } finally {
+      vi.stubGlobal("IntersectionObserver", originalObserver);
+    }
+  });
   it("refreshes the timeline from its header and indicates loading", async () => {
     const refresh = vi.fn();
     const view = render(TimelineView, { timeline: { ...timeline, refresh } });

@@ -67,7 +67,8 @@
   let scrollRaf: number | null = null;
   let selectedAsset = $state<TimelineAsset | null>(null);
   let activeLightboxAssetId = $state<string | null>(null);
-  let removedLightboxPosition = $state<{ assetId: string; index: number } | null>(null);
+  let lightboxNavigationGeneration = 0;
+  let removedLightboxPosition = $state<{ assetId: string; timeBucket: string; index: number } | null>(null);
   const assetDetailsById = new Map<string, AssetDetails | null>();
   let favoriteOverrides = $state<Record<string, boolean>>({});
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
@@ -275,11 +276,12 @@
   }
 
   function confirmAssetRemoval(assetId: string) {
-    const currentIndex = lightboxAssets.findIndex((candidate) => candidate.id === assetId);
-    if (currentIndex !== -1) {
+    const bucket = timeline.buckets.find((entry) => timeline.assetsFor(entry.timeBucket).some((candidate) => candidate.id === assetId));
+    const currentIndex = bucket ? timeline.assetsFor(bucket.timeBucket).findIndex((candidate) => candidate.id === assetId) : -1;
+    if (bucket && currentIndex !== -1) {
       if (activeLightboxAssetId === assetId) {
-        removedLightboxPosition = { assetId, index: currentIndex };
-      } else if (removedLightboxPosition && currentIndex < removedLightboxPosition.index) {
+        removedLightboxPosition = { assetId, timeBucket: bucket.timeBucket, index: currentIndex };
+      } else if (removedLightboxPosition?.timeBucket === bucket.timeBucket && currentIndex < removedLightboxPosition.index) {
         removedLightboxPosition = {
           ...removedLightboxPosition,
           index: Math.max(0, removedLightboxPosition.index - 1),
@@ -302,7 +304,7 @@
     if (wasRemovedAsset) {
       removedLightboxPosition = null;
     } else if (removedLightboxPosition) {
-      const restoredIndex = lightboxAssets.findIndex((candidate) => candidate.id === assetId);
+      const restoredIndex = timeline.assetsFor(removedLightboxPosition.timeBucket).findIndex((candidate) => candidate.id === assetId);
       if (restoredIndex !== -1 && restoredIndex <= removedLightboxPosition.index) {
         removedLightboxPosition = {
           ...removedLightboxPosition,
@@ -421,31 +423,49 @@
     opener = source;
   }
   function closeLightbox() {
+    lightboxNavigationGeneration += 1;
     selectedAsset = null;
     activeLightboxAssetId = null;
     removedLightboxPosition = null;
     queueMicrotask(() => opener?.focus());
   }
-  function navigateLightboxAsset(delta: number, current: TimelineAsset): TimelineAsset | null {
-    if (!lightboxAssets.length) return null;
-    const index = lightboxAssets.findIndex((candidate) => candidate.id === current.id);
-    let targetIndex: number;
-    if (index !== -1) {
-      removedLightboxPosition = null;
-      targetIndex = (index + delta + lightboxAssets.length) % lightboxAssets.length;
-    } else if (removedLightboxPosition?.assetId === current.id) {
-      const formerIndex = Math.min(removedLightboxPosition.index, lightboxAssets.length);
-      removedLightboxPosition = null;
-      targetIndex = delta > 0
-        ? (formerIndex + delta - 1) % lightboxAssets.length
-        : ((formerIndex + delta) % lightboxAssets.length + lightboxAssets.length) % lightboxAssets.length;
-    } else {
-      removedLightboxPosition = null;
-      targetIndex = delta > 0 ? 0 : lightboxAssets.length - 1;
+  async function navigateLightboxAsset(delta: number, current: TimelineAsset): Promise<TimelineAsset | null> {
+    const navigation = ++lightboxNavigationGeneration;
+    const buckets = timeline.buckets;
+    if (!buckets.length) return null;
+    const currentBucket = buckets.find((bucket) => timeline.assetsFor(bucket.timeBucket).some((item) => item.id === current.id));
+    const removed = removedLightboxPosition?.assetId === current.id ? removedLightboxPosition : null;
+    const anchor = currentBucket?.timeBucket ?? removed?.timeBucket;
+    const anchorIndex = anchor ? buckets.findIndex((bucket) => bucket.timeBucket === anchor) : -1;
+    if (anchorIndex !== -1) {
+      const assets = timeline.assetsFor(buckets[anchorIndex].timeBucket);
+      const index = currentBucket ? assets.findIndex((item) => item.id === current.id) + delta : (removed?.index ?? 0) + (delta < 0 ? -1 : 0);
+      if (index >= 0 && index < assets.length) {
+        const next = assets[index];
+        removedLightboxPosition = null;
+        activeLightboxAssetId = next.id;
+        return { ...next, isFavorite: isFavorite(next) };
+      }
     }
-    const next = lightboxAssets[targetIndex];
-    activeLightboxAssetId = next.id;
-    return { ...next, isFavorite: isFavorite(next) };
+    const insertion = anchor ? buckets.findIndex((bucket) => bucket.timeBucket < anchor) : -1;
+    const start = anchorIndex !== -1 ? anchorIndex + delta : delta > 0 ? (insertion < 0 ? buckets.length : insertion) : (insertion < 0 ? buckets.length : insertion) - 1;
+    for (let step = 0; step < buckets.length; step++) {
+      const index = ((start + step * delta) % buckets.length + buckets.length) % buckets.length;
+      const bucket = buckets[index];
+      try {
+        await timeline.activateBucket(bucket.timeBucket);
+      } catch {
+        return null;
+      }
+      if (navigation !== lightboxNavigationGeneration || activeLightboxAssetId !== current.id) return null;
+      const assets = timeline.assetsFor(bucket.timeBucket);
+      if (!assets.length) continue;
+      const next = delta > 0 ? assets[0] : assets[assets.length - 1];
+      removedLightboxPosition = null;
+      activeLightboxAssetId = next.id;
+      return { ...next, isFavorite: isFavorite(next) };
+    }
+    return null;
   }
   function handleKeydown(event: KeyboardEvent) {
     if (!selectedAsset && isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen) {
@@ -502,6 +522,8 @@
         </button>
       {/if}
     </div>
+  {:else}
+    <div class="mb-2 h-8 shrink-0" aria-hidden="true"></div>
   {/if}
   {#if isSelectionMode}
     <div class="mb-3 mr-16 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 shadow-sm dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-100 sm:flex sm:flex-wrap">

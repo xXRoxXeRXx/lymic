@@ -3,6 +3,67 @@ import type { TimelineDesktopAdapter } from "../tauri/desktop-adapter";
 import { createTimelineController } from "./timeline-controller.svelte";
 
 describe("Photo Timeline controller", () => {
+  it("re-fetches the index if a removal is confirmed during refresh", async () => {
+    const month = "2025-03-01T00:00:00.000Z";
+    let resolveRefresh!: (buckets: Array<{ timeBucket: string; count: number }>) => void;
+    const adapter: TimelineDesktopAdapter = {
+      getTimelineBuckets: vi.fn().mockResolvedValueOnce([{ timeBucket: month, count: 1 }])
+        .mockImplementationOnce(() => new Promise((resolve) => { resolveRefresh = resolve; }))
+        .mockResolvedValueOnce([]),
+      getTimelineBucketAssets: vi.fn().mockResolvedValue([{ id: "a", width: 1, height: 1, type: "IMAGE", takenAt: null, fileSize: null, duration: null, isFavorite: true }]),
+    };
+    const timeline = createTimelineController(adapter);
+    await timeline.refresh();
+    await timeline.activateBucket(month);
+    const pending = timeline.refresh();
+    timeline.removeAsset("a");
+    resolveRefresh([{ timeBucket: month, count: 1 }]);
+    await pending;
+    expect(adapter.getTimelineBuckets).toHaveBeenCalledTimes(3);
+    expect(timeline.buckets).toEqual([]);
+    timeline.restoreAsset("a");
+    expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["a"]);
+  });
+  it("does not resurrect a confirmed removal when an older bucket request finishes", async () => {
+    const month = "2025-03-01T00:00:00.000Z";
+    const asset = (id: string) => ({ id, width: 1, height: 1, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true });
+    let resolveBucket!: (assets: ReturnType<typeof asset>[]) => void;
+    const adapter: TimelineDesktopAdapter = {
+      getTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: month, count: 2 }]),
+      getTimelineBucketAssets: vi.fn().mockResolvedValueOnce([asset("a"), asset("b")])
+        .mockImplementationOnce(() => new Promise((resolve) => { resolveBucket = resolve; })),
+    };
+    const timeline = createTimelineController(adapter);
+    await timeline.refresh();
+    await timeline.activateBucket(month);
+    await timeline.refresh();
+    const pending = timeline.activateBucket(month);
+    timeline.removeAsset("a");
+    resolveBucket([asset("a"), asset("b")]);
+    await pending;
+    expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["b"]);
+  });
+
+  it("retains the month when the refreshed count exceeds its cached assets", async () => {
+    const month = "2025-03-01T00:00:00.000Z";
+    const asset = (id: string) => ({ id, width: 1, height: 1, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true });
+    let resolveBucket!: (assets: ReturnType<typeof asset>[]) => void;
+    const adapter: TimelineDesktopAdapter = {
+      getTimelineBuckets: vi.fn().mockResolvedValueOnce([{ timeBucket: month, count: 1 }]).mockResolvedValueOnce([{ timeBucket: month, count: 2 }]),
+      getTimelineBucketAssets: vi.fn().mockResolvedValueOnce([asset("a")])
+        .mockImplementationOnce(() => new Promise((resolve) => { resolveBucket = resolve; })),
+    };
+    const timeline = createTimelineController(adapter);
+    await timeline.refresh();
+    await timeline.activateBucket(month);
+    await timeline.refresh();
+    const pending = timeline.activateBucket(month);
+    timeline.removeAsset("a");
+    expect(timeline.buckets).toEqual([{ timeBucket: month, count: 1 }]);
+    resolveBucket([asset("a"), asset("b")]);
+    await pending;
+    expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["b"]);
+  });
   it("loads month buckets in descending chronological order", async () => {
     const adapter: TimelineDesktopAdapter = {
       getTimelineBuckets: vi.fn().mockResolvedValue([

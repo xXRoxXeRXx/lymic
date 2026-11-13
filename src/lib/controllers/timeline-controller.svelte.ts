@@ -40,16 +40,25 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   const pendingBuckets = new Map<string, Promise<void>>();
   const staleBuckets = new Set<string>();
   const removedAssets = new Map<string, RemovedAssetEntry[]>();
+  let removalVersion = 0;
+  const removalVersions = new Map<string, number>();
 
   async function refresh() {
     const request = ++latestRequest;
+    const requestVersion = removalVersion;
     // A background refresh must not replace an already usable timeline with a
     // loading state.  Keep the cached view interactive while the request runs.
     isLoading = buckets.length === 0;
     if (isLoading) hasInitialLoadError = false;
     isRefreshing = true;
     try {
-      const loaded = await adapter.getTimelineBuckets();
+      let loaded: TimelineBucket[];
+      let version: number;
+      do {
+        version = removalVersion;
+        loaded = await adapter.getTimelineBuckets();
+        if (request !== latestRequest) return;
+      } while (version !== removalVersion);
       if (request === latestRequest) {
         const list = Array.isArray(loaded) ? loaded : [];
         const nextBuckets = [...list].sort((a, b) => b.timeBucket.localeCompare(a.timeBucket));
@@ -69,7 +78,9 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
         // overwrite the newer session view.
         assetGeneration += 1;
         pendingBuckets.clear();
-        removedAssets.clear();
+        for (const [id] of removedAssets) {
+          if ((removalVersions.get(id) ?? 0) <= requestVersion) removedAssets.delete(id);
+        }
         isOffline = false;
         hasInitialLoadError = false;
       }
@@ -99,6 +110,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     pendingBuckets.clear();
     staleBuckets.clear();
     removedAssets.clear();
+    removalVersions.clear();
     assetGeneration += 1;
   }
 
@@ -111,11 +123,16 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     const pending = pendingBuckets.get(timeBucket);
     if (pending) return pending;
     const generation = assetGeneration;
+    const requestVersion = removalVersion;
     const request = adapter.getTimelineBucketAssets(timeBucket).then((assets) => {
       if (generation !== assetGeneration) return;
-      assetsByBucket = { ...assetsByBucket, [timeBucket]: assets };
+      const removedDuringRequest = new Set(
+        [...removalVersions].filter(([, version]) => version > requestVersion).map(([id]) => id),
+      );
+      assetsByBucket = { ...assetsByBucket, [timeBucket]: assets.filter((asset) => !removedDuringRequest.has(asset.id)) };
       staleBuckets.delete(timeBucket);
       for (const [removedAssetId, entries] of removedAssets) {
+        if (removedDuringRequest.has(removedAssetId)) continue;
         const remainingEntries = entries.filter((entry) => entry.timeBucket !== timeBucket);
         if (remainingEntries.length === 0) {
           removedAssets.delete(removedAssetId);
@@ -160,7 +177,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
         index: removedIndex,
         asset: assets[removedIndex],
       });
-      if (remaining.length === 0) {
+      if (remaining.length === 0 && bucket.count <= removedCount) {
         staleBuckets.delete(bucket.timeBucket);
         continue;
       }
@@ -172,6 +189,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     }
 
     if (!changed) return;
+    removalVersions.set(assetId, ++removalVersion);
     removedAssets.set(assetId, snapshotEntries);
     buckets = nextBuckets;
     assetsByBucket = nextAssetsByBucket;
@@ -181,6 +199,8 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     const snapshotEntries = removedAssets.get(assetId);
     if (!snapshotEntries || snapshotEntries.length === 0) return;
     removedAssets.delete(assetId);
+    removalVersion += 1;
+    removalVersions.delete(assetId);
 
     let changed = false;
     const nextBuckets = [...buckets];
