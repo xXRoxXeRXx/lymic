@@ -12,6 +12,7 @@ export interface TimelineViewState {
   activateBucket(timeBucket: string): Promise<void>;
   refresh(): Promise<void>;
   clear(): void;
+  removeAsset?(assetId: string): void;
 }
 
 export function createTimelineController(adapter: TimelineDesktopAdapter): TimelineViewState {
@@ -110,6 +111,41 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     return request;
   }
 
+  function removeAsset(assetId: string) {
+    let changed = false;
+    const nextBuckets: TimelineBucket[] = [];
+    const nextAssetsByBucket: Record<string, TimelineAsset[]> = {};
+
+    for (const bucket of buckets) {
+      const assets = assetsByBucket[bucket.timeBucket];
+      if (!assets) {
+        nextBuckets.push(bucket);
+        continue;
+      }
+      const remaining = assets.filter((asset) => asset.id !== assetId);
+      const removedCount = assets.length - remaining.length;
+      if (removedCount === 0) {
+        nextBuckets.push(bucket);
+        nextAssetsByBucket[bucket.timeBucket] = assets;
+        continue;
+      }
+      changed = true;
+      if (remaining.length === 0) {
+        staleBuckets.delete(bucket.timeBucket);
+        continue;
+      }
+      nextBuckets.push({
+        ...bucket,
+        count: Math.max(remaining.length, bucket.count - removedCount),
+      });
+      nextAssetsByBucket[bucket.timeBucket] = remaining;
+    }
+
+    if (!changed) return;
+    buckets = nextBuckets;
+    assetsByBucket = nextAssetsByBucket;
+  }
+
   return {
     get buckets() { return buckets; },
     get refreshGeneration() { return refreshGeneration; },
@@ -121,5 +157,6 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     activateBucket,
     refresh,
     clear,
+    removeAsset,
   };
 }

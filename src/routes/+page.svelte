@@ -436,6 +436,7 @@
             onOpenExternalUrl={desktop.openExternalUrl}
             getAssetDetails={desktop.getAssetDetails}
             setAssetFavorite={desktop.setAssetFavorite}
+            removeUnfavoritedAssets={true}
             chooseDownloadDestination={desktop.chooseDownloadDestination}
             downloadAsset={desktop.downloadAsset}
             downloadArchive={desktop.downloadArchive}
