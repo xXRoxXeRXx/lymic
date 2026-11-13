@@ -24,6 +24,73 @@
   let providerError = $state(false);
   let selectedAsset = $state<TimelineAsset | null>(null);
   let selectionGeneration = 0;
+  const pageSize = 100;
+  let collection = $state<{ source: GeoJSONSource; id: number; count: number } | null>(null);
+  let page = $state(0);
+  let pageIds = $state<string[]>([]);
+  let pageLoading = $state(false);
+  let pageError = $state(false);
+  let pageGeneration = 0;
+  let selectedIndex = -1;
+  let deferredMarkers = false;
+  let deferredStyle = false;
+  let resultButton: HTMLButtonElement | null = null;
+  let mapFocus: HTMLElement | null = null;
+
+  async function loadPage(index: number) {
+    const current = collection;
+    if (!current) return;
+    const generation = ++pageGeneration;
+    pageLoading = true;
+    pageError = false;
+    try {
+      const leaves = await current.source.getClusterLeaves(current.id, pageSize, index * pageSize);
+      if (generation !== pageGeneration || collection !== current) return;
+      page = index;
+      pageIds = leaves.map((leaf) => String(leaf.properties?.id));
+    } catch {
+      if (generation === pageGeneration) pageError = true;
+    } finally {
+      if (generation === pageGeneration) pageLoading = false;
+    }
+  }
+  async function assetAt(index: number): Promise<TimelineAsset | null> {
+    const current = collection;
+    if (!current || index < 0 || index >= current.count) return null;
+    try {
+      const leaves = await current.source.getClusterLeaves(current.id, 1, index);
+      const id = leaves[0]?.properties?.id;
+      if (id == null || collection !== current) return null;
+      const details = await desktop.getAssetDetails(String(id));
+      if (!details || collection !== current) return null;
+      return toAsset(String(id), details);
+    } catch { return null; }
+  }
+  async function navigateCollection(delta: number): Promise<TimelineAsset | null> {
+    const current = collection;
+    if (!current) return null;
+    for (let index = selectedIndex + delta; index >= 0 && index < current.count; index += delta) {
+      const asset = await assetAt(index);
+      if (collection !== current) return null;
+      if (asset) { selectedIndex = index; return asset; }
+    }
+    return null;
+  }
+  async function openResult(index: number, button: HTMLButtonElement) {
+    resultButton = button;
+    const asset = await assetAt(index);
+    if (asset) { selectedIndex = index; selectedAsset = asset; }
+  }
+  function closeResults() {
+    pageGeneration++;
+    collection = null;
+    pageIds = [];
+    if (deferredStyle) { deferredStyle = false; deferredMarkers = false; map?.setStyle(styleUrl()); }
+    else if (deferredMarkers) { deferredMarkers = false; setMarkers(); }
+    mapFocus?.focus();
+  }
+  const styleUrl = () => `https://tiles.openfreemap.org/styles/${document.documentElement.classList.contains("dark") ? "dark" : "liberty"}`;
+
   let initialized = false;
   let lastMarkers = untrack(() => mapState.markers);
   let worker: Worker | undefined;
@@ -61,12 +128,15 @@
     const convert = (globalThis as typeof globalThis & { __TAURI_INTERNALS__?: { convertFileSrc?: (path: string, protocol: string) => string } }).__TAURI_INTERNALS__?.convertFileSrc;
     return convert ? `${convert("", "lymic-thumb").replace(/\/$/, "")}/asset/${encodeURIComponent(id)}` : `lymic-thumb://asset/${encodeURIComponent(id)}`;
   }
+  function toAsset(id: string, details: NonNullable<Awaited<ReturnType<typeof desktop.getAssetDetails>>>): TimelineAsset {
+    return { id, width: details.imageWidth ?? 0, height: details.imageHeight ?? 0, type: details.assetType === "VIDEO" ? "VIDEO" : "IMAGE", takenAt: null, cameraMake: details.cameraMake, cameraModel: details.cameraModel, fileSize: details.fileSize, duration: null, isFavorite: details.isFavorite };
+  }
   async function openAsset(id: string) {
     const generation = ++selectionGeneration;
     try {
       const details = await desktop.getAssetDetails(id);
       if (generation !== selectionGeneration) return;
-      selectedAsset = { id, width: details.imageWidth ?? 0, height: details.imageHeight ?? 0, type: details.assetType === "VIDEO" ? "VIDEO" : "IMAGE", takenAt: null, cameraMake: details.cameraMake, cameraModel: details.cameraModel, fileSize: details.fileSize, duration: null, isFavorite: details.isFavorite };
+      if (details) selectedAsset = toAsset(id, details);
     } catch { /* A removed asset should not break the rest of the map. */ }
   }
   function updatePins() {
@@ -114,9 +184,8 @@
   }
   onMount(() => {
     maplibregl.setWorkerUrl(mapWorkerUrl);
-    const styleUrl = () => `https://tiles.openfreemap.org/styles/${document.documentElement.classList.contains("dark") ? "dark" : "liberty"}`;
     map = new maplibregl.Map({ container, style: styleUrl(), center: [0, 0], zoom: 1, maxZoom: 21, renderWorldCopies: false });
-    const themeObserver = new MutationObserver(() => { removePins(); map?.setStyle(styleUrl()); });
+    const themeObserver = new MutationObserver(() => { if (collection) { deferredStyle = true; return; } removePins(); map?.setStyle(styleUrl()); });
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.on("error", () => { providerError = true; });
@@ -131,8 +200,17 @@
     map.on("click", "map-clusters", async (event) => {
         const feature = event.features?.[0];
         if (!map || !feature || feature.geometry.type !== "Point") return;
-        const zoom = await (map.getSource("assets") as GeoJSONSource).getClusterExpansionZoom(Number(feature.properties.cluster_id));
-        map.easeTo({ center: feature.geometry.coordinates as [number, number], zoom });
+        const source = map.getSource("assets") as GeoJSONSource;
+        const id = Number(feature.properties.cluster_id);
+        const zoom = await source.getClusterExpansionZoom(id);
+        if (zoom <= 21 && zoom > map.getZoom()) {
+          map.easeTo({ center: feature.geometry.coordinates as [number, number], zoom });
+        } else {
+          mapFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          if (worker) { workerGeneration++; worker.terminate(); worker = undefined; deferredMarkers = true; }
+          collection = { source, id, count: Number(feature.properties.point_count) };
+          void loadPage(0);
+        }
       });
     map.on("movestart", removePins);
     map.on("moveend", updatePins);
@@ -141,7 +219,7 @@
   });
   $effect(() => {
     const markers = mapState.markers;
-    if (markers !== lastMarkers) { lastMarkers = markers; removePins(); setMarkers(); }
+    if (markers !== lastMarkers) { lastMarkers = markers; if (collection) deferredMarkers = true; else { removePins(); setMarkers(); } }
   });
   $effect(() => {
     if (active) { queueMicrotask(() => { map?.resize(); updatePins(); }); }
@@ -155,8 +233,21 @@
   {#if mapState.loaded && !mapState.markers.length}<p role="status">{$t("map_empty")}</p>{/if}
   {#if providerError}<p role="alert">{$t("map_provider_error")}</p>{/if}
   <div bind:this={container} class="min-h-0 flex-1 rounded-xl" aria-label={$t("map_title")}></div>
+  {#if collection}
+    <section class="absolute inset-4 z-20 overflow-auto rounded-xl bg-white p-4 shadow-xl dark:bg-gray-900" aria-label={$t("map_location_results")}>
+      <div class="flex items-center justify-between"><h2>{$t("map_location_results")} ({collection.count})</h2><button type="button" onclick={closeResults}>{$t("timeline_close_lightbox")}</button></div>
+      {#if pageLoading}<p role="status">{$t("map_loading")}</p>{/if}
+      {#if pageError}<p role="alert">{$t("map_error")}</p>{/if}
+      <div class="grid grid-cols-4 gap-2 sm:grid-cols-6">
+        {#each pageIds as id, index}
+          <button type="button" aria-label={$t("map_open_asset")} onclick={(event) => void openResult(page * pageSize + index, event.currentTarget)}><img src={thumbnailUrl(id)} alt="" loading="lazy" class="aspect-square w-full object-cover" /></button>
+        {/each}
+      </div>
+      <div class="flex items-center gap-3"><button type="button" disabled={page === 0 || pageLoading} onclick={() => void loadPage(page - 1)}>{$t("map_previous_page")}</button><span>{page + 1} / {Math.ceil(collection.count / pageSize)}</span><button type="button" disabled={(page + 1) * pageSize >= collection.count || pageLoading} onclick={() => void loadPage(page + 1)}>{$t("map_next_page")}</button><button type="button" disabled={pageLoading || (page + 1) * pageSize >= collection.count} onclick={() => void loadPage(Math.ceil(collection!.count / pageSize) - 1)}>{$t("map_last_page")}</button></div>
+    </section>
+  {/if}
   {#if selectedAsset}
-    <Lightbox asset={selectedAsset} navigateAsset={() => null} onClose={() => { selectedAsset = null; }} onFavoriteChange={() => {}} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} setAssetFavorite={desktop.setAssetFavorite} chooseDownloadDestination={desktop.chooseDownloadDestination} downloadAsset={desktop.downloadAsset} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
+    <Lightbox asset={selectedAsset} navigateAsset={(delta) => collection ? navigateCollection(delta) : null} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={() => {}} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} setAssetFavorite={desktop.setAssetFavorite} chooseDownloadDestination={desktop.chooseDownloadDestination} downloadAsset={desktop.downloadAsset} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
   {/if}
 </div>
 

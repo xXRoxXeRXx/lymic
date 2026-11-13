@@ -25,3 +25,13 @@ it("opens one asset and delegates navigation to the caller's available results",
   await fireEvent.keyDown(window, { key: "Escape" });
   expect(onClose).toHaveBeenCalledOnce();
 });
+
+it("waits for navigation into another page of a collection", async () => {
+  render(Lightbox, {
+    asset: photo, navigateAsset: async () => video, onClose: vi.fn(), onFavoriteChange: vi.fn(), serverUrl: "",
+    onOpenExternalUrl: vi.fn(), getAssetDetails: vi.fn().mockResolvedValue(null),
+    setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), addAssetsToAlbum: vi.fn(),
+  });
+  await fireEvent.click(screen.getByRole("button", { name: "Next asset" }));
+  expect(await screen.findByLabelText("Video preview")).toHaveAttribute("src", "lymic-asset://video/map-video");
+});

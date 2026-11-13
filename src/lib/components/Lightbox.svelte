@@ -11,7 +11,7 @@
     refreshGeneration?: number;
     detailsCache?: Map<string, AssetDetails | null>;
     updatingFavoriteAssetIds?: Record<string, true>;
-    navigateAsset(delta: number, current: TimelineAsset): TimelineAsset | null;
+    navigateAsset(delta: number, current: TimelineAsset): TimelineAsset | null | Promise<TimelineAsset | null>;
     onClose(): void;
     onFavoriteChange(assetId: string, favorite: boolean): void;
     serverUrl: string;
@@ -214,9 +214,13 @@
   function closeFromLightboxBackdrop() {
     if (isInfoOpen) isInfoOpen = false; else closeLightbox();
   }
-  function navigate(delta: number) {
+  let navigationGeneration = 0;
+  async function navigate(delta: number) {
     if (!selectedAsset || downloadingAssetId || isAddingToAlbum) return;
-    const nextAsset = navigateAsset(delta, selectedAsset);
+    const current = selectedAsset;
+    const generation = ++navigationGeneration;
+    const nextAsset = await navigateAsset(delta, current);
+    if (generation !== navigationGeneration || selectedAsset !== current) return;
     if (!nextAsset) return;
     flushSync(() => {
       selectedAsset = nextAsset;
