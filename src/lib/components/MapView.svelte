@@ -123,6 +123,7 @@
     pins.delete(id);
   }
   let workerGeneration = 0;
+  let sourceUpdating = false;
 
   function thumbnailUrl(id: string) {
     const convert = (globalThis as typeof globalThis & { __TAURI_INTERNALS__?: { convertFileSrc?: (path: string, protocol: string) => string } }).__TAURI_INTERNALS__?.convertFileSrc;
@@ -172,7 +173,10 @@
       if (!map || generation !== workerGeneration) return;
       const source = map.getSource("assets") as GeoJSONSource | undefined;
       if (!source) return;
-      void source.setData(event.data.data);
+      sourceUpdating = true;
+      void source.setData(event.data.data).catch(() => { providerError = true; }).finally(() => {
+        if (generation === workerGeneration) sourceUpdating = false;
+      });
       if (!initialized && mapState.loaded) {
         if (mapState.markers.length) {
           map.fitBounds(event.data.bounds as [number, number, number, number], { padding: 60, maxZoom: 12, duration: 0 });
@@ -201,7 +205,7 @@
     });
     map.on("click", "map-clusters", async (event) => {
         const feature = event.features?.[0];
-        if (!map || !feature || feature.geometry.type !== "Point") return;
+        if (!map || sourceUpdating || !feature || feature.geometry.type !== "Point") return;
         const source = map.getSource("assets") as GeoJSONSource;
         const id = Number(feature.properties.cluster_id);
         const zoom = await source.getClusterExpansionZoom(id);
