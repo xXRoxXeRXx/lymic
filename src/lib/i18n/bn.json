@@ -275,4 +275,9 @@
   ,"timeline_selection_album_success": "Added {count} assets to album"
   ,"timeline_selection_album_partial": "Added {succeeded} of {count} assets to album"
   ,"timeline_selection_album_failed": "Could not add selected assets to album"
+  ,"favorites_title": "পছন্দসমূহ"
+  ,"favorites_loading": "পছন্দসমূহ লোড হচ্ছে…"
+  ,"favorites_empty": "এখনও কোনো পছন্দ নেই। এখানে দেখতে ফটো বা ভিডিও পছন্দ হিসেবে চিহ্নিত করুন।"
+  ,"favorites_error": "পছন্দসমূহ লোড করা যায়নি।"
+  ,"favorites_offline": "পছন্দের টাইমলাইন অফলাইনে রয়েছে। ক্যাশ করা পছন্দসমূহ দেখানো হচ্ছে।"
 }

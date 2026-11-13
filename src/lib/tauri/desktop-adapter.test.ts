@@ -34,6 +34,7 @@ import {
   type AlbumCatalogueDesktopAdapter,
   type AlbumTimelineDesktopAdapter,
   type AuthDesktopAdapter,
+  type FavoritesTimelineDesktopAdapter,
   type PreferencesDesktopAdapter,
   type RemovableVolumeDesktopAdapter,
   type SyncDesktopAdapter,
@@ -50,6 +51,7 @@ describe("tauriDesktopAdapter", () => {
   const albumAssignmentAdapter: AlbumAssignmentDesktopAdapter = tauriDesktopAdapter;
   const albumCatalogueAdapter: AlbumCatalogueDesktopAdapter = tauriDesktopAdapter;
   const timelineAdapter: TimelineDesktopAdapter = tauriDesktopAdapter;
+  const favoritesTimelineAdapter: FavoritesTimelineDesktopAdapter = tauriDesktopAdapter;
   const albumTimelineAdapter: AlbumTimelineDesktopAdapter = tauriDesktopAdapter;
   const preferencesAdapter: PreferencesDesktopAdapter = tauriDesktopAdapter;
   const updateAdapter: UpdateDesktopAdapter = tauriDesktopAdapter;
@@ -92,6 +94,8 @@ describe("tauriDesktopAdapter", () => {
     await albumAssignmentAdapter.addAssetsToAlbum(["asset-1", "asset-2"], "album-1");
     await timelineAdapter.getTimelineBuckets();
     await timelineAdapter.getTimelineBucketAssets("2025-03-01T00:00:00.000Z");
+    await favoritesTimelineAdapter.getFavoritesTimelineBuckets();
+    await favoritesTimelineAdapter.getFavoritesTimelineBucketAssets("2025-03-01T00:00:00.000Z");
     await tauriDesktopAdapter.getAssetDetails("asset-1");
     await tauriDesktopAdapter.setAssetFavorite("asset-1", true);
     await tauriDesktopAdapter.chooseDownloadDestination("IMG_0001.CR3");
@@ -152,6 +156,8 @@ describe("tauriDesktopAdapter", () => {
       ["add_assets_to_album", { assetIds: ["asset-1", "asset-2"], albumId: "album-1" }],
       ["get_timeline_buckets"],
       ["get_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
+      ["get_favorites_timeline_buckets"],
+      ["get_favorites_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
       ["get_asset_details", { assetId: "asset-1" }],
       ["set_asset_favorite", { assetId: "asset-1", isFavorite: true }],
       ["download_asset", { assetId: "asset-1", destinationPath: "C:/Downloads/IMG_0001.CR3" }],

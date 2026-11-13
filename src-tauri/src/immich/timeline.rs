@@ -74,7 +74,7 @@ struct TimelineAssetResponse {
     #[serde(default, deserialize_with = "deserialize_duration")]
     duration: Option<u64>,
     #[serde(rename = "isFavorite", default)]
-    is_favorite: bool,
+    is_favorite: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -244,7 +244,7 @@ impl ImmichClient {
                     .assets
                     .items
                     .into_iter()
-                    .map(timeline_asset_from_response),
+                    .map(|asset| timeline_asset_from_response(asset, false)),
             );
 
             match payload.assets.next_page {
@@ -309,64 +309,116 @@ impl ImmichClient {
         }
         parse_timeline_bucket_assets(
             read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?,
+            false,
         )
     }
 
-    pub async fn get_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
+    async fn fetch_timeline_buckets_with_query(
+        &self,
+        query: &[(&str, &str)],
+        context: &str,
+    ) -> Result<Vec<TimelineBucket>, String> {
         let response = self
             .client
             .get(self.endpoint_url("timeline/buckets"))
-            .query(&[("size", "MONTH")])
+            .query(query)
             .header("x-api-key", &self.api_key)
             .send()
             .await
-            .map_err(|error| format!("Failed to fetch timeline buckets: {error}"))?;
+            .map_err(|error| format!("Failed to fetch {context}: {error}"))?;
 
         if !response.status().is_success() {
             return Err(format!(
-                "Failed to fetch timeline buckets: {}",
+                "Failed to fetch {context}: {}",
                 response_status_error(response).await?
             ));
         }
 
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         let mut buckets: Vec<TimelineBucket> = serde_json::from_slice(&body)
-            .map_err(|error| format!("Invalid timeline buckets response: {error}"))?;
+            .map_err(|error| format!("Invalid {context} response: {error}"))?;
         buckets.sort_by(|a, b| b.time_bucket.cmp(&a.time_bucket));
         Ok(buckets)
+    }
+
+    async fn fetch_timeline_bucket_assets_with_query(
+        &self,
+        query: &[(&str, &str)],
+        context: &str,
+        default_favorite: bool,
+    ) -> Result<Vec<TimelineAsset>, String> {
+        let response = self
+            .client
+            .get(self.endpoint_url("timeline/bucket"))
+            .query(query)
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to fetch {context}: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Failed to fetch {context}: {}",
+                response_status_error(response).await?
+            ));
+        }
+        parse_timeline_bucket_assets(
+            read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?,
+            default_favorite,
+        )
+    }
+
+    pub async fn get_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
+        self.fetch_timeline_buckets_with_query(&[("size", "MONTH")], "timeline buckets")
+            .await
     }
 
     pub async fn get_timeline_bucket_assets(
         &self,
         time_bucket: &str,
     ) -> Result<Vec<TimelineAsset>, String> {
-        let response = self
-            .client
-            .get(self.endpoint_url("timeline/bucket"))
-            .query(&[("size", "MONTH"), ("timeBucket", time_bucket)])
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to fetch timeline bucket: {error}"))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to fetch timeline bucket: {}",
-                response_status_error(response).await?
-            ));
-        }
-        parse_timeline_bucket_assets(
-            read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?,
+        self.fetch_timeline_bucket_assets_with_query(
+            &[("size", "MONTH"), ("timeBucket", time_bucket)],
+            "timeline bucket",
+            false,
         )
+        .await
+    }
+
+    pub async fn get_favorites_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
+        self.fetch_timeline_buckets_with_query(
+            &[("size", "MONTH"), ("isFavorite", "true")],
+            "favorites timeline buckets",
+        )
+        .await
+    }
+
+    pub async fn get_favorites_timeline_bucket_assets(
+        &self,
+        time_bucket: &str,
+    ) -> Result<Vec<TimelineAsset>, String> {
+        self.fetch_timeline_bucket_assets_with_query(
+            &[
+                ("size", "MONTH"),
+                ("timeBucket", time_bucket),
+                ("isFavorite", "true"),
+            ],
+            "favorites timeline bucket",
+            true,
+        )
+        .await
     }
 }
 
-fn parse_timeline_bucket_assets(body: Vec<u8>) -> Result<Vec<TimelineAsset>, String> {
+fn parse_timeline_bucket_assets(
+    body: Vec<u8>,
+    default_favorite: bool,
+) -> Result<Vec<TimelineAsset>, String> {
     let payload: TimelineBucketPayload = serde_json::from_slice(&body)
         .map_err(|error| format!("Invalid timeline bucket response: {error}"))?;
     Ok(match payload {
         TimelineBucketPayload::Sequence(assets) => assets
             .into_iter()
-            .map(timeline_asset_from_response)
+            .map(|asset| timeline_asset_from_response(asset, default_favorite))
             .collect(),
         TimelineBucketPayload::Columnar(columnar) => columnar
             .id
@@ -405,14 +457,17 @@ fn parse_timeline_bucket_assets(body: Vec<u8>) -> Result<Vec<TimelineAsset>, Str
                         .is_favorite
                         .get(index)
                         .and_then(|value| *value)
-                        .unwrap_or(false),
+                        .unwrap_or(default_favorite),
                 }
             })
             .collect(),
     })
 }
 
-fn timeline_asset_from_response(asset: TimelineAssetResponse) -> TimelineAsset {
+fn timeline_asset_from_response(
+    asset: TimelineAssetResponse,
+    default_favorite: bool,
+) -> TimelineAsset {
     TimelineAsset {
         id: asset.id,
         width: if asset.exif.width > 0 {
@@ -436,7 +491,7 @@ fn timeline_asset_from_response(asset: TimelineAssetResponse) -> TimelineAsset {
         camera_model: asset.exif.model,
         file_size: asset.exif.file_size,
         duration: asset.duration,
-        is_favorite: asset.is_favorite,
+        is_favorite: asset.is_favorite.unwrap_or(default_favorite),
     }
 }
 
@@ -1054,6 +1109,156 @@ mod tests {
         let error = client.get_album_timeline("album-1").await.unwrap_err();
         assert!(error.starts_with("Invalid album timeline response:"));
         assert!(!error.contains("album-api-key"));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetches_favorites_timeline_buckets_and_assets_with_favorite_default() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 4096];
+            let read = stream.read(&mut request).await.unwrap();
+            let request_text = String::from_utf8_lossy(&request[..read]);
+            assert!(request_text
+                .starts_with("GET /api/timeline/buckets?size=MONTH&isFavorite=true HTTP/1.1"));
+            assert!(request_text.contains("x-api-key: test-key"));
+            assert!(!request_text.contains("withPartners"));
+            let buckets = br#"[{"timeBucket":"2025-02-01T00:00:00.000Z","count":1},{"timeBucket":"2025-03-01T00:00:00.000Z","count":2}]"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                        buckets.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            stream.write_all(buckets).await.unwrap();
+
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let read = stream.read(&mut request).await.unwrap();
+            let request_text = String::from_utf8_lossy(&request[..read]);
+            assert!(request_text.starts_with(
+                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&isFavorite=true HTTP/1.1"
+            ));
+            assert!(request_text.contains("x-api-key: test-key"));
+            let assets = br#"{"id":["fav-photo","fav-video"],"isImage":[true,false],"isFavorite":[null],"ratio":[1.5,1.7778],"duration":[null,"0:00:42.000"],"fileCreatedAt":["2025-03-10T10:00:00.000Z","2025-03-05T10:00:00.000Z"]}"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                        assets.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            stream.write_all(assets).await.unwrap();
+
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let read = stream.read(&mut request).await.unwrap();
+            let request_text = String::from_utf8_lossy(&request[..read]);
+            assert!(request_text.starts_with(
+                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-02-01T00%3A00%3A00.000Z&isFavorite=true HTTP/1.1"
+            ));
+            let legacy_assets = br#"[{"id":"legacy-fav","type":"IMAGE","fileCreatedAt":"2025-02-14T10:00:00.000Z"}]"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                        legacy_assets.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            stream.write_all(legacy_assets).await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let buckets = client.get_favorites_timeline_buckets().await.unwrap();
+        assert_eq!(
+            buckets,
+            vec![
+                super::TimelineBucket {
+                    time_bucket: "2025-03-01T00:00:00.000Z".to_string(),
+                    count: 2,
+                },
+                super::TimelineBucket {
+                    time_bucket: "2025-02-01T00:00:00.000Z".to_string(),
+                    count: 1,
+                },
+            ]
+        );
+
+        let march_assets = client
+            .get_favorites_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap();
+        assert_eq!(march_assets.len(), 2);
+        assert_eq!(march_assets[0].id, "fav-photo");
+        assert_eq!(march_assets[0].r#type, "IMAGE");
+        assert!(march_assets[0].is_favorite);
+        assert_eq!(march_assets[1].id, "fav-video");
+        assert_eq!(march_assets[1].r#type, "VIDEO");
+        assert_eq!(march_assets[1].duration, Some(42));
+        assert!(march_assets[1].is_favorite);
+
+        let feb_assets = client
+            .get_favorites_timeline_bucket_assets("2025-02-01T00:00:00.000Z")
+            .await
+            .unwrap();
+        assert_eq!(feb_assets.len(), 1);
+        assert_eq!(feb_assets[0].id, "legacy-fav");
+        assert!(feb_assets[0].is_favorite);
+
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn reports_favorites_timeline_errors_without_leaking_body_or_api_key() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request).await.unwrap();
+            let body = b"internal secret stacktrace";
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 500 Internal Server Error\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                        body.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "fav-secret-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let error = client.get_favorites_timeline_buckets().await.unwrap_err();
+        assert!(error.starts_with("Failed to fetch favorites timeline buckets:"));
+        assert!(!error.contains("internal secret stacktrace"));
+        assert!(!error.contains("fav-secret-key"));
         server.await.unwrap();
     }
 }

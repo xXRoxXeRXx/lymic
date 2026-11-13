@@ -32,19 +32,29 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     // A background refresh must not replace an already usable timeline with a
     // loading state.  Keep the cached view interactive while the request runs.
     isLoading = buckets.length === 0;
+    if (isLoading) hasInitialLoadError = false;
     isRefreshing = true;
     try {
       const loaded = await adapter.getTimelineBuckets();
       if (request === latestRequest) {
         const list = Array.isArray(loaded) ? loaded : [];
-        buckets = [...list].sort((a, b) => b.timeBucket.localeCompare(a.timeBucket));
+        const nextBuckets = [...list].sort((a, b) => b.timeBucket.localeCompare(a.timeBucket));
+        const activeKeys = new Set(nextBuckets.map((bucket) => bucket.timeBucket));
+        const prunedAssets: Record<string, TimelineAsset[]> = {};
+        staleBuckets.clear();
+        for (const [timeBucket, assets] of Object.entries(assetsByBucket)) {
+          if (!activeKeys.has(timeBucket)) continue;
+          prunedAssets[timeBucket] = assets;
+          staleBuckets.add(timeBucket);
+        }
+        buckets = nextBuckets;
+        assetsByBucket = prunedAssets;
         refreshGeneration += 1;
         // Keep rendered assets visible while fresh bucket details arrive. A
         // generation makes requests started before this refresh unable to
         // overwrite the newer session view.
         assetGeneration += 1;
-        staleBuckets.clear();
-        for (const timeBucket of Object.keys(assetsByBucket)) staleBuckets.add(timeBucket);
+        pendingBuckets.clear();
         isOffline = false;
         hasInitialLoadError = false;
       }

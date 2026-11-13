@@ -275,4 +275,9 @@
   ,"timeline_selection_album_success": "{count} Medien zum Album hinzugefügt"
   ,"timeline_selection_album_partial": "{succeeded} von {count} Medien zum Album hinzugefügt"
   ,"timeline_selection_album_failed": "Ausgewählte Medien konnten nicht zum Album hinzugefügt werden"
+  ,"favorites_title": "Favoriten"
+  ,"favorites_loading": "Favoriten werden geladen…"
+  ,"favorites_empty": "Noch keine Favoriten. Markiere Fotos oder Videos als Favorit, um sie hier zu sehen."
+  ,"favorites_error": "Favoriten konnten nicht geladen werden."
+  ,"favorites_offline": "Favoriten-Timeline ist offline. Zwischengespeicherte Favoriten werden angezeigt."
 }

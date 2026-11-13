@@ -24,8 +24,12 @@
     albumCatalogue?: TargetAlbumCatalogue;
     addAssetsToAlbum?(assetIds: string[], albumId: string): Promise<AlbumAssignmentResult>;
     showScrubber?: boolean;
+    showRefreshButton?: boolean;
+    loadingMessage?: string;
     emptyMessage?: string;
     loadErrorMessage?: string;
+    offlineMessage?: string;
+    ariaLabel?: string;
   }
 
   let {
@@ -40,8 +44,12 @@
     albumCatalogue,
     addAssetsToAlbum = async (assetIds) => ({ succeeded: assetIds.length, failed: 0 }),
     showScrubber = true,
+    showRefreshButton = true,
+    loadingMessage = "",
     emptyMessage = "",
     loadErrorMessage = "",
+    offlineMessage = "",
+    ariaLabel = "",
   }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   const scrubberIndex = $derived(buildTimelineScrubberIndex(timeline.buckets));
@@ -347,39 +355,47 @@
 <svelte:window onkeydown={handleKeydown} onresize={handleWindowResize} />
 
 <div class="relative flex h-full min-h-0 flex-col">
-  <div class="mb-2 flex shrink-0 items-center justify-end gap-3">
-    {#if timeline.hasInitialLoadError}
-      <div class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
-        <span>{loadErrorMessage || $t("timeline_offline")}</span>
+  {#if (timeline.hasInitialLoadError && !timeline.isLoading) || (timeline.isOffline && !timeline.isLoading) || showRefreshButton}
+    <div class="mb-2 flex shrink-0 items-center justify-end gap-3">
+      {#if timeline.hasInitialLoadError && !timeline.isLoading}
+        <div class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
+          <span>{loadErrorMessage || $t("timeline_offline")}</span>
+          {#if showRefreshButton}
+            <button
+              type="button"
+              class="font-semibold underline underline-offset-2"
+              aria-label={$t("timeline_retry_connection")}
+              onclick={() => void timeline.refresh()}
+            >{$t("timeline_retry")}</button>
+          {/if}
+        </div>
+      {:else if timeline.isOffline && !timeline.isLoading}
+        <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+          <span>{offlineMessage || $t("timeline_offline")}</span>
+          {#if showRefreshButton}
+            <button
+              type="button"
+              class="font-semibold underline underline-offset-2"
+              aria-label={$t("timeline_retry_connection")}
+              onclick={() => void timeline.refresh()}
+            >{$t("timeline_retry")}</button>
+          {/if}
+        </div>
+      {/if}
+      {#if showRefreshButton}
         <button
           type="button"
-          class="font-semibold underline underline-offset-2"
-          aria-label={$t("timeline_retry_connection")}
+          class="rounded-lg p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+          aria-label={$t("timeline_refresh")}
+          aria-busy={timeline.isRefreshing}
+          disabled={timeline.isRefreshing}
           onclick={() => void timeline.refresh()}
-        >{$t("timeline_retry")}</button>
-      </div>
-    {:else if timeline.isOffline}
-      <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
-        <span>{$t("timeline_offline")}</span>
-        <button
-          type="button"
-          class="font-semibold underline underline-offset-2"
-          aria-label={$t("timeline_retry_connection")}
-          onclick={() => void timeline.refresh()}
-        >{$t("timeline_retry")}</button>
-      </div>
-    {/if}
-    <button
-      type="button"
-      class="rounded-lg p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-      aria-label={$t("timeline_refresh")}
-      aria-busy={timeline.isRefreshing}
-      disabled={timeline.isRefreshing}
-      onclick={() => void timeline.refresh()}
-    >
-      <RefreshCw class="h-4 w-4 {timeline.isRefreshing ? 'animate-spin' : ''}" />
-    </button>
-  </div>
+        >
+          <RefreshCw class="h-4 w-4 {timeline.isRefreshing ? 'animate-spin' : ''}" />
+        </button>
+      {/if}
+    </div>
+  {/if}
   {#if isSelectionMode}
     <div class="mb-3 mr-16 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 shadow-sm dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-100 sm:flex sm:flex-wrap">
       <span class="min-w-0 truncate font-medium sm:mr-auto">{$t("timeline_selection_count", { values: { count: selectionCount.toLocaleString(numberLocale) } })}</span>
@@ -408,7 +424,12 @@
       {$t(resultKey, { values: { count: selectionResult.total.toLocaleString(numberLocale), succeeded: selectionResult.succeeded.toLocaleString(numberLocale) } })}
     </p>
   {/if}
-  <div bind:this={viewport} use:measureViewport class="min-h-0 flex-1 overflow-y-auto pr-16 scrollbar-none" aria-label={$t("timeline_title")} onscroll={syncActiveBucket}>
+  <div bind:this={viewport} use:measureViewport class="min-h-0 flex-1 overflow-y-auto pr-16 scrollbar-none" aria-label={ariaLabel || $t("timeline_title")} onscroll={syncActiveBucket}>
+    {#if timeline.isLoading && loadingMessage}
+      <p role="status" class="py-4 text-sm text-slate-500 dark:text-zinc-400">{loadingMessage}</p>
+    {:else if timeline.buckets.length === 0 && !timeline.isLoading && !timeline.hasInitialLoadError && emptyMessage}
+      <p role="status" class="py-4 text-sm text-slate-500 dark:text-zinc-400">{emptyMessage}</p>
+    {/if}
     <div class="space-y-8">
       {#each timeline.buckets as bucket (bucket.timeBucket)}
         {@const layout = masonryLayout(bucket.timeBucket)}
@@ -455,8 +476,6 @@
       {/each}
     </div>
   </div>
-
-  {#if timeline.buckets.length === 0 && !timeline.isLoading && !timeline.hasInitialLoadError && emptyMessage}<p role="status">{emptyMessage}</p>{/if}
   {#if showScrubber && scrubberMonths.length > 0}
     {@const thumbRatio = scrubberMonths.length > 1 && activeTimeBucket ? Math.max(0, scrubberMonths.indexOf(activeTimeBucket)) / (scrubberMonths.length - 1) : 0}
     <nav class="absolute inset-y-0 -right-4 w-16 border-l border-slate-200/80 bg-slate-100/85 py-2 pl-1 pr-1 backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/85" aria-label={$t("timeline_scrubber")}>

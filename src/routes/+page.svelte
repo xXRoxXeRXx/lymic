@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, ArrowLeft, X, FolderSync, ScrollText, User, Images, Users, Album, Map as MapIcon } from "lucide-svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, ArrowLeft, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
@@ -25,6 +25,7 @@
   import { createRemovableVolumeController } from "#lib/controllers/removable-volume-controller.svelte.ts";
   import { createTargetAlbumCatalogue } from "#lib/controllers/target-album-catalogue.svelte.ts";
   import { createTimelineController } from "#lib/controllers/timeline-controller.svelte.ts";
+  import { createFavoritesTimelineController } from "#lib/controllers/favorites-timeline-controller.svelte.ts";
   import { createMapController } from "#lib/controllers/map-controller.svelte.ts";
   import { createPeopleController } from "#lib/controllers/people-controller.svelte.ts";
   import { createAlbumCatalogueController } from "#lib/controllers/album-catalogue-controller.svelte.ts";
@@ -61,6 +62,7 @@
     },
   });
   const timeline = createTimelineController(desktop);
+  const favorites = createFavoritesTimelineController(desktop);
   const people = createPeopleController(desktop);
   const map = createMapController(desktop);
   let mapCreated = $state(false);
@@ -92,6 +94,7 @@
   const pageTitle = $derived.by(() => {
     switch (currentView) {
       case "photos": return $t("timeline_title");
+      case "favorites": return $t("favorites_title");
       case "map": return $t("map_title");
       case "people": return $t("people_title");
       case "albums": return $t("albums_title");
@@ -114,6 +117,12 @@
     albumTimeline?.clear();
     albumTimeline = null;
     selectedAlbum = null;
+  }
+
+  function openFavorites() {
+    if (currentView === "favorites") return;
+    currentView = "favorites";
+    void favorites.refresh();
   }
 
   function openMap() {
@@ -151,6 +160,7 @@
     reportError: feedback.report,
     t: (key) => $t(key),
     onLogin: async () => {
+      favorites.clear();
       map.clear();
       mapCreated = false;
       currentView = "photos";
@@ -163,6 +173,7 @@
       sync.clearUserState();
       watchedFolders.clear();
       timeline.clear();
+      favorites.clear();
       people.clear();
       map.clear();
       mapCreated = false;
@@ -288,6 +299,15 @@
             <Images class="w-4 h-4 shrink-0 {currentView === 'photos' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('timeline_title')}</span>
           </button>
+          <button
+            type="button"
+            class="nav-item {currentView === 'favorites' ? 'active' : ''}"
+            onclick={openFavorites}
+            aria-label={$t('favorites_title')}
+          >
+            <Heart class="w-4 h-4 shrink-0 {currentView === 'favorites' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('favorites_title')}</span>
+          </button>
           <button type="button" class="nav-item {currentView === 'map' ? 'active' : ''}" onclick={openMap} aria-label={$t('map_title')}>
             <MapIcon class="w-4 h-4 shrink-0 {currentView === 'map' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('map_title')}</span>
@@ -380,7 +400,7 @@
         </div>
       </header>
 
-      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'person-timeline' || currentView === 'album-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'favorites' || currentView === 'person-timeline' || currentView === 'album-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
@@ -409,6 +429,25 @@
         {#if mapCreated}<MapView mapState={map} active={currentView === "map"} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} />{/if}
         {#if currentView === "photos"}
           <TimelineView {timeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} setAssetFavorite={desktop.setAssetFavorite} chooseDownloadDestination={desktop.chooseDownloadDestination} downloadAsset={desktop.downloadAsset} downloadArchive={desktop.downloadArchive} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
+        {:else if currentView === "favorites"}
+          <TimelineView
+            timeline={favorites}
+            serverUrl={auth.serverUrl}
+            onOpenExternalUrl={desktop.openExternalUrl}
+            getAssetDetails={desktop.getAssetDetails}
+            setAssetFavorite={desktop.setAssetFavorite}
+            chooseDownloadDestination={desktop.chooseDownloadDestination}
+            downloadAsset={desktop.downloadAsset}
+            downloadArchive={desktop.downloadArchive}
+            albumCatalogue={targetAlbumCatalogue}
+            addAssetsToAlbum={desktop.addAssetsToAlbum}
+            showRefreshButton={false}
+            ariaLabel={$t("favorites_title")}
+            loadingMessage={$t("favorites_loading")}
+            emptyMessage={$t("favorites_empty")}
+            loadErrorMessage={$t("favorites_error")}
+            offlineMessage={$t("favorites_offline")}
+          />
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
         {:else if currentView === "albums"}
