@@ -1,4 +1,4 @@
-﻿# Immich map API compatibility evidence
+# Immich map API compatibility evidence
 
 Lymic does not currently document a minimum supported Immich version. The
 following version-tagged upstream sources establish the marker contract for the

@@ -74,6 +74,8 @@ The durable queue is the recovery boundary: `RUNNING`, `PAUSED`, and `IDLE` live
 
 ## Boundary contracts
 
+The map controller (`src/lib/controllers/map-controller.svelte.ts`) owns the session marker snapshot; `MapView.svelte` renders it and opens the shared Lightbox. The registered `get_map_markers` command uses `GET /api/map/markers` through the domain-specific map desktop adapter.
+
 ### Tauri IPC
 
 Commands are registered in `app/mod.rs`; implementations live in `commands/`. The command groups are `auth`, `albums`, `timeline`, `folders`, `sync`, and `settings`. `get_asset_details` belongs to the timeline surface and supplies the Lightbox with a Remote Asset's original filename, favorite status, and optional EXIF details. `set_asset_favorite` changes a Remote Asset's favorite status. `download_asset` streams a Remote Asset's original file to the user-chosen Download path. `download_archive` retrieves Immich's ZIP archive, opens the native save dialog with Immich's safe suggested filename, and streams it to the selected path. `add_assets_to_album` adds one or more Remote Assets to an existing Album and reports successful and failed assignments. Shared frontend IPC contracts live in `src/lib/contracts.ts`, and domain-specific adapter interfaces live in `src/lib/tauri/desktop-adapter.ts`. When changing a command, update its contract, domain adapter interface, owning caller (controller or component), and tests in the same change.

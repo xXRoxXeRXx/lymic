@@ -25,3 +25,4 @@ Thumbs.db
 immich_sync.db
 .agents
 .kilo/
+.worktrees/

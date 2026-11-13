@@ -1,4 +1,4 @@
-﻿// Minimal loopback-only Immich fixture for manual packaged Map View profiling.
+// Minimal loopback-only Immich fixture for manual packaged Map View profiling.
 import { createServer } from "node:http";
 import { createReadStream, statSync, readFileSync } from "node:fs";
 

@@ -85,6 +85,7 @@ impl ArchiveDownload {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AssetDetails {
     pub asset_type: Option<String>,
+    pub taken_at: Option<String>,
     pub original_file_name: Option<String>,
     pub is_favorite: bool,
     pub camera_make: Option<String>,
@@ -106,6 +107,8 @@ pub(crate) struct AssetDetails {
 struct AssetDetailsResponse {
     #[serde(rename = "type", default)]
     asset_type: Option<String>,
+    #[serde(rename = "fileCreatedAt", default)]
+    file_created_at: Option<String>,
     #[serde(rename = "originalFileName", default)]
     original_file_name: Option<String>,
     #[serde(rename = "isFavorite", default)]
@@ -116,6 +119,8 @@ struct AssetDetailsResponse {
 
 #[derive(Default, Deserialize)]
 struct AssetDetailsExif {
+    #[serde(rename = "dateTimeOriginal", default)]
+    date_time_original: Option<String>,
     #[serde(default)]
     make: Option<String>,
     #[serde(default)]
@@ -219,6 +224,8 @@ impl From<AssetDetailsResponse> for AssetDetails {
         let exif = response.exif.unwrap_or_default();
         Self {
             asset_type: response.asset_type,
+            taken_at: non_empty(exif.date_time_original)
+                .or_else(|| non_empty(response.file_created_at)),
             original_file_name: original_file_name(response.original_file_name),
             is_favorite: response.is_favorite,
             camera_make: non_empty(exif.make),

@@ -68,6 +68,7 @@ export interface TimelineAsset {
 
 export interface AssetDetails {
   assetType?: string | null;
+  takenAt?: string | null;
   originalFileName: string | null;
   isFavorite: boolean;
   cameraMake: string | null;

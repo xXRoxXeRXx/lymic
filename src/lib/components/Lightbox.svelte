@@ -12,7 +12,7 @@
     refreshGeneration?: number;
     detailsCache?: Map<string, AssetDetails | null>;
     updatingFavoriteAssetIds?: Record<string, true>;
-    navigateAsset(delta: number, current: TimelineAsset): TimelineAsset | null | Promise<TimelineAsset | null>;
+    navigateAsset?: (delta: number, current: TimelineAsset) => TimelineAsset | null | Promise<TimelineAsset | null>;
     onClose(): void;
     onFavoriteChange(assetId: string, favorite: boolean): void;
     serverUrl: string;
@@ -217,7 +217,7 @@
   }
   let navigationGeneration = 0;
   async function navigate(delta: number) {
-    if (!selectedAsset || downloadingAssetId || isAddingToAlbum) return;
+    if (!selectedAsset || !navigateAsset || downloadingAssetId || isAddingToAlbum) return;
     const current = selectedAsset;
     const generation = ++navigationGeneration;
     const nextAsset = await navigateAsset(delta, current);
@@ -281,8 +281,10 @@
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80" title={$t("timeline_info")} aria-label={$t("timeline_info")} aria-pressed={isInfoOpen} onclick={() => isInfoOpen = !isInfoOpen}><Info class="h-5 w-5" /></button>
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_close_lightbox")} aria-label={$t("timeline_close_lightbox")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={closeLightbox}><X class="h-5 w-5" /></button>
         </div>
-        <button type="button" class="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
-        <button type="button" class="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
+        {#if navigateAsset}
+          <button type="button" class="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
+          <button type="button" class="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
+        {/if}
         {#if selectedAsset.type === "VIDEO"}
           <video class="relative z-20 h-full w-full max-h-full max-w-full object-contain" controls autoplay aria-label={$t("timeline_video_preview")} src={protocolSrc("lymic-asset", "video", selectedAsset.id)}>
             <track kind="captions" />

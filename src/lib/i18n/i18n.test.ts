@@ -27,6 +27,13 @@ const catalog = {
 } as const;
 
 describe('i18n catalogs', () => {
+  it('does not contain replacement question marks in map translations', () => {
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const [key, value] of Object.entries(translations)) {
+        if (key.startsWith('map_')) expect(value, `${localeCode}.${key}`).not.toContain('?');
+      }
+    }
+  });
   it('updates the document language when the active locale changes', async () => {
     await locale.set('de');
     expect(document.documentElement.lang).toBe('de-DE');

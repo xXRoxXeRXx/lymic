@@ -131,3 +131,9 @@ _Avoid_: date slider, fast scroll bar, year index
 **Album Timeline**:
 The chronological presentation of the Remote Assets belonging to one Album, grouped into time buckets like the Photo Timeline.
 _Avoid_: album grid, album gallery
+
+## Map
+
+**Map View**:
+The geographic presentation of Remote Assets with a recorded location in the Immich Library, including both images and videos.
+_Avoid_: photo map, upload map, location gallery

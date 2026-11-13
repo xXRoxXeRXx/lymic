@@ -48,19 +48,28 @@ it("opens the selected video thumbnail using the shared Lightbox", async () => {
   const { fireEvent, waitFor } = await import("@testing-library/svelte");
   mapHarness.features = [{ properties: { id: "video-1" }, geometry: { type: "Point", coordinates: [13, 52] } }];
   const state = createMapController({ getMapMarkers: vi.fn() });
-  const details = { assetType: "VIDEO", imageWidth: 10, imageHeight: 10, cameraMake: null, cameraModel: null, fileSize: null, isFavorite: false, originalFileName: "video.mp4", city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null };
-  const desktop = { getAssetDetails: vi.fn().mockResolvedValue(details), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
+  const details = { assetType: "VIDEO", takenAt: "2023-12-25T12:30:00Z", imageWidth: 10, imageHeight: 10, cameraMake: null, cameraModel: null, fileSize: null, isFavorite: false, originalFileName: "video.mp4", city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null };
+  const desktop = { getAssetDetails: vi.fn().mockResolvedValue(details), setAssetFavorite: vi.fn().mockResolvedValue(undefined), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
   const albumCatalogue = createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() });
   render(MapView, { mapState: state, active: true, desktop, albumCatalogue, serverUrl: "" });
-  mapHarness.handlers.get("sourcedata")?.();
+  mapHarness.handlers.get("moveend")?.();
   const button = await screen.findByRole("button", { name: "Open asset" });
   expect(button.querySelector("img")).toHaveAttribute("src", "lymic-thumb://asset/video-1");
   button.focus();
   await fireEvent.click(button);
   await waitFor(() => expect(screen.getByLabelText("Video preview")).toHaveAttribute("src", "lymic-asset://video/video-1"));
+  expect(screen.queryByRole("button", { name: "Previous asset" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Next asset" })).not.toBeInTheDocument();
   expect(desktop.getAssetDetails).toHaveBeenCalledWith("video-1");
+  await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+  expect(screen.getByText("Date")).toBeInTheDocument();
+  await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
+  await screen.findByRole("button", { name: "Remove from favorites" });
   await fireEvent.click(screen.getByRole("button", { name: "Close lightbox" }));
   await waitFor(() => expect(button).toHaveFocus());
+  await fireEvent.click(button);
+  expect(await screen.findByRole("button", { name: "Remove from favorites" })).toBeInTheDocument();
+  expect(desktop.getAssetDetails).toHaveBeenCalledTimes(1);
   mapHarness.features = [];
 });
 
@@ -70,7 +79,7 @@ it("limits simultaneous visible thumbnail requests", async () => {
   const desktop = { getAssetDetails: vi.fn(), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
   const albumCatalogue = createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() });
   render(MapView, { mapState: state, active: true, desktop, albumCatalogue, serverUrl: "" });
-  mapHarness.handlers.get("sourcedata")?.();
+  mapHarness.handlers.get("moveend")?.();
   const images = screen.getAllByRole("button", { name: "Open asset" }).map((button) => button.querySelector("img")!);
   expect(images.filter((image) => image.hasAttribute("src"))).toHaveLength(8);
   images[0].dispatchEvent(new Event("load"));
@@ -101,6 +110,15 @@ it("reaches the last member of a large location and navigates across result page
   await fireEvent.click(screen.getByRole("button", { name: "Previous asset" }));
   await waitFor(() => expect(screen.getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/asset-299998"));
   expect(mapHarness.leaves.mock.calls.every((call) => call[1] <= 100)).toBe(true);
+  await fireEvent.click(screen.getByRole("button", { name: "Close lightbox" }));
+  await fireEvent.click(screen.getByRole("button", { name: "Close results" }));
+  mapHarness.features = [{ properties: { id: "standalone" }, geometry: { type: "Point", coordinates: [13, 52] } }];
+  mapHarness.handlers.get("moveend")?.();
+  await fireEvent.click(screen.getByRole("button", { name: "Open asset" }));
+  await screen.findByRole("img", { name: "Photo preview" });
+  expect(screen.queryByRole("button", { name: "Previous asset" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Next asset" })).not.toBeInTheDocument();
+  mapHarness.features = [];
 });
 
 it("keeps the open viewer and reports a stale snapshot when a revisit refresh fails", async () => {
@@ -112,7 +130,7 @@ it("keeps the open viewer and reports a stale snapshot when a revisit refresh fa
   const desktop = { getAssetDetails: vi.fn().mockResolvedValue(details), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
   const albumCatalogue = createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() });
   const view = render(MapView, { mapState: state, active: true, desktop, albumCatalogue, serverUrl: "" });
-  mapHarness.handlers.get("sourcedata")?.();
+  mapHarness.handlers.get("moveend")?.();
   await fireEvent.click(await screen.findByRole("button", { name: "Open asset" }));
   await waitFor(() => expect(screen.getByLabelText("Video preview")).toHaveAttribute("src", "lymic-asset://video/kept"));
   await view.rerender({ active: false });
@@ -129,7 +147,7 @@ it("keeps visible thumbnail pins during map movement", () => {
   mapHarness.features = [{ properties: { id: "moving" }, geometry: { type: "Point", coordinates: [13, 52] } }];
   const desktop = { getAssetDetails: vi.fn(), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
   render(MapView, { mapState: createMapController({ getMapMarkers: vi.fn() }), active: true, desktop, albumCatalogue: createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() }), serverUrl: "" });
-  mapHarness.handlers.get("sourcedata")?.();
+  mapHarness.handlers.get("moveend")?.();
   const pin = screen.getByRole("button", { name: "Open asset" });
   mapHarness.handlers.get("movestart")?.();
   expect(pin).toBeInTheDocument();

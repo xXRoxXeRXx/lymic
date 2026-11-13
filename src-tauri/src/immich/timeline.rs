@@ -591,7 +591,7 @@ mod tests {
             let request = String::from_utf8_lossy(&request[..read]);
             assert!(request.starts_with("GET /api/assets/asset-1 HTTP/1.1"));
             assert!(request.contains("x-api-key: test-key"));
-            let body = br#"{"originalFileName":"IMG_0001.CR3","isFavorite":true,"exifInfo":{"make":"Canon","model":"EOS R6","city":"Berlin","state":"Berlin","country":"Germany","fNumber":2.8,"exposureTime":"1/250","iso":100,"focalLength":50,"lensModel":"RF50mm F1.8 STM","exifImageWidth":6048,"exifImageHeight":4024,"fileSizeInByte":12345678}}"#;
+            let body = br#"{"originalFileName":"IMG_0001.CR3","isFavorite":true,"fileCreatedAt":"2024-01-01T00:00:00Z","exifInfo":{"dateTimeOriginal":"2023-12-25T12:30:00Z","make":"Canon","model":"EOS R6","city":"Berlin","state":"Berlin","country":"Germany","fNumber":2.8,"exposureTime":"1/250","iso":100,"focalLength":50,"lensModel":"RF50mm F1.8 STM","exifImageWidth":6048,"exifImageHeight":4024,"fileSizeInByte":12345678}}"#;
             stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n", body.len()).as_bytes()).await.unwrap();
             stream.write_all(body).await.unwrap();
         });
@@ -608,6 +608,7 @@ mod tests {
 
         assert_eq!(details.original_file_name.as_deref(), Some("IMG_0001.CR3"));
         assert!(details.is_favorite);
+        assert_eq!(details.taken_at.as_deref(), Some("2023-12-25T12:30:00Z"));
         assert_eq!(details.camera_make.as_deref(), Some("Canon"));
         assert_eq!(details.camera_model.as_deref(), Some("EOS R6"));
         assert_eq!(details.city.as_deref(), Some("Berlin"));
@@ -657,6 +658,7 @@ mod tests {
                 client.get_asset_details("asset-1").await.unwrap(),
                 AssetDetails {
                     asset_type: None,
+                    taken_at: None,
                     original_file_name: None,
                     is_favorite: false,
                     camera_make: None,

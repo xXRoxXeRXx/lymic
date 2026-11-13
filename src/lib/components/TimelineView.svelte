@@ -1,7 +1,7 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
   import { untrack } from "svelte";
-  import { Album, Check, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, HeartOff, Info, Play, RefreshCw, X } from "lucide-svelte";
+  import { Album, Check, Download, Heart, HeartOff, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
@@ -56,7 +56,6 @@
   let isDragging = false;
   let scrollRaf: number | null = null;
   let selectedAsset = $state<TimelineAsset | null>(null);
-  let assetDetails = $state<AssetDetails | null>(null);
   const assetDetailsById = new Map<string, AssetDetails | null>();
   let favoriteOverrides = $state<Record<string, boolean>>({});
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
@@ -247,7 +246,6 @@
     if (currentDetails) {
       const updatedDetails = { ...currentDetails, isFavorite };
       assetDetailsById.set(assetId, updatedDetails);
-      if (selectedAsset?.id === assetId) assetDetails = updatedDetails;
     }
     if (selectedAsset?.id === assetId) selectedAsset = { ...selectedAsset, isFavorite };
   }

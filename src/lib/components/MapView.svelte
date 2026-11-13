@@ -7,7 +7,7 @@
   import "maplibre-gl/dist/maplibre-gl.css";
   import type { MapViewState } from "../controllers/map-controller.svelte";
   import type { AssetDesktopAdapter, AlbumAssignmentDesktopAdapter, UpdateDesktopAdapter } from "../tauri/desktop-adapter";
-  import type { TimelineAsset } from "../contracts";
+  import type { AssetDetails, TimelineAsset } from "../contracts";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import Lightbox from "./Lightbox.svelte";
   import { protocolSrc } from "../tauri/protocol-src";
@@ -24,6 +24,8 @@
   let map: MapLibreMap | undefined;
   let providerError = $state(false);
   let selectedAsset = $state<TimelineAsset | null>(null);
+  const detailsCache = new Map<string, AssetDetails | null>();
+  let collectionNavigation = $state(false);
   let selectionGeneration = 0;
   const pageSize = 100;
   let collection = $state<{ source: GeoJSONSource; id: number; count: number } | null>(null);
@@ -62,7 +64,7 @@
       const leaves = await current.source.getClusterLeaves(current.id, 1, index);
       const id = leaves[0]?.properties?.id;
       if (id == null || collection !== current) return null;
-      const details = await desktop.getAssetDetails(String(id));
+      const details = await getDetails(String(id));
       if (!details || collection !== current) return null;
       return toAsset(String(id), details);
     } catch { return null; }
@@ -80,7 +82,7 @@
   async function openResult(index: number, button: HTMLButtonElement) {
     resultButton = button;
     const asset = await assetAt(index);
-    if (asset) { selectedIndex = index; selectedAsset = asset; }
+    if (asset) { collectionNavigation = true; selectedIndex = index; selectedAsset = asset; }
   }
   function closeResults() {
     pageGeneration++;
@@ -127,16 +129,24 @@
   let sourceUpdating = false;
 
   function thumbnailUrl(id: string) { return protocolSrc("lymic-thumb", "asset", id); }
+  async function getDetails(id: string) {
+    if (detailsCache.has(id)) return detailsCache.get(id) ?? null;
+    const details = await desktop.getAssetDetails(id);
+    if (detailsCache.size >= 500) detailsCache.delete(detailsCache.keys().next().value!);
+    detailsCache.set(id, details);
+    return details;
+  }
   function toAsset(id: string, details: NonNullable<Awaited<ReturnType<typeof desktop.getAssetDetails>>>): TimelineAsset {
-    return { id, width: details.imageWidth ?? 0, height: details.imageHeight ?? 0, type: details.assetType === "VIDEO" ? "VIDEO" : "IMAGE", takenAt: null, cameraMake: details.cameraMake, cameraModel: details.cameraModel, fileSize: details.fileSize, duration: null, isFavorite: details.isFavorite };
+    const takenAt = details.takenAt && Number.isFinite(Date.parse(details.takenAt)) ? details.takenAt : null;
+    return { id, width: details.imageWidth ?? 0, height: details.imageHeight ?? 0, type: details.assetType === "VIDEO" ? "VIDEO" : "IMAGE", takenAt, cameraMake: details.cameraMake, cameraModel: details.cameraModel, fileSize: details.fileSize, duration: null, isFavorite: details.isFavorite };
   }
   async function openAsset(id: string, button: HTMLButtonElement) {
     resultButton = button;
     const generation = ++selectionGeneration;
     try {
-      const details = await desktop.getAssetDetails(id);
+      const details = await getDetails(id);
       if (generation !== selectionGeneration) return;
-      if (details) selectedAsset = toAsset(id, details);
+      if (details) { collectionNavigation = false; selectedAsset = toAsset(id, details); }
     } catch { /* A removed asset should not break the rest of the map. */ }
   }
   function updatePins() {
@@ -189,7 +199,7 @@
   }
   onMount(() => {
     maplibregl.setWorkerUrl(mapWorkerUrl);
-    map = new maplibregl.Map({ container, style: styleUrl(), center: [0, 0], zoom: 1, maxZoom: 21, renderWorldCopies: false });
+    map = new maplibregl.Map({ container, style: styleUrl(), center: [0, 0], zoom: 1, maxZoom: 21, renderWorldCopies: true });
     const themeObserver = new MutationObserver(() => { if (collection) { deferredStyle = true; return; } removePins(); map?.setStyle(styleUrl()); });
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     map.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -218,7 +228,7 @@
         }
       });
     map.on("moveend", updatePins);
-    map.on("sourcedata", updatePins);
+    map.on("sourcedata", (event) => { if (event.sourceId === "assets" && event.isSourceLoaded) updatePins(); });
     return () => { themeObserver.disconnect(); selectionGeneration++; workerGeneration++; worker?.terminate(); removePins(); map?.remove(); map = undefined; };
   });
   $effect(() => {
@@ -251,7 +261,7 @@
     </section>
   {/if}
   {#if selectedAsset}
-    <Lightbox asset={selectedAsset} navigateAsset={(delta) => collection ? navigateCollection(delta) : null} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={() => {}} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} setAssetFavorite={desktop.setAssetFavorite} chooseDownloadDestination={desktop.chooseDownloadDestination} downloadAsset={desktop.downloadAsset} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
+    <Lightbox asset={selectedAsset} navigateAsset={collectionNavigation ? navigateCollection : undefined} {detailsCache} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={() => {}} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={getDetails} setAssetFavorite={desktop.setAssetFavorite} chooseDownloadDestination={desktop.chooseDownloadDestination} downloadAsset={desktop.downloadAsset} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
   {/if}
 </div>
 

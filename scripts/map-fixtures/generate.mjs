@@ -1,4 +1,4 @@
-﻿// Deterministic Immich marker responses for packaged-WebView profiling.
+// Deterministic Immich marker responses for packaged-WebView profiling.
 // Usage: node scripts/map-fixtures/generate.mjs distributed|regional|identical > markers.json
 import { once } from "node:events";
 

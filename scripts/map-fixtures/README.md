@@ -1,4 +1,4 @@
-﻿# Map profiling fixtures
+# Map profiling fixtures
 
 Generate UTF-8 Immich marker responses with 300,000 valid, uniquely identified
 locations. On Windows PowerShell use `cmd /c` for redirection: Windows
@@ -17,30 +17,9 @@ small area around Berlin. `identical` places all points at one coordinate;
 coordinates must be tested separately because these workloads each require
 300,000 valid locations.
 
-Serve each response at `/api/map/markers` from a local Immich-compatible test
-server, with test image/video metadata and thumbnail/media endpoints, and use a
-packaged build. The included local server supplies synthetic media; see below. Do not
-use a real account's locations as a fixture. Record the server implementation,
-fixture hashes and request logging configuration with each run.
-
-For each workload record machine model, CPU, RAM, GPU, OS, WebView version,
-viewport, build revision, fixture and test server. Record marker transfer time
-and bytes separately from decode/index construction, first useful display, warm
-reopening and background refresh. Capture peak and steady additional process
-memory across the Rust process and WebView processes, including workers, during
-initial build and replacement. Record sustained frame rate during repeatable
-pan/zoom with thumbnails active; report the sequence and duration. Exercise fast
-pan, repeated navigation and refresh, light/dark theme, the antimeridian and
-high latitudes; log concurrent and total thumbnail requests and compare process
-memory after repeated visits. Inspect identical-coordinate results through the
-last item, including image/video Lightbox actions and navigation. Check packaged
-worker/CSP and OpenFreeMap resource loading, camera preservation, and absence of
-provider controls. Report failures and missing measurements, not just passes.
-
-The provisional goals are 30 FPS and at most 500 MiB additional process memory
-on a documented 16 GB integrated-graphics laptop. No cold-load deadline was
-agreed. These fixtures and component tests do not establish either goal: a real
-packaged desktop benchmark and its evidence are still required.
+The included loopback server supplies synthetic media for functional testing;
+see below. Do not use a real account's locations as a fixture. These datasets
+and component tests do not establish frame-rate or memory guarantees.
 
 ## Local server
 
@@ -64,10 +43,8 @@ Favorite state is held only until the server exits. Unhandled endpoints return
 The marker response is streamed from disk and logged at start and close. On
 Ctrl+C the server prints total requests, thumbnail requests, and peak concurrent thumbnail responses.
 These server-side counts do not reveal queued WebView work or requests served
-from Lymic's thumbnail cache; capture client-side activity and clear or account
-for that cache between cold runs. The included 1-pixel PNG is deterministic,
-but unrealistically cheap to transfer/decode: use representative media and a
-real or suitably extended test server for performance acceptance. The optional
+from Lymic's thumbnail cache. The included 1-pixel PNG is deterministic,
+but unrealistically cheap to transfer and decode. The optional
 MP4 is loaded in server memory and does not model production media streaming.
 Use `LYMIC_FIXTURE_PORT` to choose a different port if needed.
 

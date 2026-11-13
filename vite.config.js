@@ -8,6 +8,7 @@ import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
+import { configDefaults } from "vitest/config";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -48,5 +49,6 @@ export default defineConfig(async () => ({
   },
   test: {
     environment: "jsdom",
+    exclude: [...configDefaults.exclude, "**/.worktree*/**"],
   },
 }));
