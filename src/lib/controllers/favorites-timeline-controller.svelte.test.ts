@@ -52,5 +52,52 @@ describe("Favorites Timeline controller", () => {
     expect(favorites.isOffline).toBe(true);
     expect(favorites.buckets).toEqual([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]);
   });
+
+  it("removes a confirmed unfavorited asset, updates counts, drops empty buckets, and ignores unknown assets", async () => {
+    const adapter: FavoritesTimelineDesktopAdapter = {
+      getFavoritesTimelineBuckets: vi.fn().mockResolvedValue([
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
+        { timeBucket: "2025-02-01T00:00:00.000Z", count: 1 },
+      ]),
+      getFavoritesTimelineBucketAssets: vi.fn((timeBucket: string) => Promise.resolve(
+        timeBucket === "2025-03-01T00:00:00.000Z"
+          ? [
+              { id: "fav-1", width: 800, height: 600, type: "IMAGE" as const, takenAt: "2025-03-05T12:00:00.000Z", fileSize: null, duration: null, isFavorite: true },
+              { id: "fav-2", width: 800, height: 600, type: "IMAGE" as const, takenAt: "2025-03-04T12:00:00.000Z", fileSize: null, duration: null, isFavorite: true },
+            ]
+          : [
+              { id: "fav-3", width: 800, height: 600, type: "IMAGE" as const, takenAt: "2025-02-10T12:00:00.000Z", fileSize: null, duration: null, isFavorite: true },
+            ],
+      )),
+    };
+    const favorites = createFavoritesTimelineController(adapter);
+
+    await favorites.refresh();
+    await favorites.activateBucket("2025-03-01T00:00:00.000Z");
+    await favorites.activateBucket("2025-02-01T00:00:00.000Z");
+
+    favorites.removeAsset("does-not-exist");
+    expect(favorites.buckets).toEqual([
+      { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
+      { timeBucket: "2025-02-01T00:00:00.000Z", count: 1 },
+    ]);
+
+    favorites.removeAsset("fav-1");
+    expect(favorites.buckets).toEqual([
+      { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
+      { timeBucket: "2025-02-01T00:00:00.000Z", count: 1 },
+    ]);
+    expect(favorites.assetsFor("2025-03-01T00:00:00.000Z").map((asset) => asset.id)).toEqual(["fav-2"]);
+
+    favorites.removeAsset("fav-3");
+    expect(favorites.buckets).toEqual([
+      { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
+    ]);
+    expect(favorites.assetsFor("2025-02-01T00:00:00.000Z")).toEqual([]);
+
+    favorites.removeAsset("fav-2");
+    expect(favorites.buckets).toEqual([]);
+    expect(favorites.assetsFor("2025-03-01T00:00:00.000Z")).toEqual([]);
+  });
 });
 

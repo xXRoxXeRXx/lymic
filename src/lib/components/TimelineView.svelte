@@ -25,6 +25,7 @@
     addAssetsToAlbum?(assetIds: string[], albumId: string): Promise<AlbumAssignmentResult>;
     showScrubber?: boolean;
     showRefreshButton?: boolean;
+    removeUnfavoritedAssets?: boolean;
     loadingMessage?: string;
     emptyMessage?: string;
     loadErrorMessage?: string;
@@ -45,6 +46,7 @@
     addAssetsToAlbum = async (assetIds) => ({ succeeded: assetIds.length, failed: 0 }),
     showScrubber = true,
     showRefreshButton = true,
+    removeUnfavoritedAssets = false,
     loadingMessage = "",
     emptyMessage = "",
     loadErrorMessage = "",
@@ -64,6 +66,7 @@
   let isDragging = false;
   let scrollRaf: number | null = null;
   let selectedAsset = $state<TimelineAsset | null>(null);
+  let removedLightboxPosition = $state<{ assetId: string; index: number } | null>(null);
   const assetDetailsById = new Map<string, AssetDetails | null>();
   let favoriteOverrides = $state<Record<string, boolean>>({});
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
@@ -112,7 +115,10 @@
 
   $effect(() => {
     timeline;
-    untrack(clearSelection);
+    untrack(() => {
+      clearSelection();
+      removedLightboxPosition = null;
+    });
   });
 
   function monthLabel(timeBucket: string) {
@@ -237,6 +243,7 @@
   }
 
   function toggleAssetSelection(assetId: string) {
+    if (isSelectionActionBusy) return;
     selectionResult = null;
     const nextSelectedAssetIds = new Set(selectedAssetIds);
     if (nextSelectedAssetIds.has(assetId)) nextSelectedAssetIds.delete(assetId);
@@ -258,6 +265,30 @@
     if (selectedAsset?.id === assetId) selectedAsset = { ...selectedAsset, isFavorite };
   }
 
+  function confirmAssetRemoval(assetId: string) {
+    if (selectedAsset) {
+      const currentIndex = lightboxAssets.findIndex((candidate) => candidate.id === assetId);
+      if (currentIndex !== -1) {
+        removedLightboxPosition = { assetId, index: currentIndex };
+      }
+    }
+    timeline.removeAsset?.(assetId);
+    const { [assetId]: _removedOverride, ...remainingOverrides } = favoriteOverrides;
+    favoriteOverrides = remainingOverrides;
+    if (selectedAssetIds.has(assetId)) {
+      const nextSelectedAssetIds = new Set(selectedAssetIds);
+      nextSelectedAssetIds.delete(assetId);
+      selectedAssetIds = nextSelectedAssetIds;
+    }
+  }
+
+  async function updateAssetFavorite(assetId: string, isFavorite: boolean) {
+    await setAssetFavorite(assetId, isFavorite);
+    if (!isFavorite && removeUnfavoritedAssets) {
+      confirmAssetRemoval(assetId);
+    }
+  }
+
   async function applyFavoriteToSelection(isFavorite: boolean) {
     const assetIds = [...selectedAssetIds];
     if (assetIds.length === 0 || isSelectionActionBusy) return;
@@ -268,7 +299,11 @@
     for (const assetId of assetIds) {
       try {
         await setAssetFavorite(assetId, isFavorite);
-        updateFavoriteState(assetId, isFavorite);
+        if (!isFavorite && removeUnfavoritedAssets) {
+          confirmAssetRemoval(assetId);
+        } else {
+          updateFavoriteState(assetId, isFavorite);
+        }
         succeeded += 1;
       } catch {
         // Continue so the result can accurately report a partial update.
@@ -329,12 +364,33 @@
 
   function openAsset(asset: TimelineAsset, source: HTMLElement) {
     if (isSelectionMode) return;
+    removedLightboxPosition = null;
     selectedAsset = { ...asset, isFavorite: isFavorite(asset) };
     opener = source;
   }
   function closeLightbox() {
     selectedAsset = null;
+    removedLightboxPosition = null;
     queueMicrotask(() => opener?.focus());
+  }
+  function navigateLightboxAsset(delta: number, current: TimelineAsset): TimelineAsset | null {
+    if (!lightboxAssets.length) return null;
+    const index = lightboxAssets.findIndex((candidate) => candidate.id === current.id);
+    let targetIndex: number;
+    if (index !== -1) {
+      removedLightboxPosition = null;
+      targetIndex = (index + delta + lightboxAssets.length) % lightboxAssets.length;
+    } else if (removedLightboxPosition?.assetId === current.id) {
+      const formerIndex = Math.min(removedLightboxPosition.index, lightboxAssets.length);
+      removedLightboxPosition = null;
+      targetIndex = delta > 0
+        ? (formerIndex + delta - 1) % lightboxAssets.length
+        : ((formerIndex + delta) % lightboxAssets.length + lightboxAssets.length) % lightboxAssets.length;
+    } else {
+      targetIndex = delta > 0 ? 0 : lightboxAssets.length - 1;
+    }
+    const next = lightboxAssets[targetIndex];
+    return { ...next, isFavorite: isFavorite(next) };
   }
   function handleKeydown(event: KeyboardEvent) {
     if (!selectedAsset && isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen) {
@@ -420,7 +476,7 @@
       : selectionResult.succeeded === 0
         ? `timeline_selection_${selectionResult.action}_failed`
         : `timeline_selection_${selectionResult.action}_partial`}
-    <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {selectionResult.succeeded === 0 ? 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'}" role={selectionResult.succeeded === 0 ? "alert" : "status"}>
+    <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {selectionResult.succeeded === 0 ? 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200' : selectionResult.succeeded < selectionResult.total ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'}" role={selectionResult.succeeded === 0 ? "alert" : "status"}>
       {$t(resultKey, { values: { count: selectionResult.total.toLocaleString(numberLocale), succeeded: selectionResult.succeeded.toLocaleString(numberLocale) } })}
     </p>
   {/if}
@@ -512,12 +568,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} refreshGeneration={timeline.refreshGeneration} detailsCache={assetDetailsById} bind:updatingFavoriteAssetIds navigateAsset={(delta, current) => {
-    const index = lightboxAssets.findIndex((candidate) => candidate.id === current.id);
-    if (!lightboxAssets.length) return null;
-    const next = lightboxAssets[(index + delta + lightboxAssets.length) % lightboxAssets.length];
-    return { ...next, isFavorite: isFavorite(next) };
-  }} onClose={closeLightbox} onFavoriteChange={updateFavoriteState} {serverUrl} {onOpenExternalUrl} {getAssetDetails} {setAssetFavorite} {chooseDownloadDestination} {downloadAsset} {albumCatalogue} {addAssetsToAlbum} />
+  <Lightbox asset={selectedAsset} refreshGeneration={timeline.refreshGeneration} detailsCache={assetDetailsById} bind:updatingFavoriteAssetIds navigateAsset={navigateLightboxAsset} onClose={closeLightbox} onFavoriteChange={updateFavoriteState} {serverUrl} {onOpenExternalUrl} {getAssetDetails} setAssetFavorite={updateAssetFavorite} {chooseDownloadDestination} {downloadAsset} {albumCatalogue} {addAssetsToAlbum} />
 {/if}
 {#if albumCatalogue}
   <AddToAlbumModal

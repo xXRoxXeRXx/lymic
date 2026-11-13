@@ -4,8 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import TimelineView from "./TimelineView.svelte";
 import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
+import { createFavoritesTimelineController } from "../controllers/favorites-timeline-controller.svelte";
 import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
-import type { AssetDetails } from "../contracts";
+import type { AssetDetails, TimelineAsset } from "../contracts";
 
 vi.stubGlobal("ResizeObserver", class {
   observe() {}
@@ -936,5 +937,293 @@ describe("TimelineView scrubber", () => {
     });
 
     expect(screen.getByLabelText("Favorites")).toBeInTheDocument();
+  });
+});
+
+describe("Favorites removal in TimelineView", () => {
+  function favoriteAsset(id: string, takenAt: string, type: "IMAGE" | "VIDEO" = "IMAGE"): TimelineAsset {
+    return {
+      id,
+      width: 1600,
+      height: 1200,
+      type,
+      takenAt,
+      cameraMake: null,
+      cameraModel: null,
+      fileSize: null,
+      duration: type === "VIDEO" ? 45 : null,
+      isFavorite: true,
+    };
+  }
+
+  async function renderFavoritesTimeline(
+    buckets: Array<{ timeBucket: string; assets: TimelineAsset[] }>,
+    options: {
+      setAssetFavorite?: (assetId: string, favorite: boolean) => Promise<void>;
+      getAssetDetails?: (assetId: string) => Promise<AssetDetails | null>;
+    } = {},
+  ) {
+    const favorites = createFavoritesTimelineController({
+      getFavoritesTimelineBuckets: vi.fn().mockResolvedValue(
+        buckets.map((entry) => ({ timeBucket: entry.timeBucket, count: entry.assets.length })),
+      ),
+      getFavoritesTimelineBucketAssets: vi.fn((timeBucket: string) =>
+        Promise.resolve(buckets.find((entry) => entry.timeBucket === timeBucket)?.assets ?? []),
+      ),
+    });
+    await favorites.refresh();
+    const view = render(TimelineView, {
+      timeline: favorites,
+      removeUnfavoritedAssets: true,
+      showRefreshButton: false,
+      ariaLabel: "Favorites",
+      emptyMessage: "No favorites yet.",
+      getAssetDetails: options.getAssetDetails ?? vi.fn().mockResolvedValue(assetDetails({ isFavorite: true })),
+      setAssetFavorite: options.setAssetFavorite ?? vi.fn().mockResolvedValue(undefined),
+    });
+    const expectedCount = buckets.reduce((sum, entry) => sum + entry.assets.length, 0);
+    if (expectedCount > 0) {
+      await waitFor(() => expect(screen.getAllByLabelText("Favorite")).toHaveLength(expectedCount));
+    }
+    return { favorites, view };
+  }
+
+  it("keeps a pending favorite removal in the grid and removes it once confirmed while keeping Lightbox open", async () => {
+    let resolveFavorite!: () => void;
+    const setAssetFavorite = vi.fn(() => new Promise<void>((resolve) => {
+      resolveFavorite = resolve;
+    }));
+
+    await renderFavoritesTimeline([
+      {
+        timeBucket: "2025-03-01T00:00:00.000Z",
+        assets: [
+          favoriteAsset("fav-1", "2025-03-05T12:00:00.000Z"),
+          favoriteAsset("fav-2", "2025-03-04T12:00:00.000Z", "VIDEO"),
+        ],
+      },
+      {
+        timeBucket: "2025-02-01T00:00:00.000Z",
+        assets: [favoriteAsset("fav-3", "2025-02-10T12:00:00.000Z")],
+      },
+    ], { setAssetFavorite });
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+    const lightbox = screen.getByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+
+    expect(setAssetFavorite).toHaveBeenCalledWith("fav-1", false);
+    expect(within(lightbox).getByRole("button", { name: "Add to favorites" })).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    expect(screen.getByText("2 assets")).toBeInTheDocument();
+
+    resolveFavorite();
+
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1));
+    expect(screen.queryByText("2 assets")).not.toBeInTheDocument();
+    expect(screen.getAllByText("1 assets")).toHaveLength(2);
+    expect(screen.getByRole("dialog", { name: "Media lightbox" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Add to favorites" })).toBeEnabled();
+  });
+
+  it("navigates Lightbox from a removed asset's former position across buckets, wraps boundaries, resets on navigation or close, and stays open when none remain", async () => {
+    await renderFavoritesTimeline([
+      {
+        timeBucket: "2025-03-01T00:00:00.000Z",
+        assets: [
+          favoriteAsset("fav-1", "2025-03-05T12:00:00.000Z"),
+          favoriteAsset("fav-2", "2025-03-04T12:00:00.000Z", "VIDEO"),
+        ],
+      },
+      {
+        timeBucket: "2025-02-01T00:00:00.000Z",
+        assets: [favoriteAsset("fav-3", "2025-02-10T12:00:00.000Z")],
+      },
+      {
+        timeBucket: "2024-12-01T00:00:00.000Z",
+        assets: [favoriteAsset("fav-4", "2024-12-10T12:00:00.000Z", "VIDEO")],
+      },
+    ]);
+
+    // Open fav-2 (index 1, second in March 2025), remove it, then navigate Next across bucket boundary to fav-3
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open video" })[0]);
+    let lightbox = screen.getByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(within(lightbox).getByRole("button", { name: "Add to favorites" })).toBeEnabled());
+
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Next asset" }));
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-3");
+
+    // Once on an existing asset (fav-3), previous navigates normally to fav-1
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Previous asset" }));
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-1");
+
+    // Remove first item (fav-1 -> drops March 2025), Previous wraps cleanly to last item (fav-4)
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(screen.queryByText("March 2025")).not.toBeInTheDocument());
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Previous asset" }));
+    expect(within(lightbox).getByLabelText("Video preview")).toHaveAttribute("src", "lymic-asset://video/fav-4");
+
+    // Remove last item (fav-4 -> drops December 2024), Next wraps cleanly to first remaining item (fav-3)
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(screen.queryByText("December 2024")).not.toBeInTheDocument());
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Next asset" }));
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-3");
+
+    // Remove last remaining favorite (fav-3): empty state renders behind open Lightbox and Next/Previous are safe no-ops
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(screen.getByText("No favorites yet.")).toBeInTheDocument());
+    expect(screen.queryByRole("navigation", { name: "Timeline scrubber" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Media lightbox" })).toBeInTheDocument();
+
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Next asset" }));
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-3");
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Previous asset" }));
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-3");
+
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+    expect(screen.getByText("No favorites yet.")).toBeInTheDocument();
+  });
+
+  it("processes bulk selection removals independently, handles partial and complete failures, and shows the empty state when all remaining favorites are removed", async () => {
+    let resolveFirst!: () => void;
+    let rejectSecond!: (reason?: unknown) => void;
+    const setAssetFavorite = vi.fn()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectSecond = reject; }))
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+
+    await renderFavoritesTimeline([
+      {
+        timeBucket: "2025-03-01T00:00:00.000Z",
+        assets: [
+          favoriteAsset("fav-1", "2025-03-05T12:00:00.000Z"),
+          favoriteAsset("fav-2", "2025-03-04T12:00:00.000Z", "VIDEO"),
+          favoriteAsset("fav-3", "2025-03-03T12:00:00.000Z"),
+        ],
+      },
+    ], { setAssetFavorite });
+
+    let checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+    await fireEvent.click(screen.getByRole("button", { name: "Remove from favorites" }));
+
+    // While first removal is pending, all 3 assets stay in the grid with Favorite badges
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(3);
+    expect(screen.getByText("3 assets")).toBeInTheDocument();
+
+    resolveFirst();
+    await waitFor(() => expect(screen.getAllByLabelText("Favorite")).toHaveLength(2));
+    expect(screen.getByText("2 assets")).toBeInTheDocument();
+
+    rejectSecond(new Error("offline"));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Updated 1 of 2 assets"));
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
+    expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+
+    // Complete failure retains all remaining favorites and raises an alert
+    checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+    await fireEvent.click(screen.getByRole("button", { name: "Remove from favorites" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not update selected assets"));
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(2);
+    expect(screen.getByText("2 assets")).toBeInTheDocument();
+
+    // Removing all remaining favorites yields the empty state while still reporting the completion summary
+    checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+    await fireEvent.click(screen.getByRole("button", { name: "Remove from favorites" }));
+
+    await waitFor(() => expect(screen.getByText("No favorites yet.")).toBeInTheDocument());
+    expect(screen.getByText("Updated 2 assets")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Timeline scrubber" })).not.toBeInTheDocument();
+  });
+
+  it("rolls back single favorite removal on failure, restores confirmed Favorite status in Lightbox and grid, and shows an error", async () => {
+    const setAssetFavorite = vi.fn().mockRejectedValueOnce(new Error("offline"));
+
+    await renderFavoritesTimeline([
+      {
+        timeBucket: "2025-03-01T00:00:00.000Z",
+        assets: [
+          favoriteAsset("fav-1", "2025-03-05T12:00:00.000Z"),
+          favoriteAsset("fav-2", "2025-03-04T12:00:00.000Z"),
+        ],
+      },
+    ], { setAssetFavorite });
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+    const lightbox = screen.getByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+
+    await waitFor(() => expect(within(lightbox).getByRole("alert")).toHaveTextContent("Could not update favorite"));
+    expect(within(lightbox).getByRole("button", { name: "Remove from favorites" })).toBeEnabled();
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(2);
+    expect(screen.getByText("2 assets")).toBeInTheDocument();
+  });
+
+  it("navigates Previous from a removed middle asset, resets on close, and keeps Photo Timeline assets when unfavorited", async () => {
+    const { view } = await renderFavoritesTimeline([
+      {
+        timeBucket: "2025-03-01T00:00:00.000Z",
+        assets: [
+          favoriteAsset("fav-1", "2025-03-05T12:00:00.000Z"),
+          favoriteAsset("fav-2", "2025-03-04T12:00:00.000Z", "VIDEO"),
+          favoriteAsset("fav-3", "2025-03-03T12:00:00.000Z"),
+        ],
+      },
+    ]);
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open video" })[0]);
+    let lightbox = screen.getByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(screen.getByText("2 assets")).toBeInTheDocument());
+
+    // Previous from former middle index 1 steps backward to fav-1
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Previous asset" }));
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-1");
+
+    // Re-removing fav-1 and closing resets former position so re-opening starts fresh
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(screen.getByText("1 assets")).toBeInTheDocument());
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+
+    // Safeguard: Photo Timeline (default removeUnfavoritedAssets=false) retains unfavorited items
+    view.unmount();
+    const photoController = createFavoritesTimelineController({
+      getFavoritesTimelineBuckets: vi.fn().mockResolvedValue([
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
+      ]),
+      getFavoritesTimelineBucketAssets: vi.fn().mockResolvedValue([
+        favoriteAsset("photo-1", "2025-03-05T12:00:00.000Z"),
+        favoriteAsset("photo-2", "2025-03-04T12:00:00.000Z"),
+      ]),
+    });
+    await photoController.refresh();
+
+    render(TimelineView, {
+      timeline: photoController,
+      getAssetDetails: vi.fn().mockResolvedValue(assetDetails({ isFavorite: true })),
+      setAssetFavorite: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await waitFor(() => expect(screen.getAllByLabelText("Favorite")).toHaveLength(2));
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+    lightbox = screen.getByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(within(lightbox).getByRole("button", { name: "Add to favorites" })).toBeEnabled());
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    expect(screen.getByText("2 assets")).toBeInTheDocument();
   });
 });

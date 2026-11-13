@@ -1665,4 +1665,202 @@ describe("Favorites Timeline", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Loading favorites…");
     expect(screen.queryByText("March 2025")).not.toBeInTheDocument();
   });
+
+  it("removes unfavorited assets via desktop IPC after confirmation, preserves Lightbox former-position navigation, and renders the empty state when none remain", async () => {
+    let resolveFirstRemoval!: () => void;
+    let favoritingCall = 0;
+
+    renderAuthenticatedPage({
+      get_favorites_timeline_buckets: async () => [
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
+        { timeBucket: "2024-12-01T00:00:00.000Z", count: 1 },
+      ],
+      get_favorites_timeline_bucket_assets: async (args) => {
+        const { timeBucket } = args as { timeBucket: string };
+        if (timeBucket === "2025-03-01T00:00:00.000Z") {
+          return [
+            { id: "fav-1", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
+            { id: "fav-2", width: 1920, height: 1080, type: "VIDEO", takenAt: "2025-03-04T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: 45, isFavorite: true },
+          ];
+        }
+        return [
+          { id: "fav-3", width: 1200, height: 900, type: "IMAGE", takenAt: "2024-12-10T08:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
+        ];
+      },
+      get_asset_details: async (args) => {
+        const { assetId } = args as { assetId: string };
+        return {
+          originalFileName: `${assetId}.jpg`,
+          isFavorite: true,
+          cameraMake: null,
+          cameraModel: null,
+          city: null,
+          state: null,
+          country: null,
+          fNumber: null,
+          exposureTime: null,
+          iso: null,
+          focalLength: null,
+          lensModel: null,
+          imageWidth: 1600,
+          imageHeight: 1200,
+          fileSize: 1024,
+        };
+      },
+      set_asset_favorite: () => {
+        favoritingCall += 1;
+        if (favoritingCall === 1) {
+          return new Promise<void>((resolve) => {
+            resolveFirstRemoval = resolve;
+          });
+        }
+        return Promise.resolve();
+      },
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+    expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
+
+    // Remove fav-2 while open in Lightbox: stays in grid until Immich confirms
+    await fireEvent.click(screen.getByRole("button", { name: "Open video" }));
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+
+    expect(tauri.invoke).toHaveBeenCalledWith("set_asset_favorite", { assetId: "fav-2", isFavorite: false });
+    expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
+    expect(screen.getByText("2 assets")).toBeInTheDocument();
+
+    resolveFirstRemoval();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Open video" })).not.toBeInTheDocument());
+    expect(screen.getAllByText("1 assets")).toHaveLength(2);
+    expect(screen.getByRole("dialog", { name: "Media lightbox" })).toBeInTheDocument();
+
+    // Next navigates from fav-2's former position across the bucket boundary to fav-3
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Next asset" }));
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-3");
+
+    // Removing fav-3 drops December 2024; Next wraps to fav-1
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(screen.queryByText("December 2024")).not.toBeInTheDocument());
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Next asset" }));
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-1");
+
+    // Removing the last remaining favorite shows empty state after closing Lightbox
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() =>
+      expect(screen.getByText("No favorites yet. Mark photos or videos as favorites to see them here.")).toBeInTheDocument(),
+    );
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+  });
+
+  it("rolls back single favorite removal failures and handles bulk removal partial and complete failures via desktop IPC", async () => {
+    let callCount = 0;
+
+    renderAuthenticatedPage({
+      get_favorites_timeline_buckets: async () => [
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 3 },
+      ],
+      get_favorites_timeline_bucket_assets: async () => [
+        { id: "fav-1", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
+        { id: "fav-2", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-04T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
+        { id: "fav-3", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-03T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
+      ],
+      get_asset_details: async () => ({
+        originalFileName: "favorite.jpg",
+        isFavorite: true,
+        cameraMake: null,
+        cameraModel: null,
+        city: null,
+        state: null,
+        country: null,
+        fNumber: null,
+        exposureTime: null,
+        iso: null,
+        focalLength: null,
+        lensModel: null,
+        imageWidth: 1600,
+        imageHeight: 1200,
+        fileSize: 1024,
+      }),
+      set_asset_favorite: () => {
+        callCount += 1;
+        // Call 1: single removal rollback; Call 2: bulk item 1 succeeds; Calls 3-5: bulk failures
+        if (callCount === 2) return Promise.resolve();
+        return Promise.reject(new Error("offline"));
+      },
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+    expect(await screen.findAllByLabelText("Favorite")).toHaveLength(3);
+
+    // Single removal failure keeps item and restores confirmed favorite state in grid and Lightbox
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(within(lightbox).getByRole("alert")).toHaveTextContent("Could not update favorite"));
+    expect(within(lightbox).getByRole("button", { name: "Remove from favorites" })).toBeEnabled();
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(3);
+
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+
+    // Bulk partial failure removes confirmed fav-1 and preserves fav-2
+    let checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+    await fireEvent.click(screen.getByRole("button", { name: "Remove from favorites" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Updated 1 of 2 assets"));
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(2);
+    expect(screen.getByText("2 assets")).toBeInTheDocument();
+
+    // Bulk complete failure reports alert and leaves remaining items untouched
+    checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    await fireEvent.click(checkboxes[0]);
+    await fireEvent.click(checkboxes[1]);
+    await fireEvent.click(screen.getByRole("button", { name: "Remove from favorites" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not update selected assets"));
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(2);
+    expect(screen.getByText("2 assets")).toBeInTheDocument();
+  });
+
+  it("keeps unfavorited assets in the Photos timeline when removing a favorite there", async () => {
+    renderAuthenticatedPage({
+      get_timeline_buckets: async () => [
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
+      ],
+      get_timeline_bucket_assets: async () => [
+        { id: "photo-1", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
+      ],
+      get_asset_details: async () => ({
+        originalFileName: "photo-1.jpg",
+        isFavorite: true,
+        cameraMake: null,
+        cameraModel: null,
+        city: null,
+        state: null,
+        country: null,
+        fNumber: null,
+        exposureTime: null,
+        iso: null,
+        focalLength: null,
+        lensModel: null,
+        imageWidth: 1600,
+        imageHeight: 1200,
+        fileSize: 1024,
+      }),
+      set_asset_favorite: async () => undefined,
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Open photo" }));
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(within(lightbox).getByRole("button", { name: "Add to favorites" })).toBeEnabled());
+
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.getByRole("button", { name: "Open photo" })).toBeInTheDocument();
+    expect(screen.getByText("1 assets")).toBeInTheDocument();
+  });
 });
