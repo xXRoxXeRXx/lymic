@@ -15,7 +15,7 @@ vi.mock("maplibre-gl", () => ({
     getSource() { return { getClusterExpansionZoom: async () => mapHarness.zoom, getClusterLeaves: mapHarness.leaves }; }
     getZoom() { return 21; }
     getLayer() { return {}; }
-    getSource() { return undefined; }
+
     queryRenderedFeatures() { return mapHarness.features; }
   },
   Marker: class {
@@ -88,6 +88,11 @@ it("reaches the last member of a large location and navigates across result page
   expect(screen.getAllByRole("button", { name: "Open asset" })).toHaveLength(100);
   await fireEvent.click(screen.getByRole("button", { name: "Last page" }));
   await screen.findByText("3000 / 3000");
+  await fireEvent.click(screen.getAllByRole("button", { name: "Open asset" })[0]);
+  await waitFor(() => expect(screen.getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/asset-299900"));
+  await fireEvent.click(screen.getByRole("button", { name: "Previous asset" }));
+  await waitFor(() => expect(screen.getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/asset-299899"));
+  await fireEvent.click(screen.getByRole("button", { name: "Close lightbox" }));
   await fireEvent.click(screen.getAllByRole("button", { name: "Open asset" })[99]);
   await waitFor(() => expect(screen.getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/asset-299999"));
   await fireEvent.click(screen.getByRole("button", { name: "Previous asset" }));
