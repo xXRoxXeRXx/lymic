@@ -230,6 +230,17 @@
       removable.destroy();
     };
   });
+  const sharedTimelineProps = $derived({
+    serverUrl: auth.serverUrl,
+    onOpenExternalUrl: desktop.openExternalUrl,
+    getAssetDetails: desktop.getAssetDetails,
+    setAssetFavorite: desktop.setAssetFavorite,
+    chooseDownloadDestination: desktop.chooseDownloadDestination,
+    downloadAsset: desktop.downloadAsset,
+    downloadArchive: desktop.downloadArchive,
+    albumCatalogue: targetAlbumCatalogue,
+    addAssetsToAlbum: desktop.addAssetsToAlbum,
+  });
 </script>
 
 <div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60">
@@ -428,20 +439,12 @@
 
         {#if mapCreated}<MapView mapState={map} active={currentView === "map"} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} />{/if}
         {#if currentView === "photos"}
-          <TimelineView {timeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} setAssetFavorite={desktop.setAssetFavorite} chooseDownloadDestination={desktop.chooseDownloadDestination} downloadAsset={desktop.downloadAsset} downloadArchive={desktop.downloadArchive} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
+          <TimelineView {timeline} {...sharedTimelineProps} />
         {:else if currentView === "favorites"}
           <TimelineView
             timeline={favorites}
-            serverUrl={auth.serverUrl}
-            onOpenExternalUrl={desktop.openExternalUrl}
-            getAssetDetails={desktop.getAssetDetails}
-            setAssetFavorite={desktop.setAssetFavorite}
+            {...sharedTimelineProps}
             removeUnfavoritedAssets={true}
-            chooseDownloadDestination={desktop.chooseDownloadDestination}
-            downloadAsset={desktop.downloadAsset}
-            downloadArchive={desktop.downloadArchive}
-            albumCatalogue={targetAlbumCatalogue}
-            addAssetsToAlbum={desktop.addAssetsToAlbum}
             showRefreshButton={false}
             ariaLabel={$t("favorites_title")}
             loadingMessage={$t("favorites_loading")}
@@ -459,7 +462,7 @@
               <ArrowLeft class="h-4 w-4" />
               {$t('albums_return')}
             </button>
-            <TimelineView timeline={albumTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} setAssetFavorite={desktop.setAssetFavorite} chooseDownloadDestination={desktop.chooseDownloadDestination} downloadAsset={desktop.downloadAsset} downloadArchive={desktop.downloadArchive} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
+            <TimelineView timeline={albumTimeline} {...sharedTimelineProps} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
           </div>
         {:else if currentView === "person-timeline" && personTimeline}
           <div class="flex h-full min-h-0 flex-col gap-2">
@@ -467,7 +470,7 @@
               <ArrowLeft class="h-4 w-4" />
               {$t('people_return')}
             </button>
-            <TimelineView timeline={personTimeline} serverUrl={auth.serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={desktop.getAssetDetails} setAssetFavorite={desktop.setAssetFavorite} chooseDownloadDestination={desktop.chooseDownloadDestination} downloadAsset={desktop.downloadAsset} downloadArchive={desktop.downloadArchive} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} emptyMessage={$t('people_timeline_empty')} />
+            <TimelineView timeline={personTimeline} {...sharedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
           </div>
         {:else if currentView === "dashboard"}
           <DashboardView

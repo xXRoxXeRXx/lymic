@@ -114,4 +114,14 @@ describe('i18n catalogs', () => {
       }
     }
   });
+
+  it('uses consistent timeline and video terminology in favorites strings', () => {
+    expect(de.favorites_offline).toContain('Zeitachse');
+    expect(de.favorites_offline).not.toContain('Timeline');
+    expect(es.favorites_empty).toContain('vídeos');
+    expect(es.favorites_offline).toContain('línea de tiempo');
+    expect(pt.favorites_offline).toContain('linha do tempo');
+    expect(ar.favorites_offline).toContain('الخط الزمني');
+    expect(ru.favorites_offline).toContain('Хронология');
+  });
 });

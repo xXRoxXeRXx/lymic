@@ -66,10 +66,12 @@
   let isDragging = false;
   let scrollRaf: number | null = null;
   let selectedAsset = $state<TimelineAsset | null>(null);
+  let activeLightboxAssetId = $state<string | null>(null);
   let removedLightboxPosition = $state<{ assetId: string; index: number } | null>(null);
   const assetDetailsById = new Map<string, AssetDetails | null>();
   let favoriteOverrides = $state<Record<string, boolean>>({});
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
+  let favoriteUpdateError = $state("");
   let isAddToAlbumOpen = $state(false);
   let isAddingToAlbum = $state(false);
   let addToAlbumError = $state("");
@@ -107,8 +109,11 @@
     untrack(() => {
         assetDetailsById.clear();
       favoriteOverrides = Object.fromEntries(
-        Object.keys(updatingFavoriteAssetIds).map((assetId) => [assetId, favoriteOverrides[assetId]]),
+        Object.keys(updatingFavoriteAssetIds)
+          .filter((assetId) => assetId in favoriteOverrides)
+          .map((assetId) => [assetId, favoriteOverrides[assetId]]),
       );
+      favoriteUpdateError = "";
       clearSelection();
     });
   });
@@ -117,7 +122,9 @@
     timeline;
     untrack(() => {
       clearSelection();
+      activeLightboxAssetId = null;
       removedLightboxPosition = null;
+      favoriteUpdateError = "";
     });
   });
 
@@ -256,7 +263,9 @@
   }
 
   function updateFavoriteState(assetId: string, isFavorite: boolean) {
-    favoriteOverrides = { ...favoriteOverrides, [assetId]: isFavorite };
+    if (!removeUnfavoritedAssets) {
+      favoriteOverrides = { ...favoriteOverrides, [assetId]: isFavorite };
+    }
     const currentDetails = assetDetailsById.get(assetId);
     if (currentDetails) {
       const updatedDetails = { ...currentDetails, isFavorite };
@@ -266,10 +275,15 @@
   }
 
   function confirmAssetRemoval(assetId: string) {
-    if (selectedAsset) {
-      const currentIndex = lightboxAssets.findIndex((candidate) => candidate.id === assetId);
-      if (currentIndex !== -1) {
+    const currentIndex = lightboxAssets.findIndex((candidate) => candidate.id === assetId);
+    if (currentIndex !== -1) {
+      if (activeLightboxAssetId === assetId) {
         removedLightboxPosition = { assetId, index: currentIndex };
+      } else if (removedLightboxPosition && currentIndex < removedLightboxPosition.index) {
+        removedLightboxPosition = {
+          ...removedLightboxPosition,
+          index: Math.max(0, removedLightboxPosition.index - 1),
+        };
       }
     }
     timeline.removeAsset?.(assetId);
@@ -282,10 +296,46 @@
     }
   }
 
-  async function updateAssetFavorite(assetId: string, isFavorite: boolean) {
-    await setAssetFavorite(assetId, isFavorite);
-    if (!isFavorite && removeUnfavoritedAssets) {
+  function confirmAssetRestoration(assetId: string) {
+    const wasRemovedAsset = removedLightboxPosition?.assetId === assetId;
+    timeline.restoreAsset?.(assetId);
+    if (wasRemovedAsset) {
+      removedLightboxPosition = null;
+    } else if (removedLightboxPosition) {
+      const restoredIndex = lightboxAssets.findIndex((candidate) => candidate.id === assetId);
+      if (restoredIndex !== -1 && restoredIndex <= removedLightboxPosition.index) {
+        removedLightboxPosition = {
+          ...removedLightboxPosition,
+          index: removedLightboxPosition.index + 1,
+        };
+      }
+    }
+    favoriteOverrides = { ...favoriteOverrides, [assetId]: true };
+    const currentDetails = assetDetailsById.get(assetId);
+    if (currentDetails) {
+      assetDetailsById.set(assetId, { ...currentDetails, isFavorite: true });
+    }
+  }
+
+  function applyConfirmedFavorite(assetId: string, isFavorite: boolean) {
+    if (!removeUnfavoritedAssets) return;
+    if (isFavorite) {
+      confirmAssetRestoration(assetId);
+    } else {
       confirmAssetRemoval(assetId);
+    }
+  }
+
+  async function updateAssetFavorite(assetId: string, isFavorite: boolean) {
+    favoriteUpdateError = "";
+    try {
+      await setAssetFavorite(assetId, isFavorite);
+      applyConfirmedFavorite(assetId, isFavorite);
+    } catch (error) {
+      if (activeLightboxAssetId !== assetId) {
+        favoriteUpdateError = $t("timeline_favorite_update_error");
+      }
+      throw error;
     }
   }
 
@@ -293,14 +343,15 @@
     const assetIds = [...selectedAssetIds];
     if (assetIds.length === 0 || isSelectionActionBusy) return;
 
+    favoriteUpdateError = "";
     selectionResult = null;
     isApplyingSelection = true;
     let succeeded = 0;
     for (const assetId of assetIds) {
       try {
         await setAssetFavorite(assetId, isFavorite);
-        if (!isFavorite && removeUnfavoritedAssets) {
-          confirmAssetRemoval(assetId);
+        if (removeUnfavoritedAssets) {
+          applyConfirmedFavorite(assetId, isFavorite);
         } else {
           updateFavoriteState(assetId, isFavorite);
         }
@@ -365,11 +416,13 @@
   function openAsset(asset: TimelineAsset, source: HTMLElement) {
     if (isSelectionMode) return;
     removedLightboxPosition = null;
+    activeLightboxAssetId = asset.id;
     selectedAsset = { ...asset, isFavorite: isFavorite(asset) };
     opener = source;
   }
   function closeLightbox() {
     selectedAsset = null;
+    activeLightboxAssetId = null;
     removedLightboxPosition = null;
     queueMicrotask(() => opener?.focus());
   }
@@ -387,9 +440,11 @@
         ? (formerIndex + delta - 1) % lightboxAssets.length
         : ((formerIndex + delta) % lightboxAssets.length + lightboxAssets.length) % lightboxAssets.length;
     } else {
+      removedLightboxPosition = null;
       targetIndex = delta > 0 ? 0 : lightboxAssets.length - 1;
     }
     const next = lightboxAssets[targetIndex];
+    activeLightboxAssetId = next.id;
     return { ...next, isFavorite: isFavorite(next) };
   }
   function handleKeydown(event: KeyboardEvent) {
@@ -413,29 +468,25 @@
 <div class="relative flex h-full min-h-0 flex-col">
   {#if (timeline.hasInitialLoadError && !timeline.isLoading) || (timeline.isOffline && !timeline.isLoading) || showRefreshButton}
     <div class="mb-2 flex shrink-0 items-center justify-end gap-3">
+      {#snippet retryButton()}
+        {#if showRefreshButton}
+          <button
+            type="button"
+            class="font-semibold underline underline-offset-2"
+            aria-label={$t("timeline_retry_connection")}
+            onclick={() => void timeline.refresh()}
+          >{$t("timeline_retry")}</button>
+        {/if}
+      {/snippet}
       {#if timeline.hasInitialLoadError && !timeline.isLoading}
         <div class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
           <span>{loadErrorMessage || $t("timeline_offline")}</span>
-          {#if showRefreshButton}
-            <button
-              type="button"
-              class="font-semibold underline underline-offset-2"
-              aria-label={$t("timeline_retry_connection")}
-              onclick={() => void timeline.refresh()}
-            >{$t("timeline_retry")}</button>
-          {/if}
+          {@render retryButton()}
         </div>
       {:else if timeline.isOffline && !timeline.isLoading}
         <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
           <span>{offlineMessage || $t("timeline_offline")}</span>
-          {#if showRefreshButton}
-            <button
-              type="button"
-              class="font-semibold underline underline-offset-2"
-              aria-label={$t("timeline_retry_connection")}
-              onclick={() => void timeline.refresh()}
-            >{$t("timeline_retry")}</button>
-          {/if}
+          {@render retryButton()}
         </div>
       {/if}
       {#if showRefreshButton}
@@ -468,6 +519,17 @@
         {/if}
         <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_finish")} aria-label={$t("timeline_selection_finish")} disabled={isSelectionActionBusy} onclick={clearSelection}><X class="h-4 w-4" /></button>
       </div>
+    </div>
+  {/if}
+  {#if favoriteUpdateError}
+    <div class="mb-3 mr-16 flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
+      <span>{favoriteUpdateError}</span>
+      <button
+        type="button"
+        class="rounded p-1 hover:bg-red-100 dark:hover:bg-red-900/40"
+        aria-label={$t("dismiss_error")}
+        onclick={() => { favoriteUpdateError = ""; }}
+      ><X class="h-4 w-4" /></button>
     </div>
   {/if}
   {#if selectionResult}

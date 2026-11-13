@@ -13,9 +13,21 @@ export interface TimelineViewState {
   refresh(): Promise<void>;
   clear(): void;
   removeAsset?(assetId: string): void;
+  restoreAsset?(assetId: string): void;
 }
 
-export function createTimelineController(adapter: TimelineDesktopAdapter): TimelineViewState {
+export interface TimelineController extends TimelineViewState {
+  removeAsset(assetId: string): void;
+  restoreAsset(assetId: string): void;
+}
+
+interface RemovedAssetEntry {
+  timeBucket: string;
+  index: number;
+  asset: TimelineAsset;
+}
+
+export function createTimelineController(adapter: TimelineDesktopAdapter): TimelineController {
   let buckets = $state<TimelineBucket[]>([]);
   let isLoading = $state(false);
   let isRefreshing = $state(false);
@@ -27,6 +39,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   let assetsByBucket = $state<Record<string, TimelineAsset[]>>({});
   const pendingBuckets = new Map<string, Promise<void>>();
   const staleBuckets = new Set<string>();
+  const removedAssets = new Map<string, RemovedAssetEntry[]>();
 
   async function refresh() {
     const request = ++latestRequest;
@@ -56,6 +69,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
         // overwrite the newer session view.
         assetGeneration += 1;
         pendingBuckets.clear();
+        removedAssets.clear();
         isOffline = false;
         hasInitialLoadError = false;
       }
@@ -84,6 +98,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     assetsByBucket = {};
     pendingBuckets.clear();
     staleBuckets.clear();
+    removedAssets.clear();
     assetGeneration += 1;
   }
 
@@ -100,6 +115,14 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
       if (generation !== assetGeneration) return;
       assetsByBucket = { ...assetsByBucket, [timeBucket]: assets };
       staleBuckets.delete(timeBucket);
+      for (const [removedAssetId, entries] of removedAssets) {
+        const remainingEntries = entries.filter((entry) => entry.timeBucket !== timeBucket);
+        if (remainingEntries.length === 0) {
+          removedAssets.delete(removedAssetId);
+        } else if (remainingEntries.length !== entries.length) {
+          removedAssets.set(removedAssetId, remainingEntries);
+        }
+      }
       isOffline = false;
     }).catch((error) => {
       isOffline = true;
@@ -115,6 +138,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     let changed = false;
     const nextBuckets: TimelineBucket[] = [];
     const nextAssetsByBucket: Record<string, TimelineAsset[]> = {};
+    const snapshotEntries: RemovedAssetEntry[] = [];
 
     for (const bucket of buckets) {
       const assets = assetsByBucket[bucket.timeBucket];
@@ -122,14 +146,20 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
         nextBuckets.push(bucket);
         continue;
       }
-      const remaining = assets.filter((asset) => asset.id !== assetId);
-      const removedCount = assets.length - remaining.length;
-      if (removedCount === 0) {
+      const removedIndex = assets.findIndex((asset) => asset.id === assetId);
+      if (removedIndex === -1) {
         nextBuckets.push(bucket);
         nextAssetsByBucket[bucket.timeBucket] = assets;
         continue;
       }
+      const remaining = assets.filter((asset) => asset.id !== assetId);
+      const removedCount = assets.length - remaining.length;
       changed = true;
+      snapshotEntries.push({
+        timeBucket: bucket.timeBucket,
+        index: removedIndex,
+        asset: assets[removedIndex],
+      });
       if (remaining.length === 0) {
         staleBuckets.delete(bucket.timeBucket);
         continue;
@@ -142,6 +172,58 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     }
 
     if (!changed) return;
+    removedAssets.set(assetId, snapshotEntries);
+    buckets = nextBuckets;
+    assetsByBucket = nextAssetsByBucket;
+  }
+
+  function restoreAsset(assetId: string) {
+    const snapshotEntries = removedAssets.get(assetId);
+    if (!snapshotEntries || snapshotEntries.length === 0) return;
+    removedAssets.delete(assetId);
+
+    let changed = false;
+    const nextBuckets = [...buckets];
+    const nextAssetsByBucket = { ...assetsByBucket };
+
+    for (const { timeBucket, index, asset } of snapshotEntries) {
+      const existingBucketIndex = nextBuckets.findIndex((bucket) => bucket.timeBucket === timeBucket);
+      if (existingBucketIndex === -1) {
+        nextBuckets.push({ timeBucket, count: 1 });
+        nextAssetsByBucket[timeBucket] = [asset];
+        staleBuckets.delete(timeBucket);
+        changed = true;
+        continue;
+      }
+
+      const currentAssets = nextAssetsByBucket[timeBucket];
+      if (!currentAssets) {
+        const existingBucket = nextBuckets[existingBucketIndex];
+        nextBuckets[existingBucketIndex] = { ...existingBucket, count: existingBucket.count + 1 };
+        staleBuckets.add(timeBucket);
+        changed = true;
+        continue;
+      }
+
+      if (currentAssets.some((candidate) => candidate.id === asset.id)) continue;
+
+      const insertIndex = Math.max(0, Math.min(index, currentAssets.length));
+      const restoredAssets = [
+        ...currentAssets.slice(0, insertIndex),
+        asset,
+        ...currentAssets.slice(insertIndex),
+      ];
+      nextAssetsByBucket[timeBucket] = restoredAssets;
+      const existingBucket = nextBuckets[existingBucketIndex];
+      nextBuckets[existingBucketIndex] = {
+        ...existingBucket,
+        count: Math.max(restoredAssets.length, existingBucket.count + 1),
+      };
+      changed = true;
+    }
+
+    if (!changed) return;
+    nextBuckets.sort((a, b) => (a.timeBucket === b.timeBucket ? 0 : b.timeBucket > a.timeBucket ? 1 : -1));
     buckets = nextBuckets;
     assetsByBucket = nextAssetsByBucket;
   }
@@ -158,5 +240,6 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     refresh,
     clear,
     removeAsset,
+    restoreAsset,
   };
 }

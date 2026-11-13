@@ -1667,6 +1667,7 @@ describe("Favorites Timeline", () => {
   });
 
   it("removes unfavorited assets via desktop IPC after confirmation, preserves Lightbox former-position navigation, and renders the empty state when none remain", async () => {
+    stubImmediateIntersectionObserver();
     let resolveFirstRemoval!: () => void;
     let favoritingCall = 0;
 
@@ -1729,6 +1730,7 @@ describe("Favorites Timeline", () => {
 
     expect(tauri.invoke).toHaveBeenCalledWith("set_asset_favorite", { assetId: "fav-2", isFavorite: false });
     expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(3);
     expect(screen.getByText("2 assets")).toBeInTheDocument();
 
     resolveFirstRemoval();
@@ -1756,6 +1758,7 @@ describe("Favorites Timeline", () => {
   });
 
   it("rolls back single favorite removal failures and handles bulk removal partial and complete failures via desktop IPC", async () => {
+    stubImmediateIntersectionObserver();
     let callCount = 0;
 
     renderAuthenticatedPage({
@@ -1827,6 +1830,7 @@ describe("Favorites Timeline", () => {
   });
 
   it("keeps unfavorited assets in the Photos timeline when removing a favorite there", async () => {
+    stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
       get_timeline_buckets: async () => [
         { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
@@ -1862,5 +1866,77 @@ describe("Favorites Timeline", () => {
     await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
     expect(screen.getByRole("button", { name: "Open photo" })).toBeInTheDocument();
     expect(screen.getByText("1 assets")).toBeInTheDocument();
+  });
+
+  it("restores a re-favorited asset in the same Favorites Lightbox session and surfaces navigated-away rejection errors", async () => {
+    stubImmediateIntersectionObserver();
+    let rejectPendingRemoval!: (error: Error) => void;
+    let callCount = 0;
+
+    renderAuthenticatedPage({
+      get_favorites_timeline_buckets: async () => [
+        { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
+        { timeBucket: "2025-02-01T00:00:00.000Z", count: 1 },
+      ],
+      get_favorites_timeline_bucket_assets: async (args) => {
+        const { timeBucket } = args as { timeBucket: string };
+        if (timeBucket === "2025-03-01T00:00:00.000Z") {
+          return [
+            { id: "fav-1", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
+          ];
+        }
+        return [
+          { id: "fav-2", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-02-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
+        ];
+      },
+      get_asset_details: async () => ({
+        originalFileName: "favorite.jpg",
+        isFavorite: true,
+        cameraMake: null,
+        cameraModel: null,
+        city: null,
+        state: null,
+        country: null,
+        fNumber: null,
+        exposureTime: null,
+        iso: null,
+        focalLength: null,
+        lensModel: null,
+        imageWidth: 1600,
+        imageHeight: 1200,
+        fileSize: 1024,
+      }),
+      set_asset_favorite: () => {
+        callCount += 1;
+        if (callCount <= 2) return Promise.resolve();
+        return new Promise<void>((_, reject) => {
+          rejectPendingRemoval = reject;
+        });
+      },
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+    const openButtons = await screen.findAllByRole("button", { name: "Open photo" });
+    expect(openButtons).toHaveLength(2);
+
+    // Unfavorite fav-1 (bucket drops), then re-favorite in the same Lightbox session
+    await fireEvent.click(openButtons[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await waitFor(() => expect(screen.queryByText("March 2025")).not.toBeInTheDocument());
+
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Add to favorites" }));
+    expect(tauri.invoke).toHaveBeenCalledWith("set_asset_favorite", { assetId: "fav-1", isFavorite: true });
+    await waitFor(() => expect(screen.getByText("March 2025")).toBeInTheDocument());
+    expect(screen.getAllByLabelText("Favorite")).toHaveLength(2);
+
+    // Trigger pending removal on fav-1, navigate to fav-2, then reject fav-1
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Next asset" }));
+    await waitFor(() => expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/fav-2"));
+
+    rejectPendingRemoval(new Error("offline"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not update favorite"));
+    expect(within(lightbox).queryByRole("alert")).not.toBeInTheDocument();
   });
 });
