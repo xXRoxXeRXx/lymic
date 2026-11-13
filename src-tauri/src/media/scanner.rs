@@ -26,23 +26,21 @@ fn metadata_is_hidden(metadata: &std::fs::Metadata) -> bool {
 }
 
 fn is_hidden_path(path: &Path) -> bool {
-    if path
+    let has_hidden_component = path
         .components()
-        .any(|component| matches!(component, Component::Normal(name) if is_hidden_name(name)))
-    {
-        return true;
-    }
+        .any(|component| matches!(component, Component::Normal(name) if is_hidden_name(name)));
 
     #[cfg(windows)]
     {
-        std::fs::metadata(path)
-            .map(|metadata| metadata_is_hidden(&metadata))
-            .unwrap_or(false)
+        has_hidden_component
+            || std::fs::metadata(path)
+                .map(|metadata| metadata_is_hidden(&metadata))
+                .unwrap_or(false)
     }
 
     #[cfg(not(windows))]
     {
-        false
+        has_hidden_component
     }
 }
 
@@ -128,21 +126,18 @@ fn scan_folder_for_media(path: &Path) -> ScanResult {
                 return true;
             }
             let name = entry.file_name().to_string_lossy();
-            if is_hidden_name(entry.file_name())
-                || matches!(name.as_ref(), "@eaDir" | "@SynoResource" | "#recycle")
-            {
-                return false;
-            }
+            let is_excluded = is_hidden_name(entry.file_name())
+                || matches!(name.as_ref(), "@eaDir" | "@SynoResource" | "#recycle");
 
             #[cfg(windows)]
-            if entry.file_type().is_dir() {
+            if !is_excluded && entry.file_type().is_dir() {
                 return entry
                     .metadata()
                     .map(|metadata| !metadata_is_hidden(&metadata))
                     .unwrap_or(true);
             }
 
-            true
+            !is_excluded
         })
     {
         match entry {
