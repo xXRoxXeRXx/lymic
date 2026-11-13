@@ -16,8 +16,18 @@ pub(crate) struct MapMarker {
 #[derive(Deserialize)]
 struct MarkerResponse {
     id: String,
+    #[serde(default, deserialize_with = "coordinate_or_none")]
     lat: Option<f64>,
+    #[serde(default, deserialize_with = "coordinate_or_none")]
     lon: Option<f64>,
+}
+
+fn coordinate_or_none<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(value.as_f64())
 }
 
 impl ImmichClient {
@@ -31,7 +41,7 @@ impl ImmichClient {
             .map_err(|_| "map_unavailable".to_string())?;
         match response.status() {
             StatusCode::UNAUTHORIZED => return Err("map_authentication_required".into()),
-            StatusCode::FORBIDDEN => return Err("map_permission_denied:configure an API key with map.read and asset.read permissions".into()),
+            StatusCode::FORBIDDEN => return Err("map_permission_denied:configure an API key with map.read, asset.read and asset.view permissions".into()),
             status if !status.is_success() => return Err("map_unavailable".into()),
             _ => {}
         }
@@ -123,6 +133,23 @@ mod tests {
         )
         .unwrap();
         client.get_map_markers().await
+    }
+
+    #[tokio::test]
+    async fn omits_nonnumeric_coordinates_without_losing_valid_markers() {
+        let body = r#"[{"id":"zero","lat":0,"lon":0},{"id":"string","lat":"bad","lon":1},{"id":"object","lat":1,"lon":{"value":2}},{"id":"boolean","lat":true,"lon":1},{"id":"array","lat":[],"lon":1},{"id":"missing","lon":1},{"id":"valid","lat":-33.8,"lon":151.2}]"#;
+        let headers = format!("Content-Length: {}", body.len());
+        let markers = request_with_response("200 OK", &headers, body)
+            .await
+            .unwrap();
+        assert_eq!(
+            markers
+                .iter()
+                .map(|marker| marker.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["zero", "valid"]
+        );
+        assert_eq!((markers[0].lat, markers[0].lon), (0.0, 0.0));
     }
 
     #[tokio::test]
