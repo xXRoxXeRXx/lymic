@@ -1,5 +1,10 @@
 {
   "map_title": "Map",
+  "map_close_results": "Close results",
+  "map_location_results": "Location results",
+  "map_previous_page": "Previous page",
+  "map_next_page": "Next page",
+  "map_last_page": "Last page",
   "map_open_asset": "Open asset",
   "map_loading": "Loading map locations...",
   "map_permission": "Map access denied. Configure your API key with map.read, asset.read and asset.view permissions.",
