@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.0] - 2026-11-13
+
+### Added
+- **Interactive clustered map browsing**:
+  - Adds a Map view powered by MapLibre GL with clustered markers for geotagged Immich assets.
+  - Supports browsing complete map cluster collections and location results with shared lightbox previewing.
+  - Preserves map session state across refresh navigation and enables trackpad pinch zoom.
+  - Adds local map fixture server and distinct map profiling workloads for verification.
+- **Lightbox asset actions and details**:
+  - Displays asset metadata and details directly inside the shared lightbox.
+  - Adds favorite toggling, original asset downloading, and album assignment from the lightbox.
+  - Extracts a reusable shared lightbox component from the timeline.
+- **Timeline multi-selection actions**:
+  - Adds multi-selection mode in the timeline with batch download support for selected assets.
+- **Documentation**:
+  - Updates `GLOSSARY.md` with download and favorite definitions, adds Microsoft Store badge to `README.md`, and refreshes OpenWiki docs.
+
+### Fixed
+- **Map and lightbox resilience**:
+  - Handles malformed map coordinates gracefully and improves map viewing and localization.
+  - Preserves partial or failed download safety on stream failure and hardens lightbox favorite navigation state and asset details.
+
 ## [0.24.0] - 2026-11-08
 
 ### Added

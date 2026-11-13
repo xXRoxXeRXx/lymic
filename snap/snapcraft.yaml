@@ -1,7 +1,7 @@
 name: lymic
 title: Lymic
 base: core22
-version: '0.24.0'
+version: '0.25.0'
 summary: High-performance desktop sync client for Immich
 description: |
   Lymic is a fast, lightweight desktop synchronization client built specifically
