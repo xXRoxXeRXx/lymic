@@ -3,9 +3,6 @@ type: security architecture
 title: Authentication and Credential Safety
 description: How the desktop client validates and stores Immich credentials, constrains credential-bearing requests, reuses authenticated clients safely, and isolates cached profile data across sessions.
 tags: [security, authentication, credentials, keyring, immich]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-11-09T18:02:27.157Z
 sources:
   - id: openwiki-source-23775c3de52f3ab95a13cb8b
     resource: repo://README.md

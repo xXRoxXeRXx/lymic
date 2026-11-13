@@ -3,9 +3,6 @@ type: architecture
 title: Desktop Runtime Architecture
 description: Tauri process composition, recovery-first startup, managed Rust services, native protocols and controls, and the Svelte webview boundary. Use this page when changing initialization order, native integration, or Rust-to-webview commands and events.
 tags: [architecture, tauri, svelte, runtime]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-11-09T18:02:27.157Z
 sources:
   - id: openwiki-source-1fcd4acb19ae27b109afe923
     resource: repo://src-tauri/src/app/asset_protocol.rs

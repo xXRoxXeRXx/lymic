@@ -3,9 +3,6 @@ type: operations guide
 title: Release and Distribution
 description: Explains version inputs, the tagged GitHub release workflow, signed updater artifacts, Windows Store MSIX, Snap, Homebrew, and AUR handoffs. It identifies manual publication decisions and distribution steps conditional on repository secrets.
 tags: [releases, distribution, updater, github, microsoft-store, msix, snap, homebrew, aur]
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-11-09T18:02:27.157Z
 sources:
   - id: openwiki-source-d2673828881732005728e0ea
     resource: repo://.github/workflows/aur-package.yml

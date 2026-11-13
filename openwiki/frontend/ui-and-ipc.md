@@ -28,9 +28,6 @@ sources:
     resource: repo://src/lib/tauri/sync-event-subscription.ts
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-11-09T18:02:27.157Z
 generated: { by: "openwiki/0.7.2", at: "2026-11-09T18:02:27.157Z" }
 ---
 
