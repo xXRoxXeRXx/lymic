@@ -805,9 +805,9 @@ describe("TimelineView scrubber", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await screen.findByRole("button", { name: "Download original" });
-    fireEvent.click(screen.getByRole("button", { name: "Next asset" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Next asset" }));
 
-    expect(screen.getByRole("button", { name: "Download original" })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Download original" })).toBeDisabled());
     resolveVideo?.(assetDetails());
   });
 
