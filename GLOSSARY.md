@@ -132,6 +132,10 @@ _Avoid_: date slider, fast scroll bar, year index
 The chronological presentation of the Remote Assets belonging to one Album, grouped into time buckets like the Photo Timeline.
 _Avoid_: album grid, album gallery
 
+**Favorites Timeline**:
+The chronological presentation of Remote Assets marked as Favorites in the authenticated user's Immich Library.
+_Avoid_: favorites album, favorites folder
+
 ## Map
 
 **Map View**:
