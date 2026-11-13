@@ -55,9 +55,12 @@ it("opens the selected video thumbnail using the shared Lightbox", async () => {
   mapHarness.handlers.get("sourcedata")?.();
   const button = await screen.findByRole("button", { name: "Open asset" });
   expect(button.querySelector("img")).toHaveAttribute("src", "lymic-thumb://asset/video-1");
+  button.focus();
   await fireEvent.click(button);
   await waitFor(() => expect(screen.getByLabelText("Video preview")).toHaveAttribute("src", "lymic-asset://video/video-1"));
   expect(desktop.getAssetDetails).toHaveBeenCalledWith("video-1");
+  await fireEvent.click(screen.getByRole("button", { name: "Close lightbox" }));
+  await waitFor(() => expect(button).toHaveFocus());
   mapHarness.features = [];
 });
 
@@ -119,4 +122,18 @@ it("keeps the open viewer and reports a stale snapshot when a revisit refresh fa
   expect(screen.getByLabelText("Video preview")).toHaveAttribute("src", "lymic-asset://video/kept");
   expect(screen.queryByRole("button", { name: /refresh|reset/i })).not.toBeInTheDocument();
   mapHarness.features = [];
+});
+
+
+it("keeps visible thumbnail pins during map movement", () => {
+  mapHarness.features = [{ properties: { id: "moving" }, geometry: { type: "Point", coordinates: [13, 52] } }];
+  const desktop = { getAssetDetails: vi.fn(), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
+  render(MapView, { mapState: createMapController({ getMapMarkers: vi.fn() }), active: true, desktop, albumCatalogue: createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() }), serverUrl: "" });
+  mapHarness.handlers.get("sourcedata")?.();
+  const pin = screen.getByRole("button", { name: "Open asset" });
+  mapHarness.handlers.get("movestart")?.();
+  expect(pin).toBeInTheDocument();
+  mapHarness.features = [];
+  mapHarness.handlers.get("moveend")?.();
+  expect(pin).not.toBeInTheDocument();
 });

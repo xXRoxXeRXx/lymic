@@ -10,6 +10,7 @@
   import type { TimelineAsset } from "../contracts";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import Lightbox from "./Lightbox.svelte";
+  import { protocolSrc } from "../tauri/protocol-src";
 
   interface Props {
     mapState: MapViewState;
@@ -125,14 +126,12 @@
   let workerGeneration = 0;
   let sourceUpdating = false;
 
-  function thumbnailUrl(id: string) {
-    const convert = (globalThis as typeof globalThis & { __TAURI_INTERNALS__?: { convertFileSrc?: (path: string, protocol: string) => string } }).__TAURI_INTERNALS__?.convertFileSrc;
-    return convert ? `${convert("", "lymic-thumb").replace(/\/$/, "")}/asset/${encodeURIComponent(id)}` : `lymic-thumb://asset/${encodeURIComponent(id)}`;
-  }
+  function thumbnailUrl(id: string) { return protocolSrc("lymic-thumb", "asset", id); }
   function toAsset(id: string, details: NonNullable<Awaited<ReturnType<typeof desktop.getAssetDetails>>>): TimelineAsset {
     return { id, width: details.imageWidth ?? 0, height: details.imageHeight ?? 0, type: details.assetType === "VIDEO" ? "VIDEO" : "IMAGE", takenAt: null, cameraMake: details.cameraMake, cameraModel: details.cameraModel, fileSize: details.fileSize, duration: null, isFavorite: details.isFavorite };
   }
-  async function openAsset(id: string) {
+  async function openAsset(id: string, button: HTMLButtonElement) {
+    resultButton = button;
     const generation = ++selectionGeneration;
     try {
       const details = await desktop.getAssetDetails(id);
@@ -157,7 +156,7 @@
       image.loading = "lazy";
       pendingImages.set(id, image);
       button.append(image);
-      button.onclick = () => void openAsset(id);
+      button.onclick = () => void openAsset(id, button);
       pins.set(id, new maplibregl.Marker({ element: button }).setLngLat(feature.geometry.coordinates as [number, number]).addTo(map));
     }
     for (const [id, pin] of pins) if (!found.has(id)) removePin(id, pin);
@@ -218,7 +217,6 @@
           void loadPage(0);
         }
       });
-    map.on("movestart", removePins);
     map.on("moveend", updatePins);
     map.on("sourcedata", updatePins);
     return () => { themeObserver.disconnect(); selectionGeneration++; workerGeneration++; worker?.terminate(); removePins(); map?.remove(); map = undefined; };
