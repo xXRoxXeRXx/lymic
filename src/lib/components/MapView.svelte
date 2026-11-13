@@ -237,7 +237,7 @@
   <div bind:this={container} class="min-h-0 flex-1 rounded-xl" aria-label={$t("map_title")}></div>
   {#if collection}
     <section class="absolute inset-4 z-20 overflow-auto rounded-xl bg-white p-4 shadow-xl dark:bg-gray-900" aria-label={$t("map_location_results")}>
-      <div class="flex items-center justify-between"><h2>{$t("map_location_results")} ({collection.count})</h2><button type="button" onclick={closeResults}>{$t("timeline_close_lightbox")}</button></div>
+      <div class="flex items-center justify-between"><h2>{$t("map_location_results")} ({collection.count})</h2><button type="button" onclick={closeResults}>{$t("map_close_results")}</button></div>
       {#if pageLoading}<p role="status">{$t("map_loading")}</p>{/if}
       {#if pageError}<p role="alert">{$t("map_error")}</p>{/if}
       <div class="grid grid-cols-4 gap-2 sm:grid-cols-6">
