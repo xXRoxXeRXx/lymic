@@ -24,6 +24,7 @@ function createFavorites(options: {
   timeline: TimelineController;
   setAssetFavorite?: (assetId: string, isFavorite: boolean) => Promise<void>;
   removeUnfavorited?: boolean;
+  isFavorite?: (asset: TimelineAsset) => boolean;
   onReflect?: (assetId: string, isFavorite: boolean) => void;
   onRemoved?: (assetId: string) => void;
 }) {
@@ -32,6 +33,7 @@ function createFavorites(options: {
     setAssetFavorite: options.setAssetFavorite ?? (async () => {}),
     removeUnfavorited: options.removeUnfavorited ?? false,
     errorMessage: "favorite update failed",
+    isFavorite: options.isFavorite ?? ((candidate) => candidate.isFavorite),
     onReflect: options.onReflect,
     onRemoved: options.onRemoved,
   });
@@ -136,10 +138,14 @@ describe("Remote Asset favorites in a Favorites Timeline", () => {
 describe("Remote Asset favorites in a Photo Timeline", () => {
   it("keeps unfavorited assets in the timeline and reflects each confirmed selection update", async () => {
     const timeline = await favoritesTimeline({ [march]: [asset("a", false), asset("b", false), asset("c", false)] });
-    const onReflect = vi.fn();
+    const reflected: Record<string, boolean> = {};
+    const onReflect = vi.fn((assetId: string, isFavorite: boolean) => { reflected[assetId] = isFavorite; });
     const onRemoved = vi.fn();
     const setAssetFavorite = vi.fn(async (assetId: string) => { if (assetId === "b") throw new Error("rejected"); });
-    const favorites = createFavorites({ timeline, setAssetFavorite, onReflect, onRemoved });
+    const favorites = createFavorites({
+      timeline, setAssetFavorite, onReflect, onRemoved,
+      isFavorite: (candidate) => reflected[candidate.id] ?? candidate.isFavorite,
+    });
 
     const result = await favorites.updateMany(["a", "b", "c"], true, () => true);
 
@@ -175,29 +181,34 @@ describe("Remote Asset favorites in a Photo Timeline", () => {
     expect(onReflect).not.toHaveBeenCalled();
   });
 
-  it("tracks Lightbox favorite changes as overrides and keeps only in-flight ones across a refresh", async () => {
+  it("reports reflected favorite changes and shows the status the caller resolves", async () => {
     const timeline = await favoritesTimeline({ [march]: [asset("a", false), asset("b", false)] });
     const onReflect = vi.fn();
-    const favorites = createFavorites({ timeline, onReflect });
+    const reflected: Record<string, boolean> = {};
+    const favorites = createFavorites({
+      timeline,
+      onReflect: (assetId, isFavorite) => { reflected[assetId] = isFavorite; onReflect(assetId, isFavorite); },
+      isFavorite: (candidate) => reflected[candidate.id] ?? candidate.isFavorite,
+    });
 
     favorites.reflect("a", true);
-    favorites.reflect("b", true);
-    expect(timeline.assetsFor(march).map((candidate) => favorites.isFavorite(candidate))).toEqual([true, true]);
-    expect(onReflect.mock.calls).toEqual([["a", true], ["b", true]]);
 
-    favorites.retainOverrides(["b"]);
-    expect(timeline.assetsFor(march).map((candidate) => favorites.isFavorite(candidate))).toEqual([false, true]);
+    expect(onReflect.mock.calls).toEqual([["a", true]]);
+    expect(timeline.assetsFor(march).map((candidate) => favorites.isFavorite(candidate))).toEqual([true, false]);
+  });
 
-    favorites.reset();
-    expect(timeline.assetsFor(march).map((candidate) => favorites.isFavorite(candidate))).toEqual([false, false]);
+  it("ignores reflected status in the grid of a Favorites Timeline", async () => {
+    const timeline = await favoritesTimeline({ [march]: [asset("a")] });
+    const favorites = createFavorites({ timeline, removeUnfavorited: true, isFavorite: () => false });
+
+    expect(timeline.assetsFor(march).map((candidate) => favorites.isFavorite(candidate))).toEqual([true]);
   });
 });
 
 describe("Remote Asset favorites navigation in a Photo Timeline", () => {
   it("wraps around the loaded assets and resolves each asset's favorite state", async () => {
     const timeline = await favoritesTimeline({ [march]: [asset("a", false), asset("b", false)] });
-    const favorites = createFavorites({ timeline });
-    favorites.reflect("b", true);
+    const favorites = createFavorites({ timeline, isFavorite: (candidate) => candidate.id === "b" || candidate.isFavorite });
 
     expect(await favorites.navigate(1, asset("a", false))).toMatchObject({ id: "b", isFavorite: true });
     expect((await favorites.navigate(1, asset("b", false)))?.id).toBe("a");

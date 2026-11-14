@@ -74,9 +74,8 @@
 
   function updateFavoriteState(assetId: string, isFavorite: boolean) {
     onFavoriteChange(assetId, isFavorite);
-    assetActions.reflectFavorite(assetId, isFavorite);
     if (selectedAsset?.id === assetId) {
-      const updatedDetails = assetActions.get(assetId);
+      const updatedDetails = assetActions.cachedDetails(assetId);
       if (updatedDetails) assetDetails = updatedDetails;
       selectedAsset = { ...selectedAsset, isFavorite };
     }
@@ -84,7 +83,7 @@
 
   function loadAssetDetails(asset: TimelineAsset) {
     favoriteError = "";
-    const cached = assetActions.get(asset.id);
+    const cached = assetActions.cachedDetails(asset.id);
     if (cached !== undefined) {
       assetDetails = cached;
       isAssetDetailsLoading = false;
@@ -92,7 +91,7 @@
     }
     assetDetails = null;
     isAssetDetailsLoading = true;
-    void assetActions.load(asset.id)
+    void assetActions.loadDetails(asset.id)
       .then(({ details, stale }) => {
         if (stale || isDestroyed || selectedAsset?.id !== asset.id) return;
         assetDetails = details;
@@ -137,8 +136,8 @@
     downloadingAssetId = assetId;
     const isCurrent = () => selectedAsset?.id === assetId;
     try {
-      const outcome = await assetActions.download([assetId]);
-      if (outcome === "saved" && isCurrent()) downloadMessage = $t("timeline_download_saved");
+      const outcome = await assetActions.download([assetId], () => !isDestroyed && isCurrent());
+      if (outcome === "saved") downloadMessage = $t("timeline_download_saved");
     } catch {
       if (isCurrent()) downloadError = $t("timeline_download_failed");
     } finally {

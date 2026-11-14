@@ -70,7 +70,7 @@
       const leaves = await current.source.getClusterLeaves(current.id, 1, index);
       const id = leaves[0]?.properties?.id;
       if (id == null || collection !== current) return null;
-      const details = await getDetails(String(id));
+      const details = (await assetActions.loadDetails(String(id))).details;
       if (!details || collection !== current) return null;
       return toAsset(String(id), details);
     } catch { return null; }
@@ -135,9 +135,6 @@
   let sourceUpdating = false;
 
   function thumbnailUrl(id: string) { return protocolSrc("lymic-thumb", "asset", id); }
-  async function getDetails(id: string) {
-    return (await assetActions.load(id)).details;
-  }
   function toAsset(id: string, details: AssetDetails): TimelineAsset {
     const takenAt = details.takenAt && Number.isFinite(Date.parse(details.takenAt)) ? details.takenAt : null;
     return { id, width: details.imageWidth ?? 0, height: details.imageHeight ?? 0, type: details.assetType === "VIDEO" ? "VIDEO" : "IMAGE", takenAt, cameraMake: details.cameraMake, cameraModel: details.cameraModel, fileSize: details.fileSize, duration: null, isFavorite: details.isFavorite };
@@ -146,7 +143,7 @@
     resultButton = button;
     const generation = ++selectionGeneration;
     try {
-      const details = await getDetails(id);
+      const details = (await assetActions.loadDetails(id)).details;
       if (generation !== selectionGeneration) return;
       if (details) { collectionNavigation = false; selectedAsset = toAsset(id, details); }
     } catch { /* A removed asset should not break the rest of the map. */ }
@@ -235,7 +232,7 @@
   });
   $effect(() => {
     const markers = mapState.markers;
-    if (markers !== lastMarkers) { lastMarkers = markers; if (collection) deferredMarkers = true; else { removePins(); setMarkers(); } }
+    if (markers !== lastMarkers) { lastMarkers = markers; assetActions.invalidate(); if (collection) deferredMarkers = true; else { removePins(); setMarkers(); } }
   });
   $effect(() => {
     if (active) { queueMicrotask(() => { map?.resize(); updatePins(); }); }
@@ -263,7 +260,7 @@
     </section>
   {/if}
   {#if selectedAsset}
-    <Lightbox asset={selectedAsset} navigateAsset={collectionNavigation ? navigateCollection : undefined} {assetActions} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={() => {}} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={desktop.setAssetFavorite} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
+    <Lightbox asset={selectedAsset} navigateAsset={collectionNavigation ? navigateCollection : undefined} {assetActions} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={assetActions.reflectFavorite} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={desktop.setAssetFavorite} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
   {/if}
 </div>
 

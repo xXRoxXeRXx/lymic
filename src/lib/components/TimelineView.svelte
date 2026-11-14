@@ -89,6 +89,7 @@
     get setAssetFavorite() { return setAssetFavorite; },
     get removeUnfavorited() { return removeUnfavoritedAssets; },
     get errorMessage() { return $t("timeline_favorite_update_error"); },
+    isFavorite: (asset) => assetActions.isFavorite(asset),
     onReflect: reflectFavoriteState,
     onRemoved: cleanupRemovedAssetState,
   });
@@ -114,6 +115,7 @@
     selectedAsset = null;
     opener = null;
     updatingFavoriteAssetIds = {};
+    assetActions.invalidate();
     favorites.reset();
   }
 
@@ -143,7 +145,6 @@
         resetLightbox();
         return;
       }
-      favorites.retainOverrides(Object.keys(updatingFavoriteAssetIds));
       favorites.clearError();
     });
   });
@@ -151,6 +152,7 @@
   $effect(() => {
     timeline;
     untrack(() => {
+      assetActions.invalidate();
       resetSelectionAndModals();
       favorites.reset();
     });

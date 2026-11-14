@@ -155,3 +155,24 @@ it("keeps visible thumbnail pins during map movement", () => {
   mapHarness.handlers.get("moveend")?.();
   expect(pin).not.toBeInTheDocument();
 });
+
+it("downloads a Map View asset's original file through the shared actions", async () => {
+  const { fireEvent, waitFor } = await import("@testing-library/svelte");
+  mapHarness.features = [{ properties: { id: "photo-1" }, geometry: { type: "Point", coordinates: [13, 52] } }];
+  const state = createMapController({ getMapMarkers: vi.fn() });
+  const details = { assetType: "IMAGE", takenAt: null, imageWidth: 10, imageHeight: 10, cameraMake: null, cameraModel: null, fileSize: null, isFavorite: false, originalFileName: "IMG_0001.jpg", city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null };
+  const desktop = { getAssetDetails: vi.fn().mockResolvedValue(details), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn().mockResolvedValue("C:/Downloads/IMG_0001.jpg"), downloadAsset: vi.fn().mockResolvedValue(undefined), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
+  const albumCatalogue = createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() });
+  render(MapView, { mapState: state, active: true, desktop, albumCatalogue, serverUrl: "" });
+  mapHarness.handlers.get("moveend")?.();
+  await fireEvent.click(await screen.findByRole("button", { name: "Open asset" }));
+  const download = await screen.findByRole("button", { name: "Download original" });
+  await waitFor(() => expect(download).toBeEnabled());
+  await fireEvent.click(download);
+
+  await waitFor(() => expect(desktop.downloadAsset).toHaveBeenCalledWith("photo-1", "C:/Downloads/IMG_0001.jpg"));
+  expect(desktop.chooseDownloadDestination).toHaveBeenCalledWith("IMG_0001.jpg");
+  expect(await screen.findByRole("status")).toHaveTextContent("Download saved");
+  expect(desktop.getAssetDetails).toHaveBeenCalledTimes(1);
+  mapHarness.features = [];
+});

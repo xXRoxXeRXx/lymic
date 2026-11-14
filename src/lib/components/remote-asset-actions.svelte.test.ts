@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AssetDetails } from "../contracts";
-import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
+import { createRemoteAssetActions, maxCachedDetails } from "./remote-asset-actions.svelte";
 
 function details(id: string, overrides: Partial<AssetDetails> = {}): AssetDetails {
   return { originalFileName: `${id}.jpg`, isFavorite: false, ...overrides } as AssetDetails;
@@ -18,14 +18,12 @@ function createActions(options: {
   chooseDownloadDestination?: (name: string) => Promise<string | null>;
   downloadAsset?: (assetId: string, destination: string) => Promise<void>;
   downloadArchive?: (assetIds: string[]) => Promise<void>;
-  maxCachedDetails?: number;
 } = {}) {
   return createRemoteAssetActions({
     getAssetDetails: options.getAssetDetails ?? (async (id) => details(id)),
     chooseDownloadDestination: options.chooseDownloadDestination ?? (async (name) => `/downloads/${name}`),
     downloadAsset: options.downloadAsset ?? (async () => {}),
     downloadArchive: options.downloadArchive ?? (async () => {}),
-    maxCachedDetails: options.maxCachedDetails,
   });
 }
 
@@ -34,26 +32,26 @@ describe("Remote Asset details", () => {
     const getAssetDetails = vi.fn(async (id: string) => details(id));
     const actions = createActions({ getAssetDetails });
 
-    expect(actions.get("a")).toBeUndefined();
-    const [first, concurrent] = await Promise.all([actions.load("a"), actions.load("a")]);
-    const again = await actions.load("a");
+    expect(actions.cachedDetails("a")).toBeUndefined();
+    const [first, concurrent] = await Promise.all([actions.loadDetails("a"), actions.loadDetails("a")]);
+    const again = await actions.loadDetails("a");
 
     expect(getAssetDetails).toHaveBeenCalledTimes(1);
     expect(first).toEqual({ details: details("a"), stale: false });
     expect(concurrent).toEqual(first);
     expect(again).toEqual(first);
-    expect(actions.get("a")).toEqual(details("a"));
+    expect(actions.cachedDetails("a")).toEqual(details("a"));
   });
 
   it("caches a missing result and distinguishes it from an uncached asset", async () => {
     const getAssetDetails = vi.fn(async () => null);
     const actions = createActions({ getAssetDetails });
 
-    await actions.load("gone");
-    await actions.load("gone");
+    await actions.loadDetails("gone");
+    await actions.loadDetails("gone");
 
     expect(getAssetDetails).toHaveBeenCalledTimes(1);
-    expect(actions.get("gone")).toBeNull();
+    expect(actions.cachedDetails("gone")).toBeNull();
   });
 
   it("does not cache a failed request and lets the next load retry", async () => {
@@ -62,20 +60,18 @@ describe("Remote Asset details", () => {
       .mockResolvedValueOnce(details("a"));
     const actions = createActions({ getAssetDetails });
 
-    await expect(actions.load("a")).rejects.toThrow("offline");
-    expect(actions.get("a")).toBeUndefined();
-    expect((await actions.load("a")).details).toEqual(details("a"));
+    await expect(actions.loadDetails("a")).rejects.toThrow("offline");
+    expect(actions.cachedDetails("a")).toBeUndefined();
+    expect((await actions.loadDetails("a")).details).toEqual(details("a"));
   });
 
   it("evicts the oldest entry beyond the cache limit", async () => {
-    const actions = createActions({ maxCachedDetails: 2 });
-    await actions.load("a");
-    await actions.load("b");
-    await actions.load("c");
+    const actions = createActions();
+    for (let index = 0; index <= maxCachedDetails; index += 1) await actions.loadDetails(`asset-${index}`);
 
-    expect(actions.get("a")).toBeUndefined();
-    expect(actions.get("b")).toBeDefined();
-    expect(actions.get("c")).toBeDefined();
+    expect(actions.cachedDetails("asset-0")).toBeUndefined();
+    expect(actions.cachedDetails("asset-1")).toBeDefined();
+    expect(actions.cachedDetails(`asset-${maxCachedDetails}`)).toBeDefined();
   });
 
   it("drops results that resolve after invalidate and reports them as stale", async () => {
@@ -84,12 +80,12 @@ describe("Remote Asset details", () => {
     const actions = createActions({ getAssetDetails });
 
     const generation = actions.generation;
-    const loading = actions.load("a");
+    const loading = actions.loadDetails("a");
     actions.invalidate();
     request.resolve(details("a"));
 
     expect((await loading).stale).toBe(true);
-    expect(actions.get("a")).toBeUndefined();
+    expect(actions.cachedDetails("a")).toBeUndefined();
     expect(actions.generation).toBe(generation + 1);
   });
 
@@ -97,7 +93,7 @@ describe("Remote Asset details", () => {
     const request = deferred<AssetDetails | null>();
     const actions = createActions({ getAssetDetails: () => request.promise });
 
-    const loading = actions.load("a");
+    const loading = actions.loadDetails("a");
     actions.invalidate();
     request.reject(new Error("offline"));
 
@@ -111,32 +107,32 @@ describe("Remote Asset details", () => {
       .mockResolvedValueOnce(details("a", { originalFileName: "fresh.jpg" }));
     const actions = createActions({ getAssetDetails });
 
-    const first = actions.load("a");
+    const first = actions.loadDetails("a");
     actions.invalidate();
-    const second = await actions.load("a");
+    const second = await actions.loadDetails("a");
     stale.resolve(details("a", { originalFileName: "stale.jpg" }));
 
     expect(second.details?.originalFileName).toBe("fresh.jpg");
     expect((await first).stale).toBe(true);
-    expect(actions.get("a")?.originalFileName).toBe("fresh.jpg");
+    expect(actions.cachedDetails("a")?.originalFileName).toBe("fresh.jpg");
   });
 
   it("clears the cache on invalidate", async () => {
     const actions = createActions();
-    await actions.load("a");
+    await actions.loadDetails("a");
     actions.invalidate();
-    expect(actions.get("a")).toBeUndefined();
+    expect(actions.cachedDetails("a")).toBeUndefined();
   });
 });
 
 describe("Remote Asset favorite status", () => {
   it("patches cached details and overrides the asset's favorite status", async () => {
     const actions = createActions();
-    await actions.load("a");
+    await actions.loadDetails("a");
 
     actions.reflectFavorite("a", true);
 
-    expect(actions.get("a")?.isFavorite).toBe(true);
+    expect(actions.cachedDetails("a")?.isFavorite).toBe(true);
     expect(actions.isFavorite({ id: "a", isFavorite: false })).toBe(true);
     expect(actions.isFavorite({ id: "other", isFavorite: false })).toBe(false);
   });
@@ -145,12 +141,12 @@ describe("Remote Asset favorite status", () => {
     const request = deferred<AssetDetails | null>();
     const actions = createActions({ getAssetDetails: () => request.promise });
 
-    const loading = actions.load("a");
+    const loading = actions.loadDetails("a");
     actions.reflectFavorite("a", true);
     request.resolve(details("a", { isFavorite: false }));
 
     expect((await loading).details?.isFavorite).toBe(true);
-    expect(actions.get("a")?.isFavorite).toBe(true);
+    expect(actions.cachedDetails("a")?.isFavorite).toBe(true);
   });
 
   it("forgets overrides on invalidate except for assets still being updated", async () => {
@@ -162,7 +158,7 @@ describe("Remote Asset favorite status", () => {
 
     expect(actions.isFavorite({ id: "done", isFavorite: false })).toBe(false);
     expect(actions.isFavorite({ id: "updating", isFavorite: false })).toBe(true);
-    expect((await actions.load("updating")).details?.isFavorite).toBe(true);
+    expect((await actions.loadDetails("updating")).details?.isFavorite).toBe(true);
   });
 });
 
@@ -183,7 +179,7 @@ describe("Remote Asset Download", () => {
   it("uses cached details instead of requesting them again", async () => {
     const getAssetDetails = vi.fn(async (id: string) => details(id));
     const actions = createActions({ getAssetDetails });
-    await actions.load("a");
+    await actions.loadDetails("a");
 
     await actions.download(["a"]);
 

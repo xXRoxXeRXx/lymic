@@ -5,8 +5,6 @@ export interface RemoteAssetActionsOptions {
   readonly chooseDownloadDestination: (originalFileName: string) => Promise<string | null>;
   readonly downloadAsset: (assetId: string, destinationPath: string) => Promise<void>;
   readonly downloadArchive: (assetIds: string[]) => Promise<void>;
-  /** Cached details beyond this count evict the oldest entry. */
-  readonly maxCachedDetails?: number;
 }
 
 export interface RemoteAssetDetailsLoad {
@@ -18,7 +16,8 @@ export interface RemoteAssetDetailsLoad {
 /** `saved` finished, `cancelled` means no destination was chosen, `stale` means the caller's context ended first. */
 export type RemoteAssetDownloadOutcome = "saved" | "cancelled" | "stale";
 
-const defaultMaxCachedDetails = 500;
+/** Cached details beyond this count evict the oldest entry. */
+export const maxCachedDetails = 500;
 
 /**
  * Shares Remote Asset detail retrieval, caching and Download between the Lightbox, timeline selection and Map View.
@@ -33,9 +32,8 @@ export function createRemoteAssetActions(options: RemoteAssetActionsOptions) {
   let favoriteOverrides = $state<Record<string, boolean>>({});
 
   function store(assetId: string, details: AssetDetails | null) {
-    const limit = options.maxCachedDetails ?? defaultMaxCachedDetails;
     cache.delete(assetId);
-    if (cache.size >= limit) cache.delete(cache.keys().next().value!);
+    if (cache.size >= maxCachedDetails) cache.delete(cache.keys().next().value!);
     cache.set(assetId, details);
   }
 
@@ -45,11 +43,11 @@ export function createRemoteAssetActions(options: RemoteAssetActionsOptions) {
   }
 
   /** Cached details; `undefined` when not cached and `null` when the asset is known to have none. */
-  function get(assetId: string) {
+  function cachedDetails(assetId: string) {
     return cache.get(assetId);
   }
 
-  function load(assetId: string): Promise<RemoteAssetDetailsLoad> {
+  function loadDetails(assetId: string): Promise<RemoteAssetDetailsLoad> {
     if (cache.has(assetId)) return Promise.resolve({ details: cache.get(assetId) ?? null, stale: false });
     const existing = inFlight.get(assetId);
     if (existing) return existing;
@@ -100,9 +98,9 @@ export function createRemoteAssetActions(options: RemoteAssetActionsOptions) {
   async function download(assetIds: string[], isCurrent: () => boolean = () => true): Promise<RemoteAssetDownloadOutcome> {
     if (assetIds.length === 1) {
       const assetId = assetIds[0];
-      let loaded = await load(assetId);
+      let loaded = await loadDetails(assetId);
       // An invalidation during the request says nothing about this Download, so ask again.
-      while (loaded.stale && isCurrent()) loaded = await load(assetId);
+      while (loaded.stale && isCurrent()) loaded = await loadDetails(assetId);
       const { details } = loaded;
       if (!isCurrent()) return "stale";
       if (!details?.originalFileName) throw new Error("Original file name is unavailable");
@@ -118,8 +116,8 @@ export function createRemoteAssetActions(options: RemoteAssetActionsOptions) {
 
   return {
     get generation() { return generation; },
-    get,
-    load,
+    cachedDetails,
+    loadDetails,
     isFavorite,
     reflectFavorite,
     invalidate,

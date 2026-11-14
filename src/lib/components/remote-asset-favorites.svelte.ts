@@ -11,6 +11,8 @@ export interface RemoteAssetFavoritesOptions {
   /** True in the Favorites Timeline, where an unfavorited Remote Asset leaves the timeline. */
   readonly removeUnfavorited: boolean;
   readonly errorMessage: string;
+  /** The favorite status to show for an asset, including changes not yet in the timeline data. */
+  readonly isFavorite: (asset: TimelineAsset) => boolean;
   /** Called when a favorite status should be reflected in caches and open views. */
   onReflect?: (assetId: string, isFavorite: boolean) => void;
   /** Called after an asset is removed from the Favorites Timeline. */
@@ -25,8 +27,8 @@ interface FavoritesMode {
   singleFailed(): void;
   /** One asset of a selection update was confirmed by the server. */
   selectionConfirmed(assetId: string, isFavorite: boolean): void;
-  /** Whether reflected favorite changes are kept as overrides for the grid. */
-  recordsOverrides: boolean;
+  /** Whether the grid shows reflected favorite changes before the timeline data catches up. */
+  showsReflectedStatus: boolean;
   navigate(delta: number, current: TimelineAsset): Promise<TimelineAsset | null>;
 }
 
@@ -36,7 +38,6 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
   let navigationGeneration = 0;
   let removedPosition = $state<RemovedLightboxPosition | null>(null);
   let updateError = $state("");
-  let overrides = $state<Record<string, boolean>>({});
 
   function open(assetId: string) {
     removedPosition = null;
@@ -54,7 +55,7 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
   }
 
   function isFavorite(asset: TimelineAsset) {
-    return overrides[asset.id] ?? asset.isFavorite;
+    return mode().showsReflectedStatus ? options.isFavorite(asset) : asset.isFavorite;
   }
 
   function confirmRemoval(assetId: string, isFavorite: boolean) {
@@ -79,7 +80,7 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
     if (!next || navigation !== navigationGeneration || activeAssetId !== current.id) return null;
     removedPosition = null;
     activeAssetId = next.id;
-    return { ...next, isFavorite: isFavorite(next) };
+    return { ...next, isFavorite: options.isFavorite(next) };
   }
 
   async function navigateAround(delta: number, current: TimelineAsset) {
@@ -88,17 +89,16 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
     if (!assets.length) return null;
     const index = assets.findIndex((candidate) => candidate.id === current.id);
     const next = assets[(index + delta + assets.length) % assets.length];
-    return { ...next, isFavorite: isFavorite(next) };
+    return { ...next, isFavorite: options.isFavorite(next) };
   }
 
-  /** Records a favorite status the UI should show before or after the server confirms it. */
+  /** Reports a favorite status the UI should show before or after the server confirms it. */
   function reflect(assetId: string, isFavorite: boolean) {
-    if (mode().recordsOverrides) overrides = { ...overrides, [assetId]: isFavorite };
     options.onReflect?.(assetId, isFavorite);
   }
 
   const favoritesTimelineMode: FavoritesMode = {
-    recordsOverrides: false,
+    showsReflectedStatus: false,
     singleConfirmed: confirmRemoval,
     singleFailed: () => { updateError = options.errorMessage; },
     selectionConfirmed: confirmRemoval,
@@ -107,7 +107,7 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
 
   // The Lightbox reflects single-asset changes itself, so only selections need to.
   const otherTimelineMode: FavoritesMode = {
-    recordsOverrides: true,
+    showsReflectedStatus: true,
     singleConfirmed: () => {},
     singleFailed: () => {},
     selectionConfirmed: reflect,
@@ -118,17 +118,9 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
     return options.removeUnfavorited ? favoritesTimelineMode : otherTimelineMode;
   }
 
-  /** Drops overrides except for assets whose update is still in flight. */
-  function retainOverrides(assetIds: string[]) {
-    overrides = Object.fromEntries(
-      assetIds.filter((assetId) => assetId in overrides).map((assetId) => [assetId, overrides[assetId]]),
-    );
-  }
-
-  /** Forgets Lightbox tracking, overrides and the error. */
+  /** Forgets Lightbox tracking and the error. */
   function reset() {
     close();
-    retainOverrides([]);
     clearError();
   }
 
@@ -172,7 +164,6 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
     clearError,
     isFavorite,
     reflect,
-    retainOverrides,
     reset,
     updateOne,
     updateMany,
