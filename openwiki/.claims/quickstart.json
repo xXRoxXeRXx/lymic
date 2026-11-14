@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:fda909358f74278af02706ce6c51a95be1afeecc241214aa1a0486665ff2a3c8",
+  "pageVersion": "sha256:3c8651fd3563939d1bad82b5ee5d76052f19031062f652419c543651090d7d96",
   "claims": [
     {
       "id": "claim_655ad282a57142a1afaa65a72307e791",
@@ -18,7 +18,7 @@
       "evidence": [
         {
           "resource": "repo://docs/agents/application-map.md",
-          "version": "repo-file-v1:sha256:f6a96a8dd77376833c3ecc4838205536033747ceffc31724dcd32b8047f292d4"
+          "version": "repo-file-v1:sha256:799ea4afab3b846cbaf32cef9eae4139424bf8aec644ebe05f017c08d70e1b24"
         }
       ]
     },
@@ -28,7 +28,7 @@
       "evidence": [
         {
           "resource": "repo://package.json",
-          "version": "repo-file-v1:sha256:264bc31a2e252a0d493dae95bb1734f5919c726875fa640eb2c7e27357b8026a"
+          "version": "repo-file-v1:sha256:7941d3b8c725b48ee68afdd5c97940699ac7816c4cf096894cf56dd78c28053d"
         }
       ]
     },
@@ -37,7 +37,7 @@
       "statement": "On mount, the Svelte root starts sync, watched-folder, update, and preferences lifecycles plus removable-volume subscriptions; it independently hydrates authentication, watched folders, sync, and preferences, and begins sync event subscriptions only after sync hydration. On unmount it destroys the sync, watched-folder, update, and removable-volume controllers and stops the preferences lifecycle.",
       "evidence": [
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L177-L205",
+          "resource": "repo://src/routes/%2Bpage.svelte#L193-L221",
           "version": "repo-lines-v1:sha256:6ccc0c54ec4a67b1a4d4d6ab36a727a3b7e111e915450e408a4ea4891ccfce83:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZjVmYTE1OTFmN2RiOTQ2YjVhMjQ4NmYwY2NjNTY2NmY4MDM5YThlMjJhNDc2NjQ1MDUzYzY3NjNjYmFkZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyMGZjOWU2N2RiMDdlZDIzOWJiM2FkMjMxMmVhYWI5YTcwZTFmNmZiYTAxMjg4YjBiYTZlNjFkN2Y4ZWU3ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxOGZlZThlYTdkNWQ3MzNhNTc1MjA0NzRiMWQ4MTk0NWJiYmQ3OWE5NjRlZWMxZmUzMWRkZmUyM2QyOWU3MDIifQ"
         }
       ]
@@ -85,8 +85,8 @@
           "version": "repo-lines-v1:sha256:4e999cd0587428db30998859bbd7973074c31c1e4b7942151b52e6ff00ecb59f:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGRkZThiOTA0NjMxZTlmYzdhZDA0ODA0ZWVhMzllZmI1N2M5NGMyZjc5NzYxM2M2NTczNDBkZTFhNGY1MTY4YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmNjYWYwNjhmZGFmZTliMWRmNzcxOWYwZTdhYTA0MDBmZmI2YmM4YzVmOTRiYjAwYTg1ZjBmYzA0ZDQwM2RhYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDA0Y2QwYWRhOWM5N2E1OWVjNzc4YTljODVjYjBhNmU0YjNjNjY1OTllM2RkOTcxN2NmNDQxYTgzZTRmNjc2ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODNlYTNhNmRhMGE1YjUzYjc0YzQ3NTMyZGVjOTAzMTdhYzY5ZTBjNDVjZTM0MTkwOTYxYjY3MmNhMTlkNzU5ZSJ9"
         },
         {
-          "resource": "repo://docs/agents/application-map.md#L75-L89",
-          "version": "repo-lines-v1:sha256:b362efa513f63c614ce221df36f52142325974b82a7f100a93071fd2195ea2da:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2NjVkNmU0NmIyZDFmZWY0YWJhMzBmMWFhODdlZWE0ZTgzM2Q3NDU1OThiMTk3ZTAyYWJlNjhlNzE5MzZiOWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhYTE5ZjFiYTc0MDQ0M2Q3MDNlOTczYzE4N2RmZjc3ZmRiODc4M2VlZTg1MzFkM2I4N2NkMGQ2NzY2NDc3YTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhlYWVlYjA0YmI3Y2U4ZjhlN2M5N2FiNWZiZDYyMjRkZWJmNGU3MjUwYWVhNmNlMjA4Y2RhZDNmZDM2NTdiZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxZWY2MmFjNWFiYTAxZDIzZjA0Yzk1YWY4YmYxZjQ2ZmZhNmZiMjViYzczODZjMDE0MDEyNTRiZWI0MDE3ODIifQ"
+          "resource": "repo://docs/agents/application-map.md#L75-L91",
+          "version": "repo-lines-v1:sha256:c5471a01c931a9e150c1122539845b53afd2499aa67a4f4dddde1b80b2e107c3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2NjVkNmU0NmIyZDFmZWY0YWJhMzBmMWFhODdlZWE0ZTgzM2Q3NDU1OThiMTk3ZTAyYWJlNjhlNzE5MzZiOWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhYTE5ZjFiYTc0MDQ0M2Q3MDNlOTczYzE4N2RmZjc3ZmRiODc4M2VlZTg1MzFkM2I4N2NkMGQ2NzY2NDc3YTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhlYWVlYjA0YmI3Y2U4ZjhlN2M5N2FiNWZiZDYyMjRkZWJmNGU3MjUwYWVhNmNlMjA4Y2RhZDNmZDM2NTdiZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxZWY2MmFjNWFiYTAxZDIzZjA0Yzk1YWY4YmYxZjQ2ZmZhNmZiMjViYzczODZjMDE0MDEyNTRiZWI0MDE3ODIifQ"
         }
       ]
     },
@@ -95,12 +95,12 @@
       "statement": "The Svelte root selects the login interface when authentication is absent and otherwise presents dashboard, activity-log, settings, and information views; unmount cleanup destroys the sync, update, and removable-volume controllers and stops the preferences lifecycle.",
       "evidence": [
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L177-L205",
+          "resource": "repo://src/routes/%2Bpage.svelte#L193-L221",
           "version": "repo-lines-v1:sha256:6ccc0c54ec4a67b1a4d4d6ab36a727a3b7e111e915450e408a4ea4891ccfce83:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZjVmYTE1OTFmN2RiOTQ2YjVhMjQ4NmYwY2NjNTY2NmY4MDM5YThlMjJhNDc2NjQ1MDUzYzY3NjNjYmFkZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyMGZjOWU2N2RiMDdlZDIzOWJiM2FkMjMxMmVhYWI5YTcwZTFmNmZiYTAxMjg4YjBiYTZlNjFkN2Y4ZWU3ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxOGZlZThlYTdkNWQ3MzNhNTc1MjA0NzRiMWQ4MTk0NWJiYmQ3OWE5NjRlZWMxZmUzMWRkZmUyM2QyOWU3MDIifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L208-L328",
-          "version": "repo-lines-v1:sha256:8be2036f32fd9eaddf6643cc5a9cc101a3babef3ba1d64915488cea6c9c9652f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmNWMxZWI4MjRkMmY4NGY3YzdmYjQ0MjBkNzE0ZDU3NzVhZmNlZDI4ZDBjNmE4N2VkMTFhYjc0N2VkZWRiYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI2M2Y3ZDUwZjNjM2E4YzNkMjM0YjhkYWU0YWI3OThjYTQ2ODViYWNkMzhiNGQ0ZTE4MzMwODcwZGRkODgxNGI1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5OWI4MDk4NTQwYjc3MGVlOTYxZWRlN2QxYTk3ZDYwM2JhMjA4NGU1NTk2YTI0YzQyNzc3OTAwNWJkM2FlMzk5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI3Zjk4ZjBiOGZmNjQzOTViM2U0ODI4OGZiN2QxNDYxYWNlOTYxZGE2Zjk0YjljNzFlODgzOTY0YTQ4ZTg3ZTM5In0"
+          "resource": "repo://src/routes/%2Bpage.svelte#L224-L348",
+          "version": "repo-lines-v1:sha256:f1a1d1bbc5a618e66a9199c5de6ab95857c8b56d785145cb76d9a26ba9bfb8c4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmNWMxZWI4MjRkMmY4NGY3YzdmYjQ0MjBkNzE0ZDU3NzVhZmNlZDI4ZDBjNmE4N2VkMTFhYjc0N2VkZWRiYTY0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI2M2Y3ZDUwZjNjM2E4YzNkMjM0YjhkYWU0YWI3OThjYTQ2ODViYWNkMzhiNGQ0ZTE4MzMwODcwZGRkODgxNGI1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5OWI4MDk4NTQwYjc3MGVlOTYxZWRlN2QxYTk3ZDYwM2JhMjA4NGU1NTk2YTI0YzQyNzc3OTAwNWJkM2FlMzk5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI3Zjk4ZjBiOGZmNjQzOTViM2U0ODI4OGZiN2QxNDYxYWNlOTYxZGE2Zjk0YjljNzFlODgzOTY0YTQ4ZTg3ZTM5In0"
         }
       ]
     },
@@ -123,7 +123,7 @@
       "statement": "The repository's standard verification includes frontend type checking and tests plus Cargo formatting, Clippy with warnings denied, and locked Rust tests; `npm run tauri dev` is the end-to-end desktop smoke-test command.",
       "evidence": [
         {
-          "resource": "repo://docs/agents/application-map.md#L103-L115",
+          "resource": "repo://docs/agents/application-map.md#L105-L117",
           "version": "repo-lines-v1:sha256:939518c3b6306c0c4e28d82fd539cb7fc84c1a21fe6f3130663acae8744f2374:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2N2EwODQ3MjUyZTNkMWNiYTkxYzU4MzIwNGQxYzk5MWQwZDYyYzM3OGIxMDYyOGQzNTRkYWEzMmY5OWYxMzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhMTc4NDdkYjMyYTM2ZGE0ZTU2YmQwOGIwNDkzYzdjNDM0ZmQ2ZjQ4OGQyN2IwZjM2M2I1NDNjNzZhZTVjMjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1NWNlM2Y1YzhiNWI3YjQ2ZmJjMWVjNzkwNzljZGMwYjZmZWM1NTRmYjIxNjVmODA2YWUzYzg1N2IxNDU2OTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjNGI3YWM5MWI1ODIyYjU5MTA4Y2ZjZmZkMmI5NzkwYzA5NjAwYTZlZDQxMDY3MjM4ZjQ5ZDNlNmExNWM5MmEifQ"
         },
         {
@@ -147,7 +147,7 @@
       "statement": "The repository handoff gates run frontend static checks and Vitest plus Rust formatting, warning-denying Clippy, and locked Cargo tests; `npm run tauri dev` is the end-to-end desktop smoke-test command, particularly for high-risk behavior such as migrations, recovery, credential handling, queue retry, duplicate handling, and target-album failures.",
       "evidence": [
         {
-          "resource": "repo://docs/agents/application-map.md#L103-L115",
+          "resource": "repo://docs/agents/application-map.md#L105-L117",
           "version": "repo-lines-v1:sha256:939518c3b6306c0c4e28d82fd539cb7fc84c1a21fe6f3130663acae8744f2374:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2N2EwODQ3MjUyZTNkMWNiYTkxYzU4MzIwNGQxYzk5MWQwZDYyYzM3OGIxMDYyOGQzNTRkYWEzMmY5OWYxMzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhMTc4NDdkYjMyYTM2ZGE0ZTU2YmQwOGIwNDkzYzdjNDM0ZmQ2ZjQ4OGQyN2IwZjM2M2I1NDNjNzZhZTVjMjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1NWNlM2Y1YzhiNWI3YjQ2ZmJjMWVjNzkwNzljZGMwYjZmZWM1NTRmYjIxNjVmODA2YWUzYzg1N2IxNDU2OTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjNGI3YWM5MWI1ODIyYjU5MTA4Y2ZjZmZkMmI5NzkwYzA5NjAwYTZlZDQxMDY3MjM4ZjQ5ZDNlNmExNWM5MmEifQ"
         }
       ]
@@ -157,28 +157,28 @@
       "statement": "The Rust runtime composition root registers custom asset and thumbnail protocols, desktop plugins and Tauri commands; during setup it initializes startup state, starts background work, configures the tray, and queues window display unless the app was autostarted with stored credentials. It records event-loop readiness and flushes an audit shutdown event on exit.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L19-L158",
-          "version": "repo-lines-v1:sha256:176e937be2f47832fcd99949e1fa9f6b982ede45b4d74be4564c62dea10b37c6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI4ZDAwNmVjYzg0YTQyM2VmYjVhNmRjNTBhOTE4OGM3MWEwNDM3MWIwZGJmYWJhNWQxZDA4YmM3YTg4MDFkOWE1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI1OWMxMzU5MDY2NTYzMjNkMWM1ZWE0MTY1NGVlNjZhZmI1ODVhY2RjZmFlYWNhMTIxZDVlMzBiZjE5M2VlZGQ3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyY2EyMzg1ZjZmOTUzZTdkMzIwMWI0YTkzYWEzYzMzYmM1Y2Q4MWE5MWYzODQ4MDczZTYzOWUwN2MwM2FmNTBhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNTIxNjA0YjM1ZmM0MGFmMDBjYmE0ZWVhMmZkNWUyYzNhZjE4NjNiMzkxMTg1ZDdiZjRiYjA5ZTcyZDBjOGIzIn0"
+          "resource": "repo://src-tauri/src/app/mod.rs#L19-L164",
+          "version": "repo-lines-v1:sha256:ced1d67ac143d166bf6a7d6c66e00ad28ff9f3071752616070d205e9562cd737:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQ2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI4ZDAwNmVjYzg0YTQyM2VmYjVhNmRjNTBhOTE4OGM3MWEwNDM3MWIwZGJmYWJhNWQxZDA4YmM3YTg4MDFkOWE1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI1OWMxMzU5MDY2NTYzMjNkMWM1ZWE0MTY1NGVlNjZhZmI1ODVhY2RjZmFlYWNhMTIxZDVlMzBiZjE5M2VlZGQ3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyY2EyMzg1ZjZmOTUzZTdkMzIwMWI0YTkzYWEzYzMzYmM1Y2Q4MWE5MWYzODQ4MDczZTYzOWUwN2MwM2FmNTBhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNTIxNjA0YjM1ZmM0MGFmMDBjYmE0ZWVhMmZkNWUyYzNhZjE4NjNiMzkxMTg1ZDdiZjRiYjA5ZTcyZDBjOGIzIn0"
         }
       ]
     },
     {
       "id": "claim_91619bb75db448539938e77264f8a862",
-      "statement": "The authenticated Svelte root exposes photos, albums, people, dashboard, activity-log, settings, and information navigation; opening a person or album creates and refreshes a dedicated timeline controller, and returning clears that controller while restoring the originating view.",
+      "statement": "The authenticated Svelte root exposes photos, map, albums, people, dashboard, activity-log, settings, and information navigation; opening a person or album creates and refreshes a dedicated timeline controller, and returning clears that controller while restoring the originating view and its scroll position.",
       "evidence": [
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L251-L328",
-          "version": "repo-lines-v1:sha256:c81deb196b115548eef6f0e558e3652dd0afac6e3ef5c0be0b5c6f1775174370:eyJzZWxlY3RlZExpbmVDb3VudCI6NzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5M2U0MmQxM2E4NTQ5OTI5MmVkMzZhNjY0NjZhOWYxZDA5YmE0ZTU5ZTExZGVjOGMxODJiM2QzNTJjNzYxZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzZjdkNTBmM2MzYThjM2QyMzRiOGRhZTRhYjc5OGNhNDY4NWJhY2QzOGI0ZDRlMTgzMzA4NzBkZGQ4ODE0YjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU3OGU2ODExNjFkNTg0YjcyYmQ4ODU1NmIwNWYyODc3NDNjNDY4NmUyN2I0ZWIxMWFmMTA1MTA1NjJiOTgxODQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdmOThmMGI4ZmY2NDM5NWIzZTQ4Mjg4ZmI3ZDE0NjFhY2U5NjFkYTZmOTRiOWM3MWU4ODM5NjRhNDhlODdlMzkifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L267-L347",
+          "version": "repo-lines-v1:sha256:1dbde9552e05338b383a029ad3281ea0c343d509c8db169099959fd0ab557710:eyJzZWxlY3RlZExpbmVDb3VudCI6ODEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5M2U0MmQxM2E4NTQ5OTI5MmVkMzZhNjY0NjZhOWYxZDA5YmE0ZTU5ZTExZGVjOGMxODJiM2QzNTJjNzYxZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzNzNhZGIxZjE2MDUzNGM2NDQ4NWUxMDFkNmU0NTNhNjE1OGM2ZTcxYmEyMWEyZjM2ZWI5YzUwODQ3NWNiYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU3OGU2ODExNjFkNTg0YjcyYmQ4ODU1NmIwNWYyODc3NDNjNDY4NmUyN2I0ZWIxMWFmMTA1MTA1NjJiOTgxODQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlmOWYwNjgwNzQ3M2E4MzA3MzYyZGQ4ZWM2NWUxZjVjNWIxMGRlMjE0NzBmODhhZWQ5MDFlYzUyM2RjZjk1NmMifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L72-L134",
-          "version": "repo-lines-v1:sha256:b39a7b7d79968389dbcb324a17a3bc3f42ffa730a4a0fea574ea31259b937c92:eyJzZWxlY3RlZExpbmVDb3VudCI6NjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1NzEwYzBkMzJmZWExMjU2NTQ1NWQxY2RhNzIxN2M4MGFkNTU4NzFhZGMyNDRhNDM4YmMyNjUxOGJlYjlmN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhmN2QyMGEwODAxNjc5ZWMyM2U3MTk0ZGU3OTczODBjYzUyODdmMWVhNGY1NjIyNzI1Njc2Y2ZmZmE0Yzc4ODIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUyNTIyOWJmYmZhZjA0ZTBhZTFjZjg0OWE3MTkwNzY1ZmVlNjkzYmUwMzUyN2IwNjgzYmE4ZGZiYzY2NmI4MjgifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L76-L145",
+          "version": "repo-lines-v1:sha256:e6b7a48e754aaa233b397ff430bc2722d3200c5b7853f1b4f5f64354c01fad0f:eyJzZWxlY3RlZExpbmVDb3VudCI6NzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1NzEwYzBkMzJmZWExMjU2NTQ1NWQxY2RhNzIxN2M4MGFkNTU4NzFhZGMyNDRhNDM4YmMyNjUxOGJlYjlmN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4MmQyOGJiNDZiOTE5NzhiZjkxMWVmM2M1NWViYmQ2MmIxN2QwOWMwZTA3ZWEyYjU0MGU0NDc0NTMxMzU0YjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhmN2QyMGEwODAxNjc5ZWMyM2U3MTk0ZGU3OTczODBjYzUyODdmMWVhNGY1NjIyNzI1Njc2Y2ZmZmE0Yzc4ODIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY4ZDNmNTM1ZmI2OTM0MDJhZjY4N2MzODFlNGY5ZTc3MGRmYzJhNjQyMTA5Y2FmMjRiMjc3YTQ3OWMwYTBjODcifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-11-09T18:02:27.157Z"
+    "at": "2026-11-13T15:48:39.594Z"
   }
 }

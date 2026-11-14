@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:a64f8e1bce458e46f0a1bbd110550c29f8bbe6e9576992887a21592b385add9a",
+  "pageVersion": "sha256:b812499c1dd5161ec66bd7ccb15f20248179e6e267cf8218dc374626cd72667b",
   "claims": [
     {
       "id": "claim_addffc2e2a704657a6384177bd1284dc",
@@ -134,22 +134,22 @@
     },
     {
       "id": "claim_f0991e345fdd49b9a542047e19378911",
-      "statement": "Folder scans recursively collect supported non-hidden media while excluding Synology metadata directories and configured exclusion patterns, retain entry-level failures, deduplicate files across overlapping roots, and suppress a complete live-photo upload unit if either component is excluded.",
+      "statement": "Folder scans recursively collect supported, non-hidden media while skipping Synology metadata directories, retaining entry-level failures, avoiding duplicate paths across overlapping roots, and then applying configured exclusion patterns as a post-scan admission step using the most-specific containing root. Admission evaluates a complete live-photo upload unit, so exclusion of either component suppresses the unit.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/media/admission.rs",
-          "version": "repo-file-v1:sha256:ebc9aba32048a4bc50f7c2bfb97e39371d051e46dd3686665f8717f87d7060ed"
+          "resource": "repo://src-tauri/src/media/admission.rs#L68-L131",
+          "version": "repo-lines-v1:sha256:9b2e94e193f869cbc1ceadba7ca8666d2b16a4a991a5bae9276cbebc44cb1cf6:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVmZGNjMjc0ZDlmM2FmNDgzYmFlM2JkNmMxZDU1NDgxYTdiM2EyN2FjZWY4MjMzNDBkNzY0MDZiOTU2NjI2ZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxYTAxZGEzYjY3NzFiMjQwNDU2MTNhMmVmNjM5MTQzYjA4NjIwNjlmNzNjZmVlNWYzNGY4OTZhZTg0MjVjZWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVlZjhiNTYzNzcwMjlmN2Y1MTIxZTdmYmI0OTRiZGYzZDc1ZGExZDFjZGU5YjYxMWVmZDcxOTFhYjc3MTgzOTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiOTY2MTBjNWU4OTdlYWE0MGNhYmExYzQ0Yzk5MmE5ZDUzYTQ4M2YxOTA0YzJhYTE1ZTRmNzlkZDE1NzNkMGMifQ"
         },
         {
           "resource": "repo://src-tauri/src/media/events.rs#L8-L59",
           "version": "repo-lines-v1:sha256:dcda90a3fcd7d7b3c84506deee8e234b079d61eac7fa8c242564013a79ca176e:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyZTkxMjJlNDQzZjg5NzRmNjBiYjIwNjY0OGNjNGM3YzMyMDMxOWJkMDZlNDMyMjM4MWJhZDdkNmQ5ODYxMjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4OTc3MWZlMWI2NjI4ODc1YWEyM2U3ZGJlNGFhNzE0NjFkMDBjZGZiNjZkZGYxMWI5ZDgyMGFjNTg5N2ZkZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ4N2Y1YmM0ODczNGY4YzJmYjc2N2ZlNjQyMDA3MDc2MGQ4NzY2Y2FhOGVjZjc5Mzc2ZDNmMGI5MjkxNGY1NzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxZmM2NmU5MGVkNzkwYzAxMDNiNzc0NTVjYmM5YmM5ODk4NTdmN2VlMDk1OTNkOWVjMzE2YmQ0MDM2Y2JhMjYifQ"
         },
         {
-          "resource": "repo://src-tauri/src/media/scanner.rs#L122-L179",
-          "version": "repo-lines-v1:sha256:b7e70df866995a30aa91f6c9e9977b95251e2180a8d39caff03f8314db951d6e:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2MGZkYTQwNDA1ZDVjYWU4ZGJhMGRhYWI3MmM1ZjJmZGVlNGRkNmVhZmE1NmRhZDc4MjVjYjZhMzQwYWJkZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4M2MwZjg5NWZkZGM3NmJiMDU0N2NhMjQ3MjdmMTdjNDM3ODAwM2MwMDk4YTY0MTI5ZWQ4MzlmYmQyZjk1NzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFlNTU2MzQ4ZjVmZmQ3YzA2ZWIzM2Q4MTViYzY1ZjJjYTI1ZTI0YmIzZWZjZWNlOGRlZmVkMDYwYjE1MmM3MmYifQ"
+          "resource": "repo://src-tauri/src/media/scanner.rs#L120-L173",
+          "version": "repo-lines-v1:sha256:e5cc7e85fa32a548b3260e0435f8f10849cf8fbc653463df4016cc9783adcbc1:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2MGZkYTQwNDA1ZDVjYWU4ZGJhMGRhYWI3MmM1ZjJmZGVlNGRkNmVhZmE1NmRhZDc4MjVjYjZhMzQwYWJkZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlY2UxMWZmY2E4ZmJlZmViODgwZjI2MmI2MTJlZWM0Yjg5MTc5NGZkMWU4YTY2NjY2MDgxYjQyYWZhYmM2N2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4M2MwZjg5NWZkZGM3NmJiMDU0N2NhMjQ3MjdmMTdjNDM3ODAwM2MwMDk4YTY0MTI5ZWQ4MzlmYmQyZjk1NzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjE2MDRiMzVmYzQwYWYwMGNiYTRlZWEyZmQ1ZTJjM2FmMTg2M2IzOTExODVkN2JmNGJiMDllNzJkMGM4YjMifQ"
         },
         {
-          "resource": "repo://src-tauri/src/media/scanner.rs#L203-L230",
+          "resource": "repo://src-tauri/src/media/scanner.rs#L198-L225",
           "version": "repo-lines-v1:sha256:0adce7a26aa12d894b0446e4d6a85a7351edc3e3ac68bbaba35be4bab5ffce47:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmZjBiZTM1MGQyMWNhZDQ4MTVmMjY0MTg1YTNlMjRhYTY2N2IzNWI0ZWEwMTA4ZTY4MWVlZGUwNDZkMTdiNTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1OTdhNjAzM2M5NDFiNzFmYzgzMzBhNTEwZDI2MTdmNzM0OTM1NDUxOGRhZGY1YjBiNWI5YWM3YjA5ZDQ4NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUyYzAyODRiZWMzOTczNzkxM2Q2MjVkMTk5MTRkOWJkMDE3MDQ4NzY5YmI1NmRhZDgwOGZlNGEzYmEwMjNhYmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwNWZkODU1MjRjMjhhNWFiYTczOTJkMWFmOGU4YzdjNGVmM2U3ZDk4ZWI0NjBiN2ZlMGI1OTIwMzE4ODJkOGMifQ"
         }
       ]
@@ -225,6 +225,6 @@
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-11-06T15:30:15.009Z"
+    "at": "2026-11-13T15:48:39.594Z"
   }
 }

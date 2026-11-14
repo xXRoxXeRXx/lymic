@@ -1,7 +1,7 @@
 ---
 type: integration
-title: Frontend UI and IPC Boundary
-description: How the Svelte composition root, stateful controllers, typed desktop adapter, Tauri commands, and native events coordinate desktop behavior. Covers navigation, hydration and cleanup, snapshot reconciliation, and the safe procedure for evolving both sides of IPC.
+title: Frontend UI and Desktop IPC
+description: The Svelte composition root delegates interaction state to controllers and reaches the native application through a typed Tauri adapter. This page describes view ownership, command and event contracts, lifecycle cleanup, error reconciliation, and the tests that keep TypeScript and Rust aligned.
 tags: [frontend, svelte, tauri, ipc]
 sources:
   - id: openwiki-source-11d0a4fc3a0d3b69fb50a64d
@@ -28,113 +28,119 @@ sources:
     resource: repo://src/lib/tauri/sync-event-subscription.ts
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
-generated: { by: "openwiki/0.7.2", at: "2026-11-09T18:02:27.157Z" }
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-11-13T15:48:39.594Z
+generated: { by: "openwiki/0.7.2", at: "2026-11-13T15:48:39.594Z" }
 ---
 
-# Frontend UI and IPC Boundary
+# Frontend UI and Desktop IPC
 
-The webview is a client of desktop state rather than the owner of persisted credentials, folders, or synchronization work. The root Svelte route composes controllers around presentational components. Controllers own interaction and display state, use a typed adapter for request/response operations, and reconcile meaningful state with backend snapshots and native events.
+The webview renders desktop state; it does not persist credentials, watched folders, or synchronization work. `src/routes/+page.svelte` composes stateful Svelte controllers around presentational views. Controllers own user interaction and display state, invoke narrow adapter capabilities, and reconcile that state with backend snapshots and native events.
 
-## Composition and ownership
+## Composition root and view ownership
 
-`src/routes/+page.svelte` creates the production `tauriDesktopAdapter`, then composes feedback, auth, sync, watched-folder, removable-volume, preferences, update, target-album, timeline, people, and album-catalogue controllers. Components receive state and intent callbacks rather than invoking Tauri directly.
+The route creates the production `tauriDesktopAdapter`, feedback, auth, sync, watched-folder, removable-volume, preference, update, target-album catalogue, timeline, map, people, and album controllers. It owns route-local `currentView`, selected album/person state, and the scroll positions used when returning from scoped timelines.
 
-- Watched folders own picking, pending album selection, mutations, and the list used by `sync.canStartSync`. A removable-volume acceptance dismisses its prompt only after the backend mutation succeeds; a folder removal refreshes sync failures.
-- Sync owns progress, failed work, logs, and native sync subscriptions. Its settlement callback refreshes both watched folders and the main timeline.
-- Authentication refreshes the main timeline, failed work, and folders after login. Logout clears shared catalogue, prompt, feedback, sync, folder, timeline, people, and album state before returning to Photos.
-- Selecting a person or album creates a scoped timeline controller and refreshes it. Returning clears that controller and restores the prior People or Albums scroll position. Preferences can append a database-recovery notice to the sync log, and updates receive `sync.isActive` to prevent installation while sync is running or paused.
+Authentication selects the outer shell: an unauthenticated user receives `LoginView`; an authenticated user receives a sidebar and the selected Photos, Map, People, Albums, person timeline, album timeline, Dashboard, Logs, Settings, or Info pane. The route passes controller state and intent callbacks to these views. Where a view needs an operation such as opening a URL, loading asset details, or downloading an asset, the route passes the relevant adapter function explicitly rather than having the view construct a Tauri client.
 
-Authentication selects the outer UI: unauthenticated users see `LoginView`; authenticated users see the sidebar shell. Route-local `currentView` selects Photos, People, Albums, their scoped timelines, Dashboard, Logs, Settings, or Info. The route owns selection and controller wiring; views render the supplied state and forward user intent.
+| Owner | State and coordination responsibility |
+| --- | --- |
+| Auth controller | Login form values, authentication status, user identity, validation, and login errors. |
+| Sync controller | Dashboard state, progress, transfer metrics, failed entries, activity logs, and sync-event lifecycle. |
+| Watched-folders controller | Folder list, native-picker flow, target-album dialog state, removal confirmation, and removable-folder acceptance. |
+| Timeline, map, people, and album controllers | Catalogues and paged/scoped media data; the route creates scoped album/person timelines on selection. |
+| Preferences and update controllers | Local UI preferences, desktop settings, release/update state, and installation progress. |
+| Removable-volume controller | Volume prompt queue and native volume-event subscriptions. |
 
-| Owner | Frontend state and interaction | Desktop boundary |
-| --- | --- | --- |
-| Auth controller | credentials form, authentication, current user, and login errors | auth commands and confirmation dialog |
-| Sync controller | dashboard status, failed work, progress, transfer metrics, activity log, and event cleanup | sync commands and sync events |
-| Watched-folders controller | folders, native picker, pending target-album modal, removal confirmation, and removable-folder acceptance | folder commands and dialog plugin |
-| Timeline, people, and album controllers | paged people, album catalogue, time buckets, assets, and scoped album or person timelines | timeline, people, and album commands; opener plugin is passed to views |
-| Preferences controller | theme, locale, autostart, parallelism, and saving state | local storage, autostart plugin, and settings commands |
-| Update controller | channel, version, update dialog, and install progress | updater/process plugins and startup probes |
-| Removable-volume controller | volume prompts and volume-event subscriptions | volume events and notification plugin |
+Selecting a person or album saves the catalogue pane's scroll position, creates the corresponding scoped timeline with that entity ID, changes the view, and refreshes it. Returning clears the scoped controller and restores the saved scroll position in a microtask. Opening Map marks it as created and refreshes it; it remains mounted and receives an `active` flag thereafter.
 
-## Typed adapter and change surface
+### Cross-controller dependencies
 
-`DesktopAdapter` combines narrower capability interfaces for auth, sync, watched folders, albums and album catalogues, timelines, people, preferences, updates, and removable volumes. Controllers depend on their narrow capability interface; `tauriDesktopAdapter` satisfies the complete contract. It maps application operations to `invoke` command strings and camel-case argument objects such as `targetAlbumId`, `confirmCancellation`, `timeBucket`, and `uploadParallelism`. It also encapsulates dialogs, autostart, updater and process operations, opener, notifications, and event listeners behind the same controller-facing boundary.
+The route deliberately composes callbacks instead of coupling controllers to one another:
 
-The Rust app registers the application commands in its `invoke_handler`. A Rust source-level test enumerates every application command used by the adapter and checks that its quoted command name occurs in the adapter and that the handler is registered. The frontend adapter test, by contrast, mocks Tauri APIs and pins the complete command/payload mapping plus plugin delegation. Together these tests protect command-registration coverage and TypeScript-side argument casing; they do not validate Rust deserialization or serialized result shapes. Treat a command change as a coordinated API change:
+- `sync.canStartSync` reads whether watched folders exist. On terminal sync reconciliation, the route refreshes watched folders and the main timeline.
+- A folder removal refreshes failed sync entries. A successful removable-folder mutation calls the removable-volume controller to dismiss the matching prompt.
+- Login clears map state, selects Photos, and refreshes the main timeline, failures, and folders. Logout clears catalogues, prompts, feedback, sync/folder/media state, scoped timelines, and returns to Photos.
+- Preferences can append a recovery notice to the sync log. The update controller receives `sync.isActive`, preventing update installation while sync is syncing or paused.
 
-1. Change the capability interface, adapter invocation, TypeScript contract, and camel-case arguments together.
-2. Change and register the Rust command, then validate service-level authorization, persistence, and error semantics.
-3. Update the owning controller and its fake-adapter tests; update component tests only for callback wiring or presentation.
-4. Preserve result shapes where possible. If a shape changes, update Rust serialization, `contracts.ts`, controller reconciliation, and affected tests in the same change.
+## The typed desktop boundary
 
-## Lifecycle, hydration, and disposal
+`DesktopAdapter` is the complete controller-facing contract. It is an intersection of capability interfaces for authentication, sync, watched folders, albums and assignment, catalogue and timelines, map and people, preferences, updates, and removable volumes. Controllers type against the smallest relevant interface, which makes fake adapters practical in controller tests.
 
-On mount, the route starts sync, watched-folder, update, and preferences lifecycles, and begins removable-volume subscriptions. It independently hydrates authentication, watched folders, sync status, and preferences. Sync event subscriptions begin only after `sync.hydrate()` resolves. Update startup concurrently discovers the release channel/checks for an update and loads the app version.
+`tauriDesktopAdapter` maps application operations to `invoke` with the Rust command name and camel-case payload keys—for example `targetAlbumId`, `confirmCancellation`, `timeBucket`, and `uploadParallelism`. It also hides Tauri plugins behind the same boundary: dialog open/save/confirm, autostart, updater, process relaunch, external opener, notifications, and native event listeners. `checkForUpdate` stores the updater result in module-local `pendingUpdate`; `downloadAndInstallUpdate` rejects if no prior check found an update.
 
-Unmount destroys sync, watched-folder, update, preferences, and removable-volume lifecycles. The sync controller clears its progress-reset timer and invokes its subscription disposer. Subscription registration is asynchronous: the helper immediately calls an unlisten function that resolves after disposal or after its supplied `isActive` predicate becomes false. Controllers also use mounted or generation checks to avoid applying late command results to disposed state.
+The Rust builder registers application commands in its `invoke_handler`, including the adapter's sync, folder, auth, album, media, map, people, locale, startup-probe, recovery-notice, and release-channel commands. Plugin operations are intentionally not Rust command registrations.
 
-## Synchronization feedback path
+### Safe command changes
 
-The sync controller hydrates a backend `SyncSnapshot` through `getSyncStatus`; `RUNNING`, `PAUSED`, and `FAILED` map to the display states `syncing`, `paused`, and `error`, while an idle snapshot with failures is also an error. Pause and resume apply the snapshots returned by their commands. Manual start is guarded against active sync, a pending action, and no hydrated watched folders; it first provides provisional syncing state, then reconciles the returned `SyncSummary`. On `sync-idle`, the controller refreshes persisted failed entries and calls its settle callback; the route uses that callback to refresh watched folders and the main timeline before the controller selects `idle` or `error`.
+Treat a command as one API spanning TypeScript and Rust:
 
-`subscribeToSyncEvents` is the sole sync-event registration helper. It listens for `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `log-message`, and `sync-idle`. Progress and transfer events update display fields, snapshot events restore authoritative state, errors set the error state, and idle invokes terminal reconciliation. There is no `trigger-sync` subscription in the current event contract.
+1. Change the relevant narrow adapter interface, implementation, and `contracts.ts` result/request type together.
+2. Add or change the Rust command and its `invoke_handler` registration; preserve Rust serialization names expected by the camel-case frontend payload.
+3. Update the controller's reconciliation and error behavior, then its fake-adapter tests.
+4. Update the adapter mapping test and the Rust registration list. Test authorization, persistence, and service behavior separately from registration coverage.
+
+The adapter test mocks Tauri APIs and asserts the complete application-command sequence, argument casing, and plugin delegation. The Rust source-level test enumerates application command strings and asserts that each occurs in both `desktop-adapter.ts` and the Rust handler. Together they catch mapping and registration drift, but neither proves Rust deserialization nor serialized result-shape compatibility.
+
+## Startup, disposal, and stale-result protection
+
+On mount, the route starts sync, watched-folder, update, and preference lifecycles and begins removable-volume subscriptions. It hydrates auth, folders, sync, and preferences independently. Sync listeners start only after `sync.hydrate()` resolves; update startup runs its own probes. Unmount destroys sync, watched-folder, update, and removable-volume controllers and stops the preference lifecycle.
+
+The sync controller holds a `mounted` guard, clears its progress-reset timer, and calls the event disposer on destruction. The subscription helper accommodates asynchronous `listen` registration: if disposal or the supplied active predicate occurs before `listen` resolves, it immediately calls the late unlistener; otherwise it retains the unlistener for disposal. Watched-folder refreshes additionally use a generation counter, so a response begun before `clear()` cannot repopulate logged-out state.
+
+## Sync command and event reconciliation
+
+A hydrated `SyncSnapshot` is authoritative for display state: `RUNNING`, `PAUSED`, and `FAILED` map to `syncing`, `paused`, and `error`; an otherwise idle snapshot with failures is also an error. A start is ignored while active, while a pause/resume action is pending, or when no watched folder exists. It initially displays provisional sync state, then reconciles the `SyncSummary` returned by `start_sync` or `retry_failed_syncs`. Pause and resume apply their returned snapshots.
+
+`subscribeToSyncEvents` is the one sync-listener registration point. It listens for `sync-progress`, `sync-progress-percent`, `sync-started`, `sync-transfer-stats`, `sync-progress-snapshot`, `sync-paused`, `sync-resumed`, `sync-error`, `log-message`, and `sync-idle`. Progress and snapshot events update displayed work; errors set error state and report a nonempty reason; `sync-idle` invokes terminal reconciliation. There is no `trigger-sync` listener.
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant View as Dashboard view
-    participant Sync as Sync controller
-    participant Adapter as Desktop adapter
-    participant Command as Tauri command
-    participant Service as Synchronization service
-    participant Events as Tauri events
-    User->>View: select sync action
-    View->>Sync: onSyncAction
+    participant Dash as DashboardView
+    participant Sync as SyncController
+    participant Adapter as DesktopAdapter
+    participant Cmd as start_sync command
+    participant Service as Synchronization
+    participant EventBus as Tauri events
+    User->>Dash: request sync
+    Dash->>Sync: onSyncAction
     Sync->>Sync: set provisional syncing state
     Sync->>Adapter: startSync
-    Adapter->>Command: invoke start_sync
-    Command->>Service: start
-    Service-->>Events: emit progress or snapshot
-    Events-->>Sync: subscribed payload
-    Sync->>Sync: update derived display state
-    Service-->>Command: summary or error
-    Command-->>Adapter: command result
+    Adapter->>Cmd: invoke start_sync
+    Cmd->>Service: start
+    Service-->>EventBus: emit progress or snapshot
+    EventBus-->>Sync: subscribed event payload
+    Sync->>Sync: update display state
+    Service-->>Cmd: SyncSummary or error
+    Cmd-->>Adapter: command result
     Adapter-->>Sync: summary or rejection
     Sync->>Adapter: getFailedSyncs
-    Sync->>Sync: call onSyncSettled
-    Sync-->>View: reconciled state
+    Sync->>Sync: refresh folders and timeline
+    Sync-->>Dash: reconciled state
 ```
 
-*Manual synchronization combines the command result with asynchronous events and a terminal backend refresh.*
+*The UI combines the `start_sync` result with asynchronous Tauri events, then refreshes persisted terminal state.*
 
-The `start_sync` command itself is a thin Tauri adapter to `Synchronization::start`; concurrency, lifecycle transitions, persistence, and pipeline execution remain in the backend service. This is why the frontend must treat its provisional state as feedback, rather than proof that its request exclusively started work.
+The Rust `start_sync` command is a thin adapter to `Synchronization::start`; it does not implement the synchronization pipeline. Accordingly, provisional frontend state is feedback for the user, not proof that this webview exclusively started work. On terminal completion, the controller refreshes persisted failed entries, invokes the route's settlement callback, then selects `idle` or `error`. It keeps the newest 50 UI log entries, assigns local IDs, and formats their timestamps using the current locale.
 
-Backend UI logs arrive as `log-message` payloads with a normalized level, fallback message, timestamp, and optional localization key/parameters. The sync controller assigns its own entry IDs, formats timestamps for the current locale, and retains the newest 50 entries. `ActivityLog` can translate a keyed entry and fall back to its supplied message.
+## Folder, authentication, and error flows
 
-## Watched folders and removable media
+Adding a folder first opens the directory picker, then stores a pending path and opens target-album selection. Confirmation invokes either `addFolder` or `acceptRemovableMediaFolder` and refreshes the list. For removable media, the picker defaults to the mount path; the native volume prompt is dismissed only after the backend acceptance succeeds. Failed picker or mutation operations report feedback.
 
-The watched-folders controller separates folder ownership from sync state. A normal add opens the directory picker, records a pending path, then opens target-album selection; confirmation invokes `addFolder` and refreshes the list. It refreshes after successful exclusion-pattern changes too.
+Folder removal is deliberately two-stage: the first `removeFolder(id)` determines whether cancellation is necessary, the controller displays the corresponding warning, and only a confirmed action calls `removeFolder(id, true)`. Success refreshes folders and failed sync entries. Exclusion-pattern writes likewise refresh only after success.
 
-Removal is deliberately two-stage. The first `removeFolder(id)` obtains whether sync cancellation is required. The controller shows either the cancellation warning or normal confirmation, and invokes `removeFolder(id, true)` only after approval. It then refreshes folders and failed syncs.
+The auth controller first obtains authentication status, then loads server URL and user data only when authenticated. Login requires a URL and API key and rejects a partial Cloudflare Access client-id/secret pair before IPC. On successful login it clears the API key and secret, runs the route's refresh callback, and loads the user. Logout requests native confirmation and clears frontend user state only after the backend command succeeds. Controller failures either surface a shared dismissible feedback error or, for login validation/known login errors, populate login-specific state.
 
-For a detected removable volume, the picker is rooted at the volume mount path. The controller retains the chosen path and volume until the target-album modal confirms. It invokes `acceptRemovableMediaFolder(volumeId, path, targetAlbumId)`, dismisses the volume prompt only after that succeeds, and refreshes folders. Errors report feedback without dismissing the prompt.
+## Focused testing
 
-## Preferences, authentication, and updates
-
-Preferences store theme and locale locally while coordinating desktop state independently. Theme is persisted under `lymic-theme`, applied to the document, and reapplied for system color-scheme changes. Lifecycle startup selects a valid stored locale from `lymic-locale` (or the current locale), applies it immediately, and sends `updateLocale`; a failed write is logged without rolling back the local choice. Hydration independently loads the locale catalogue, autostart plugin state, upload parallelism, and a database-recovery notice. Autostart writes through its plugin and rereads the state. A failed upload-parallelism write restores the select's prior value.
-
-The auth controller hydrates status before server URL and current-user data. Login requires server URL and API key, rejects an incomplete Cloudflare Access client-id/secret pair before IPC, clears sensitive fields after success, and then executes the route's post-login refresh. Logout requires dialog confirmation and only clears frontend user state after the backend logout succeeds.
-
-Update checks and installation are disabled for the `store` release channel. For supported channels, the update controller guards against duplicate checks, disregards late results after destruction, and records startup probes on a best-effort basis. Installation returns without action when no update is available, synchronization is active, or an install is already underway. Otherwise it records download bytes/content length from updater events, transitions to installing on completion, downloads/installs through the updater plugin, and calls the process relaunch plugin; a mounted controller records an error state on failure.
-
-## Tests and safe extension
-
-Prioritize controller tests that inject a fake capability interface: hydration/snapshot mapping, terminal reconciliation, pause/resume, event disposal, folder confirmation, removable-media acceptance, locale and parallelism failures, login validation, and update guards/progress. Adapter tests should pin command names and argument casing. Keep the Rust adapter-registration test aligned with the application command set, then test service behavior independently. Run the frontend and backend checks described in [Development and Testing](../operations/development-and-testing.md) whenever changing this boundary.
+Prioritize controller tests with fake capability interfaces for snapshot mapping, terminal reconciliation, event disposal, guarded start/pause/resume, stale refreshes after logout, folder confirmation, removable-media acceptance, login validation, and update guards/progress. Keep the adapter test authoritative for command names and camel-case argument objects, and keep the Rust registration test's command list aligned with application commands. Run the frontend and backend checks described in [Quickstart](../quickstart.md) when changing this boundary.
 
 ## Related topics
 
-- [Desktop Runtime Architecture](../architecture/runtime.md) describes backend startup, plugins, and command registration.
-- [Release Distribution](../operations/release-distribution.md) explains release channels and updater distribution.
-- [Authentication and Credential Security](../security/authentication.md) describes backend credential handling.
-- [Synchronization Workflow](../workflows/synchronization.md) describes the pipeline behind sync commands and events.
-- [Watched Folders and Media Discovery](../workflows/watched-folders.md) describes watched-folder persistence and discovery.
+- [Desktop Runtime Architecture](../architecture/runtime.md) covers backend startup, plugins, and command registration.
+- [Immich API Integration](../integrations/immich-api.md) describes the remote service behind user-facing media operations.
+- [Authentication and Credential Security](../security/authentication.md) describes credential handling beyond the UI form.
+- [Synchronization Workflow](../workflows/synchronization.md) covers the pipeline behind sync commands and events.
+- [Watched Folders](../workflows/watched-folders.md) describes watched-folder persistence and discovery.

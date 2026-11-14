@@ -1,11 +1,11 @@
 ---
 type: workflow
-title: Watched Folder and Removable Media Lifecycle
-description: How Lymic registers durable watched roots, reconciles native filesystem events and unavailable paths, and recovers removable-media folders across mount changes.
+title: Watched Folders, File Events, and Removable Media
+description: How Lymic persists watched roots, admits media discovered by scans and filesystem events, reconciles unavailable paths, and restores removable-media folders after mount changes.
 tags: [folders, watcher, media, removable-volumes, synchronization]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-11-06T15:30:15.009Z
+    at: 2026-11-13T15:48:39.594Z
 sources:
   - id: openwiki-source-5834cc73f881f690a60014d3
     resource: repo://src-tauri/migrations/0006_removable_watched_folders.sql
@@ -49,10 +49,10 @@ sources:
     resource: repo://src/lib/controllers/removable-volume-controller.svelte.ts
   - id: openwiki-source-0404bf8c574be78713975986
     resource: repo://src/lib/controllers/watched-folders-controller.svelte.ts
-generated: { by: "openwiki/0.7.2", at: "2026-11-06T15:30:15.009Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-13T15:48:39.594Z" }
 ---
 
-# Watched Folder and Removable Media Lifecycle
+# Watched Folders, File Events, and Removable Media
 
 A watched folder is durable configuration in SQLite: a root path, optional target album, and exclusion patterns. The native `WatcherState` is deliberately separate and represents only currently active recursive registrations. An unavailable folder therefore remains configured but is neither watched nor scanned until reconciliation can register it.
 
@@ -85,7 +85,7 @@ The path must be a directory when it exists; inaccessible paths fail, but `NotFo
 
 Exclusion patterns are stored as JSON per folder. The update command normalizes patterns, rejects invalid syntax, returns an error for an unknown folder, then scans the updated root and sends the result to synchronization admission with `SyncSource::ExclusionPatternsChanged`. The supported relative pattern language admits names plus `*` and `**`; normalization trims values, removes blanks, and deduplicates case-insensitively.
 
-Full scans run in a blocking worker. They traverse non-overlapping roots, collect supported media with size and modification time, retain per-entry metadata or traversal failures, and deduplicate assets by path. Traversal skips dot-hidden components, `@eaDir`, `@SynoResource`, and `#recycle`, as well as Windows hidden filesystem entries. A final admission pass applies the most-specific containing root's patterns. The same admission policy is applied to watcher-driven scans and failed-item retry preparation; if either component of a live-photo upload unit is excluded, the complete unit is suppressed.
+Full scans run in a blocking worker. They traverse non-overlapping roots, collect supported media with size and modification time, retain per-entry metadata or traversal failures, and deduplicate assets by path. Traversal itself skips dot-hidden components, `@eaDir`, `@SynoResource`, and `#recycle`, as well as Windows hidden filesystem entries; configured exclusion patterns are applied afterwards, not while walking. That admission pass uses the most-specific containing root and evaluates complete upload units, so excluding either component of a live photo suppresses the whole unit. Event-driven scans apply the same admission step after scanning event files or directories, and failed-item retry preparation rechecks admission before probing live-photo siblings.
 
 ## Watcher ingestion and unavailable roots
 

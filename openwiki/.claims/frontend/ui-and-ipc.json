@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:1b355bd4eb071e53b45b4d8dd96e396ba99559426e1de6c67c8574866c983118",
+  "pageVersion": "sha256:391ea2699176e0c19a0a62f3bf23ab5f36dff823cb2784413a9efed048900402",
   "claims": [
     {
       "id": "claim_307a20f803294b5582675f834f48ba0a",
@@ -28,23 +28,19 @@
     },
     {
       "id": "claim_3e705413783f4cd59bdbe79072f1815b",
-      "statement": "The root Svelte route switches between `LoginView` and an authenticated sidebar shell, retains the selected authenticated pane in local `currentView`, and injects controller state and callbacks into photo timelines, people, albums, dashboard, log, settings, and information views rather than allowing views to own cross-process operations.",
+      "statement": "The root Svelte route switches between `LoginView` and an authenticated sidebar shell, retains the selected authenticated pane in local `currentView`, and injects controller state and callbacks into photo, map, people, album, dashboard, log, settings, and information views rather than allowing views to construct cross-process clients.",
       "evidence": [
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L208-L251",
+          "resource": "repo://src/routes/%2Bpage.svelte#L224-L267",
           "version": "repo-lines-v1:sha256:a590aa96aec200aabb94a3b1c7f3dbf82bd4816a20c48b616bbb4aca102fd699:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1YzFlYjgyNGQyZjg0ZjdjN2ZiNDQyMGQ3MTRkNTc3NWFmY2VkMjhkMGM2YTg3ZWQxMWFiNzQ3ZWRlZGJhNjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5M2U0MmQxM2E4NTQ5OTI5MmVkMzZhNjY0NjZhOWYxZDA5YmE0ZTU5ZTExZGVjOGMxODJiM2QzNTJjNzYxZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5YjgwOTg1NDBiNzcwZWU5NjFlZGU3ZDFhOTdkNjAzYmEyMDg0ZTU1OTZhMjRjNDI3Nzc5MDA1YmQzYWUzOTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0MTRiZGIxZjVlNTU5NTY3NDM0YmUxZGU5ZThlM2IyYzU3YmRhMDYzNTIzYTExODYyOGRmY2QxZWMzMTI1MDgifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L264-L327",
-          "version": "repo-lines-v1:sha256:2c4f805149873591dfc804bf05fa36359999a1a0c70e58671d7d022f5691ae60:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwOTM5YmQ4ZGRhYjJjNzA1M2VmNGMwNzFlZjRkMDMwNmFhNDYxZjRhY2I0YzYwNTg1MGUxMzM2NmNiYThmMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzNzNhZGIxZjE2MDUzNGM2NDQ4NWUxMDFkNmU0NTNhNjE1OGM2ZTcxYmEyMWEyZjM2ZWI5YzUwODQ3NWNiYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjczN2RhODVkZDgzYzM1MjcxOTkwMGNkMWFjN2ZmNzA2OWNiZGM0YjBhNmVjNTVmZDNjMTgxMzU3ZTgwZTVlOTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlmOWYwNjgwNzQ3M2E4MzA3MzYyZGQ4ZWM2NWUxZjVjNWIxMGRlMjE0NzBmODhhZWQ5MDFlYzUyM2RjZjk1NmMifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L36-L74",
+          "version": "repo-lines-v1:sha256:8e8c5edec1bb1f249470df3e82ca7f5ee5292722ecd88ad853867ff2259e6b2b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmYWEzNDcyZWZmMDEyY2QyOWE2NmJiZTg3Mjc1Y2MyZjc5OTQ0YmUzNjE3YzM3MDU1ZjM5N2UyNjI0ODk2MTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3ZTc3NWM4MzI0NTUyZmRmOTRkN2Q2OTZjMzZjYWQxNjQ5M2NhMDBiYmYwNzQ2MDg2NTQ1YmRiNDFiNWJkOTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFhYTc3OWM4MjRmNTQwOTQxNDJjZWIyYmU1MjYyNGU1MjMwNTU5ZDkyMzIxOGQ4ZjE4YjBhZGQ1MTM4ZGVhOWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhhNzE3ODBkM2IxMzFmNGUwNGE1ZDI1OWJiM2Y1MDk5NjA3ODBjMjhkMzEzYTFjZjVkOGI2N2ExYzIzYjE1NzEifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L34-L35",
-          "version": "repo-lines-v1:sha256:05c676b6944d1d84a9e8581fcc95375b1ecd50364a797f7c8cb59ea898bd90b4:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWZhYTM0NzJlZmYwMTJjZDI5YTY2YmJlODcyNzVjYzJmNzk5NDRiZTM2MTdjMzcwNTVmMzk3ZTI2MjQ4OTYxNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDEyYjdmMWNmMmM5ZmU4ZTZjMjU2ZWYwYmZiOTljNTAwOGJlYmEyMmY3YTU2YzBkNWExMmY3NDYxYjQzZjk2ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWFhNzc5YzgyNGY1NDA5NDE0MmNlYjJiZTUyNjI0ZTUyMzA1NTlkOTIzMjE4ZDhmMThiMGFkZDUxMzhkZWE5ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzMzMWYzZWFkMWYwODdjNWZlYzM0Mjg4NzczMzU5OWIzN2E4OGUzYTQ5ZWE4NzFkNThhN2ExZjI0MGNkN2NiYSJ9"
-        },
-        {
-          "resource": "repo://src/routes/%2Bpage.svelte#L389-L443",
-          "version": "repo-lines-v1:sha256:d5da38e3d20870697e9ef57cbb28be24d6e3929eb8be5c683819276b6f986599:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiZWRhZjgzMTQwYWY2MWU2NTgyYzljM2RkNmE5NjU4ZWNkODlmYTc2NTU1YmZiNjg3YTI0NjkwOGRkNzZhYjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjNzEzN2EzZDI2OTJiMzEzZmVmYmE3NWE3ZjkzMzI5MWVkOTFjZDdmZGVjOTA3NmUxYjhlYjdlMTRiYmQzMWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNhYmI0YmQ2ZmZhNmE2MjllMGY3NmY4NDQ3ZTRlOGNmYTUwNzBiMDdjNzdkMzIyMmVkOWJjMWJlMzQ4MDQ4MzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE1NWFjYmE0ODEyZjU3MGViMDk2NGUxMmMzN2M2N2QyZWY0ZWJlNTM4YzlkNzRlOGZlMTEwNDFjOWM3N2Y4MzkifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L383-L489",
+          "version": "repo-lines-v1:sha256:de8c3643539635e2754b53922e02b8d84013feabd5ccacd6d6670f781d3ddf9e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3YmNjMTM1NGZkZTY0MWZjNGYwODk5MzQ2YTg2NDg4MzZiZGE4OWE2Y2I4ZTM3YzllOGQ2MTExOGMxNzE3N2Q1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3ODhlN2M1ZWVjNWZhMGM1NzUxZTI0NTBkOGE2MWZlM2FlZjk1MzAzYTM4MGE3OWZlNmY3YmEwNWNlMDc1MTE1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiOTY3YmMxN2Y3NWM0N2E0OWYzNGQ5Mjc4YWFlZDQxZmE5NGE5YzJlM2VkODZlOGI3YzNmMTlmMGNiNmY3OGYyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1ZWI1MTY1OGM0ZmYwMzVmZWNkZWI0YzI2OWVmYjJkMzNhNjdhYzk5MjhhMmE2YzJkMmQ5YTE0NjMwYTBlYzM1In0"
         }
       ]
     },
@@ -61,7 +57,7 @@
           "version": "repo-lines-v1:sha256:64196ac5a04cb10d8ecdf32c1a209711586a22fff9f494963a30d6d2a76eb329:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIwY2NiNjMyNmRjNjM4Yzk2MTBiYjg1ZjU2NThjOGIzNjFkYzczMGUwNzlhMjFkMjlhODlmYThjZTU0ZDQwMjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA1YzQ5N2U3Y2Q3MDg4ZjMxOGRhMjBmZTEyNzE1YmM0MTE0NjY3NjMzNDg4ZGIwOGQzMjUzNTBhMTNmY2VhM2EifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L51-L61",
+          "resource": "repo://src/routes/%2Bpage.svelte#L53-L63",
           "version": "repo-lines-v1:sha256:92ffd695ab21759897dfc2a8d15e5f0f94799615f0e67c3574847b4d103466ba:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MDc1ZTc3MzhjMDRhZmIwNTkxYTdmNDRkOGM5NmFlNTRmMWRmYWM3NTBkNjRkOTU1OGRiZjdjYzIwYTYzZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxMmIxZjUyMzBiMzIzYmFmODQwZjMxMDQxN2Q4ZTFjM2M2ZTA3ZTM1ZTI3Mzk5Zjk1MDg0YTYwMzA3NGI2YTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY0NDhlYTUxMjRkOTRiZGM4YTk3N2VmNTAyZTcwMTlmNGU4ZmFhNzY5NmJmOWU5YmY4NmI4NmVhOWFlZTgxZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ1MGVjMDE4YzhhNGFhMjA5MGY3Njk2ZTAxYjFiYzRjODkwNzYwYjJlMGRlMWVhMzgwYWY0NjM0YjA1NTZiY2MifQ"
         }
       ]
@@ -83,7 +79,7 @@
           "version": "repo-lines-v1:sha256:8852445be5983de5bc5ed5a323a3d8b99ae0764bff1cbc81e12d07f2f2a8724a:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjk2ZWFmZDEzYWUyMGUyMzY0ZTkyM2NjYmQwYWQ0ZDY4M2RkOWE2M2NmMjNmOTk4YmNkZjZkZmFlMjBlMjczYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDJhMmNiMjVhMTIyYjQ0MjIxYTYyMzRlYzY2MGE3YjVmYjdmOWJkZTdiM2I5ZTJiM2M1NTlhMGQ5NmZhYzczOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTgyODUxYzY4ZWUzYmQ5NDJkYTgyNTdjYzI2MzdkN2VlMzk0ODc5YjdhYTY5MGI1YTZiZjMwY2Q5MmFkMDU2MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjEsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSJ9"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L177-L205",
+          "resource": "repo://src/routes/%2Bpage.svelte#L193-L221",
           "version": "repo-lines-v1:sha256:6ccc0c54ec4a67b1a4d4d6ab36a727a3b7e111e915450e408a4ea4891ccfce83:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZjVmYTE1OTFmN2RiOTQ2YjVhMjQ4NmYwY2NjNTY2NmY4MDM5YThlMjJhNDc2NjQ1MDUzYzY3NjNjYmFkZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyMGZjOWU2N2RiMDdlZDIzOWJiM2FkMjMxMmVhYWI5YTcwZTFmNmZiYTAxMjg4YjBiYTZlNjFkN2Y4ZWU3ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxOGZlZThlYTdkNWQ3MzNhNTc1MjA0NzRiMWQ4MTk0NWJiYmQ3OWE5NjRlZWMxZmUzMWRkZmUyM2QyOWU3MDIifQ"
         }
       ]
@@ -97,11 +93,11 @@
           "version": "repo-lines-v1:sha256:67ed79b2c810c6656a53603d5d2b436b337ec078db27c7ecb30928c65f250ba7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0N2I3OGIxODE5MzZjOWVjZjk4ZTI2ZmQ0ZDZmZjY0ZThkNWEyMTE2YWEyZDhiNTI3ODFlNDZmNzhhZWQxOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4YmMzZmExMDhmZmEwNmRiNGFkMjFlNWI4YWQ2MTM5NjkwNzIwYjE4YzlmM2YzYjgxNWRkMTIzYzBlZDkxYjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwNDkzMDczOTg5MTNjZjg0MTQ5NDc3YmUyMDE0ODg0NGQzNjViMzM0OWQ1YjllNWYyYTk2MmZmMDc5ZGEwMDUifQ"
         },
         {
-          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L145-L148",
+          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L167-L170",
           "version": "repo-lines-v1:sha256:f7aff8ddc3ff4659dbaf32f0673aa9a6c9d3ce6512066d25fa0c0c84e81c3f5f:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjVhZjlhMmRmODhlNjA4YmRkZjgwNDZjYTdjNzIyYWI2ZWZjYzQ3YThjNDFmNTAxYmZmYThjYjgwNjA4ZGU1YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzAxOTk1ZjJhM2U0YTNhNzBmMmVjNmVlZWNmN2I4MTZiZDY5Mjc4ZDRlM2E2NzZhOWZmNDkxOTQ0MGJhYzcyZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDYxYzI5YTY5NTUxYTNkZGZlNjhkOGRhNGNjYThkMTVhNTIyMGY1Yjc0NWRiMzcxYjY0Y2UxNjAyYzMwYjYwNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzkxMDY5NTI1YzYxODlkZWIwZTdlYTNhNjliNDdjM2U5ZGQ3YWYzOGQyZjhmNWRiNTRmMjRjODI4Yzg2YmJmOSJ9"
         },
         {
-          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L49-L57",
+          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L52-L60",
           "version": "repo-lines-v1:sha256:6df7b95876fd4cfdeb298e5571efd9e929d2d25d004d886ec2f33001e30ca64f:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmYzNzRkNzQyOGI3N2IzZDllYjkzM2M4MDczNjhmZjg0Yjk2OGY4NjFiYWZhNTU1YjM4OTZlZTIxM2ZiNmMyOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDNjYjY3Mzk0Y2M5NDVmMDk5MTBkMzdkZmY1YjhiYjQyZDgyM2E5OTQ2MjVhNjhjOTMxZTJjY2E2ZTA1YmI2OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjM2YmEwZTExYWRlYzg5ODFiNzMyYmU2YjFkNWY0YTM5Yzk4OGUwM2IxMjAxMDgzYzVmMmViM2QwNjhjNTU4NiJ9"
         }
       ]
@@ -137,7 +133,7 @@
           "version": "repo-lines-v1:sha256:44bce69719f3d49575506e9416d21189a779c245db87f5c2e3543208eede0282:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2MDYxMTIyMDg1ZTM4ZDk1Y2Q4NzM5YmU3Y2M0NWI2ZmJiNWJkMTY4MDEzMjhiMDdlZTQwNDZjNjkyMTc4ZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdjZjQ1OGFkZGU3NjZmZjM1NjVlNTE1ZmZlOGNkYjAzZGE0NGRlNzgxZGVkOWI0ZGFkOTdkZjJkZDQ0Y2RjMTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZGFhZDk0YWJlNGViOWM1NzU5MGZlOThkOGZmZjQ3NjQ3Yzk5MjQxOGM0ZDVlOTIyZTlhMDcyMjBkYTJmMTEifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L448-L458",
+          "resource": "repo://src/routes/%2Bpage.svelte#L469-L479",
           "version": "repo-lines-v1:sha256:c75555db57b8ff709741ca6cc8b9aff0d95f3fe0b9c45a5f5c30df4e5a03be4e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5Y2Y2ZmY5MWEyN2MxMTljYWVkNGYwZDdmMDE1NjRlZjJmMmMwODY0MmZjZmUwYmNjOGZiYzliY2FjNjdlOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3YWQ2YTdiYWFkYjcwODAzNDU3NGVlMDQwY2I4ZjA1ZTc5OTVjZTUwNDk0ZTIyZjUyMDZlOWEwYTE2N2ZiZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFmOTc4Y2I4NjBiMDU5ZTIzYmY5MGM0YjgzOTZhNGNiYjJhODk4N2U4MjlkMzZjMWZlMDc0M2ZlM2IyMTRlNzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ2NWU0NzZkNDlkZjJiZmEyNWJmZDBiMTkwOTUyMGQ3M2FkNmQ2YmUzZDQ3YzUyNmJhOThlYWJkNTY0OGY2MzAifQ"
         }
       ]
@@ -166,19 +162,19 @@
     },
     {
       "id": "claim_b5a0d71b3bbd4f5fa9dc677e36f36edb",
-      "statement": "`DesktopAdapter` is the typed frontend contract for Tauri commands, and the production adapter maps its methods to `invoke` calls with camel-case argument objects; a Rust test checks that every adapter command string is also registered in the Tauri invoke handler.",
+      "statement": "`DesktopAdapter` is the typed frontend contract for Tauri application commands, and the production adapter maps its command-backed methods to `invoke` calls with camel-case argument objects; a Rust source-level test checks its enumerated application command strings occur in both the adapter and the Tauri invoke handler.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L161-L212",
-          "version": "repo-lines-v1:sha256:83994b07d84572c7c1154408673b32a8d728b02fa8a50af9b2d985d251f8cb60:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1Y2Y1ZmMyM2YyYTZkMjNjM2VhNTFlNzJmNWU4OTZjNzU1NWZiYWEwNWNkNWIxZWExODJiZjk2MThhOGU4MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0NjFkNDcxZTE1ZDg2MDVjN2Y5MjI1MjJlNWE2ZjFkNjgyNDZjMDMzODhmYWQwYmY3NmZiZDY4OWU3Yzg2MWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkOTAzNTEyOTg2OWUzNDVjYWExNDliYjNlMWE3N2E0NTBiN2E2MDMwNjIyNWEzNWQ4MDE0Y2RjMThmYmJhOTgifQ"
+          "resource": "repo://src-tauri/src/app/mod.rs#L167-L224",
+          "version": "repo-lines-v1:sha256:0813b99d755a25ddb1b7570d693a4983ceec8291dffd31625340e9a40779fa5c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1Y2Y1ZmMyM2YyYTZkMjNjM2VhNTFlNzJmNWU4OTZjNzU1NWZiYWEwNWNkNWIxZWExODJiZjk2MThhOGU4MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0NjFkNDcxZTE1ZDg2MDVjN2Y5MjI1MjJlNWE2ZjFkNjgyNDZjMDMzODhmYWQwYmY3NmZiZDY4OWU3Yzg2MWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkOTAzNTEyOTg2OWUzNDVjYWExNDliYjNlMWE3N2E0NTBiN2E2MDMwNjIyNWEzNWQ4MDE0Y2RjMThmYmJhOTgifQ"
         },
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L94-L127",
-          "version": "repo-lines-v1:sha256:3a101a6455297791e0f85cb6757b76ac61601b1f64948b87425bc9f270aa9b22:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhM2I5NWFlMzgyMWJjZmZjNDQzYjQzOWUxZjY5Nzc1MmUxNjA1ZDdkNTVmZjA2OGY4ZDk4NzE2MzFhMjRkZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyNzZjMWQxZjk3ODVlNTU2MGQwYmI1Zjc5YzJlOTc5OTk3YjcwY2RlZDFmM2I2OGVlYjBjZDE5MTBhZTIyN2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiMDE2ZjE2M2NhYWFjM2YxMGVjNjg4ZjE4YTFjMjcyOTUyOTg1MDY3OGRhZmM0YjAwNzg4MWIyNjE2NjdlNDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwZTQ4ZGU2NjVlNGE1YTNmMTZkZTkwYjQ5MjI5YTU4ZTcyNWQwNTkwZjA2ZTljYzYzMjdhOWZkMGQ5Nzg3N2YifQ"
+          "resource": "repo://src-tauri/src/app/mod.rs#L94-L133",
+          "version": "repo-lines-v1:sha256:7534502f715f7ae0ca0763f60ac01268684feda9923ed236e9fc91bc5f8c050d:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhM2I5NWFlMzgyMWJjZmZjNDQzYjQzOWUxZjY5Nzc1MmUxNjA1ZDdkNTVmZjA2OGY4ZDk4NzE2MzFhMjRkZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyNzZjMWQxZjk3ODVlNTU2MGQwYmI1Zjc5YzJlOTc5OTk3YjcwY2RlZDFmM2I2OGVlYjBjZDE5MTBhZTIyN2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiMDE2ZjE2M2NhYWFjM2YxMGVjNjg4ZjE4YTFjMjcyOTUyOTg1MDY3OGRhZmM0YjAwNzg4MWIyNjE2NjdlNDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwZTQ4ZGU2NjVlNGE1YTNmMTZkZTkwYjQ5MjI5YTU4ZTcyNWQwNTkwZjA2ZTljYzYzMjdhOWZkMGQ5Nzg3N2YifQ"
         },
         {
-          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L31-L203",
-          "version": "repo-lines-v1:sha256:9c4c7f95666d2e66c18bc30f7d641169aa8f8959bca2b62e8debe832299abfcb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTczLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiMTU1ZTVkODk4MDY5MTg3MjVkN2Q1NGZiYWRiMjA4ZTgwYWVkNGY0Y2I4M2JmZGU2MWVlMGM0YmM0MDBlNWEwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJhYTFkMWE2MzM5MDIyOWM3OTgzNDdlODNhMDQwNTQ0MWM5NDAwMDM1Mjg0YWQxNjhjMWJmNmNkZjFkNzBhMzcwIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5NWJkODY0ZmM3OTFmNmQ1ZDFkNTgyZjViZjFlOTU4OTBlZWNhNTI2NTljODNkNWZjNjQ4ZjY4NjYzNzJlM2UxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MiwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI4NjVkNWVkZDgyNzU5OTc4ZTA3M2JjMTY2YWFjMDVkNGU1ZWNmZmU1YTlhNTA3ZWRmYTIwMWZlZWMyNDE1M2MwIn0"
+          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L136-L232",
+          "version": "repo-lines-v1:sha256:84b9e546f2198316da2eb36e72f8c790be6b51719719915db9aa2469460ad43a:eyJzZWxlY3RlZExpbmVDb3VudCI6OTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkMjdiYTZlY2Y5ZDJhNGJhMTcxZGQzNWViNzE4MTIyZmUxYWMwMTNiNzU4YTFhMjU5ZjJlNjk5M2FiMDdiNjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMWQxYTYzMzkwMjI5Yzc5ODM0N2U4M2EwNDA1NDQxYzk0MDAwMzUyODRhZDE2OGMxYmY2Y2RmMWQ3MGEzNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEwNjE0MTE1ZDlhMjJhZmViZDEyYTk5YzU1ZTViZTFhMDFiZGNmMjMwYmRjOTk2NzJkMDlkZjM5MGUzMTg4MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg2NWQ1ZWRkODI3NTk5NzhlMDczYmMxNjZhYWMwNWQ0ZTVlY2ZmZTVhOWE1MDdlZGZhMjAxZmVlYzI0MTUzYzAifQ"
         }
       ]
     },
@@ -209,40 +205,40 @@
           "version": "repo-lines-v1:sha256:a67b537d604d624de87b3dab2f2e52ec36a2c5cae66e7ebc12b3c6adc71374f6:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViMGFhNWI1MzgwZTYyZTZkMDkzNTE4Y2JjMjQyYzBjZGJmZjk1YTUxNWY0ZmI4ZWFlYmY4ZmQ1NTNmZjc1YTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA3YTRlMDJlY2NjYjAwZDY4YWE0MWMxMTRjYzUzY2VmYzc2NGNmY2QwNDI3YjZiNGUzYzM1NjhmMTRkMjQxNDcifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L378-L386",
+          "resource": "repo://src/routes/%2Bpage.svelte#L398-L406",
           "version": "repo-lines-v1:sha256:5bd61b79e070dc1e04be3ce02c6711db6c3f129ae6fbed2867dda5ebe4c4763c:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWIwNTdmNjgxMWJhMTU0ODAzZjY0ZTQ5YzhiZWUxZjdkMjE1OGNjNGJlMWQwZGFmMzU5YjdlZjRmOTY5M2RjNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGI1OTJlMDdiNGNmNTNhODM4NmM1NjgwY2ZiN2YzZTRlNzU0Mjk2OWM4NzI2YWM1ZWQzMjc1M2Y4Y2E5NTk3NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzMwMjJhMzk1OTY1YjdkY2NiMWRhOTdkNDljMTdmYWQ2YzljYTAzNTJiNjU0ZGQ5YWZjYTZhZjkxNTAzYmNhOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2E5ZWQ0MzRmYjJhZDdlYTYzZDE1ZWJjMTg1OTAwNGI1MjUwYTY2M2UwMDM2N2Q3YWFjMGM5N2FhMzNhZTRjMiJ9"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L43-L50",
+          "resource": "repo://src/routes/%2Bpage.svelte#L45-L52",
           "version": "repo-lines-v1:sha256:8be52e04bd27fdc4da8e8f5bc3848b874c9be2cbb565f4fedff2338c8e2d5f45:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmFiYjM2M2I1YTU1MTg3MjllYTE4N2M4YjQ5ZTUwNDYwZjRhMGNmMGYzZGMwYWU1MmE1OGMzYjQ4OWVkNDIyMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2EzZTQ2Zjk0Mjc2YjZmNmY0ZWQxZjAyYWY3OGJlZjZhMmVlMWM0MzlkZDU1ODRiOTczOTQ4MzEzMjE0ZDJiNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTc0NzhjM2U2NjBiZDkwNThkN2UzZGIyY2RkYzIzM2YzOGI0NDViODVmZWZhMDY5MDY3YjY2N2M3NTA1Y2M1NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWRlMTEwNTE0ZDM0OTVkNjEyMzUzMWRkZDhjOTgxNDQ2MTk5Y2I5OTg5MTE2Yzk3MzI0ZTdlZjYxOTQwZGRkOCJ9"
         }
       ]
     },
     {
       "id": "claim_237840ab2ab645779cecaadaa1c9a5db",
-      "statement": "`DesktopAdapter` combines capability-specific frontend contracts for auth, sync, watched folders, albums and catalogues, timelines, people, preferences, updates, and removable volumes. Its production implementation maps application commands to Tauri `invoke` calls and maps plugin operations such as dialogs, autostart, updater, process relaunch, opener, notifications, and event listeners behind the same controller-facing boundary.",
+      "statement": "`DesktopAdapter` combines capability-specific frontend contracts for auth, sync, watched folders, albums and media catalogues, timelines, map, people, preferences, updates, and removable volumes. Its production implementation maps application commands to Tauri `invoke` calls and maps dialog, autostart, updater, process relaunch, opener, notification, and event-listener plugin operations behind the same controller-facing boundary.",
       "evidence": [
         {
-          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L131-L203",
-          "version": "repo-lines-v1:sha256:8b9458f5932bef71116ba8c3dc7294ba8d8b5a06205391a03b3e7a493ba2fa29:eyJzZWxlY3RlZExpbmVDb3VudCI6NzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3YjNjNzNkNzQ1NjdlOWU5M2I3MzU1OTY5YTdiYTU0MGFiZGRkNmY2MmFhZjM5NTI0MGRkZWMwMTA5NmMzZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMWQxYTYzMzkwMjI5Yzc5ODM0N2U4M2EwNDA1NDQxYzk0MDAwMzUyODRhZDE2OGMxYmY2Y2RmMWQ3MGEzNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkZDUzNTA3NTYyNzUwN2U1NTA1NmExZjU2NjY1OGZlN2QzODNjOTQ5NzY2MGU3Mzc4ZWQ0OTg3NjA5MGFkZDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg2NWQ1ZWRkODI3NTk5NzhlMDczYmMxNjZhYWMwNWQ0ZTVlY2ZmZTVhOWE1MDdlZGZhMjAxZmVlYzI0MTUzYzAifQ"
+          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L153-L234",
+          "version": "repo-lines-v1:sha256:27c41e8d76fb041dfaf9ffc7c66c39205e18c1d45b08b1e08bda477713884249:eyJzZWxlY3RlZExpbmVDb3VudCI6ODIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3YjNjNzNkNzQ1NjdlOWU5M2I3MzU1OTY5YTdiYTU0MGFiZGRkNmY2MmFhZjM5NTI0MGRkZWMwMTA5NmMzZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxNDUwMTNiYjkzNDNhOTc2NmM0ZDQ4NjM1YmU2Yzc1OTFkMmJhN2U4ZTA4ZmMyYWNmODQ4YmU4MmMwNWZjYTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkZDUzNTA3NTYyNzUwN2U1NTA1NmExZjU2NjY1OGZlN2QzODNjOTQ5NzY2MGU3Mzc4ZWQ0OTg3NjA5MGFkZDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
-          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L31-L129",
-          "version": "repo-lines-v1:sha256:19de9884701f3b5e7142bc764894e5bee199329b347516eeae80742092a84a01:eyJzZWxlY3RlZExpbmVDb3VudCI6OTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxNTVlNWQ4OTgwNjkxODcyNWQ3ZDU0ZmJhZGIyMDhlODBhZWQ0ZjRjYjgzYmZkZTYxZWUwYzRiYzQwMGU1YTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ODVjZDZhYTBlYzcyZTUwZTJlZGJmOTU4ODkwOWY4MjYyNzFkMzJkZGVhYmZlYmU3MjZjY2EzNmQ0YmE1OWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk1YmQ4NjRmYzc5MWY2ZDVkMWQ1ODJmNWJmMWU5NTg5MGVlY2E1MjY1OWM4M2Q1ZmM2NDhmNjg2NjM3MmUzZTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiMmZhZjQ3OWE4ZGRjMzQwZWVjYzY2YWIwY2I5NWU5ODE0NjUzZWYzNDM2ODBlMjQwYzk3MjM4NGI2NTc3NjAifQ"
+          "resource": "repo://src/lib/tauri/desktop-adapter.ts#L34-L151",
+          "version": "repo-lines-v1:sha256:8394b4d99042db207c814474aaf7386b6031889cbe02664edae89835d49f4b45:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiMTU1ZTVkODk4MDY5MTg3MjVkN2Q1NGZiYWRiMjA4ZTgwYWVkNGY0Y2I4M2JmZGU2MWVlMGM0YmM0MDBlNWEwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzNDg1Y2Q2YWEwZWM3MmU1MGUyZWRiZjk1ODg5MDlmODI2MjcxZDMyZGRlYWJmZWJlNzI2Y2NhMzZkNGJhNTlhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5NWJkODY0ZmM3OTFmNmQ1ZDFkNTgyZjViZjFlOTU4OTBlZWNhNTI2NTljODNkNWZjNjQ4ZjY4NjYzNzJlM2UxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI3YjJmYWY0NzlhOGRkYzM0MGVlY2M2NmFiMGNiOTVlOTgxNDY1M2VmMzQzNjgwZTI0MGM5NzIzODRiNjU3NzYwIn0"
         }
       ]
     },
     {
       "id": "claim_ec63f7bcc4074abcbc81730a479660b6",
-      "statement": "The route composes explicit controller dependencies: watched folders determine whether sync can start, sync settlement refreshes folders and the main timeline, folder removal refreshes failures, login refreshes timeline/failures/folders, and logout clears shared frontend state before returning to the Photos pane.",
+      "statement": "The route composes explicit controller dependencies: watched folders determine whether sync can start, sync settlement refreshes folders and the main timeline, folder removal refreshes failures, successful login resets the map and refreshes timeline/failures/folders, and logout clears shared frontend state before returning to the Photos pane.",
       "evidence": [
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L136-L166",
-          "version": "repo-lines-v1:sha256:5d079a715cbf9d21169a9d8ae3de0b37f02b71b342a8c21cb1ddbc78a05ab86e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4OWIwMmU4MGE1ZTg0YWJiYjFjMTg5MDI3ZDlhOWEwYjE1MzFiOTY1YWZkZTJiNWI3MmJmOTY2OTUyZjRlMjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzZWFlOWUyMmQzYmYyNTg0ZWZkOGVmZTJlYThhZDE0MGEwMzk0Mzc5NmJlYjExMDk0MWUxMjg2NWIxMTg3MzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5YjFkMGQ5NGE0MGM1NjZmNTFhMmE0ZjFhMDIzYjMzNTgzMTUyYjQxN2RjZGY4ZWNjYTIzOGFkODcxYTU3YTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5NDU4OGRlMmU3OWQyZDk0ZTkxY2E0Y2EzOGEyMzdlOTk1NjBjMTZiMDIzMmFhM2NiODJkMDU2ZmJhZmEyNWYifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L148-L181",
+          "version": "repo-lines-v1:sha256:05cdb1203e24bb455860ba38e9e3c08db89c8de093aec433b42647eb6fe3bbe8:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4OWIwMmU4MGE1ZTg0YWJiYjFjMTg5MDI3ZDlhOWEwYjE1MzFiOTY1YWZkZTJiNWI3MmJmOTY2OTUyZjRlMjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5YjFkMGQ5NGE0MGM1NjZmNTFhMmE0ZjFhMDIzYjMzNTgzMTUyYjQxN2RjZGY4ZWNjYTIzOGFkODcxYTU3YTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVhNWQyYTg4ZTJiZWMwZTAyODA4MTVkZGE0ODMyYjhhNWY1ZjBmMjQ2M2RmOTcxMWNjYTI0YjlhMmFkMzliMWQifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L37-L61",
-          "version": "repo-lines-v1:sha256:e4fe9096caf77d1b7f7872da6a582931884ae756de21e14742e458443679e2d5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4NjRmOGExZmIzNzE2ZGNkMGI1NzlmZWJmY2QyYjk0NmU4YzViODVjZDI4ZDNjZjc1YmNjYTg4YjhlYjlhNGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxMmIxZjUyMzBiMzIzYmFmODQwZjMxMDQxN2Q4ZTFjM2M2ZTA3ZTM1ZTI3Mzk5Zjk1MDg0YTYwMzA3NGI2YTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVlYTMzYWMyNjFiMjhmMTFmMGQ0YjIzNTk1NzNkNDBkZTY5NzFkMTdlZTEyMzY1ZDEwNGUzNTNlOTUwNDM3NDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ1MGVjMDE4YzhhNGFhMjA5MGY3Njk2ZTAxYjFiYzRjODkwNzYwYjJlMGRlMWVhMzgwYWY0NjM0YjA1NTZiY2MifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L40-L74",
+          "version": "repo-lines-v1:sha256:c96b18fd1bc15c52054b6e42a4580f9ebcd7a68fe675cc267b823c322536c7fb:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzYzFlYThlOTUzMmRkZmU2YTYzNzA4OGVjM2VhZDRkOGFmMTljZGNhMTQzNmVjOTdlMTNhNjY4MDU3ZWFlOWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3ZTc3NWM4MzI0NTUyZmRmOTRkN2Q2OTZjMzZjYWQxNjQ5M2NhMDBiYmYwNzQ2MDg2NTQ1YmRiNDFiNWJkOTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhiZWE3MjNiYjExNWVjZTFlMDA1MzAxYmE3ODliODk4NGY2NThjYzA1YWMxNDIxNjZjZjU5YTY5YWU3MDYwMTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhhNzE3ODBkM2IxMzFmNGUwNGE1ZDI1OWJiM2Y1MDk5NjA3ODBjMjhkMzEzYTFjZjVkOGI2N2ExYzIzYjE1NzEifQ"
         }
       ]
     },
@@ -276,39 +272,35 @@
     },
     {
       "id": "claim_2ff0d8afae974bbeb5d02af7fc61b777",
-      "statement": "Selecting a person or album creates and refreshes a scoped timeline controller, while returning clears it and restores the saved scroll position of the People or Albums view.",
+      "statement": "Selecting a person or album saves the current catalogue scroll position, creates and refreshes a scoped timeline controller, while returning clears it and restores the saved scroll position of the People or Albums view.",
       "evidence": [
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L102-L134",
-          "version": "repo-lines-v1:sha256:4d5968af3b33aa23fee43122b4827c582e9d3f692822ac166fd86f4efdbe3889:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlM2M2MWM0ZjIxYzcyMjA4N2NmYjZlN2FhODFmOGYxMzBjYjYyNTk2NjQ1NzY5MDQ0YjNmZDVjZmUwOWY3ODQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyMGZjOWU2N2RiMDdlZDIzOWJiM2FkMjMxMmVhYWI5YTcwZTFmNmZiYTAxMjg4YjBiYTZlNjFkN2Y4ZWU3ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUyNTIyOWJmYmZhZjA0ZTBhZTFjZjg0OWE3MTkwNzY1ZmVlNjkzYmUwMzUyN2IwNjgzYmE4ZGZiYzY2NmI4MjgifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L107-L146",
+          "version": "repo-lines-v1:sha256:bdbb5cdb33f29a09e11fdb0dee37407997885822cc892834c3c1b1c3773772f9:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlM2M2MWM0ZjIxYzcyMjA4N2NmYjZlN2FhODFmOGYxMzBjYjYyNTk2NjQ1NzY5MDQ0YjNmZDVjZmUwOWY3ODQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyMGZjOWU2N2RiMDdlZDIzOWJiM2FkMjMxMmVhYWI5YTcwZTFmNmZiYTAxMjg4YjBiYTZlNjFkN2Y4ZWU3ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUyNTIyOWJmYmZhZjA0ZTBhZTFjZjg0OWE3MTkwNzY1ZmVlNjkzYmUwMzUyN2IwNjgzYmE4ZGZiYzY2NmI4MjgifQ"
         },
         {
-          "resource": "repo://src/routes/%2Bpage.svelte#L64-L85",
-          "version": "repo-lines-v1:sha256:8b85f1cf6d4746f7c0cb329bcd4399be0e955c819d2b895274068626de78ce8c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxMTEwNGY0MTZkYWNlMjY5YjBmODg5MGFjMzhmZmYwZGNkMjI5YWJhNmExYWM3MDBjMmIxNzVmMjgzYzJhOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMxYWU3MmVlMmIyNTU2ZGFhY2VjZDZiYjJhMWMyYjUxMzQyZjQ3OGExNTljYzJjMGI5MjIxNjg2Y2EzNDE4MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY0OGRjZTM1NDY4MWNjNTJjNTcyYzRhOTI2ZWFhYzIxMjVmM2VhZDA0NzlhZTk3ZGIxZGZlNTBhYTkzZjRmNDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUzZjEzMTNlNzE4MjljYzcxYTNhNzRkZmJkNDY5ODdmYjg4MWZlMTYzNDk0MzIyYjMwYzc1MTJhNTJhY2IxYzQifQ"
+          "resource": "repo://src/routes/%2Bpage.svelte#L76-L90",
+          "version": "repo-lines-v1:sha256:5804caec99034dd09132de70b8faf1ef8b4ea3c866520523d6da2df6d9540082:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1NzEwYzBkMzJmZWExMjU2NTQ1NWQxY2RhNzIxN2M4MGFkNTU4NzFhZGMyNDRhNDM4YmMyNjUxOGJlYjlmN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhmN2QyMGEwODAxNjc5ZWMyM2U3MTk0ZGU3OTczODBjYzUyODdmMWVhNGY1NjIyNzI1Njc2Y2ZmZmE0Yzc4ODIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE2OTVkZWQyYjhjMTk3YjFjYWZiNmU5YTQxN2NiM2VmNzE5NWQ0NTMzMzRmMWQ2ZWE2ZDJiYjQzNTNlYzU3NDcifQ"
         }
       ]
     },
     {
       "id": "claim_a49d7f858c494beda650d9eb97eb49a9",
-      "statement": "The frontend adapter test pins the mocked Tauri command names and camel-case payloads for all adapter operations and verifies plugin delegation, complementing the Rust test that checks every enumerated application command is registered in the Tauri invoke handler.",
+      "statement": "The frontend adapter test pins command names and camel-case payloads for the command-backed operations it exercises and verifies plugin delegation; the Rust source-level test complements it by checking every command in its enumerated application-command list is present in the Tauri invoke handler and adapter.",
       "evidence": [
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L165-L212",
-          "version": "repo-lines-v1:sha256:073583da14a1f0a14d2855f484ccc06e672dc810dbd944ddbb9ada735ec8c946:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyYjVlZGY1OTQ5Y2ZlYTY3ODIyY2Y2OTExMzIzNjNkNjhkNmYxZTE2OWY1ZTBkNGY3YzE0ZTVmYTFlNmQ0ZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ5ZWMzYjNmYzljZWRmMDgyMDRiY2M0YWUwYTVmMTMwYzhkODEzYjgxNTQ0ZWQ0NGVhYWJjYTA4ODEzOTg2MzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkOTAzNTEyOTg2OWUzNDVjYWExNDliYjNlMWE3N2E0NTBiN2E2MDMwNjIyNWEzNWQ4MDE0Y2RjMThmYmJhOTgifQ"
+          "resource": "repo://src-tauri/src/app/mod.rs#L167-L224",
+          "version": "repo-lines-v1:sha256:0813b99d755a25ddb1b7570d693a4983ceec8291dffd31625340e9a40779fa5c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1Y2Y1ZmMyM2YyYTZkMjNjM2VhNTFlNzJmNWU4OTZjNzU1NWZiYWEwNWNkNWIxZWExODJiZjk2MThhOGU4MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0NjFkNDcxZTE1ZDg2MDVjN2Y5MjI1MjJlNWE2ZjFkNjgyNDZjMDMzODhmYWQwYmY3NmZiZDY4OWU3Yzg2MWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkOTAzNTEyOTg2OWUzNDVjYWExNDliYjNlMWE3N2E0NTBiN2E2MDMwNjIyNWEzNWQ4MDE0Y2RjMThmYmJhOTgifQ"
         },
         {
-          "resource": "repo://src-tauri/src/app/mod.rs#L94-L127",
-          "version": "repo-lines-v1:sha256:3a101a6455297791e0f85cb6757b76ac61601b1f64948b87425bc9f270aa9b22:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhM2I5NWFlMzgyMWJjZmZjNDQzYjQzOWUxZjY5Nzc1MmUxNjA1ZDdkNTVmZjA2OGY4ZDk4NzE2MzFhMjRkZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyNzZjMWQxZjk3ODVlNTU2MGQwYmI1Zjc5YzJlOTc5OTk3YjcwY2RlZDFmM2I2OGVlYjBjZDE5MTBhZTIyN2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiMDE2ZjE2M2NhYWFjM2YxMGVjNjg4ZjE4YTFjMjcyOTUyOTg1MDY3OGRhZmM0YjAwNzg4MWIyNjE2NjdlNDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwZTQ4ZGU2NjVlNGE1YTNmMTZkZTkwYjQ5MjI5YTU4ZTcyNWQwNTkwZjA2ZTljYzYzMjdhOWZkMGQ5Nzg3N2YifQ"
-        },
-        {
-          "resource": "repo://src/lib/tauri/desktop-adapter.test.ts#L55-L170",
-          "version": "repo-lines-v1:sha256:77df6f21fb2a6f952f33bafb934e04bccb99d4b1ef9bd0ce73332f7335788283:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJjZmI4ODE2NjViYmQ2ZjRhODVmMWM1Mjg5ZDc1YTQzOTU1NDg3YTIwYjgyMDRlMGEzNzlmOTZiYTYxZGFmMjhiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5MDkzZTEyOTA2YTYxZmQ1YzA4OWZlZThmY2FmZDk1MmU1N2E1OTA5YTI0OWRkMTI1MDk0OThkMjcxYTcxYzk2IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJjNmJjZjc5YjkzMTQxYTgwNTRlMTJhYTQ0YWNmMzcyYTA3ODIwMzE3YTViMGQ1M2U5YTJhODFmOTAzOWQ5NjJjIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MiwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkODE3ZmJiNzNjOTJiMzZkNWU0ODk2ZmY1MWMxYjU4ZWVjMzMwYmJlOTYxYmEwNWZjNjIwNWY4NjdlYTFiY2Y2In0"
+          "resource": "repo://src/lib/tauri/desktop-adapter.test.ts#L58-L185",
+          "version": "repo-lines-v1:sha256:ee14a1a78f1657c2e1ca530886297e6f8444355a888b0c4b3630804e46c2d299:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJjZmI4ODE2NjViYmQ2ZjRhODVmMWM1Mjg5ZDc1YTQzOTU1NDg3YTIwYjgyMDRlMGEzNzlmOTZiYTYxZGFmMjhiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5MDkzZTEyOTA2YTYxZmQ1YzA4OWZlZThmY2FmZDk1MmU1N2E1OTA5YTI0OWRkMTI1MDk0OThkMjcxYTcxYzk2IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJjNmJjZjc5YjkzMTQxYTgwNTRlMTJhYTQ0YWNmMzcyYTA3ODIwMzE3YTViMGQ1M2U5YTJhODFmOTAzOWQ5NjJjIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MiwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkODE3ZmJiNzNjOTJiMzZkNWU0ODk2ZmY1MWMxYjU4ZWVjMzMwYmJlOTYxYmEwNWZjNjIwNWY4NjdlYTFiY2Y2In0"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.2",
-    "at": "2026-11-09T18:02:27.157Z"
+    "at": "2026-11-13T15:48:39.594Z"
   }
 }

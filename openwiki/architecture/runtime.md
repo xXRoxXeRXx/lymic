@@ -18,6 +18,10 @@ sources:
     resource: repo://src-tauri/src/app/thumbnail_protocol.rs
   - id: openwiki-source-ccc0cb371a1c02a3941c4ffb
     resource: repo://src-tauri/src/app/tray.rs
+  - id: openwiki-source-8fb4609cef6e3bffc73c48ee
+    resource: repo://src-tauri/src/lib.rs
+  - id: openwiki-source-99b0214e9f2113a0f6a2cf92
+    resource: repo://src-tauri/src/main.rs
   - id: openwiki-source-d86d6ce7cb2c85ce2672a18b
     resource: repo://src-tauri/src/sync/service.rs
   - id: openwiki-source-9a712a1a91500c698b23fdc0
@@ -30,7 +34,10 @@ sources:
     resource: repo://src/lib/tauri/sync-event-subscription.ts
   - id: openwiki-source-31a0716bfc7f6379a14d2d70
     resource: repo://src/routes/%2Bpage.svelte
-generated: { by: "openwiki/0.7.2", at: "2026-11-09T18:02:27.157Z" }
+generated: { by: "openwiki/0.7.2", at: "2026-11-13T15:48:39.594Z" }
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-11-13T15:48:39.594Z
 ---
 
 # Desktop Runtime Architecture
@@ -140,7 +147,7 @@ The frontend subscription listens for `sync-progress`, `sync-progress-percent`, 
 
 The host registers two asynchronous URI schemes before plugins and setup. `lymic-asset` validates an asset kind and identifier, reconstructs an authenticated Immich client from stored credentials, and proxies a preview or video response. Video ranges are capped at 8 MiB and selected response headers are preserved, which lets the webview seek without requesting an unbounded chunk. `lymic-thumb` uses a disk cache under the app cache directory, separated by account, and bounds foreground thumbnail downloading with a 12-permit, LIFO-priority pool; it returns HTTP-style error responses when credentials, cache paths, or thumbnail retrieval fail.
 
-`tauri.conf.json` declares the initially hidden `main` webview and its development/build frontend locations. Its production CSP admits only self-hosted scripts and the `lymic-thumb` and `lymic-asset` schemes for images and media; its connection policy admits Tauri IPC. The development CSP adds the Vite HTTP and WebSocket endpoints. This coupling means a new scheme or network origin needs both a host registration and an appropriate CSP change. See [Authentication](../security/authentication.md) for credential handling.
+`tauri.conf.json` declares the initially hidden `main` webview and its development/build frontend locations. Its production CSP admits only self-hosted scripts, permits the `lymic-thumb` and `lymic-asset` schemes for images and media, and allows `https://tiles.openfreemap.org` for map tiles. Its connection policy permits both Tauri IPC and that tile origin. The development CSP additionally permits the Vite HTTP and WebSocket endpoints. This coupling means a new scheme or network origin needs both a host registration and an appropriate CSP change. See [Authentication](../security/authentication.md) for credential handling.
 
 ## Native tray control surface
 

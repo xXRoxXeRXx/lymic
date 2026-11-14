@@ -1,3 +1,3 @@
 # Files
 
-- [Frontend UI and IPC Boundary](ui-and-ipc.md) - How the Svelte composition root, stateful controllers, typed desktop adapter, Tauri commands, and native events coordinate desktop behavior. Covers navigation, hydration and cleanup, snapshot reconciliation, and the safe procedure for evolving both sides of IPC.
+- [Frontend UI and Desktop IPC](ui-and-ipc.md) - The Svelte composition root delegates interaction state to controllers and reaches the native application through a typed Tauri adapter. This page describes view ownership, command and event contracts, lifecycle cleanup, error reconciliation, and the tests that keep TypeScript and Rust aligned.

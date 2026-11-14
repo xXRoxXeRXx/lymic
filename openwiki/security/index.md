@@ -1,3 +1,3 @@
 # Files
 
-- [Authentication and Credential Safety](authentication.md) - How the desktop client validates and stores Immich credentials, constrains credential-bearing requests, reuses authenticated clients safely, and isolates cached profile data across sessions.
+- [Authentication and Credential Boundaries](authentication.md) - How the desktop client validates and stores Immich credentials, constructs authenticated clients, and handles logout, startup, and synchronization failures.
