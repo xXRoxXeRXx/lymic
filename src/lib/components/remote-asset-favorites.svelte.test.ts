@@ -28,7 +28,7 @@ function createFavorites(options: {
   onRemoved?: (assetId: string) => void;
 }) {
   return createRemoteAssetFavorites({
-    getTimeline: () => options.timeline,
+    timeline: options.timeline,
     setAssetFavorite: options.setAssetFavorite ?? (async () => {}),
     removeUnfavorited: options.removeUnfavorited ?? false,
     errorMessage: "favorite update failed",
@@ -188,7 +188,19 @@ describe("Remote Asset favorites in a Photo Timeline", () => {
     favorites.retainOverrides(["b"]);
     expect(timeline.assetsFor(march).map((candidate) => favorites.isFavorite(candidate))).toEqual([false, true]);
 
-    favorites.retainOverrides([]);
+    favorites.reset();
     expect(timeline.assetsFor(march).map((candidate) => favorites.isFavorite(candidate))).toEqual([false, false]);
+  });
+});
+
+describe("Remote Asset favorites navigation in a Photo Timeline", () => {
+  it("wraps around the loaded assets and resolves each asset's favorite state", async () => {
+    const timeline = await favoritesTimeline({ [march]: [asset("a", false), asset("b", false)] });
+    const favorites = createFavorites({ timeline });
+    favorites.reflect("b", true);
+
+    expect(await favorites.navigate(1, asset("a", false))).toMatchObject({ id: "b", isFavorite: true });
+    expect((await favorites.navigate(1, asset("b", false)))?.id).toBe("a");
+    expect((await favorites.navigate(-1, asset("a", false)))?.id).toBe("b");
   });
 });

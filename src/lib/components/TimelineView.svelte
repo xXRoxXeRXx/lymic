@@ -79,7 +79,7 @@
   let selectionResult = $state<{ action: "favorite" | "album" | "download"; succeeded: number; total: number } | null>(null);
   let actionGeneration = 0;
   const favorites = createRemoteAssetFavorites({
-    getTimeline: () => timeline,
+    get timeline() { return timeline; },
     get setAssetFavorite() { return setAssetFavorite; },
     get removeUnfavorited() { return removeUnfavoritedAssets; },
     get errorMessage() { return $t("timeline_favorite_update_error"); },
@@ -108,7 +108,6 @@
     selectedAsset = null;
     opener = null;
     updatingFavoriteAssetIds = {};
-    favorites.retainOverrides([]);
     favorites.reset();
   }
 
@@ -377,15 +376,6 @@
     selectedAsset = null;
     queueMicrotask(() => opener?.focus());
   }
-  function navigateLightboxAsset(delta: number, current: TimelineAsset): TimelineAsset | null | Promise<TimelineAsset | null> {
-    if (removeUnfavoritedAssets) {
-      return favorites.navigate(delta, current);
-    }
-    if (!lightboxAssets.length) return null;
-    const index = lightboxAssets.findIndex((candidate) => candidate.id === current.id);
-    const next = lightboxAssets[(index + delta + lightboxAssets.length) % lightboxAssets.length];
-    return { ...next, isFavorite: favorites.isFavorite(next) };
-  }
   function handleKeydown(event: KeyboardEvent) {
     if (!selectedAsset && isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen) {
       event.preventDefault();
@@ -462,7 +452,7 @@
       </div>
     </div>
   {/if}
-  {#if removeUnfavoritedAssets && favorites.updateError}
+  {#if favorites.updateError}
     <div class="mb-3 mr-16 flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
       <span>{favorites.updateError}</span>
       <button
@@ -571,7 +561,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} refreshGeneration={timeline.refreshGeneration} detailsCache={assetDetailsById} bind:updatingFavoriteAssetIds navigateAsset={navigateLightboxAsset} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} {getAssetDetails} setAssetFavorite={favorites.updateOne} {chooseDownloadDestination} {downloadAsset} {albumCatalogue} {addAssetsToAlbum} />
+  <Lightbox asset={selectedAsset} refreshGeneration={timeline.refreshGeneration} detailsCache={assetDetailsById} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} {getAssetDetails} setAssetFavorite={favorites.updateOne} {chooseDownloadDestination} {downloadAsset} {albumCatalogue} {addAssetsToAlbum} />
 {/if}
 {#if albumCatalogue}
   <AddToAlbumModal
