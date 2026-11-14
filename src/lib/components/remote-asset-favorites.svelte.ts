@@ -1,12 +1,12 @@
 import type { TimelineAsset } from "../contracts";
-import type { TimelineAssetPosition, TimelineViewState } from "../controllers/timeline-controller.svelte";
+import type { TimelineAssetPosition, TimelineController } from "../controllers/timeline-controller.svelte";
 
 interface RemovedLightboxPosition extends TimelineAssetPosition {
   assetId: string;
 }
 
 export interface RemoteAssetFavoritesOptions {
-  readonly timeline: TimelineViewState;
+  readonly timeline: TimelineController;
   readonly setAssetFavorite: (assetId: string, isFavorite: boolean) => Promise<void>;
   /** True in the Favorites Timeline, where an unfavorited Remote Asset leaves the timeline. */
   readonly removeUnfavorited: boolean;
@@ -61,7 +61,7 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
   function confirmRemoval(assetId: string, isFavorite: boolean) {
     if (isFavorite) return;
     const { timeline } = options;
-    const located = timeline.locateAsset?.(assetId);
+    const located = timeline.locateAsset(assetId);
     if (located) {
       if (activeAssetId === assetId) {
         removedPosition = { assetId, ...located };
@@ -69,14 +69,14 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
         removedPosition = { ...removedPosition, index: Math.max(0, removedPosition.index - 1) };
       }
     }
-    timeline.removeAsset?.(assetId);
+    timeline.removeAsset(assetId);
     options.onRemoved?.(assetId);
   }
 
   async function navigateFromFormerPosition(delta: number, current: TimelineAsset) {
     const navigation = ++navigationGeneration;
     const former = removedPosition?.assetId === current.id ? removedPosition : null;
-    const next = await options.timeline.stepAsset?.(current.id, delta, former);
+    const next = await options.timeline.stepAsset(current.id, delta, former);
     if (!next || navigation !== navigationGeneration || activeAssetId !== current.id) return null;
     removedPosition = null;
     activeAssetId = next.id;

@@ -6,7 +6,12 @@ export interface TimelineAssetPosition {
   index: number;
 }
 
-export interface TimelineViewState {
+/**
+ * The contract shared by the Photo, Favorites, Album, and Person timelines.
+ * Every timeline supports Remote Asset removal and navigation; callers need
+ * not check for either.
+ */
+export interface TimelineController {
   readonly buckets: TimelineBucket[];
   readonly refreshGeneration: number;
   readonly isLoading: boolean;
@@ -17,14 +22,16 @@ export interface TimelineViewState {
   activateBucket(timeBucket: string): Promise<void>;
   refresh(): Promise<void>;
   clear(): void;
-  removeAsset?(assetId: string): void;
-  locateAsset?(assetId: string): TimelineAssetPosition | null;
-  stepAsset?(currentId: string, delta: number, formerPosition?: TimelineAssetPosition | null): Promise<TimelineAsset | null>;
-}
-
-export interface TimelineController extends TimelineViewState {
+  /** Removes a loaded asset from its bucket, dropping a bucket that becomes empty. A no-op if the asset is not loaded. */
   removeAsset(assetId: string): void;
+  /** Where a loaded asset sits in its bucket, or null if it is not loaded. */
   locateAsset(assetId: string): TimelineAssetPosition | null;
+  /**
+   * The asset `delta` places after (positive) or before (negative) `currentId`,
+   * crossing and wrapping buckets. If `currentId` was removed, pass its
+   * `formerPosition` (from `locateAsset` before removal) to step from where it was.
+   * Null when the timeline has no asset to step to or a bucket fails to load.
+   */
   stepAsset(currentId: string, delta: number, formerPosition?: TimelineAssetPosition | null): Promise<TimelineAsset | null>;
 }
 

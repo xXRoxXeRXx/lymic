@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import TimelineView from "./TimelineView.svelte";
-import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
+import type { TimelineController } from "../controllers/timeline-controller.svelte";
 import { createFavoritesTimelineController } from "../controllers/favorites-timeline-controller.svelte";
 import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 import type { AssetDetails, TimelineAsset } from "../contracts";
@@ -21,7 +21,7 @@ vi.stubGlobal("IntersectionObserver", class {
   disconnect() { }
 });
 
-const timeline: TimelineViewState = {
+const timeline: TimelineController = {
   buckets: [
     { timeBucket: "2025-03-01T00:00:00.000Z", count: 12 },
     { timeBucket: "2025-02-01T00:00:00.000Z", count: 3 },
@@ -39,6 +39,9 @@ const timeline: TimelineViewState = {
   activateBucket: vi.fn(),
   refresh: vi.fn(),
   clear: vi.fn(),
+  removeAsset: vi.fn(),
+  locateAsset: vi.fn(() => null),
+  stepAsset: vi.fn(async () => null),
 };
 
 function assetDetails(overrides: Partial<AssetDetails> = {}): AssetDetails {

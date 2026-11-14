@@ -4,7 +4,7 @@
   import { Album, Check, Download, Heart, HeartOff, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
-  import type { TimelineViewState } from "../controllers/timeline-controller.svelte";
+  import type { TimelineController } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
   import type { AlbumAssignmentResult, AssetDetails, TimelineAsset } from "../contracts";
   import { calculateMasonryLayout } from "./timeline-masonry";
@@ -15,7 +15,7 @@
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
   interface Props {
-    timeline: TimelineViewState;
+    timeline: TimelineController;
     serverUrl?: string;
     onOpenExternalUrl?(url: string): Promise<void>;
     getAssetDetails?(assetId: string): Promise<AssetDetails | null>;
