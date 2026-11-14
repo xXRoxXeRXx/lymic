@@ -10,6 +10,7 @@
   import type { AssetDetails, TimelineAsset } from "../contracts";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import Lightbox from "./Lightbox.svelte";
+  import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
   import { protocolSrc } from "../tauri/protocol-src";
 
   interface Props {
@@ -24,7 +25,12 @@
   let map: MapLibreMap | undefined;
   let providerError = $state(false);
   let selectedAsset = $state<TimelineAsset | null>(null);
-  const detailsCache = new Map<string, AssetDetails | null>();
+  const assetActions = createRemoteAssetActions({
+    get getAssetDetails() { return desktop.getAssetDetails; },
+    get chooseDownloadDestination() { return desktop.chooseDownloadDestination; },
+    get downloadAsset() { return desktop.downloadAsset; },
+    get downloadArchive() { return desktop.downloadArchive; },
+  });
   let collectionNavigation = $state(false);
   let selectionGeneration = 0;
   const pageSize = 100;
@@ -130,13 +136,9 @@
 
   function thumbnailUrl(id: string) { return protocolSrc("lymic-thumb", "asset", id); }
   async function getDetails(id: string) {
-    if (detailsCache.has(id)) return detailsCache.get(id) ?? null;
-    const details = await desktop.getAssetDetails(id);
-    if (detailsCache.size >= 500) detailsCache.delete(detailsCache.keys().next().value!);
-    detailsCache.set(id, details);
-    return details;
+    return (await assetActions.load(id)).details;
   }
-  function toAsset(id: string, details: NonNullable<Awaited<ReturnType<typeof desktop.getAssetDetails>>>): TimelineAsset {
+  function toAsset(id: string, details: AssetDetails): TimelineAsset {
     const takenAt = details.takenAt && Number.isFinite(Date.parse(details.takenAt)) ? details.takenAt : null;
     return { id, width: details.imageWidth ?? 0, height: details.imageHeight ?? 0, type: details.assetType === "VIDEO" ? "VIDEO" : "IMAGE", takenAt, cameraMake: details.cameraMake, cameraModel: details.cameraModel, fileSize: details.fileSize, duration: null, isFavorite: details.isFavorite };
   }
@@ -261,7 +263,7 @@
     </section>
   {/if}
   {#if selectedAsset}
-    <Lightbox asset={selectedAsset} navigateAsset={collectionNavigation ? navigateCollection : undefined} {detailsCache} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={() => {}} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} getAssetDetails={getDetails} setAssetFavorite={desktop.setAssetFavorite} chooseDownloadDestination={desktop.chooseDownloadDestination} downloadAsset={desktop.downloadAsset} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
+    <Lightbox asset={selectedAsset} navigateAsset={collectionNavigation ? navigateCollection : undefined} {assetActions} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={() => {}} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={desktop.setAssetFavorite} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
   {/if}
 </div>
 

@@ -6,42 +6,37 @@
   import { toBcp47Locale } from "../i18n";
   import type { AlbumAssignmentResult, AssetDetails, TimelineAsset } from "../contracts";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
+  import type { RemoteAssetActions } from "./remote-asset-actions.svelte";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   interface Props {
     asset: TimelineAsset;
-    refreshGeneration?: number;
-    detailsCache?: Map<string, AssetDetails | null>;
+    assetActions: RemoteAssetActions;
     updatingFavoriteAssetIds?: Record<string, true>;
     navigateAsset?: (delta: number, current: TimelineAsset) => TimelineAsset | null | Promise<TimelineAsset | null>;
     onClose(): void;
     onFavoriteChange(assetId: string, favorite: boolean): void;
     serverUrl: string;
     onOpenExternalUrl(url: string): Promise<void>;
-    getAssetDetails(assetId: string): Promise<AssetDetails | null>;
     setAssetFavorite(assetId: string, favorite: boolean): Promise<void>;
-    chooseDownloadDestination(name: string): Promise<string | null>;
-    downloadAsset(assetId: string, destination: string): Promise<void>;
     albumCatalogue?: TargetAlbumCatalogue;
     addAssetsToAlbum(assetIds: string[], albumId: string): Promise<AlbumAssignmentResult>;
   }
-  let { asset, refreshGeneration = 0, detailsCache = new Map(), updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, getAssetDetails, setAssetFavorite, chooseDownloadDestination, downloadAsset, albumCatalogue, addAssetsToAlbum }: Props = $props();
+  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   let selectedAsset = $state<TimelineAsset | null>(untrack(() => asset));
   let assetDetails = $state<AssetDetails | null>(null);
-  const assetDetailsById = untrack(() => detailsCache);
   let isAssetDetailsLoading = $state(false);
   let isInfoOpen = $state(false);
-  let favoriteOverrides = $state<Record<string, boolean>>({});
   let favoriteError = $state("");
   let downloadingAssetId = $state<string | null>(null);
   let downloadMessage = $state("");
   let downloadError = $state("");
+  let isDestroyed = false;
   let isAddToAlbumOpen = $state(false);
   let isAddingToAlbum = $state(false);
   let addToAlbumMessage = $state("");
   let addToAlbumError = $state("");
   let addToAlbumMessageTimeout: ReturnType<typeof setTimeout> | null = null;
-  let detailsGeneration = 0;
   const exifDetails = $derived.by(() => {
     if (!assetDetails) return [];
     const details: string[] = [];
@@ -74,45 +69,38 @@
   const fileSize = $derived(assetDetails?.fileSize ?? selectedAsset?.fileSize ?? null);
 
   function isFavorite(asset: TimelineAsset) {
-    return favoriteOverrides[asset.id] ?? asset.isFavorite;
+    return assetActions.isFavorite(asset);
   }
 
   function updateFavoriteState(assetId: string, isFavorite: boolean) {
     onFavoriteChange(assetId, isFavorite);
-    favoriteOverrides = { ...favoriteOverrides, [assetId]: isFavorite };
-    const currentDetails = assetDetailsById.get(assetId);
-    if (currentDetails) {
-      const updatedDetails = { ...currentDetails, isFavorite };
-      assetDetailsById.set(assetId, updatedDetails);
-      if (selectedAsset?.id === assetId) assetDetails = updatedDetails;
+    assetActions.reflectFavorite(assetId, isFavorite);
+    if (selectedAsset?.id === assetId) {
+      const updatedDetails = assetActions.get(assetId);
+      if (updatedDetails) assetDetails = updatedDetails;
+      selectedAsset = { ...selectedAsset, isFavorite };
     }
-    if (selectedAsset?.id === assetId) selectedAsset = { ...selectedAsset, isFavorite };
   }
 
   function loadAssetDetails(asset: TimelineAsset) {
     favoriteError = "";
-    if (assetDetailsById.has(asset.id)) {
-      assetDetails = assetDetailsById.get(asset.id) ?? null;
+    const cached = assetActions.get(asset.id);
+    if (cached !== undefined) {
+      assetDetails = cached;
       isAssetDetailsLoading = false;
       return;
     }
     assetDetails = null;
     isAssetDetailsLoading = true;
-    const requestGeneration = detailsGeneration;
-    void getAssetDetails(asset.id)
-      .then((details) => {
-        if (requestGeneration !== detailsGeneration) return;
-        const favorite = favoriteOverrides[asset.id];
-        const resolvedDetails = details && favorite === undefined ? details : details && { ...details, isFavorite: favorite };
-        assetDetailsById.set(asset.id, resolvedDetails);
-        if (selectedAsset?.id === asset.id) {
-          assetDetails = resolvedDetails;
-          isAssetDetailsLoading = false;
-        }
+    void assetActions.load(asset.id)
+      .then(({ details, stale }) => {
+        if (stale || isDestroyed || selectedAsset?.id !== asset.id) return;
+        assetDetails = details;
+        isAssetDetailsLoading = false;
       })
       // Details enhance the Info drawer; a failure must not disrupt asset viewing.
       .catch(() => {
-        if (requestGeneration === detailsGeneration && selectedAsset?.id === asset.id) isAssetDetailsLoading = false;
+        if (!isDestroyed && selectedAsset?.id === asset.id) isAssetDetailsLoading = false;
       });
   }
 
@@ -144,17 +132,15 @@
     if (!selectedAsset || !assetDetails?.originalFileName || downloadingAssetId) return;
 
     const assetId = selectedAsset.id;
-    const originalFileName = assetDetails.originalFileName;
     downloadMessage = "";
     downloadError = "";
     downloadingAssetId = assetId;
+    const isCurrent = () => selectedAsset?.id === assetId;
     try {
-      const destinationPath = await chooseDownloadDestination(originalFileName);
-      if (!destinationPath) return;
-      await downloadAsset(assetId, destinationPath);
-      if (selectedAsset?.id === assetId) downloadMessage = $t("timeline_download_saved");
+      const outcome = await assetActions.download([assetId]);
+      if (outcome === "saved" && isCurrent()) downloadMessage = $t("timeline_download_saved");
     } catch {
-      if (selectedAsset?.id === assetId) downloadError = $t("timeline_download_failed");
+      if (isCurrent()) downloadError = $t("timeline_download_failed");
     } finally {
       downloadingAssetId = null;
     }
@@ -192,7 +178,7 @@
     addToAlbumMessageTimeout = setTimeout(clearAddToAlbumMessage, 3_000);
   }
 
-  onDestroy(() => { detailsGeneration += 1; clearAddToAlbumMessage(); });
+  onDestroy(() => { isDestroyed = true; clearAddToAlbumMessage(); });
 
   function hasRealDimensions(asset: TimelineAsset, width: number | null, height: number | null) {
     if (width === null || height === null || width <= 0 || height <= 0) return false;
@@ -246,18 +232,10 @@
   }
 
 
-  let initialGeneration = true;
+  // Loads details initially and again whenever the shared details are invalidated, e.g. by a timeline refresh.
   $effect(() => {
-    refreshGeneration;
+    assetActions.generation;
     untrack(() => {
-      if (!initialGeneration) {
-        detailsGeneration += 1;
-        assetDetailsById.clear();
-        favoriteOverrides = Object.fromEntries(
-          Object.keys(updatingFavoriteAssetIds).map((id) => [id, favoriteOverrides[id]]),
-        );
-      }
-      initialGeneration = false;
       if (selectedAsset) loadAssetDetails(selectedAsset);
     });
   });

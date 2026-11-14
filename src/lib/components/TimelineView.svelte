@@ -10,6 +10,7 @@
   import { calculateMasonryLayout } from "./timeline-masonry";
   import Lightbox from "./Lightbox.svelte";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
+  import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
   import { createRemoteAssetFavorites } from "./remote-asset-favorites.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
@@ -67,7 +68,6 @@
   let isDragging = false;
   let scrollRaf: number | null = null;
   let selectedAsset = $state<TimelineAsset | null>(null);
-  const assetDetailsById = new Map<string, AssetDetails | null>();
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
   let isAddToAlbumOpen = $state(false);
   let isAddingToAlbum = $state(false);
@@ -78,6 +78,12 @@
   let isDownloadingSelection = $state(false);
   let selectionResult = $state<{ action: "favorite" | "album" | "download"; succeeded: number; total: number } | null>(null);
   let actionGeneration = 0;
+  const assetActions = createRemoteAssetActions({
+    get getAssetDetails() { return getAssetDetails; },
+    get chooseDownloadDestination() { return chooseDownloadDestination; },
+    get downloadAsset() { return downloadAsset; },
+    get downloadArchive() { return downloadArchive; },
+  });
   const favorites = createRemoteAssetFavorites({
     get timeline() { return timeline; },
     get setAssetFavorite() { return setAssetFavorite; },
@@ -131,7 +137,7 @@
   $effect(() => {
     timeline.refreshGeneration;
     untrack(() => {
-      assetDetailsById.clear();
+      assetActions.invalidate(Object.keys(updatingFavoriteAssetIds));
       resetSelectionAndModals();
       if (timeline.buckets.length === 0) {
         resetLightbox();
@@ -280,11 +286,7 @@
   }
 
   function reflectFavoriteState(assetId: string, isFavorite: boolean) {
-    const currentDetails = assetDetailsById.get(assetId);
-    if (currentDetails) {
-      const updatedDetails = { ...currentDetails, isFavorite };
-      assetDetailsById.set(assetId, updatedDetails);
-    }
+    assetActions.reflectFavorite(assetId, isFavorite);
     if (selectedAsset?.id === assetId) selectedAsset = { ...selectedAsset, isFavorite };
   }
 
@@ -319,22 +321,8 @@
     selectionResult = null;
     isDownloadingSelection = true;
     try {
-      if (assetIds.length === 1) {
-        const assetId = assetIds[0];
-        let details = assetDetailsById.get(assetId);
-        if (!assetDetailsById.has(assetId)) {
-          details = await getAssetDetails(assetId);
-          if (generation !== actionGeneration) return;
-          assetDetailsById.set(assetId, details);
-        }
-        if (!details?.originalFileName) throw new Error("Original file name is unavailable");
-        const destinationPath = await chooseDownloadDestination(details.originalFileName);
-        if (!destinationPath || generation !== actionGeneration) return;
-        await downloadAsset(assetId, destinationPath);
-      } else {
-        await downloadArchive(assetIds);
-      }
-      if (generation !== actionGeneration) return;
+      const outcome = await assetActions.download(assetIds, () => generation === actionGeneration);
+      if (outcome !== "saved") return;
       selectionResult = { action: "download", succeeded: assetIds.length, total: assetIds.length };
     } catch {
       if (generation !== actionGeneration) return;
@@ -561,7 +549,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} refreshGeneration={timeline.refreshGeneration} detailsCache={assetDetailsById} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} {getAssetDetails} setAssetFavorite={favorites.updateOne} {chooseDownloadDestination} {downloadAsset} {albumCatalogue} {addAssetsToAlbum} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} setAssetFavorite={favorites.updateOne} {albumCatalogue} {addAssetsToAlbum} />
 {/if}
 {#if albumCatalogue}
   <AddToAlbumModal

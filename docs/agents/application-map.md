@@ -37,7 +37,7 @@ Rust application services
 | --- | --- | --- |
 | UI composition | `src/routes/+page.svelte` | Creates controllers, hydrates them, and selects login, photo timeline, favorites, map, albums, people, dashboard, logs, settings, or info views. |
 | UI state and IPC callers | `src/lib/controllers/` | One controller per concern: auth, timeline, favorites timeline, sync, watched folders, preferences, update, and feedback. |
-| UI components and translations | `src/lib/components/`, `src/lib/i18n/` | Present controller state; locale files are the UI strings. |
+| UI components and translations | `src/lib/components/`, `src/lib/i18n/` | Present controller state; locale files are the UI strings. `remote-asset-actions.svelte.ts` is the single owner of Remote Asset detail caching, stale-request handling, favorite overrides on details, and Download (single file or archive) for the Lightbox, timeline selection, and Map View. |
 | Frontend IPC contracts and adapters | `src/lib/contracts.ts`, `src/lib/tauri/desktop-adapter.ts` | Shared frontend DTOs/state types and domain-split Tauri command adapters. |
 | UI event bridge | `src/lib/tauri/sync-event-subscription.ts` | Stable frontend subscriptions and event payload expectations. |
 | Tauri surface | `src-tauri/src/commands/`, `src-tauri/src/app/mod.rs`, `src-tauri/src/app/thumbnail_protocol.rs`, `src-tauri/src/app/asset_protocol.rs` | Command inputs, responses, custom streaming URI schemes (`lymic-thumb://`, `lymic-asset://`), and registration. |

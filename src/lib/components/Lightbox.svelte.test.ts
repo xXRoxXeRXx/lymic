@@ -3,20 +3,27 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, expect, it, vi } from "vitest";
 import "../i18n";
 import Lightbox from "./Lightbox.svelte";
+import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
 import type { TimelineAsset } from "../contracts";
 
 const photo: TimelineAsset = { id: "map-photo", width: 100, height: 80, type: "IMAGE", takenAt: null, cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false };
 const video: TimelineAsset = { ...photo, id: "map-video", type: "VIDEO" };
 afterEach(cleanup);
 
+function assetActions() {
+  return createRemoteAssetActions({
+    getAssetDetails: vi.fn().mockResolvedValue(null), chooseDownloadDestination: vi.fn(),
+    downloadAsset: vi.fn(), downloadArchive: vi.fn(),
+  });
+}
+
 it("opens one asset and delegates navigation to the caller's available results", async () => {
   const navigateAsset = vi.fn((delta: number) => delta === 1 ? video : null);
   const onClose = vi.fn();
   render(Lightbox, {
     asset: photo, navigateAsset, onClose, onFavoriteChange: vi.fn(), serverUrl: "",
-    onOpenExternalUrl: vi.fn(), getAssetDetails: vi.fn().mockResolvedValue(null),
-    setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(),
-    addAssetsToAlbum: vi.fn(),
+    onOpenExternalUrl: vi.fn(), assetActions: assetActions(),
+    setAssetFavorite: vi.fn(), addAssetsToAlbum: vi.fn(),
   });
   expect(screen.getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/map-photo");
   await fireEvent.click(screen.getByRole("button", { name: "Next asset" }));
@@ -29,8 +36,8 @@ it("opens one asset and delegates navigation to the caller's available results",
 it("waits for navigation into another page of a collection", async () => {
   render(Lightbox, {
     asset: photo, navigateAsset: async () => video, onClose: vi.fn(), onFavoriteChange: vi.fn(), serverUrl: "",
-    onOpenExternalUrl: vi.fn(), getAssetDetails: vi.fn().mockResolvedValue(null),
-    setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), addAssetsToAlbum: vi.fn(),
+    onOpenExternalUrl: vi.fn(), assetActions: assetActions(),
+    setAssetFavorite: vi.fn(), addAssetsToAlbum: vi.fn(),
   });
   await fireEvent.click(screen.getByRole("button", { name: "Next asset" }));
   expect(await screen.findByLabelText("Video preview")).toHaveAttribute("src", "lymic-asset://video/map-video");

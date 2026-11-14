@@ -395,7 +395,7 @@ describe("TimelineView scrubber", () => {
 
     expect(chooseDownloadDestination).toHaveBeenCalledWith("IMG_0001.CR3");
     await waitFor(() => expect(downloadAsset).toHaveBeenCalledWith("photo-1", "C:/Downloads/IMG_0001.CR3"));
-    expect(screen.getByRole("status")).toHaveTextContent("Download saved");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Download saved"));
   });
 
   it("assigns the open asset to a searched album and confirms success", async () => {
