@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
+import type { TimelineAsset } from "../contracts";
 import type { TimelineDesktopAdapter } from "../tauri/desktop-adapter";
 import { createTimelineController } from "./timeline-controller.svelte";
+
+function makeAsset(id: string): TimelineAsset {
+  return {
+    id,
+    width: 640,
+    height: 480,
+    type: "IMAGE",
+    takenAt: null,
+    fileSize: null,
+    duration: null,
+    isFavorite: true,
+  };
+}
 
 describe("Photo Timeline controller", () => {
   it("re-fetches the index if a removal is confirmed during refresh", async () => {
@@ -261,8 +275,7 @@ describe("Photo Timeline controller", () => {
 
   it("deduplicates concurrent activations of the same bucket within a generation", async () => {
     const month = "2025-03-01T00:00:00.000Z";
-    const asset = (id: string) => ({ id, width: 640, height: 480, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true });
-    let resolveBucket!: (assets: ReturnType<typeof asset>[]) => void;
+    let resolveBucket!: (assets: TimelineAsset[]) => void;
     const adapter: TimelineDesktopAdapter = {
       getTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: month, count: 1 }]),
       getTimelineBucketAssets: vi.fn().mockImplementationOnce(
@@ -276,16 +289,15 @@ describe("Photo Timeline controller", () => {
     const second = timeline.activateBucket(month);
     expect(adapter.getTimelineBucketAssets).toHaveBeenCalledTimes(1);
 
-    resolveBucket([asset("a1")]);
+    resolveBucket([makeAsset("a1")]);
     await Promise.all([first, second]);
     expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["a1"]);
   });
 
   it("fetches current assets after a refresh even when an earlier request is still pending and ignores stale successes", async () => {
     const month = "2025-03-01T00:00:00.000Z";
-    const asset = (id: string) => ({ id, width: 640, height: 480, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true });
-    let resolveStale!: (assets: ReturnType<typeof asset>[]) => void;
-    let resolveCurrent!: (assets: ReturnType<typeof asset>[]) => void;
+    let resolveStale!: (assets: TimelineAsset[]) => void;
+    let resolveCurrent!: (assets: TimelineAsset[]) => void;
     const adapter: TimelineDesktopAdapter = {
       getTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: month, count: 1 }]),
       getTimelineBucketAssets: vi.fn()
@@ -302,19 +314,18 @@ describe("Photo Timeline controller", () => {
     const currentSecond = timeline.activateBucket(month);
     expect(adapter.getTimelineBucketAssets).toHaveBeenCalledTimes(2);
 
-    resolveCurrent([asset("current")]);
+    resolveCurrent([makeAsset("current")]);
     await Promise.all([currentFirst, currentSecond]);
     expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["current"]);
 
-    resolveStale([asset("stale")]);
+    resolveStale([makeAsset("stale")]);
     await staleActivation;
     expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["current"]);
   });
 
   it("does not let a stale bucket success overwrite offline state after a current bucket failure", async () => {
     const month = "2025-03-01T00:00:00.000Z";
-    const asset = (id: string) => ({ id, width: 640, height: 480, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true });
-    let resolveStale!: (assets: ReturnType<typeof asset>[]) => void;
+    let resolveStale!: (assets: TimelineAsset[]) => void;
     let rejectCurrent!: (reason?: unknown) => void;
     const adapter: TimelineDesktopAdapter = {
       getTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: month, count: 1 }]),
@@ -333,7 +344,7 @@ describe("Photo Timeline controller", () => {
     await expect(currentActivation).rejects.toThrow("current failure");
     expect(timeline.isOffline).toBe(true);
 
-    resolveStale([asset("stale")]);
+    resolveStale([makeAsset("stale")]);
     await staleActivation;
     expect(timeline.isOffline).toBe(true);
     expect(timeline.assetsFor(month)).toEqual([]);
@@ -341,9 +352,8 @@ describe("Photo Timeline controller", () => {
 
   it("ignores stale bucket failures after a refresh without overwriting current assets or offline state", async () => {
     const month = "2025-03-01T00:00:00.000Z";
-    const asset = (id: string) => ({ id, width: 640, height: 480, type: "IMAGE" as const, takenAt: null, fileSize: null, duration: null, isFavorite: true });
     let rejectStale!: (reason?: unknown) => void;
-    let resolveCurrent!: (assets: ReturnType<typeof asset>[]) => void;
+    let resolveCurrent!: (assets: TimelineAsset[]) => void;
     const adapter: TimelineDesktopAdapter = {
       getTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: month, count: 1 }]),
       getTimelineBucketAssets: vi.fn()
@@ -359,7 +369,7 @@ describe("Photo Timeline controller", () => {
     const currentActivation = timeline.activateBucket(month);
     expect(adapter.getTimelineBucketAssets).toHaveBeenCalledTimes(2);
 
-    resolveCurrent([asset("current")]);
+    resolveCurrent([makeAsset("current")]);
     await currentActivation;
     expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["current"]);
     expect(timeline.isOffline).toBe(false);
