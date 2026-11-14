@@ -28,7 +28,13 @@ export interface TimelineController extends TimelineViewState {
   stepAsset(currentId: string, delta: number, formerPosition?: TimelineAssetPosition | null): Promise<TimelineAsset | null>;
 }
 
-export function createTimelineController(adapter: TimelineDesktopAdapter): TimelineController {
+export interface CompleteTimelineSource {
+  getTimeline(): Promise<{ buckets: TimelineBucket[]; assetsByBucket: Record<string, TimelineAsset[]> }>;
+}
+
+export function createTimelineController(
+  adapter: TimelineDesktopAdapter | CompleteTimelineSource,
+): TimelineController {
   let buckets = $state<TimelineBucket[]>([]);
   let isLoading = $state(false);
   let isRefreshing = $state(false);
@@ -38,10 +44,21 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
   let latestRequest = 0;
   let assetGeneration = 0;
   let assetsByBucket = $state<Record<string, TimelineAsset[]>>({});
+  let completeAssetsByBucket: Record<string, TimelineAsset[]> = {};
   const pendingBuckets = new Map<string, Promise<void>>();
   const staleBuckets = new Set<string>();
   let removalVersion = 0;
   const removalVersions = new Map<string, number>();
+
+  const source = "getTimeline" in adapter
+    ? {
+        load: () => adapter.getTimeline(),
+        loadBucket: (timeBucket: string) => Promise.resolve(completeAssetsByBucket[timeBucket] ?? []),
+      }
+    : {
+        load: async () => ({ buckets: await adapter.getTimelineBuckets(), assetsByBucket: undefined }),
+        loadBucket: (timeBucket: string) => adapter.getTimelineBucketAssets(timeBucket),
+      };
 
   async function refresh() {
     const request = ++latestRequest;
@@ -53,13 +70,19 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     isRefreshing = true;
     try {
       let loaded: TimelineBucket[];
+      let loadedAssetsByBucket: Record<string, TimelineAsset[]> | undefined;
       let version: number;
       do {
         version = removalVersion;
-        loaded = await adapter.getTimelineBuckets();
+        const snapshot = await source.load();
+        loaded = snapshot.buckets;
+        loadedAssetsByBucket = snapshot.assetsByBucket;
         if (request !== latestRequest) return;
       } while (version !== removalVersion);
       if (request === latestRequest) {
+        if (loadedAssetsByBucket) {
+          completeAssetsByBucket = loadedAssetsByBucket;
+        }
         const list = Array.isArray(loaded) ? loaded : [];
         const nextBuckets = [...list].sort((a, b) => b.timeBucket.localeCompare(a.timeBucket));
         const activeKeys = new Set(nextBuckets.map((bucket) => bucket.timeBucket));
@@ -107,6 +130,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     isOffline = false;
     hasInitialLoadError = false;
     assetsByBucket = {};
+    completeAssetsByBucket = {};
     pendingBuckets.clear();
     staleBuckets.clear();
     removalVersions.clear();
@@ -123,7 +147,7 @@ export function createTimelineController(adapter: TimelineDesktopAdapter): Timel
     if (pending) return pending;
     const generation = assetGeneration;
     const requestVersion = removalVersion;
-    const request = adapter.getTimelineBucketAssets(timeBucket).then((assets) => {
+    const request = source.loadBucket(timeBucket).then((assets) => {
       if (generation !== assetGeneration) return;
       const removedDuringRequest = new Set(
         [...removalVersions].filter(([, version]) => version > requestVersion).map(([id]) => id),
