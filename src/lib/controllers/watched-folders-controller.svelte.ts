@@ -49,7 +49,7 @@ export function createWatchedFoldersController(
   let watchedFolders = $state<WatchedFolder[]>([]);
   let pendingAddition = $state<PendingFolderAddition | null>(null);
   let mounted = true;
-  let refreshGeneration = 0;
+  let generation = 0;
 
   function startLifecycle() {
     mounted = true;
@@ -60,7 +60,7 @@ export function createWatchedFoldersController(
   }
 
   function clear() {
-    refreshGeneration += 1;
+    generation += 1;
     watchedFolders = [];
     pendingAddition = null;
   }
@@ -70,21 +70,21 @@ export function createWatchedFoldersController(
   }
 
   async function refresh() {
-    const generation = refreshGeneration;
+    const request = generation;
     try {
       const nextFolders = await adapter.getFolders();
-      if (mounted && generation === refreshGeneration) {
+      if (mounted && request === generation) {
         watchedFolders = nextFolders;
         if (referencesUnknownTargetAlbum(nextFolders)) void options.targetAlbumCatalogue?.refresh();
       }
     } catch (error) {
       console.error("Failed to load folders", error);
-      if (mounted && generation === refreshGeneration) options.reportError(error);
+      if (mounted && request === generation) options.reportError(error);
     }
   }
 
   async function promptForFolder(volume: DetectedVolume | null, logMessage: string) {
-    const generation = refreshGeneration;
+    const request = generation;
     try {
       const selected = await adapter.openFolderDialog({
         directory: true,
@@ -92,12 +92,12 @@ export function createWatchedFoldersController(
         ...(volume ? { defaultPath: volume.mountPath } : {}),
         title: options.t("select_folder"),
       });
-      if (mounted && generation === refreshGeneration && typeof selected === "string") {
+      if (mounted && request === generation && typeof selected === "string") {
         pendingAddition = { path: selected, volume };
       }
     } catch (error) {
       console.error(logMessage, error);
-      if (mounted && generation === refreshGeneration) options.reportError(error);
+      if (mounted && request === generation) options.reportError(error);
     }
   }
 
@@ -111,21 +111,21 @@ export function createWatchedFoldersController(
 
   async function confirmAddFolder(targetAlbumId: string | null) {
     if (!pendingAddition) return;
-    const generation = refreshGeneration;
+    const request = generation;
     const { path, volume } = pendingAddition;
     pendingAddition = null;
     try {
       if (volume) {
         await adapter.acceptRemovableMediaFolder(volume.volumeId, path, targetAlbumId);
-        if (generation !== refreshGeneration) return;
+        if (request !== generation) return;
         options.onRemovableVolumeAccepted?.(volume.volumeId);
       } else {
         await adapter.addFolder(path, targetAlbumId);
       }
-      if (generation === refreshGeneration) await refresh();
+      if (request === generation) await refresh();
     } catch (error) {
       console.error("Failed to add folder", error);
-      if (mounted && generation === refreshGeneration) options.reportError(error);
+      if (mounted && request === generation) options.reportError(error);
     }
   }
 
@@ -134,7 +134,7 @@ export function createWatchedFoldersController(
   }
 
   async function removeFolder(id: number) {
-    const generation = refreshGeneration;
+    const request = generation;
     try {
       const result = await adapter.removeFolder(id);
       const warningMessage = result?.requiresSyncCancellation
@@ -144,26 +144,26 @@ export function createWatchedFoldersController(
         title: options.t("remove_folder"),
         kind: "warning",
       });
-      if (!confirmed || generation !== refreshGeneration) return;
+      if (!confirmed || request !== generation) return;
       await adapter.removeFolder(id, true);
-      if (generation !== refreshGeneration) return;
+      if (request !== generation) return;
       await refresh();
-      if (generation === refreshGeneration) await options.onFolderRemoved?.();
+      if (request === generation) await options.onFolderRemoved?.();
     } catch (error) {
       console.error("Failed to remove folder", error);
-      if (mounted && generation === refreshGeneration) options.reportError(error);
+      if (mounted && request === generation) options.reportError(error);
     }
   }
 
   async function updateFolderExclusionPatterns(id: number, exclusionPatterns: string[]) {
-    const generation = refreshGeneration;
+    const request = generation;
     try {
       await adapter.updateFolderExclusionPatterns(id, exclusionPatterns);
-      if (generation !== refreshGeneration) return false;
+      if (request !== generation) return false;
       await refresh();
       return true;
     } catch (error) {
-      if (mounted && generation === refreshGeneration) options.reportError(error);
+      if (mounted && request === generation) options.reportError(error);
       return false;
     }
   }

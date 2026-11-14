@@ -25,16 +25,19 @@ export function createAuthController(options: {
   let loginError = $state("");
   let loginErrorCode = $state("");
   let generation = 0;
+  let pendingAuthOperations = 0;
   let authOperation = Promise.resolve();
 
   async function runAuthOperation(request: number, operation: () => Promise<void>) {
     const previous = authOperation;
     let release!: () => void;
     authOperation = new Promise<void>((resolve) => { release = resolve; });
+    pendingAuthOperations += 1;
     await previous;
     try {
       if (request === generation) await operation();
     } finally {
+      pendingAuthOperations -= 1;
       release();
     }
   }
@@ -52,6 +55,10 @@ export function createAuthController(options: {
 
   async function hydrate() {
     const request = ++generation;
+    if (pendingAuthOperations > 0) {
+      await authOperation;
+      if (request !== generation) return;
+    }
     const authenticated = await adapter.getAuthStatus();
     if (request !== generation) return;
     if (!authenticated) {
@@ -92,6 +99,8 @@ export function createAuthController(options: {
       }));
       if (request !== generation) return;
       apiKey = "";
+      allowLocalHttp = false;
+      cloudflareClientId = "";
       cloudflareClientSecret = "";
       isAuthenticated = true;
       currentUserName = "";
@@ -127,6 +136,7 @@ export function createAuthController(options: {
       isAuthenticated = false;
       apiKey = "";
       allowLocalHttp = false;
+      loginError = "";
       loginErrorCode = "";
       cloudflareClientId = "";
       cloudflareClientSecret = "";

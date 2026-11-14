@@ -79,12 +79,32 @@
   let isApplyingSelection = $state(false);
   let isDownloadingSelection = $state(false);
   let selectionResult = $state<{ action: "favorite" | "album" | "download"; succeeded: number; total: number } | null>(null);
+  let actionGeneration = 0;
   const selectionCount = $derived(selectedAssetIds.size);
   const isSelectionMode = $derived(selectionCount > 0);
   const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selectedAssetIds.has(asset.id)));
   const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => isFavorite(asset)));
   const hasNonFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => !isFavorite(asset)));
   const isSelectionActionBusy = $derived(isApplyingSelection || isAddingToAlbum || isDownloadingSelection);
+
+  function resetSelectionAndModals() {
+    actionGeneration += 1;
+    isApplyingSelection = false;
+    isDownloadingSelection = false;
+    isAddingToAlbum = false;
+    isAddToAlbumOpen = false;
+    addToAlbumError = "";
+    selectionResult = null;
+    clearSelection();
+  }
+
+  function resetLightbox() {
+    selectedAsset = null;
+    opener = null;
+    updatingFavoriteAssetIds = {};
+    favoriteOverrides = {};
+    favoritesLightbox.reset();
+  }
 
   $effect(() => {
     if (!activeTimeBucket || !scrubberMonths.includes(activeTimeBucket)) {
@@ -106,21 +126,25 @@
   $effect(() => {
     timeline.refreshGeneration;
     untrack(() => {
-        assetDetailsById.clear();
+      assetDetailsById.clear();
+      resetSelectionAndModals();
+      if (timeline.buckets.length === 0) {
+        resetLightbox();
+        return;
+      }
       favoriteOverrides = Object.fromEntries(
         Object.keys(updatingFavoriteAssetIds)
           .filter((assetId) => assetId in favoriteOverrides)
           .map((assetId) => [assetId, favoriteOverrides[assetId]]),
       );
       favoritesLightbox.clearError();
-      clearSelection();
     });
   });
 
   $effect(() => {
     timeline;
     untrack(() => {
-      clearSelection();
+      resetSelectionAndModals();
       favoritesLightbox.reset();
     });
   });
@@ -295,6 +319,7 @@
     const assetIds = [...selectedAssetIds];
     if (assetIds.length === 0 || isSelectionActionBusy) return;
 
+    const generation = actionGeneration;
     if (removeUnfavoritedAssets) favoritesLightbox.clearError();
     selectionResult = null;
     isApplyingSelection = true;
@@ -302,6 +327,7 @@
     for (const assetId of assetIds) {
       try {
         await setAssetFavorite(assetId, isFavorite);
+        if (generation !== actionGeneration) return;
         if (removeUnfavoritedAssets) {
           if (!isFavorite) {
             favoritesLightbox.confirmRemoval(assetId);
@@ -312,9 +338,11 @@
         }
         succeeded += 1;
       } catch {
+        if (generation !== actionGeneration) return;
         // Continue so the result can accurately report a partial update.
       }
     }
+    if (generation !== actionGeneration) return;
     isApplyingSelection = false;
     clearSelection();
     selectionResult = { action: "favorite", succeeded, total: assetIds.length };
@@ -324,6 +352,7 @@
     const assetIds = [...selectedAssetIds];
     if (assetIds.length === 0 || isSelectionActionBusy) return;
 
+    const generation = actionGeneration;
     selectionResult = null;
     isDownloadingSelection = true;
     try {
@@ -332,20 +361,23 @@
         let details = assetDetailsById.get(assetId);
         if (!assetDetailsById.has(assetId)) {
           details = await getAssetDetails(assetId);
+          if (generation !== actionGeneration) return;
           assetDetailsById.set(assetId, details);
         }
         if (!details?.originalFileName) throw new Error("Original file name is unavailable");
         const destinationPath = await chooseDownloadDestination(details.originalFileName);
-        if (!destinationPath) return;
+        if (!destinationPath || generation !== actionGeneration) return;
         await downloadAsset(assetId, destinationPath);
       } else {
         await downloadArchive(assetIds);
       }
+      if (generation !== actionGeneration) return;
       selectionResult = { action: "download", succeeded: assetIds.length, total: assetIds.length };
     } catch {
+      if (generation !== actionGeneration) return;
       selectionResult = { action: "download", succeeded: 0, total: assetIds.length };
     } finally {
-      isDownloadingSelection = false;
+      if (generation === actionGeneration) isDownloadingSelection = false;
     }
   }
 
@@ -359,9 +391,11 @@
   async function assignSelectedAssetToAlbum(albumId: string) {
     if (isAddingToAlbum || selectedAssetIds.size === 0) return;
     const assetIds = [...selectedAssetIds];
+    const generation = actionGeneration;
     isAddingToAlbum = true;
     let succeeded = 0;
     try { succeeded = (await addAssetsToAlbum(assetIds, albumId)).succeeded; } catch { /* Report failure below. */ }
+    if (generation !== actionGeneration) return;
     isAddingToAlbum = false;
     isAddToAlbumOpen = false;
     clearSelection();

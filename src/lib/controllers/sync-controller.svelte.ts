@@ -37,6 +37,7 @@ export interface SyncController {
   startSubscriptions(): void;
   refreshFailedSyncs(): Promise<void>;
   addLog(payload: UiLogMessage): void;
+  clear(): void;
   clearUserState(): void;
   destroy(): void;
 }
@@ -324,6 +325,7 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
     startSubscriptions,
     refreshFailedSyncs,
     addLog,
+    clear: clearUserState,
     clearUserState,
     destroy,
   };

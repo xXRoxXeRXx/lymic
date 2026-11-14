@@ -827,6 +827,38 @@ describe("TimelineView scrubber", () => {
     expect(getAssetDetails).toHaveBeenCalledTimes(2);
   });
 
+  it("closes the lightbox and discards in-flight selection updates when the timeline is cleared", async () => {
+    let resolveFavorite!: () => void;
+    const setAssetFavorite = vi.fn(() => new Promise<void>((resolve) => { resolveFavorite = resolve; }));
+    const view = render(TimelineView, { timeline, setAssetFavorite });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    expect(screen.getByRole("dialog", { name: "Media lightbox" })).toBeInTheDocument();
+
+    view.rerender({
+      timeline: { ...timeline, buckets: [], assetsFor: () => [], refreshGeneration: 1 },
+      setAssetFavorite,
+    });
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+
+    view.rerender({
+      timeline: { ...timeline, refreshGeneration: 2 },
+      setAssetFavorite,
+    });
+    await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
+    await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
+    await waitFor(() => expect(resolveFavorite).toBeDefined());
+
+    view.rerender({
+      timeline: { ...timeline, buckets: [], assetsFor: () => [], refreshGeneration: 3 },
+      setAssetFavorite,
+    });
+    resolveFavorite();
+    await Promise.resolve();
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("keeps the download action stable and disables it until the next details resolve", async () => {
     let resolveVideo: ((details: AssetDetails | null) => void) | undefined;
     const getAssetDetails = vi.fn((assetId: string) => assetId === "photo-1"

@@ -22,26 +22,25 @@ export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): Targe
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let hasRequested = $state(false);
-  let latestRequest = 0;
   let generation = 0;
   let pendingCreated = new Map<string, Album>();
 
   async function refresh() {
-    const request = ++latestRequest;
+    const request = ++generation;
     hasRequested = true;
     isLoading = true;
     error = null;
 
     try {
       const loadedAlbums = await adapter.getAlbums();
-      if (request === latestRequest) {
+      if (request === generation) {
         for (const album of loadedAlbums) pendingCreated.delete(album.id);
         albums = sorted([...loadedAlbums, ...[...pendingCreated.values()].filter((album) => !loadedAlbums.some((loaded) => loaded.id === album.id))]);
       }
     } catch (caught) {
-      if (request === latestRequest) error = formatError(caught, "Failed to load albums");
+      if (request === generation) error = formatError(caught, "Failed to load albums");
     } finally {
-      if (request === latestRequest) isLoading = false;
+      if (request === generation) isLoading = false;
     }
   }
 
@@ -57,7 +56,6 @@ export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): Targe
 
   function clear() {
     generation += 1;
-    latestRequest += 1;
     albums = [];
     pendingCreated.clear();
     error = null;

@@ -16,19 +16,9 @@
   import UpdateDialog from "#lib/components/UpdateDialog.svelte";
   import RemovableVolumePrompt from "#lib/components/RemovableVolumePrompt.svelte";
   import TargetAlbumModal from "#lib/components/TargetAlbumModal.svelte";
-  import { createFeedbackController } from "#lib/controllers/feedback-controller.svelte.ts";
   import { createSessionController } from "#lib/controllers/session-controller.svelte.ts";
-  import { createSyncController } from "#lib/controllers/sync-controller.svelte.ts";
-  import { createWatchedFoldersController } from "#lib/controllers/watched-folders-controller.svelte.ts";
   import { createPreferencesController } from "#lib/controllers/preferences-controller.svelte.ts";
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
-  import { createRemovableVolumeController } from "#lib/controllers/removable-volume-controller.svelte.ts";
-  import { createTargetAlbumCatalogue } from "#lib/controllers/target-album-catalogue.svelte.ts";
-  import { createTimelineController } from "#lib/controllers/timeline-controller.svelte.ts";
-  import { createFavoritesTimelineController } from "#lib/controllers/favorites-timeline-controller.svelte.ts";
-  import { createMapController } from "#lib/controllers/map-controller.svelte.ts";
-  import { createPeopleController } from "#lib/controllers/people-controller.svelte.ts";
-  import { createAlbumCatalogueController } from "#lib/controllers/album-catalogue-controller.svelte.ts";
   import { createAlbumTimelineController } from "#lib/controllers/album-timeline-controller.svelte.ts";
   import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
   import type { AlbumCatalogueItem, RecognizedPerson } from "#lib/contracts.ts";
@@ -36,37 +26,7 @@
 
   let currentView = $state("photos");
   const desktop = tauriDesktopAdapter;
-  const feedback = createFeedbackController(() => $t("unknown_error"));
-  const targetAlbumCatalogue = createTargetAlbumCatalogue(desktop);
-  const removable = createRemovableVolumeController({
-    adapter: desktop,
-    t: (key, params) => $t(key, params),
-    onVolumeRemounted: () => void watchedFolders.refresh(),
-  });
-  const watchedFolders = createWatchedFoldersController({
-    adapter: desktop,
-    reportError: feedback.report,
-    t: (key) => $t(key),
-    targetAlbumCatalogue,
-    onRemovableVolumeAccepted: (volumeId) => removable.dismiss(volumeId),
-    onFolderRemoved: () => sync.refreshFailedSyncs(),
-  });
-  const sync = createSyncController({
-    adapter: desktop,
-    reportError: feedback.report,
-    locale: () => $locale ?? "en",
-    canStartSync: () => watchedFolders.hasFolders,
-    onSyncSettled: () => {
-      void timeline.refresh();
-      return watchedFolders.refresh();
-    },
-  });
-  const timeline = createTimelineController(desktop);
-  const favorites = createFavoritesTimelineController(desktop);
-  const people = createPeopleController(desktop);
-  const map = createMapController(desktop);
   let mapCreated = $state(false);
-  const albumCatalogue = createAlbumCatalogueController(desktop);
   let selectedAlbum = $state<AlbumCatalogueItem | null>(null);
   let albumTimeline = $state<ReturnType<typeof createAlbumTimelineController> | null>(null);
   let selectedPerson = $state<RecognizedPerson | null>(null);
@@ -156,19 +116,29 @@
 
   const auth = createSessionController({
     adapter: desktop,
-    formatError: feedback.formatError,
-    reportError: feedback.report,
-    t: (key) => $t(key),
-    state: [targetAlbumCatalogue, feedback, removable, { clear: sync.clearUserState }, watchedFolders,
-      timeline, favorites, people, map, albumCatalogue],
-    refresh: [timeline.refresh, sync.hydrate, sync.refreshFailedSyncs, watchedFolders.refresh, async () => sync.startSubscriptions()],
+    t: (key, params) => $t(key, params),
+    locale: () => $locale ?? "en",
     resetView: () => {
       mapCreated = false;
+      peopleScrollTop = 0;
+      albumsScrollTop = 0;
       closeAlbumTimeline();
       closePersonTimeline();
       currentView = "photos";
     },
   });
+  const {
+    feedback,
+    targetAlbumCatalogue,
+    removable,
+    watchedFolders,
+    sync,
+    timeline,
+    favorites,
+    people,
+    map,
+    albumCatalogue,
+  } = auth;
   const preferences = createPreferencesController({
     adapter: desktop,
     reportError: feedback.report,
@@ -188,11 +158,9 @@
   });
 
   onMount(() => {
-    sync.startLifecycle();
-    watchedFolders.startLifecycle();
+    auth.startLifecycle();
     updater.startLifecycle();
     preferences.startLifecycle();
-    void removable.startSubscriptions();
 
     void auth.hydrate()
       .catch((error) => console.error("Failed to hydrate authentication", error));
@@ -200,11 +168,9 @@
     updater.startup();
 
     return () => {
-      sync.destroy();
-      watchedFolders.destroy();
+      auth.destroy();
       updater.destroy();
       preferences.stopLifecycle();
-      removable.destroy();
     };
   });
   const sharedTimelineProps = $derived({
