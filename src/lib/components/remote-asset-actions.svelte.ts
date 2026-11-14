@@ -102,7 +102,7 @@ export function createRemoteAssetActions(options: RemoteAssetActionsOptions) {
       const assetId = assetIds[0];
       let loaded = await load(assetId);
       // An invalidation during the request says nothing about this Download, so ask again.
-      if (loaded.stale && isCurrent()) loaded = await load(assetId);
+      while (loaded.stale && isCurrent()) loaded = await load(assetId);
       const { details } = loaded;
       if (!isCurrent()) return "stale";
       if (!details?.originalFileName) throw new Error("Original file name is unavailable");

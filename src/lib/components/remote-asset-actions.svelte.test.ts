@@ -245,6 +245,27 @@ describe("Remote Asset Download", () => {
     expect(downloadAsset).toHaveBeenCalledWith("a", "/downloads/a.jpg");
   });
 
+  it("keeps retrying details while they are repeatedly invalidated mid-request", async () => {
+    const first = deferred<AssetDetails | null>();
+    const second = deferred<AssetDetails | null>();
+    const getAssetDetails = vi.fn<(id: string) => Promise<AssetDetails | null>>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+      .mockResolvedValueOnce(details("a"));
+    const downloadAsset = vi.fn(async () => {});
+    const actions = createActions({ getAssetDetails, downloadAsset });
+
+    const downloading = actions.download(["a"]);
+    actions.invalidate();
+    first.reject(new Error("superseded"));
+    await vi.waitFor(() => expect(getAssetDetails).toHaveBeenCalledTimes(2));
+    actions.invalidate();
+    second.reject(new Error("superseded again"));
+
+    await expect(downloading).resolves.toBe("saved");
+    expect(downloadAsset).toHaveBeenCalledWith("a", "/downloads/a.jpg");
+  });
+
   it("stops with a stale result when the caller's context ends mid-download", async () => {
     const details$ = deferred<AssetDetails | null>();
     const downloadAsset = vi.fn(async () => {});
