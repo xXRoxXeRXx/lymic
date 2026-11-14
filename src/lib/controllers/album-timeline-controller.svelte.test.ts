@@ -122,7 +122,7 @@ describe("Album Timeline controller", () => {
     expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["newer"]);
   });
 
-  it("updates previously activated buckets to the latest accepted refresh and retains prior state when the latest refresh fails", async () => {
+  it("immediately updates previously activated buckets to the latest accepted refresh without waiting for re-activation", async () => {
     const month = "2025-03-01T00:00:00.000Z";
     const { adapter, requests } = createDeferredAdapter({
       buckets: [{ timeBucket: month, count: 1 }],
@@ -133,6 +133,41 @@ describe("Album Timeline controller", () => {
     await timeline.refresh();
     await timeline.activateBucket(month);
     expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["initial"]);
+
+    const staleRefresh = timeline.refresh();
+    const latestRefresh = timeline.refresh();
+
+    requests[1].resolve({
+      buckets: [{ timeBucket: month, count: 1 }],
+      assetsByBucket: { [month]: [makeAsset("latest")] },
+    });
+    await latestRefresh;
+
+    expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["latest"]);
+
+    requests[0].resolve({
+      buckets: [{ timeBucket: "2025-01-01T00:00:00.000Z", count: 1 }],
+      assetsByBucket: {
+        [month]: [makeAsset("stale")],
+        "2025-01-01T00:00:00.000Z": [makeAsset("stale-jan", "2025-01-02T00:00:00.000Z")],
+      },
+    });
+    await staleRefresh;
+
+    expect(timeline.buckets).toEqual([{ timeBucket: month, count: 1 }]);
+    expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["latest"]);
+  });
+
+  it("retains previously activated and unactivated buckets when a newer overlapping refresh fails", async () => {
+    const month = "2025-03-01T00:00:00.000Z";
+    const { adapter, requests } = createDeferredAdapter({
+      buckets: [{ timeBucket: month, count: 1 }],
+      assetsByBucket: { [month]: [makeAsset("initial")] },
+    });
+    const timeline = createAlbumTimelineController(adapter, "album-1");
+
+    await timeline.refresh();
+    await timeline.activateBucket(month);
 
     const staleRefresh = timeline.refresh();
     const failingLatestRefresh = timeline.refresh();
@@ -151,7 +186,6 @@ describe("Album Timeline controller", () => {
 
     expect(timeline.isOffline).toBe(true);
     expect(timeline.buckets).toEqual([{ timeBucket: month, count: 1 }]);
-    await timeline.activateBucket(month);
     expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["initial"]);
 
     const recoveredRefresh = timeline.refresh();
@@ -161,7 +195,6 @@ describe("Album Timeline controller", () => {
     });
     await recoveredRefresh;
 
-    await timeline.activateBucket(month);
     expect(timeline.isOffline).toBe(false);
     expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["recovered"]);
   });

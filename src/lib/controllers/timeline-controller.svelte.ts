@@ -80,18 +80,24 @@ export function createTimelineController(
         if (request !== latestRequest) return;
       } while (version !== removalVersion);
       if (request === latestRequest) {
-        if (loadedAssetsByBucket) {
-          completeAssetsByBucket = loadedAssetsByBucket;
-        }
         const list = Array.isArray(loaded) ? loaded : [];
         const nextBuckets = [...list].sort((a, b) => b.timeBucket.localeCompare(a.timeBucket));
         const activeKeys = new Set(nextBuckets.map((bucket) => bucket.timeBucket));
         const prunedAssets: Record<string, TimelineAsset[]> = {};
         staleBuckets.clear();
-        for (const [timeBucket, assets] of Object.entries(assetsByBucket)) {
-          if (!activeKeys.has(timeBucket)) continue;
-          prunedAssets[timeBucket] = assets;
-          staleBuckets.add(timeBucket);
+        if (loadedAssetsByBucket) {
+          completeAssetsByBucket = loadedAssetsByBucket;
+          for (const timeBucket of activeKeys) {
+            if (timeBucket in assetsByBucket) {
+              prunedAssets[timeBucket] = loadedAssetsByBucket[timeBucket] ?? [];
+            }
+          }
+        } else {
+          for (const [timeBucket, assets] of Object.entries(assetsByBucket)) {
+            if (!activeKeys.has(timeBucket)) continue;
+            prunedAssets[timeBucket] = assets;
+            staleBuckets.add(timeBucket);
+          }
         }
         buckets = nextBuckets;
         assetsByBucket = prunedAssets;
