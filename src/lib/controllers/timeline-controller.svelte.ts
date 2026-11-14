@@ -162,7 +162,7 @@ export function createTimelineController(
       staleBuckets.delete(timeBucket);
       isOffline = false;
     }).catch((error) => {
-      isOffline = true;
+      if (generation === assetGeneration) isOffline = true;
       throw error;
     }).finally(() => {
       if (pendingBuckets.get(timeBucket) === request) pendingBuckets.delete(timeBucket);
