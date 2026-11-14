@@ -4,11 +4,13 @@ Read this before changing Lymic application behaviour. It is the implementation-
 
 ## Product boundary
 
-Lymic is a cross-platform Tauri desktop client that **uploads** media from local **Watched Folders** to one Immich server. It discovers and watches local files, avoids uploading assets already known to Immich, and records durable progress locally.
+Lymic is a cross-platform Tauri desktop client that **uploads** media from local **Watched Folders** to one **Immich Server**. It discovers and watches **Media Assets**, avoids uploading **Duplicates** already known to Immich, and records durable progress locally.
 
-It is not a bidirectional filesystem mirror: it does not automatically download Remote Assets or apply remote deletions or renames locally. A user-initiated **Download** from the Lightbox saves one Remote Asset's original file to a chosen local path; it is separate from Synchronization. Preserve that boundary unless the product decision explicitly changes it.
+It is not a bidirectional filesystem mirror: **Synchronization** does not automatically download **Remote Assets** or apply remote deletions or renames locally. A user-initiated **Download** from the Lightbox saves one **Remote Asset**'s original file to a chosen local path; it is separate from **Synchronization**.
 
-Use the defined terms in [`GLOSSARY.md`](../../GLOSSARY.md): **Watched Folder**, **Removable Watched Folder**, **Target Album**, **Album Assignment**, and **Upload Unit**. Target-album behaviour is governed by [ADR-0001](../adr/0001-folder-target-albums.md); removable-volume behaviour is governed by [ADR-0002](../adr/0002-removable-watched-folders.md).
+The **Virtual Library** ([ADR-0003](../adr/0003-windows-virtual-cloud-library.md)) is a **planned, Windows-only** optional read-only projection of the **Immich Library** into the Windows filesystem via the Windows Cloud Files API (`cldapi.dll`), exposing **Virtual Placeholders** with on-demand **Hydration**. **It is not implemented on `master` or included in current builds** (there is no `cloud_files` module, `lymic-shell-ext` shell extension, Virtual Library IPC command, or Virtual Library UI/persistence in this codebase), and it is unavailable on macOS and Linux. Even as designed in [ADR-0003](../adr/0003-windows-virtual-cloud-library.md), the **Virtual Library** is strictly read-only and separate from **Synchronization**: Explorer delete, move, and write operations are denied so uploads and asset lifecycle remain exclusively in **Watched Folders** and **Synchronization**. Preserve that boundary unless the product decision explicitly changes it.
+
+Use the defined terms in [`GLOSSARY.md`](../../GLOSSARY.md): **Watched Folder**, **Removable Watched Folder**, **Target Album**, **Album Assignment**, **Upload Unit**, **Synchronization**, **Download**, **Virtual Library**, **Virtual Placeholder**, and **Hydration**. Target-album behaviour is governed by [ADR-0001](../adr/0001-folder-target-albums.md); removable-volume behaviour is governed by [ADR-0002](../adr/0002-removable-watched-folders.md); the planned read-only Windows Virtual Library design is recorded in [ADR-0003](../adr/0003-windows-virtual-cloud-library.md).
 
 ## Runtime shape
 

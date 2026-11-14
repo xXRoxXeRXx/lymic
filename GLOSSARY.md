@@ -1,6 +1,6 @@
 # Lymic
 
-Lymic is a desktop client that brings local media into an Immich library. It owns the path from a local folder to a remote asset; optionally on Windows, it projects the remote library as a read-only Virtual Library without performing bidirectional filesystem mirroring.
+Lymic is a desktop client that brings local media into an Immich Library. It owns the path from a Watched Folder to a Remote Asset through one-way Synchronization; a planned, Windows-only Virtual Library would project the Immich Library as read-only without performing bidirectional filesystem mirroring.
 
 ## Sources and destinations
 
@@ -83,7 +83,7 @@ _Avoid_: failed file, upload error
 ## Virtual Library
 
 **Virtual Library**:
-A read-only projection of the Immich Library into the Windows filesystem using the Windows Cloud Files API. Remote Assets appear as on-demand placeholders and are hydrated when opened.
+A planned, Windows-only read-only projection of the Immich Library into the Windows filesystem using the Windows Cloud Files API, separate from Synchronization. Remote Assets appear as on-demand Virtual Placeholders and undergo Hydration when opened.
 _Avoid_: sync drive, cloud mirror, network share
 
 **Virtual Placeholder**:
