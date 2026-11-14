@@ -158,7 +158,7 @@ describe("Album Timeline controller", () => {
     expect(timeline.assetsFor(month).map((item) => item.id)).toEqual(["latest"]);
   });
 
-  it("retains previously activated and unactivated buckets when a newer overlapping refresh fails", async () => {
+  it("retains the prior timeline when a newer overlapping refresh fails and recovers on retry", async () => {
     const month = "2025-03-01T00:00:00.000Z";
     const { adapter, requests } = createDeferredAdapter({
       buckets: [{ timeBucket: month, count: 1 }],
