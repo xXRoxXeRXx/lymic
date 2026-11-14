@@ -133,10 +133,19 @@ pub async fn enqueue_upload_units(
     )
     .fetch_one(&mut *tx)
     .await?;
-    let should_reset =
-        (status == "IDLE" || status == "FAILED" || (status == "RUNNING" && !has_pending))
-            && (!units.is_empty() || !failures.is_empty());
+    let should_reset = ((status == "IDLE" || status == "FAILED" || status == "RUNNING")
+        && !has_pending)
+        && (!units.is_empty() || !failures.is_empty());
     if should_reset {
+        sqlx::query(
+            "INSERT INTO album_retry_remote_ids (local_path, size, last_modified, remote_id) \
+             SELECT local_path, size, last_modified, remote_id FROM sync_queue \
+             WHERE job_id = 1 AND status = 'FAILED' AND remote_id IS NOT NULL \
+             ON CONFLICT(local_path) DO UPDATE SET size = excluded.size, \
+             last_modified = excluded.last_modified, remote_id = excluded.remote_id",
+        )
+        .execute(&mut *tx)
+        .await?;
         sqlx::query("UPDATE sync_jobs SET status = 'RUNNING', next_sequence = 1, total_count = 0, success_count = 0, failure_count = 0, current_path = NULL WHERE id = 1")
             .execute(&mut *tx).await?;
         sqlx::query("DELETE FROM sync_queue WHERE job_id = 1")
@@ -161,10 +170,17 @@ pub async fn enqueue_upload_units(
         for (asset, is_primary) in std::iter::once((&unit.image, true))
             .chain(unit.live_photo_video.as_ref().map(|asset| (asset, false)))
         {
+            sqlx::query("DELETE FROM album_retry_remote_ids WHERE local_path = ? AND (size != ? OR last_modified != ?)")
+                .bind(&asset.path).bind(asset.size).bind(asset.mtime).execute(&mut *tx).await?;
+            let retry_remote_id: Option<String> = sqlx::query_scalar(
+                "SELECT remote_id FROM album_retry_remote_ids WHERE local_path = ? AND size = ? AND last_modified = ?",
+            ).bind(&asset.path).bind(asset.size).bind(asset.mtime).fetch_optional(&mut *tx).await?;
             let assigned_sequence: i64 = sqlx::query_scalar(
-            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, target_album_id, upload_unit_id, is_primary)
-             VALUES (1, ?, ?, ?, ?, 'PENDING', ?, ?, ?)
+            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, target_album_id, upload_unit_id, is_primary, remote_id)
+             VALUES (1, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?)
              ON CONFLICT(job_id, local_path) DO UPDATE SET
+               remote_id = CASE WHEN sync_queue.size = excluded.size AND sync_queue.last_modified = excluded.last_modified
+                                THEN COALESCE(sync_queue.remote_id, excluded.remote_id) ELSE NULL END,
                size = excluded.size, last_modified = excluded.last_modified,
                upload_unit_id = excluded.upload_unit_id, is_primary = excluded.is_primary,
                status = CASE WHEN sync_queue.status = 'SYNCED' THEN 'SYNCED' ELSE 'PENDING' END,
@@ -178,6 +194,7 @@ pub async fn enqueue_upload_units(
         .bind(asset.target_album_id.as_ref().map(|id| id.as_str()))
         .bind(&unit_id)
         .bind(is_primary)
+        .bind(retry_remote_id)
         .fetch_one(&mut *tx)
         .await?;
             advance_sequence_for_new_row(&mut next_sequence, assigned_sequence);
@@ -329,6 +346,7 @@ pub async fn update_sync_queue_failure(
     Ok(())
 }
 
+#[cfg(test)]
 pub async fn has_pending_sync_queue_items(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING')",
@@ -392,6 +410,14 @@ pub async fn finalize_queued_block(
     }
     query.push(')');
     query.build().execute(&mut *tx).await?;
+    for (path, status) in results {
+        if status == "SYNCED" {
+            sqlx::query("DELETE FROM album_retry_remote_ids WHERE local_path = ?")
+                .bind(path)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
     let current_path = &results.last().expect("non-empty results").0;
     update_counts_and_snapshot(tx, false, Some(current_path)).await
 }

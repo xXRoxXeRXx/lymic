@@ -161,7 +161,7 @@ pub async fn discard_failed_sync_paths(
     }
 
     let mut tx = pool.begin().await?;
-    for table in ["sync_state", "sync_queue"] {
+    for table in ["sync_state", "sync_queue", "album_retry_remote_ids"] {
         for path_batch in paths.chunks(DISCARD_PATH_BATCH_SIZE) {
             let mut query = QueryBuilder::<Sqlite>::new(format!("DELETE FROM {table} WHERE "));
             if table == "sync_queue" {
@@ -215,7 +215,9 @@ pub async fn discard_sync_data_in_folder(
     let paths: Vec<String> = sqlx::query_scalar(&format!(
         "SELECT local_path FROM sync_queue WHERE job_id = 1 AND {path_cond} \
              UNION \
-             SELECT local_path FROM sync_state WHERE status != 'SYNCED' AND {path_cond}"
+             SELECT local_path FROM sync_state WHERE status != 'SYNCED' AND {path_cond} \
+             UNION \
+             SELECT local_path FROM album_retry_remote_ids WHERE {path_cond}"
     ))
     .bind(folder)
     .fetch_all(pool)

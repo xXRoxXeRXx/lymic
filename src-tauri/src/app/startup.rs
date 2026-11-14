@@ -74,7 +74,8 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
         None,
     );
     let recovered_sync =
-        tauri::async_runtime::block_on(db::recover_sync_job(&pool)).map_err(|error| {
+        tauri::async_runtime::block_on(sync::lifecycle::SynchronizationLifecycle::recover(&pool))
+            .map_err(|error| {
             let message = format!("Failed to recover sync queue: {error}");
             record_startup_phase(
                 &handle,

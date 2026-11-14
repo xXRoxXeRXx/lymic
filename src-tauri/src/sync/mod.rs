@@ -7,6 +7,7 @@ pub(crate) mod active_work;
 pub(crate) mod album_batch;
 pub(crate) mod completion;
 pub(crate) mod coordinator;
+pub(crate) mod lifecycle;
 pub(crate) mod processor;
 pub(crate) mod progress;
 pub(crate) mod queue_runner;

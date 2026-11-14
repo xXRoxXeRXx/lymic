@@ -9,6 +9,7 @@ use crate::{
     db,
     immich::{ImmichClient, SidecarDirectoryCache},
     sync::{
+        lifecycle::SynchronizationLifecycle,
         processor::{RunProcessor, SyncSummary},
         CurrentFileProgress, JobByteProgress, SyncCoordinatorInner, SyncSource,
     },
@@ -181,20 +182,11 @@ pub(crate) async fn run_sync_pipeline(
             .await
             .map_err(|error| format!("Could not load sync queue: {}", error))?;
         if queued.is_empty() {
-            // Release runner ownership before the terminal database transition.
-            // A producer admitted in this window can claim a successor runner;
-            // its pending work then makes the conditional completion a no-op.
-            if release_runner_and_reclaim_if_pending(&pool, &running).await? {
+            // Complete the durable job before releasing runner ownership.
+            let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator.clone());
+            let Some(snapshot) = lifecycle.complete().await? else {
                 continue;
-            }
-            let snapshot = db::complete_sync_job_if_finished(&pool)
-                .await
-                .map_err(|error| format!("Could not complete sync job: {}", error))?
-                .unwrap_or(
-                    db::get_sync_snapshot(&pool)
-                        .await
-                        .map_err(|error| error.to_string())?,
-                );
+            };
             let _ = app.emit("sync-progress-snapshot", &snapshot);
             crate::app::tray::update_sync_action(&app, &snapshot);
             transfer_stats.sync_queue(
@@ -279,20 +271,6 @@ pub(crate) async fn run_sync_pipeline(
             let _ = app.emit("sync-progress-snapshot", &snapshot);
         }
     }
-}
-
-async fn release_runner_and_reclaim_if_pending(
-    pool: &sqlx::SqlitePool,
-    running: &std::sync::atomic::AtomicBool,
-) -> Result<bool, String> {
-    running.store(false, Ordering::SeqCst);
-    let has_pending = db::has_pending_sync_queue_items(pool)
-        .await
-        .map_err(|error| format!("Could not load sync queue: {error}"))?;
-    Ok(has_pending
-        && running
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok())
 }
 
 fn emit_transfer_stats(
@@ -487,62 +465,6 @@ mod tests {
             (snapshot.total, snapshot.succeeded, snapshot.failed),
             (1, 0, 0)
         );
-    }
-
-    #[tokio::test]
-    async fn runner_reclaims_ownership_when_work_arrives_as_the_queue_drains() {
-        let pool = test_pool().await;
-        let running = std::sync::atomic::AtomicBool::new(true);
-        assert!(!db::has_pending_sync_queue_items(&pool).await.unwrap());
-        db::enqueue_upload_units(
-            &pool,
-            &[db::QueueUploadUnit {
-                image: db::QueueUploadAsset {
-                    path: "arrived-at-drain.jpg".to_string(),
-                    size: 1,
-                    mtime: 1,
-                    target_album_id: None,
-                },
-                live_photo_video: None,
-            }],
-            &[],
-        )
-        .await
-        .unwrap();
-
-        assert!(release_runner_and_reclaim_if_pending(&pool, &running)
-            .await
-            .unwrap());
-        assert!(running.load(Ordering::SeqCst));
-    }
-
-    #[tokio::test]
-    async fn producer_admitted_after_runner_releases_ownership_is_reclaimed() {
-        let pool = test_pool().await;
-        let running = std::sync::atomic::AtomicBool::new(true);
-        assert!(!db::has_pending_sync_queue_items(&pool).await.unwrap());
-
-        running.store(false, Ordering::SeqCst);
-        db::enqueue_upload_units(
-            &pool,
-            &[db::QueueUploadUnit {
-                image: db::QueueUploadAsset {
-                    path: "admitted-during-drain.jpg".to_string(),
-                    size: 1,
-                    mtime: 1,
-                    target_album_id: None,
-                },
-                live_photo_video: None,
-            }],
-            &[],
-        )
-        .await
-        .unwrap();
-
-        assert!(db::has_pending_sync_queue_items(&pool).await.unwrap());
-        assert!(running
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok());
     }
 
     #[tokio::test]

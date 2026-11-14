@@ -5,9 +5,13 @@ use crate::{
     audit::SyncAuditContext,
     auth, db,
     immich::ImmichClient,
-    sync::{queue_runner::run_sync_pipeline, SyncCoordinator},
+    sync::{
+        lifecycle::{LifecycleClaim, SynchronizationLifecycle},
+        queue_runner::run_sync_pipeline,
+        SyncCoordinator,
+    },
 };
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::Arc;
 use tauri::{Emitter, Manager, Runtime};
 
 /// Identifies the producer submitting Synchronization work.
@@ -44,98 +48,6 @@ impl SyncSource {
 
     pub(crate) const fn is_manual(self) -> bool {
         matches!(self, Self::Manual | Self::RetryFailed)
-    }
-}
-
-#[derive(Debug, Clone)]
-enum LifecycleClaim {
-    Started(db::SyncSnapshot),
-    Joined,
-    Paused,
-}
-
-/// Durable synchronization state transitions, independent of the desktop shell.
-///
-/// `Synchronization` owns the surrounding desktop orchestration; this smaller
-/// collaborator is deliberately kept free of Tauri so its state-machine
-/// contract can be exercised against the real SQLite schema.
-pub(crate) struct SynchronizationLifecycle<'a> {
-    pool: &'a sqlx::SqlitePool,
-    running: &'a std::sync::atomic::AtomicBool,
-    coordinator: Arc<crate::sync::SyncCoordinatorInner>,
-}
-
-impl<'a> SynchronizationLifecycle<'a> {
-    pub(crate) fn new(
-        pool: &'a sqlx::SqlitePool,
-        running: &'a std::sync::atomic::AtomicBool,
-        coordinator: Arc<crate::sync::SyncCoordinatorInner>,
-    ) -> Self {
-        Self {
-            pool,
-            running,
-            coordinator,
-        }
-    }
-
-    async fn start_or_join(&self) -> Result<LifecycleClaim, String> {
-        let current = self.status().await?;
-        if current.status == "PAUSED" {
-            return Ok(LifecycleClaim::Paused);
-        }
-        if self
-            .running
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
-            return Ok(LifecycleClaim::Joined);
-        }
-
-        match db::set_sync_status(self.pool, "RUNNING").await {
-            Ok(snapshot) => Ok(LifecycleClaim::Started(snapshot)),
-            Err(error) => {
-                self.running.store(false, Ordering::SeqCst);
-                Err(error.to_string())
-            }
-        }
-    }
-
-    pub(crate) fn finish(&self) {
-        self.running.store(false, Ordering::SeqCst);
-    }
-
-    pub(crate) async fn fail(&self) -> Result<db::SyncSnapshot, String> {
-        self.finish();
-        db::set_sync_status(self.pool, "FAILED")
-            .await
-            .map_err(|error| error.to_string())
-    }
-
-    pub(crate) async fn pause(&self) -> Result<db::SyncSnapshot, String> {
-        self.coordinator.paused.store(true, Ordering::SeqCst);
-        db::set_sync_status(self.pool, "PAUSED")
-            .await
-            .map_err(|error| error.to_string())
-    }
-
-    pub(crate) async fn resume(&self) -> Result<db::SyncSnapshot, String> {
-        let snapshot = self.status().await?;
-        if snapshot.status != "PAUSED" {
-            return Ok(snapshot);
-        }
-
-        self.coordinator.paused.store(false, Ordering::SeqCst);
-        let snapshot = db::set_sync_status(self.pool, "RUNNING")
-            .await
-            .map_err(|error| error.to_string())?;
-        self.coordinator.resume.notify_waiters();
-        Ok(snapshot)
-    }
-
-    pub(crate) async fn status(&self) -> Result<db::SyncSnapshot, String> {
-        db::get_sync_snapshot(self.pool)
-            .await
-            .map_err(|error| error.to_string())
     }
 }
 
@@ -323,20 +235,21 @@ impl<'a> Synchronization<'a> {
         &self,
         snapshot: &db::SyncSnapshot,
     ) -> Result<db::SyncSnapshot, String> {
-        if snapshot.status != "RUNNING" || self.coordinator.lock.try_lock().is_err() {
+        if snapshot.status != "RUNNING" {
             return Ok(snapshot.clone());
         }
-        let has_pending = db::has_pending_sync_queue_items(self.pool)
-            .await
-            .map_err(|error| error.to_string())?;
-        if !has_pending {
-            let completed = db::complete_sync_job_if_finished(self.pool)
-                .await
-                .map_err(|error| error.to_string())?
-                .ok_or_else(|| "Sync queue is still processing.".to_string())?;
-            crate::app::tray::update_sync_action(self.app, &completed);
-            let _ = self.app.emit("sync-progress-snapshot", &completed);
-            return Ok(completed);
+        let lifecycle = self.lifecycle();
+        if !matches!(lifecycle.start_or_join().await?, LifecycleClaim::Started(_)) {
+            return lifecycle.status().await;
+        }
+        match lifecycle.complete().await {
+            Ok(Some(completed)) => {
+                crate::app::tray::update_sync_action(self.app, &completed);
+                let _ = self.app.emit("sync-progress-snapshot", &completed);
+                return Ok(completed);
+            }
+            Ok(None) => {}
+            Err(error) => return self.fail_run(SyncSource::Recovery, &error).await,
         }
         let credentials = match auth::get_credentials() {
             Ok(Some(credentials)) => credentials,
@@ -364,7 +277,6 @@ impl<'a> Synchronization<'a> {
                 serde_json::json!({}),
             ),
         );
-        self.running.store(true, Ordering::SeqCst);
         spawn_sync_runner(
             self.app.clone(),
             self.pool.clone(),
@@ -577,6 +489,7 @@ pub(crate) async fn admit_and_run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::Ordering;
     use tauri::Listener;
 
     #[tokio::test]
@@ -679,6 +592,302 @@ mod tests {
 
         assert_eq!(lifecycle.fail().await.unwrap().status, "FAILED");
         assert!(db::has_pending_sync_queue_items(&pool).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn lifecycle_keeps_ownership_when_work_arrives_before_completion() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        assert!(matches!(
+            lifecycle.start_or_join().await.unwrap(),
+            LifecycleClaim::Started(_)
+        ));
+        db::enqueue_sync_assets(
+            &pool,
+            &[db::QueueAsset {
+                path: "arrived.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        assert!(lifecycle.complete().await.unwrap().is_none());
+        assert!(running.load(Ordering::SeqCst));
+        assert!(matches!(
+            lifecycle.start_or_join().await.unwrap(),
+            LifecycleClaim::Joined
+        ));
+    }
+
+    #[tokio::test]
+    async fn failed_run_keeps_pending_work_when_new_work_is_admitted() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let first = db::QueueAsset {
+            path: "first.jpg",
+            size: 1,
+            mtime: 1,
+            target_album_id: None,
+        };
+        db::enqueue_sync_assets(&pool, &[first], &[]).await.unwrap();
+        lifecycle.start_or_join().await.unwrap();
+        lifecycle.fail().await.unwrap();
+        let second = db::QueueAsset {
+            path: "second.jpg",
+            size: 1,
+            mtime: 1,
+            target_album_id: None,
+        };
+        db::enqueue_sync_assets(&pool, &[second], &[])
+            .await
+            .unwrap();
+        assert!(matches!(
+            lifecycle.start_or_join().await.unwrap(),
+            LifecycleClaim::Started(_)
+        ));
+        assert_eq!(
+            db::next_queued_upload_units(&pool, 10).await.unwrap().len(),
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn restart_pauses_running_work_until_resumed() {
+        let database_path =
+            std::env::temp_dir().join(format!("lymic-recovery-{}.db", uuid::Uuid::new_v4()));
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true);
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options.clone())
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let asset = db::QueueAsset {
+            path: "pending.jpg",
+            size: 1,
+            mtime: 1,
+            target_album_id: None,
+        };
+        db::enqueue_sync_assets(&pool, &[asset], &[]).await.unwrap();
+        pool.close().await;
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
+        assert_eq!(
+            SynchronizationLifecycle::recover(&pool)
+                .await
+                .unwrap()
+                .status,
+            "PAUSED"
+        );
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(true));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        assert!(matches!(
+            lifecycle.start_or_join().await.unwrap(),
+            LifecycleClaim::Paused
+        ));
+        lifecycle.resume().await.unwrap();
+        assert!(matches!(
+            lifecycle.start_or_join().await.unwrap(),
+            LifecycleClaim::Started(_)
+        ));
+        assert_eq!(
+            db::next_queued_upload_units(&pool, 10).await.unwrap().len(),
+            1
+        );
+        pool.close().await;
+        std::fs::remove_file(database_path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn admission_racing_completion_always_has_a_runner() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(4)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=shared"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        lifecycle.start_or_join().await.unwrap();
+        let (completion, claim) = tokio::join!(lifecycle.complete(), async {
+            db::enqueue_sync_assets(
+                &pool,
+                &[db::QueueAsset {
+                    path: "during-completion.jpg",
+                    size: 1,
+                    mtime: 1,
+                    target_album_id: None,
+                }],
+                &[],
+            )
+            .await
+            .unwrap();
+            lifecycle.start_or_join().await.unwrap()
+        });
+        match completion.unwrap() {
+            Some(_) => assert!(matches!(claim, LifecycleClaim::Started(_))),
+            None => assert!(matches!(claim, LifecycleClaim::Joined)),
+        }
+        assert!(running.load(Ordering::SeqCst));
+        assert_eq!(
+            db::next_queued_upload_units(&pool, 10).await.unwrap().len(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_after_completion_preserves_remote_asset_for_album_assignment() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let album = crate::immich::AlbumId::new("album-1");
+        let asset = db::QueueAsset {
+            path: "photo.jpg",
+            size: 1,
+            mtime: 1,
+            target_album_id: Some(&album),
+        };
+        db::enqueue_sync_assets(&pool, &[asset.clone()], &[])
+            .await
+            .unwrap();
+        db::update_sync_queue_remote_id(
+            &pool,
+            "photo.jpg",
+            &crate::immich::RemoteAssetId::new("remote-1"),
+        )
+        .await
+        .unwrap();
+        db::finalize_queued_block(&pool, &[("photo.jpg".into(), "FAILED".into())])
+            .await
+            .unwrap();
+        let running = std::sync::atomic::AtomicBool::new(true);
+        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        assert!(lifecycle.complete().await.unwrap().is_some());
+        db::enqueue_sync_assets(
+            &pool,
+            &[db::QueueAsset {
+                path: "unrelated.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        db::finalize_queued_block(&pool, &[("unrelated.jpg".into(), "SYNCED".into())])
+            .await
+            .unwrap();
+        db::complete_sync_job_if_finished(&pool).await.unwrap();
+        db::enqueue_sync_assets(&pool, &[asset], &[]).await.unwrap();
+        let queued = db::next_queued_upload_units(&pool, 10).await.unwrap();
+        assert_eq!(
+            queued[0].image.remote_id.as_ref().map(|id| id.as_str()),
+            Some("remote-1")
+        );
+        assert_eq!(
+            queued[0]
+                .image
+                .target_album_id
+                .as_ref()
+                .map(|id| id.as_str()),
+            Some("album-1")
+        );
+    }
+
+    #[tokio::test]
+    async fn changed_file_does_not_reuse_remote_asset_while_other_work_is_pending() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let original = db::QueueAsset {
+            path: "photo.jpg",
+            size: 1,
+            mtime: 1,
+            target_album_id: None,
+        };
+        let other = db::QueueAsset {
+            path: "other.jpg",
+            size: 1,
+            mtime: 1,
+            target_album_id: None,
+        };
+        db::enqueue_sync_assets(&pool, &[original, other], &[])
+            .await
+            .unwrap();
+        db::update_sync_queue_remote_id(
+            &pool,
+            "photo.jpg",
+            &crate::immich::RemoteAssetId::new("old-id"),
+        )
+        .await
+        .unwrap();
+        db::finalize_queued_block(&pool, &[("photo.jpg".into(), "FAILED".into())])
+            .await
+            .unwrap();
+        let changed = db::QueueAsset {
+            path: "photo.jpg",
+            size: 2,
+            mtime: 2,
+            target_album_id: None,
+        };
+        db::enqueue_sync_assets(&pool, &[changed], &[])
+            .await
+            .unwrap();
+        let queued = db::next_queued_upload_units(&pool, 10).await.unwrap();
+        assert!(queued
+            .iter()
+            .find(|unit| unit.image.local_path == "photo.jpg")
+            .unwrap()
+            .image
+            .remote_id
+            .is_none());
     }
 
     #[test]

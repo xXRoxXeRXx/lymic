@@ -200,6 +200,17 @@ pub async fn remap_watched_folder_path(
         .execute(&mut *tx)
         .await?;
 
+    let album_retry_sql = format!(
+        "UPDATE album_retry_remote_ids \
+         SET local_path = ?2 || substr(local_path, length(?1) + 1) \
+         WHERE {local_path_cond}"
+    );
+    sqlx::query(&album_retry_sql)
+        .bind(&clean_old)
+        .bind(&clean_new)
+        .execute(&mut *tx)
+        .await?;
+
     let sync_queue_unit_sql = format!(
         "UPDATE sync_queue \
          SET upload_unit_id = ?2 || substr(upload_unit_id, length(?1) + 1) \
