@@ -182,7 +182,7 @@ pub async fn discard_failed_sync_paths(
          total_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1), \
          success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), \
          failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED'), \
-         status = CASE WHEN NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN 'IDLE' ELSE status END, \
+         status = CASE WHEN status != 'PAUSED' AND NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN 'IDLE' ELSE status END, \
          current_path = CASE WHEN NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN NULL ELSE current_path END \
          WHERE id = 1",
     )
@@ -258,6 +258,15 @@ async fn discard_folder_sync_paths(pool: &SqlitePool, paths: &[String]) -> Resul
         }
         state_paths.push_unseparated(")");
         state.build().execute(&mut *tx).await?;
+
+        let mut retries =
+            QueryBuilder::<Sqlite>::new("DELETE FROM album_retry_remote_ids WHERE local_path IN (");
+        let mut retry_paths = retries.separated(", ");
+        for path in path_batch {
+            retry_paths.push_bind(path);
+        }
+        retry_paths.push_unseparated(")");
+        retries.build().execute(&mut *tx).await?;
     }
 
     sqlx::query(
@@ -265,7 +274,7 @@ async fn discard_folder_sync_paths(pool: &SqlitePool, paths: &[String]) -> Resul
          total_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1), \
          success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), \
          failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED'), \
-         status = CASE WHEN NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN 'IDLE' ELSE status END, \
+         status = CASE WHEN status != 'PAUSED' AND NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN 'IDLE' ELSE status END, \
          current_path = CASE WHEN NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN NULL ELSE current_path END \
          WHERE id = 1",
     )

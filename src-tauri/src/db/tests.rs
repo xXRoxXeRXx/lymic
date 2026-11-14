@@ -21,6 +21,46 @@ mod database_tests {
             .unwrap()
     }
 
+    #[tokio::test]
+    async fn removing_folder_discards_saved_album_retry_ids() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        enqueue_upload_units(&pool, &[single_upload_unit("C:/photos/asset.jpg")], &[])
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO album_retry_remote_ids (local_path, size, last_modified, remote_id) VALUES ('C:/photos/asset.jpg', 100, 10, 'remote-id')")
+            .execute(&pool).await.unwrap();
+        discard_sync_data_in_folder(&pool, "C:/photos")
+            .await
+            .unwrap();
+        let ids: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM album_retry_remote_ids")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            ids, 0,
+            "removed folder must not retain Album Assignment retry IDs"
+        );
+    }
+
+    #[tokio::test]
+    async fn discarding_work_does_not_resume_a_paused_synchronization() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        enqueue_upload_units(&pool, &[single_upload_unit("C:/photos/asset.jpg")], &[])
+            .await
+            .unwrap();
+        set_sync_status(&pool, "PAUSED").await.unwrap();
+        discard_sync_data_in_folder(&pool, "C:/photos")
+            .await
+            .unwrap();
+        assert_eq!(get_sync_snapshot(&pool).await.unwrap().status, "PAUSED");
+        discard_failed_sync_paths(&pool, &["C:/photos/missing.jpg".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(get_sync_snapshot(&pool).await.unwrap().status, "PAUSED");
+    }
+
     fn single_upload_unit(path: &str) -> QueueUploadUnit {
         QueueUploadUnit {
             image: QueueUploadAsset {

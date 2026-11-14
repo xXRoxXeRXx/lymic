@@ -836,7 +836,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn changed_file_does_not_reuse_remote_asset_while_other_work_is_pending() {
+    async fn changed_media_asset_does_not_reuse_remote_asset_while_other_work_is_pending() {
         let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
@@ -888,6 +888,89 @@ mod tests {
             .image
             .remote_id
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn runner_completes_after_its_last_folder_is_removed() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        db::enqueue_sync_assets(
+            &pool,
+            &[db::QueueAsset {
+                path: "C:/photos/asset.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        lifecycle.start_or_join().await.unwrap();
+        db::discard_sync_data_in_folder(&pool, "C:/photos")
+            .await
+            .unwrap();
+        assert_eq!(
+            lifecycle
+                .complete()
+                .await
+                .unwrap()
+                .expect("runner must finish after its work is discarded")
+                .status,
+            "IDLE"
+        );
+        assert!(!running.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn admission_during_completion_preserves_previous_results() {
+        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:{database_name}?mode=memory&cache=private"
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        db::enqueue_sync_assets(
+            &pool,
+            &[db::QueueAsset {
+                path: "first.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        db::finalize_queued_block(&pool, &[("first.jpg".into(), "SYNCED".into())])
+            .await
+            .unwrap();
+        let snapshot = db::enqueue_sync_assets(
+            &pool,
+            &[db::QueueAsset {
+                path: "second.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        assert_eq!((snapshot.total, snapshot.succeeded), (2, 1));
     }
 
     #[test]

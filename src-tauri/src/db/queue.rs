@@ -133,8 +133,7 @@ pub async fn enqueue_upload_units(
     )
     .fetch_one(&mut *tx)
     .await?;
-    let should_reset = ((status == "IDLE" || status == "FAILED" || status == "RUNNING")
-        && !has_pending)
+    let should_reset = ((status == "IDLE" || status == "FAILED") && !has_pending)
         && (!units.is_empty() || !failures.is_empty());
     if should_reset {
         sqlx::query(
@@ -462,7 +461,7 @@ pub async fn complete_sync_job_if_finished(
     let mut tx = pool.begin().await?;
     let result = sqlx::query(
         "UPDATE sync_jobs SET status = 'IDLE', current_path = NULL \
-         WHERE id = 1 AND status = 'RUNNING' AND status != 'PAUSED' \
+         WHERE id = 1 AND status IN ('RUNNING', 'IDLE') \
            AND NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING')",
     )
     .execute(&mut *tx)
