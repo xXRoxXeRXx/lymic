@@ -60,7 +60,7 @@ Rust application services
 5. **Queue and process:** missing assets are durably enqueued, then streamed as multipart uploads with configured parallelism.
 6. **Assign and record:** when a Watched Folder has a Target Album, both uploaded and duplicate remote assets are assigned to it. Queue outcomes, remote IDs, failures, and progress are persisted.
 
-The durable queue is the recovery boundary: `RUNNING`, `PAUSED`, and `IDLE` live in `sync_jobs`; `PENDING`, `SYNCED`, and `FAILED` entries live in `sync_queue`. Resume recovered work from the queue rather than scanning folders again.
+The durable queue is the recovery boundary: `RUNNING`, `PAUSED`, `FAILED`, and `IDLE` live in `sync_jobs`; `PENDING`, `SYNCED`, and `FAILED` entries live in `sync_queue`. The Synchronization lifecycle coordinates job transitions and runner claims. On restart, pending work without a runner is recovered as paused; resume it from the queue rather than scanning folders again.
 
 ## Invariants to preserve
 

@@ -9,6 +9,7 @@ use crate::{
 };
 use serde_json::json;
 use std::path::PathBuf;
+use tauri::Manager;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -144,7 +145,13 @@ pub(crate) async fn remove_folder(
         // The watcher is gone before cancellation so no new work can be produced for this root.
         // The queue cleanup is path-component based and leaves sibling roots untouched.
         sync_coordinator.0.active_work.cancel_work_in(&path);
-        if let Err(error) = db::discard_sync_data_in_folder(pool.inner(), &path).await {
+        let running = app.state::<crate::sync::SyncState>();
+        let lifecycle = crate::sync::lifecycle::SynchronizationLifecycle::new(
+            pool.inner(),
+            &running.0,
+            sync_coordinator.0.clone(),
+        );
+        if let Err(error) = lifecycle.discard_folder(&path).await {
             let path_for_check = PathBuf::from(&path);
             let is_available = tokio::task::spawn_blocking(move || path_for_check.is_dir())
                 .await

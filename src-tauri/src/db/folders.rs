@@ -178,38 +178,16 @@ pub async fn remap_watched_folder_path(
     let upload_unit_cond = super::sql_path_is_or_descendant_of("upload_unit_id", "?1");
     let current_path_cond = super::sql_path_is_or_descendant_of("current_path", "?1");
 
-    let sync_state_sql = format!(
-        "UPDATE sync_state \
-         SET local_path = ?2 || substr(local_path, length(?1) + 1) \
-         WHERE {local_path_cond}"
-    );
-    sqlx::query(&sync_state_sql)
-        .bind(&clean_old)
-        .bind(&clean_new)
-        .execute(&mut *tx)
-        .await?;
-
-    let sync_queue_path_sql = format!(
-        "UPDATE sync_queue \
-         SET local_path = ?2 || substr(local_path, length(?1) + 1) \
-         WHERE {local_path_cond}"
-    );
-    sqlx::query(&sync_queue_path_sql)
-        .bind(&clean_old)
-        .bind(&clean_new)
-        .execute(&mut *tx)
-        .await?;
-
-    let album_retry_sql = format!(
-        "UPDATE album_retry_remote_ids \
-         SET local_path = ?2 || substr(local_path, length(?1) + 1) \
-         WHERE {local_path_cond}"
-    );
-    sqlx::query(&album_retry_sql)
-        .bind(&clean_old)
-        .bind(&clean_new)
-        .execute(&mut *tx)
-        .await?;
+    for table in ["sync_state", "sync_queue", "album_retry_remote_ids"] {
+        let sql = format!(
+            "UPDATE {table} SET local_path = ?2 || substr(local_path, length(?1) + 1) WHERE {local_path_cond}"
+        );
+        sqlx::query(&sql)
+            .bind(&clean_old)
+            .bind(&clean_new)
+            .execute(&mut *tx)
+            .await?;
+    }
 
     let sync_queue_unit_sql = format!(
         "UPDATE sync_queue \

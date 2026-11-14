@@ -3,6 +3,39 @@ use sqlx::SqlitePool;
 /// The singleton job ID used for Lymic's desktop sync queue, backed by database CHECK constraint `id = 1`.
 pub const SINGLETON_SYNC_JOB_ID: i64 = 1;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncJobStatus {
+    Idle,
+    Running,
+    Paused,
+    Failed,
+}
+
+impl SyncJobStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Idle => "IDLE",
+            Self::Running => "RUNNING",
+            Self::Paused => "PAUSED",
+            Self::Failed => "FAILED",
+        }
+    }
+}
+
+impl std::str::FromStr for SyncJobStatus {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "IDLE" => Ok(Self::Idle),
+            "RUNNING" => Ok(Self::Running),
+            "PAUSED" => Ok(Self::Paused),
+            "FAILED" => Ok(Self::Failed),
+            _ => Err(format!("Unknown synchronization status: {value}")),
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncSnapshot {
@@ -82,15 +115,6 @@ fn advance_sequence_for_new_row(next_sequence: &mut i64, assigned_sequence: i64)
     }
 }
 
-pub async fn recover_sync_job(pool: &SqlitePool) -> Result<SyncSnapshot, sqlx::Error> {
-    // A process cannot safely know whether an in-flight HTTP upload completed. Recovery
-    // therefore always requires explicit user confirmation before processing resumes.
-    sqlx::query("UPDATE sync_jobs SET status = 'PAUSED' WHERE id = 1 AND status = 'RUNNING'")
-        .execute(pool)
-        .await?;
-    get_sync_snapshot(pool).await
-}
-
 pub async fn get_sync_snapshot(pool: &SqlitePool) -> Result<SyncSnapshot, sqlx::Error> {
     sqlx::query_as::<_, SyncSnapshot>(SNAPSHOT_SELECT)
         .fetch_one(pool)
@@ -145,7 +169,7 @@ pub async fn enqueue_upload_units(
         )
         .execute(&mut *tx)
         .await?;
-        sqlx::query("UPDATE sync_jobs SET status = 'RUNNING', next_sequence = 1, total_count = 0, success_count = 0, failure_count = 0, current_path = NULL WHERE id = 1")
+        sqlx::query("UPDATE sync_jobs SET next_sequence = 1, total_count = 0, success_count = 0, failure_count = 0, current_path = NULL WHERE id = 1")
             .execute(&mut *tx).await?;
         sqlx::query("DELETE FROM sync_queue WHERE job_id = 1")
             .execute(&mut *tx)
@@ -345,7 +369,6 @@ pub async fn update_sync_queue_failure(
     Ok(())
 }
 
-#[cfg(test)]
 pub async fn has_pending_sync_queue_items(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING')",
@@ -379,9 +402,12 @@ pub async fn discard_pending_sync_paths(
     update_counts_and_snapshot(tx, true, None).await
 }
 
-pub async fn set_sync_status(pool: &SqlitePool, status: &str) -> Result<SyncSnapshot, sqlx::Error> {
+pub async fn set_sync_status(
+    pool: &SqlitePool,
+    status: SyncJobStatus,
+) -> Result<SyncSnapshot, sqlx::Error> {
     sqlx::query("UPDATE sync_jobs SET status = ?, current_path = CASE WHEN ? = 'IDLE' THEN NULL ELSE current_path END WHERE id = 1")
-        .bind(status).bind(status).execute(pool).await?;
+        .bind(status.as_str()).bind(status.as_str()).execute(pool).await?;
     get_sync_snapshot(pool).await
 }
 
@@ -517,10 +543,6 @@ pub async fn reset_failed_queue_items_for_folder(
         .await?;
 
     if queue_res.rows_affected() > 0 {
-        let job_sql = format!(
-            "UPDATE sync_jobs SET status = 'RUNNING' WHERE id = {SINGLETON_SYNC_JOB_ID} AND status IN ('IDLE', 'FAILED')"
-        );
-        sqlx::query(&job_sql).execute(&mut *tx).await?;
         update_counts_and_snapshot(tx, false, running_current_path.as_deref()).await?;
         return Ok(queue_res.rows_affected());
     }

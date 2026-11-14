@@ -161,11 +161,24 @@ pub async fn discard_failed_sync_paths(
     }
 
     let mut tx = pool.begin().await?;
+    delete_sync_paths(&mut tx, paths, false).await?;
+    update_job_counts(&mut tx).await?;
+    tx.commit().await
+}
+
+async fn delete_sync_paths(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    paths: &[String],
+    preserve_synced: bool,
+) -> Result<(), sqlx::Error> {
     for table in ["sync_state", "sync_queue", "album_retry_remote_ids"] {
         for path_batch in paths.chunks(DISCARD_PATH_BATCH_SIZE) {
             let mut query = QueryBuilder::<Sqlite>::new(format!("DELETE FROM {table} WHERE "));
             if table == "sync_queue" {
                 query.push("job_id = 1 AND ");
+            }
+            if table == "sync_state" && preserve_synced {
+                query.push("status != 'SYNCED' AND ");
             }
             query.push("local_path IN (");
             let mut separated = query.separated(", ");
@@ -173,22 +186,24 @@ pub async fn discard_failed_sync_paths(
                 separated.push_bind(path);
             }
             separated.push_unseparated(")");
-            query.build().execute(&mut *tx).await?;
+            query.build().execute(&mut **tx).await?;
         }
     }
+    Ok(())
+}
 
+async fn update_job_counts(tx: &mut sqlx::Transaction<'_, Sqlite>) -> Result<(), sqlx::Error> {
     sqlx::query(
         "UPDATE sync_jobs SET \
          total_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1), \
          success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), \
          failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED'), \
-         status = CASE WHEN status != 'PAUSED' AND NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN 'IDLE' ELSE status END, \
          current_path = CASE WHEN NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN NULL ELSE current_path END \
          WHERE id = 1",
     )
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
-    tx.commit().await
+    Ok(())
 }
 
 pub async fn has_sync_work_in_folder(pool: &SqlitePool, folder: &str) -> Result<bool, sqlx::Error> {
@@ -238,47 +253,7 @@ async fn discard_folder_sync_paths(pool: &SqlitePool, paths: &[String]) -> Resul
     }
 
     let mut tx = pool.begin().await?;
-    for path_batch in paths.chunks(DISCARD_PATH_BATCH_SIZE) {
-        let mut queue = QueryBuilder::<Sqlite>::new(
-            "DELETE FROM sync_queue WHERE job_id = 1 AND local_path IN (",
-        );
-        let mut queue_paths = queue.separated(", ");
-        for path in path_batch {
-            queue_paths.push_bind(path);
-        }
-        queue_paths.push_unseparated(")");
-        queue.build().execute(&mut *tx).await?;
-
-        let mut state = QueryBuilder::<Sqlite>::new(
-            "DELETE FROM sync_state WHERE status != 'SYNCED' AND local_path IN (",
-        );
-        let mut state_paths = state.separated(", ");
-        for path in path_batch {
-            state_paths.push_bind(path);
-        }
-        state_paths.push_unseparated(")");
-        state.build().execute(&mut *tx).await?;
-
-        let mut retries =
-            QueryBuilder::<Sqlite>::new("DELETE FROM album_retry_remote_ids WHERE local_path IN (");
-        let mut retry_paths = retries.separated(", ");
-        for path in path_batch {
-            retry_paths.push_bind(path);
-        }
-        retry_paths.push_unseparated(")");
-        retries.build().execute(&mut *tx).await?;
-    }
-
-    sqlx::query(
-        "UPDATE sync_jobs SET \
-         total_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1), \
-         success_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'SYNCED'), \
-         failure_count = (SELECT COUNT(*) FROM sync_queue WHERE job_id = 1 AND status = 'FAILED'), \
-         status = CASE WHEN status != 'PAUSED' AND NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN 'IDLE' ELSE status END, \
-         current_path = CASE WHEN NOT EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING') THEN NULL ELSE current_path END \
-         WHERE id = 1",
-    )
-    .execute(&mut *tx)
-    .await?;
+    delete_sync_paths(&mut tx, paths, true).await?;
+    update_job_counts(&mut tx).await?;
     tx.commit().await
 }

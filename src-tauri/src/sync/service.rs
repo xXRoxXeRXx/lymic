@@ -81,17 +81,6 @@ impl<'a> Synchronization<'a> {
         SynchronizationLifecycle::new(self.pool, self.running, self.coordinator.clone())
     }
 
-    /// Admit producer output into the durable queue before any runner observes it.
-    /// This is the shared boundary for manual scans, watcher batches, remounts,
-    /// and recovery; producers do not choose queue ordering or runner ownership.
-    pub(crate) async fn admit(&self, scan_result: ScanResult) -> Result<db::SyncSnapshot, String> {
-        log_overlapping_folders(self.app, &scan_result);
-        let snapshot = admit_scan_result(self.pool, &scan_result).await?;
-        crate::app::tray::update_sync_action(self.app, &snapshot);
-        let _ = self.app.emit("sync-progress-snapshot", &snapshot);
-        Ok(snapshot)
-    }
-
     pub(crate) async fn start(&self) -> Result<crate::sync::SyncSummary, String> {
         let folders = db::get_folders(self.pool)
             .await
@@ -131,9 +120,9 @@ impl<'a> Synchronization<'a> {
             .await
             .map_err(|error| error.to_string())?;
         let scan_result = crate::sync::prepare_failed_sync_retry(failed_paths, folders).await?;
-        db::discard_failed_sync_paths(self.pool, &scan_result.discarded_paths)
-            .await
-            .map_err(|error| error.to_string())?;
+        self.lifecycle()
+            .discard_failed(&scan_result.discarded_paths)
+            .await?;
         Ok(self
             .admit_and_run(scan_result, SyncSource::RetryFailed)
             .await?
@@ -149,13 +138,13 @@ impl<'a> Synchronization<'a> {
         scan_result: ScanResult,
         source: SyncSource,
     ) -> Result<Option<crate::sync::SyncSummary>, String> {
-        if scan_result.files.is_empty() && scan_result.failures.is_empty() {
-            return Ok(None);
-        }
-        self.admit(scan_result).await?;
-
+        log_overlapping_folders(self.app, &scan_result);
         let lifecycle = self.lifecycle();
-        let claim = lifecycle.start_or_join().await?;
+        let (admitted, claim) = lifecycle.admit_and_claim(&scan_result).await?;
+        if let Some(snapshot) = admitted {
+            crate::app::tray::update_sync_action(self.app, &snapshot);
+            let _ = self.app.emit("sync-progress-snapshot", &snapshot);
+        }
         let LifecycleClaim::Started(started) = claim else {
             return Ok(None);
         };
@@ -240,7 +229,7 @@ impl<'a> Synchronization<'a> {
         }
         let lifecycle = self.lifecycle();
         if !matches!(lifecycle.start_or_join().await?, LifecycleClaim::Started(_)) {
-            return lifecycle.status().await;
+            return lifecycle.status().await.map_err(Into::into);
         }
         match lifecycle.complete().await {
             Ok(Some(completed)) => {
@@ -249,7 +238,11 @@ impl<'a> Synchronization<'a> {
                 return Ok(completed);
             }
             Ok(None) => {}
-            Err(error) => return self.fail_run(SyncSource::Recovery, &error).await,
+            Err(error) => {
+                return self
+                    .fail_run(SyncSource::Recovery, &error.to_string())
+                    .await
+            }
         }
         let credentials = match auth::get_credentials() {
             Ok(Some(credentials)) => credentials,
@@ -290,7 +283,7 @@ impl<'a> Synchronization<'a> {
     }
 
     pub(crate) async fn status(&self) -> Result<db::SyncSnapshot, String> {
-        self.lifecycle().status().await
+        self.lifecycle().status().await.map_err(Into::into)
     }
 }
 
@@ -492,8 +485,7 @@ mod tests {
     use std::sync::atomic::Ordering;
     use tauri::Listener;
 
-    #[tokio::test]
-    async fn lifecycle_persists_pause_and_resume_without_a_desktop_runtime() {
+    async fn test_pool() -> sqlx::SqlitePool {
         let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
@@ -503,6 +495,12 @@ mod tests {
             .await
             .unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn lifecycle_persists_pause_and_resume_without_a_desktop_runtime() {
+        let pool = test_pool().await;
         let running = std::sync::atomic::AtomicBool::new(false);
         let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
         let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator.clone());
@@ -520,15 +518,7 @@ mod tests {
 
     #[tokio::test]
     async fn concurrent_manual_admissions_join_one_lifecycle_without_losing_either_result() {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
         db::add_folder(&pool, "C:/photos", None).await.unwrap();
         let running = std::sync::atomic::AtomicBool::new(false);
         let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
@@ -565,15 +555,7 @@ mod tests {
 
     #[tokio::test]
     async fn lifecycle_failure_is_durable_without_discarding_queued_work() {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
         db::enqueue_sync_assets(
             &pool,
             &[db::QueueAsset {
@@ -596,15 +578,7 @@ mod tests {
 
     #[tokio::test]
     async fn lifecycle_keeps_ownership_when_work_arrives_before_completion() {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
         let running = std::sync::atomic::AtomicBool::new(false);
         let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
         let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
@@ -634,15 +608,7 @@ mod tests {
 
     #[tokio::test]
     async fn failed_run_keeps_pending_work_when_new_work_is_admitted() {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
         let running = std::sync::atomic::AtomicBool::new(false);
         let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
         let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
@@ -770,15 +736,7 @@ mod tests {
 
     #[tokio::test]
     async fn retry_after_completion_preserves_remote_asset_for_album_assignment() {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
         let album = crate::immich::AlbumId::new("album-1");
         let asset = db::QueueAsset {
             path: "photo.jpg",
@@ -837,15 +795,7 @@ mod tests {
 
     #[tokio::test]
     async fn changed_media_asset_does_not_reuse_remote_asset_while_other_work_is_pending() {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
         let original = db::QueueAsset {
             path: "photo.jpg",
             size: 1,
@@ -892,15 +842,7 @@ mod tests {
 
     #[tokio::test]
     async fn runner_completes_after_its_last_folder_is_removed() {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
         db::enqueue_sync_assets(
             &pool,
             &[db::QueueAsset {
@@ -934,15 +876,7 @@ mod tests {
 
     #[tokio::test]
     async fn admission_during_completion_preserves_previous_results() {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
         db::enqueue_sync_assets(
             &pool,
             &[db::QueueAsset {
@@ -955,6 +889,10 @@ mod tests {
         )
         .await
         .unwrap();
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        lifecycle.start_or_join().await.unwrap();
         db::finalize_queued_block(&pool, &[("first.jpg".into(), "SYNCED".into())])
             .await
             .unwrap();
@@ -971,6 +909,77 @@ mod tests {
         .await
         .unwrap();
         assert_eq!((snapshot.total, snapshot.succeeded), (2, 1));
+    }
+
+    #[tokio::test]
+    async fn restart_pauses_pending_work_even_if_no_runner_was_claimed() {
+        let pool = test_pool().await;
+        db::enqueue_sync_assets(
+            &pool,
+            &[db::QueueAsset {
+                path: "recovered.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        db::set_sync_status(&pool, db::SyncJobStatus::Idle)
+            .await
+            .unwrap();
+        assert_eq!(
+            SynchronizationLifecycle::recover(&pool)
+                .await
+                .unwrap()
+                .status,
+            "PAUSED"
+        );
+    }
+
+    #[tokio::test]
+    async fn empty_remount_scan_claims_restored_pending_work() {
+        let pool = test_pool().await;
+        db::enqueue_sync_assets(
+            &pool,
+            &[db::QueueAsset {
+                path: "C:/photos/asset.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        db::finalize_queued_block(&pool, &[("C:/photos/asset.jpg".into(), "FAILED".into())])
+            .await
+            .unwrap();
+        db::reset_failed_queue_items_for_folder(&pool, "C:/photos")
+            .await
+            .unwrap();
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        lifecycle.pause().await.unwrap();
+        let (_, claim) = lifecycle
+            .admit_and_claim(&ScanResult::default())
+            .await
+            .unwrap();
+        assert!(matches!(claim, LifecycleClaim::Paused));
+        assert!(!running.load(Ordering::SeqCst));
+        lifecycle.resume().await.unwrap();
+        let (_, claim) = lifecycle
+            .admit_and_claim(&ScanResult::default())
+            .await
+            .unwrap();
+        assert!(matches!(claim, LifecycleClaim::Started(_)));
+        assert!(running.load(Ordering::SeqCst));
+        assert_eq!(
+            db::next_queued_upload_units(&pool, 10).await.unwrap().len(),
+            1
+        );
     }
 
     #[test]
@@ -1015,15 +1024,7 @@ mod tests {
     #[tokio::test]
     async fn shared_failure_cleanup_persists_failed_state_and_emits_a_snapshot_for_manual_and_background_sources(
     ) {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
         let app = tauri::test::mock_app();
         let audit_logger =
             std::sync::Arc::new(crate::audit::AuditLogger::initialize(app.handle()).unwrap());
@@ -1125,15 +1126,7 @@ mod tests {
 
     #[tokio::test]
     async fn changing_a_watched_folders_target_album_after_enqueue_does_not_change_queued_work() {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
 
         let scan = ScanResult {
             files: vec![Asset {

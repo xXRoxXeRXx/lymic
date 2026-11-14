@@ -50,7 +50,7 @@ mod database_tests {
         enqueue_upload_units(&pool, &[single_upload_unit("C:/photos/asset.jpg")], &[])
             .await
             .unwrap();
-        set_sync_status(&pool, "PAUSED").await.unwrap();
+        set_sync_status(&pool, SyncJobStatus::Paused).await.unwrap();
         discard_sync_data_in_folder(&pool, "C:/photos")
             .await
             .unwrap();
@@ -318,12 +318,14 @@ mod database_tests {
             .await
             .unwrap();
 
-        let snapshot = recover_sync_job(&pool).await.unwrap();
+        let snapshot = crate::sync::lifecycle::SynchronizationLifecycle::recover(&pool)
+            .await
+            .unwrap();
         assert_eq!(snapshot.status, "PAUSED");
     }
 
     #[tokio::test]
-    async fn admitting_work_after_a_failed_run_starts_a_fresh_job() {
+    async fn admitting_work_after_a_failed_run_prepares_a_fresh_job() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
@@ -337,7 +339,7 @@ mod database_tests {
         finalize_queued_block(&pool, &[("failed.jpg".to_string(), "FAILED".to_string())])
             .await
             .unwrap();
-        set_sync_status(&pool, "FAILED").await.unwrap();
+        set_sync_status(&pool, SyncJobStatus::Failed).await.unwrap();
 
         let fresh = [QueueAsset {
             path: "fresh.jpg",
@@ -347,7 +349,7 @@ mod database_tests {
         }];
         let snapshot = enqueue_sync_assets(&pool, &fresh, &[]).await.unwrap();
 
-        assert_eq!(snapshot.status, "RUNNING");
+        assert_eq!(snapshot.status, "FAILED");
         assert_eq!(snapshot.total, 1);
         assert_eq!(snapshot.succeeded, 0);
         assert_eq!(snapshot.failed, 0);
@@ -495,7 +497,7 @@ mod database_tests {
     async fn paused_queue_accepts_new_items_without_resuming() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        set_sync_status(&pool, "PAUSED").await.unwrap();
+        set_sync_status(&pool, SyncJobStatus::Paused).await.unwrap();
         let assets = [QueueAsset {
             path: "later.jpg",
             size: 7,
@@ -542,7 +544,7 @@ mod database_tests {
         )
         .await
         .unwrap();
-        set_sync_status(&pool, "PAUSED").await.unwrap();
+        set_sync_status(&pool, SyncJobStatus::Paused).await.unwrap();
 
         let new_asset = [QueueAsset {
             path: "new.jpg",
@@ -2059,7 +2061,7 @@ mod database_tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(job_status, "RUNNING");
+        assert_eq!(job_status, "IDLE");
 
         // Verify E:/DCIM items in sync_queue were reset
         let target_queue: Vec<(String, String, Option<String>)> = sqlx::query_as(
@@ -2118,7 +2120,7 @@ mod database_tests {
     }
 
     #[tokio::test]
-    async fn reset_failed_queue_items_for_folder_restarts_failed_job_and_recomputes_counts() {
+    async fn reset_failed_queue_items_for_folder_preserves_job_status_and_recomputes_counts() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
@@ -2150,7 +2152,7 @@ mod database_tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(job, ("RUNNING".to_string(), 3, 1, 1));
+        assert_eq!(job, ("FAILED".to_string(), 3, 1, 1));
     }
 
     #[tokio::test]
