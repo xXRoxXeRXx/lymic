@@ -17,7 +17,7 @@
   import RemovableVolumePrompt from "#lib/components/RemovableVolumePrompt.svelte";
   import TargetAlbumModal from "#lib/components/TargetAlbumModal.svelte";
   import { createFeedbackController } from "#lib/controllers/feedback-controller.svelte.ts";
-  import { createAuthController } from "#lib/controllers/auth-controller.svelte.ts";
+  import { createSessionController } from "#lib/controllers/session-controller.svelte.ts";
   import { createSyncController } from "#lib/controllers/sync-controller.svelte.ts";
   import { createWatchedFoldersController } from "#lib/controllers/watched-folders-controller.svelte.ts";
   import { createPreferencesController } from "#lib/controllers/preferences-controller.svelte.ts";
@@ -154,30 +154,16 @@
     queueMicrotask(() => { if (content) content.scrollTop = albumsScrollTop; });
   }
 
-  const auth = createAuthController({
+  const auth = createSessionController({
     adapter: desktop,
     formatError: feedback.formatError,
     reportError: feedback.report,
     t: (key) => $t(key),
-    onLogin: async () => {
-      favorites.clear();
-      map.clear();
+    state: [targetAlbumCatalogue, feedback, removable, { clear: sync.clearUserState }, watchedFolders,
+      timeline, favorites, people, map, albumCatalogue],
+    refresh: [timeline.refresh, sync.hydrate, sync.refreshFailedSyncs, watchedFolders.refresh, async () => sync.startSubscriptions()],
+    resetView: () => {
       mapCreated = false;
-      currentView = "photos";
-      await Promise.all([timeline.refresh(), sync.refreshFailedSyncs(), watchedFolders.refresh()]);
-    },
-    onLogout: () => {
-      targetAlbumCatalogue.clear();
-      feedback.clear();
-      removable.clear();
-      sync.clearUserState();
-      watchedFolders.clear();
-      timeline.clear();
-      favorites.clear();
-      people.clear();
-      map.clear();
-      mapCreated = false;
-      albumCatalogue.clear();
       closeAlbumTimeline();
       closePersonTimeline();
       currentView = "photos";
@@ -209,16 +195,7 @@
     void removable.startSubscriptions();
 
     void auth.hydrate()
-      .then(() => {
-        if (!auth.isAuthenticated) return;
-        return Promise.all([sync.refreshFailedSyncs(), timeline.refresh()]);
-      })
       .catch((error) => console.error("Failed to hydrate authentication", error));
-    void watchedFolders.refresh()
-      .catch((error) => console.error("Failed to hydrate watched folders", error));
-    void sync.hydrate()
-      .then(() => sync.startSubscriptions())
-      .catch((error) => console.error("Failed to hydrate sync state", error));
     void preferences.hydrate().catch((error) => console.error("Failed to hydrate preferences", error));
     updater.startup();
 

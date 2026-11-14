@@ -84,6 +84,7 @@ export function createWatchedFoldersController(
   }
 
   async function promptForFolder(volume: DetectedVolume | null, logMessage: string) {
+    const generation = refreshGeneration;
     try {
       const selected = await adapter.openFolderDialog({
         directory: true,
@@ -91,12 +92,12 @@ export function createWatchedFoldersController(
         ...(volume ? { defaultPath: volume.mountPath } : {}),
         title: options.t("select_folder"),
       });
-      if (mounted && typeof selected === "string") {
+      if (mounted && generation === refreshGeneration && typeof selected === "string") {
         pendingAddition = { path: selected, volume };
       }
     } catch (error) {
       console.error(logMessage, error);
-      if (mounted) options.reportError(error);
+      if (mounted && generation === refreshGeneration) options.reportError(error);
     }
   }
 
@@ -110,19 +111,21 @@ export function createWatchedFoldersController(
 
   async function confirmAddFolder(targetAlbumId: string | null) {
     if (!pendingAddition) return;
+    const generation = refreshGeneration;
     const { path, volume } = pendingAddition;
     pendingAddition = null;
     try {
       if (volume) {
         await adapter.acceptRemovableMediaFolder(volume.volumeId, path, targetAlbumId);
+        if (generation !== refreshGeneration) return;
         options.onRemovableVolumeAccepted?.(volume.volumeId);
       } else {
         await adapter.addFolder(path, targetAlbumId);
       }
-      await refresh();
+      if (generation === refreshGeneration) await refresh();
     } catch (error) {
       console.error("Failed to add folder", error);
-      if (mounted) options.reportError(error);
+      if (mounted && generation === refreshGeneration) options.reportError(error);
     }
   }
 
@@ -131,6 +134,7 @@ export function createWatchedFoldersController(
   }
 
   async function removeFolder(id: number) {
+    const generation = refreshGeneration;
     try {
       const result = await adapter.removeFolder(id);
       const warningMessage = result?.requiresSyncCancellation
@@ -140,23 +144,26 @@ export function createWatchedFoldersController(
         title: options.t("remove_folder"),
         kind: "warning",
       });
-      if (!confirmed) return;
+      if (!confirmed || generation !== refreshGeneration) return;
       await adapter.removeFolder(id, true);
+      if (generation !== refreshGeneration) return;
       await refresh();
-      await options.onFolderRemoved?.();
+      if (generation === refreshGeneration) await options.onFolderRemoved?.();
     } catch (error) {
       console.error("Failed to remove folder", error);
-      if (mounted) options.reportError(error);
+      if (mounted && generation === refreshGeneration) options.reportError(error);
     }
   }
 
   async function updateFolderExclusionPatterns(id: number, exclusionPatterns: string[]) {
+    const generation = refreshGeneration;
     try {
       await adapter.updateFolderExclusionPatterns(id, exclusionPatterns);
+      if (generation !== refreshGeneration) return false;
       await refresh();
       return true;
     } catch (error) {
-      if (mounted) options.reportError(error);
+      if (mounted && generation === refreshGeneration) options.reportError(error);
       return false;
     }
   }

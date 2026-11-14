@@ -66,6 +66,7 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
   let logs = $state<LogEntry[]>([]);
   let isSyncActionPending = $state(false);
   let mounted = false;
+  let generation = 0;
   let logCounter = 0;
   let progressResetTimer: ReturnType<typeof setTimeout> | undefined;
   let stopEvents: (() => void) | undefined;
@@ -119,29 +120,35 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
   }
 
   async function refreshFailedSyncs() {
+    const request = generation;
     try {
-      failedSyncs = await adapter.getFailedSyncs();
+      const result = await adapter.getFailedSyncs();
+      if (request !== generation) return;
+      failedSyncs = result;
       if (failedSyncs.length > 0 && syncStatus === "idle") syncStatus = "error";
     } catch (error) {
+      if (request !== generation) return;
       console.error("Failed to load sync failures", error);
       options.reportError(error);
     }
   }
 
   async function hydrate() {
+    const request = generation;
     try {
-      applySyncSnapshot(await adapter.getSyncStatus());
+      const snapshot = await adapter.getSyncStatus();
+      if (request === generation) applySyncSnapshot(snapshot);
     } catch (error) {
       console.warn("Failed to load sync status", error);
     }
   }
 
-  async function finishSync(summary?: SyncSummary) {
-    if (!mounted) return;
+  async function finishSync(summary?: SyncSummary, request = generation) {
+    if (!mounted || request !== generation) return;
     await refreshFailedSyncs();
-    if (!mounted) return;
+    if (!mounted || request !== generation) return;
     await options.onSyncSettled?.();
-    if (!mounted) return;
+    if (!mounted || request !== generation) return;
 
     if (syncStatus === "error" || !!summary?.failed || failedSyncs.length > 0) {
       syncStatus = "error";
@@ -172,9 +179,11 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
     processed = 0;
     syncTotal = 0;
     resetTransferStats();
+    const request = generation;
     try {
-      await finishSync(await adapter.startSync());
+      await finishSync(await adapter.startSync(), request);
     } catch (error) {
+      if (request !== generation) return;
       console.error("Sync failed", error);
       options.reportError(error);
       syncStatus = "error";
@@ -186,12 +195,14 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
     if (!isSyncActive()) return startSync();
 
     isSyncActionPending = true;
+    const request = generation;
     try {
-      applySyncSnapshot(await (syncStatus === "syncing" ? adapter.pauseSync() : adapter.resumeSync()));
+      const snapshot = await (syncStatus === "syncing" ? adapter.pauseSync() : adapter.resumeSync());
+      if (request === generation) applySyncSnapshot(snapshot);
     } catch (error) {
-      options.reportError(error);
+      if (request === generation) options.reportError(error);
     } finally {
-      isSyncActionPending = false;
+      if (request === generation) isSyncActionPending = false;
     }
   }
 
@@ -204,52 +215,56 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
     processed = 0;
     syncTotal = 0;
     resetTransferStats();
+    const request = generation;
     try {
-      await finishSync(await adapter.retryFailedSyncs());
+      await finishSync(await adapter.retryFailedSyncs(), request);
     } catch (error) {
+      if (request !== generation) return;
       console.error("Failed to retry sync failures", error);
       options.reportError(error);
       await refreshFailedSyncs();
-      syncStatus = "error";
+      if (request === generation) syncStatus = "error";
     }
   }
 
   function startSubscriptions() {
     if (!mounted || stopEvents) return;
+    const request = generation;
+    const active = () => mounted && request === generation;
     stopEvents = subscribeToSyncEvents({
       onProgress(path) {
-        if (!mounted) return;
+        if (!active()) return;
         syncStatus = "syncing";
         currentFile = path.split(/[/\\]/).pop() || "";
       },
       onProgressPercent(value) {
-        if (mounted) progress = value;
+        if (active()) progress = value;
       },
       onStarted() {
-        if (!mounted) return;
+        if (!active()) return;
         if (progressResetTimer) clearTimeout(progressResetTimer);
         progressResetTimer = undefined;
         syncStatus = "syncing";
         resetTransferStats();
       },
       onTransferStats(stats: TransferStatsEvent) {
-        if (!mounted) return;
+        if (!active()) return;
         transferredBytes = stats.transferredBytes ?? 0;
         transferRateBytesPerSecond = stats.transferRateBytesPerSecond > 0 ? stats.transferRateBytesPerSecond : null;
         estimatedSecondsRemaining = stats.estimatedSecondsRemaining;
       },
-      onSnapshot: applySyncSnapshot,
+      onSnapshot(snapshot) { if (active()) applySyncSnapshot(snapshot); },
       onError(reason) {
-        if (!mounted) return;
+        if (!active()) return;
         syncStatus = "error";
         progress = 0;
         if (reason?.trim()) options.reportError(reason);
       },
-      onLog: addLog,
+      onLog(payload) { if (active()) addLog(payload); },
       onIdle() {
-        void finishSync();
+        if (active()) void finishSync();
       },
-    }, () => mounted);
+    }, active);
   }
 
   function startLifecycle() {
@@ -257,6 +272,10 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
   }
 
   function clearUserState() {
+    generation += 1;
+    stopEvents?.();
+    stopEvents = undefined;
+    isSyncActionPending = false;
     syncStatus = "idle";
     lastSync = null;
     progress = 0;
@@ -271,6 +290,7 @@ export function createSyncController(options: SyncControllerOptions): SyncContro
   }
 
   function destroy() {
+    generation += 1;
     mounted = false;
     if (progressResetTimer) clearTimeout(progressResetTimer);
     progressResetTimer = undefined;

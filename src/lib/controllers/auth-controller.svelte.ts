@@ -24,22 +24,49 @@ export function createAuthController(options: {
   let isLoggingIn = $state(false);
   let loginError = $state("");
   let loginErrorCode = $state("");
+  let generation = 0;
+  let authOperation = Promise.resolve();
 
-  async function loadCurrentUser() {
+  async function runAuthOperation(request: number, operation: () => Promise<void>) {
+    const previous = authOperation;
+    let release!: () => void;
+    authOperation = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      if (request === generation) await operation();
+    } finally {
+      release();
+    }
+  }
+
+  async function loadCurrentUser(request: number) {
     try {
       const user: CurrentUser = await adapter.getCurrentUser();
+      if (request !== generation) return;
       currentUserName = user.displayName;
       profileImage = user.profileImage;
     } catch (error) {
-      console.warn("Failed to load current user", error);
+      if (request === generation) console.warn("Failed to load current user", error);
     }
   }
 
   async function hydrate() {
-    isAuthenticated = await adapter.getAuthStatus();
-    if (!isAuthenticated) return;
-    serverUrl = await adapter.getServerUrl();
-    await loadCurrentUser();
+    const request = ++generation;
+    const authenticated = await adapter.getAuthStatus();
+    if (request !== generation) return;
+    if (!authenticated) {
+      isAuthenticated = false;
+      currentUserName = "";
+      profileImage = null;
+      await options.onLogout();
+      return;
+    }
+    const url = await adapter.getServerUrl();
+    if (request !== generation) return;
+    serverUrl = url;
+    isAuthenticated = true;
+    await options.onLogin();
+    if (request === generation) await loadCurrentUser(request);
   }
 
   async function login() {
@@ -51,23 +78,28 @@ export function createAuthController(options: {
       loginErrorCode = CLOUDFLARE_ACCESS_PAIR_REQUIRED_ERROR;
       return;
     }
+    const request = ++generation;
     isLoggingIn = true;
     loginError = "";
     loginErrorCode = "";
     try {
-      await adapter.login({
+      await runAuthOperation(request, () => adapter.login({
         serverUrl,
         apiKey,
         allowLocalHttp,
         cloudflareClientId: normalizedCloudflareClientId || null,
         cloudflareClientSecret: normalizedCloudflareClientSecret || null,
-      });
+      }));
+      if (request !== generation) return;
       apiKey = "";
       cloudflareClientSecret = "";
       isAuthenticated = true;
+      currentUserName = "";
+      profileImage = null;
       await options.onLogin();
-      await loadCurrentUser();
+      if (request === generation) await loadCurrentUser(request);
     } catch (error) {
+      if (request !== generation) return;
       const message = options.formatError(error);
       if (message.startsWith(`${LOCAL_HTTP_NOT_ALLOWED_ERROR}:`)) {
         loginError = options.t("local_http_not_allowed");
@@ -76,18 +108,22 @@ export function createAuthController(options: {
         loginError = message;
       }
     } finally {
-      isLoggingIn = false;
+      if (request === generation) isLoggingIn = false;
     }
   }
 
   async function logout() {
+    const confirmationGeneration = generation;
     const shouldLogout = await adapter.confirm(options.t("logout_confirmation"), {
       title: options.t("logout"),
       kind: "warning",
     });
-    if (!shouldLogout) return;
+    if (!shouldLogout || confirmationGeneration !== generation) return;
+    const request = ++generation;
     try {
-      await adapter.logout();
+      await runAuthOperation(request, () => adapter.logout());
+      if (request !== generation) return;
+      isLoggingIn = false;
       isAuthenticated = false;
       apiKey = "";
       allowLocalHttp = false;
@@ -98,6 +134,7 @@ export function createAuthController(options: {
       profileImage = null;
       await options.onLogout();
     } catch (error) {
+      if (request !== generation) return;
       console.error("Logout failed", error);
       options.reportError(error);
     }

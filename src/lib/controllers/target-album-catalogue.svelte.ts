@@ -23,6 +23,7 @@ export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): Targe
   let error = $state<string | null>(null);
   let hasRequested = $state(false);
   let latestRequest = 0;
+  let generation = 0;
   let pendingCreated = new Map<string, Album>();
 
   async function refresh() {
@@ -45,7 +46,9 @@ export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): Targe
   }
 
   async function create(name: string) {
+    const request = generation;
     const created = await adapter.createAlbum(name);
+    if (request !== generation) return created;
     pendingCreated.set(created.id, created);
     albums = sorted([...albums.filter((album) => album.id !== created.id), created]);
     await refresh();
@@ -53,6 +56,7 @@ export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): Targe
   }
 
   function clear() {
+    generation += 1;
     latestRequest += 1;
     albums = [];
     pendingCreated.clear();
