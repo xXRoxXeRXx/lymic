@@ -10,7 +10,7 @@
   import { calculateMasonryLayout } from "./timeline-masonry";
   import Lightbox from "./Lightbox.svelte";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
-  import { createFavoritesLightboxState } from "./favorites-lightbox-state.svelte";
+  import { createRemoteAssetFavorites } from "./remote-asset-favorites.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
   interface Props {
@@ -67,9 +67,7 @@
   let isDragging = false;
   let scrollRaf: number | null = null;
   let selectedAsset = $state<TimelineAsset | null>(null);
-  const favoritesLightbox = createFavoritesLightboxState(() => timeline);
   const assetDetailsById = new Map<string, AssetDetails | null>();
-  let favoriteOverrides = $state<Record<string, boolean>>({});
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
   let isAddToAlbumOpen = $state(false);
   let isAddingToAlbum = $state(false);
@@ -80,11 +78,19 @@
   let isDownloadingSelection = $state(false);
   let selectionResult = $state<{ action: "favorite" | "album" | "download"; succeeded: number; total: number } | null>(null);
   let actionGeneration = 0;
+  const favorites = createRemoteAssetFavorites({
+    getTimeline: () => timeline,
+    get setAssetFavorite() { return setAssetFavorite; },
+    get removeUnfavorited() { return removeUnfavoritedAssets; },
+    get errorMessage() { return $t("timeline_favorite_update_error"); },
+    onReflect: reflectFavoriteState,
+    onRemoved: cleanupRemovedAssetState,
+  });
   const selectionCount = $derived(selectedAssetIds.size);
   const isSelectionMode = $derived(selectionCount > 0);
   const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selectedAssetIds.has(asset.id)));
-  const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => isFavorite(asset)));
-  const hasNonFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => !isFavorite(asset)));
+  const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => favorites.isFavorite(asset)));
+  const hasNonFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => !favorites.isFavorite(asset)));
   const isSelectionActionBusy = $derived(isApplyingSelection || isAddingToAlbum || isDownloadingSelection);
 
   function resetSelectionAndModals() {
@@ -102,8 +108,8 @@
     selectedAsset = null;
     opener = null;
     updatingFavoriteAssetIds = {};
-    favoriteOverrides = {};
-    favoritesLightbox.reset();
+    favorites.retainOverrides([]);
+    favorites.reset();
   }
 
   $effect(() => {
@@ -132,12 +138,8 @@
         resetLightbox();
         return;
       }
-      favoriteOverrides = Object.fromEntries(
-        Object.keys(updatingFavoriteAssetIds)
-          .filter((assetId) => assetId in favoriteOverrides)
-          .map((assetId) => [assetId, favoriteOverrides[assetId]]),
-      );
-      favoritesLightbox.clearError();
+      favorites.retainOverrides(Object.keys(updatingFavoriteAssetIds));
+      favorites.clearError();
     });
   });
 
@@ -145,7 +147,7 @@
     timeline;
     untrack(() => {
       resetSelectionAndModals();
-      favoritesLightbox.reset();
+      favorites.reset();
     });
   });
 
@@ -262,10 +264,6 @@
     return hours > 0 ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
   }
 
-  function isFavorite(asset: TimelineAsset) {
-    return favoriteOverrides[asset.id] ?? asset.isFavorite;
-  }
-
   function isAssetSelected(assetId: string) {
     return selectedAssetIds.has(assetId);
   }
@@ -282,10 +280,7 @@
     selectedAssetIds = new Set();
   }
 
-  function updateFavoriteState(assetId: string, isFavorite: boolean) {
-    if (!removeUnfavoritedAssets) {
-      favoriteOverrides = { ...favoriteOverrides, [assetId]: isFavorite };
-    }
+  function reflectFavoriteState(assetId: string, isFavorite: boolean) {
     const currentDetails = assetDetailsById.get(assetId);
     if (currentDetails) {
       const updatedDetails = { ...currentDetails, isFavorite };
@@ -295,8 +290,6 @@
   }
 
   function cleanupRemovedAssetState(assetId: string) {
-    const { [assetId]: _removedOverride, ...remainingOverrides } = favoriteOverrides;
-    favoriteOverrides = remainingOverrides;
     if (selectedAssetIds.has(assetId)) {
       const nextSelectedAssetIds = new Set(selectedAssetIds);
       nextSelectedAssetIds.delete(assetId);
@@ -304,48 +297,19 @@
     }
   }
 
-  function updateAssetFavorite(assetId: string, isFavorite: boolean) {
-    if (!removeUnfavoritedAssets) return setAssetFavorite(assetId, isFavorite);
-    return favoritesLightbox.updateFavorite(
-      assetId,
-      isFavorite,
-      setAssetFavorite,
-      () => $t("timeline_favorite_update_error"),
-      cleanupRemovedAssetState,
-    );
-  }
-
   async function applyFavoriteToSelection(isFavorite: boolean) {
     const assetIds = [...selectedAssetIds];
     if (assetIds.length === 0 || isSelectionActionBusy) return;
 
     const generation = actionGeneration;
-    if (removeUnfavoritedAssets) favoritesLightbox.clearError();
+    favorites.clearError();
     selectionResult = null;
     isApplyingSelection = true;
-    let succeeded = 0;
-    for (const assetId of assetIds) {
-      try {
-        await setAssetFavorite(assetId, isFavorite);
-        if (generation !== actionGeneration) return;
-        if (removeUnfavoritedAssets) {
-          if (!isFavorite) {
-            favoritesLightbox.confirmRemoval(assetId);
-            cleanupRemovedAssetState(assetId);
-          }
-        } else {
-          updateFavoriteState(assetId, isFavorite);
-        }
-        succeeded += 1;
-      } catch {
-        if (generation !== actionGeneration) return;
-        // Continue so the result can accurately report a partial update.
-      }
-    }
-    if (generation !== actionGeneration) return;
+    const result = await favorites.updateMany(assetIds, isFavorite, () => generation === actionGeneration);
+    if (!result) return;
     isApplyingSelection = false;
     clearSelection();
-    selectionResult = { action: "favorite", succeeded, total: assetIds.length };
+    selectionResult = { action: "favorite", ...result };
   }
 
   async function downloadSelection() {
@@ -404,23 +368,23 @@
 
   function openAsset(asset: TimelineAsset, source: HTMLElement) {
     if (isSelectionMode) return;
-    if (removeUnfavoritedAssets) favoritesLightbox.open(asset.id);
-    selectedAsset = { ...asset, isFavorite: isFavorite(asset) };
+    favorites.open(asset.id);
+    selectedAsset = { ...asset, isFavorite: favorites.isFavorite(asset) };
     opener = source;
   }
   function closeLightbox() {
-    if (removeUnfavoritedAssets) favoritesLightbox.close();
+    favorites.close();
     selectedAsset = null;
     queueMicrotask(() => opener?.focus());
   }
   function navigateLightboxAsset(delta: number, current: TimelineAsset): TimelineAsset | null | Promise<TimelineAsset | null> {
     if (removeUnfavoritedAssets) {
-      return favoritesLightbox.navigate(delta, current, isFavorite);
+      return favorites.navigate(delta, current);
     }
     if (!lightboxAssets.length) return null;
     const index = lightboxAssets.findIndex((candidate) => candidate.id === current.id);
     const next = lightboxAssets[(index + delta + lightboxAssets.length) % lightboxAssets.length];
-    return { ...next, isFavorite: isFavorite(next) };
+    return { ...next, isFavorite: favorites.isFavorite(next) };
   }
   function handleKeydown(event: KeyboardEvent) {
     if (!selectedAsset && isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen) {
@@ -498,14 +462,14 @@
       </div>
     </div>
   {/if}
-  {#if removeUnfavoritedAssets && favoritesLightbox.updateError}
+  {#if removeUnfavoritedAssets && favorites.updateError}
     <div class="mb-3 mr-16 flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
-      <span>{favoritesLightbox.updateError}</span>
+      <span>{favorites.updateError}</span>
       <button
         type="button"
         class="rounded p-1 hover:bg-red-100 dark:hover:bg-red-900/40"
         aria-label={$t("dismiss_error")}
-        onclick={() => favoritesLightbox.clearError()}
+        onclick={() => favorites.clearError()}
       ><X class="h-4 w-4" /></button>
     </div>
   {/if}
@@ -546,7 +510,7 @@
                     <div class="group relative overflow-hidden rounded-lg bg-slate-200 dark:bg-zinc-800">
                       <button type="button" class="block w-full text-left" aria-label={item.asset.type === "VIDEO" ? $t("timeline_open_video") : $t("timeline_open_photo")} onclick={(event) => openAsset(item.asset, event.currentTarget)}>
                       <img src={protocolSrc("lymic-thumb", "asset", item.asset.id)} alt="" loading="lazy" width={item.asset.width} height={item.asset.height} style:height={`${item.height}px`} class="w-full object-cover" />
-                      {#if isFavorite(item.asset)}
+                      {#if favorites.isFavorite(item.asset)}
                         <span class="absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white" aria-label={$t("timeline_favorite_marker")}><Heart class="h-3.5 w-3.5 fill-current" /></span>
                       {/if}
                       {#if item.asset.type === "VIDEO"}
@@ -607,7 +571,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} refreshGeneration={timeline.refreshGeneration} detailsCache={assetDetailsById} bind:updatingFavoriteAssetIds navigateAsset={navigateLightboxAsset} onClose={closeLightbox} onFavoriteChange={updateFavoriteState} {serverUrl} {onOpenExternalUrl} {getAssetDetails} setAssetFavorite={updateAssetFavorite} {chooseDownloadDestination} {downloadAsset} {albumCatalogue} {addAssetsToAlbum} />
+  <Lightbox asset={selectedAsset} refreshGeneration={timeline.refreshGeneration} detailsCache={assetDetailsById} bind:updatingFavoriteAssetIds navigateAsset={navigateLightboxAsset} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} {getAssetDetails} setAssetFavorite={favorites.updateOne} {chooseDownloadDestination} {downloadAsset} {albumCatalogue} {addAssetsToAlbum} />
 {/if}
 {#if albumCatalogue}
   <AddToAlbumModal
