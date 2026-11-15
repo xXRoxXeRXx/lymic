@@ -34,6 +34,69 @@ describe('i18n catalogs', () => {
       }
     }
   });
+  it('translates the Explore Overview strings in every locale', () => {
+    const keys = ['explore_title', 'explore_view_all', 'explore_retry', 'explore_empty', 'explore_return'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+    }
+    expect(de.explore_title).toBe('Erkunden');
+  });
+
+  it('translates the Explore Places strings in every locale', () => {
+    const keys = ['places_title', 'places_all_title', 'places_loading', 'places_empty', 'places_offline', 'places_error', 'places_unavailable', 'places_permission_denied'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+      expect((translations as Record<string, string>).places_permission_denied, localeCode).toContain('asset.read');
+    }
+  });
+
+  it('translates the Place Timeline strings in every locale', () => {
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of ['places_return', 'places_timeline_empty', 'places_timeline_error']) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+    }
+  });
+
+  it('translates the Memories strings in every locale', () => {
+    const keys = ['memories_title', 'memories_loading', 'memories_offline', 'memories_error', 'memories_unavailable', 'memories_permission_denied', 'memory_year_ago', 'memory_years_ago', 'memory_birthday', 'memory_untitled', 'memories_timeline_empty'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+      expect((translations as Record<string, string>).memories_permission_denied, localeCode).toContain('memory.read');
+      expect((translations as Record<string, string>).memory_birthday, localeCode).toContain('{name}');
+    }
+    expect(de.memories_title).toBe('Erinnerungen');
+  });
+
+  it('names the person.read permission in the People permission message of every locale', () => {
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      const message = (translations as Record<string, string>).people_permission_denied;
+      expect(message?.trim(), localeCode).toBeTruthy();
+      expect(message, localeCode).toContain('person.read');
+    }
+  });
+
+  it('translates the All Memories strings in every locale', () => {
+    const keys = ['memories_all_title', 'memories_all_empty', 'memories_loading_more', 'memories_more_error', 'memories_all_return'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+    }
+    expect(de.memories_all_title).toBe('Alle Erinnerungen');
+  });
+
   it('updates the document language when the active locale changes', async () => {
     await locale.set('de');
     expect(document.documentElement.lang).toBe('de-DE');

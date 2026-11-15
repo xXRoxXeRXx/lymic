@@ -71,3 +71,9 @@ it("loads the next people page when the end marker enters the app scroll contain
   expect(loadMore).toHaveBeenCalledOnce();
   expect(observedOptions?.root).toBe(main);
 });
+
+it("names the person.read permission when People is permission denied", () => {
+  render(PeopleView, { people: { ...peopleState(null), people: [], error: "permission_denied" }, onSelect: vi.fn() });
+
+  expect(screen.getByRole("alert")).toHaveTextContent("person.read");
+});

@@ -1,7 +1,21 @@
-use reqwest::{RequestBuilder, Response};
+use reqwest::{RequestBuilder, Response, StatusCode};
 
 pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 8 * 1024;
 pub(super) const MAX_SUCCESS_RESPONSE_BYTES: usize = 1024 * 1024;
+
+/// The credential-free error code of a failed Explore request: `{prefix}_authentication_required`
+/// for 401, `{prefix}_permission_denied:{permission_hint}` for 403 and `{prefix}_unavailable` otherwise.
+pub(super) fn explore_status_error(
+    prefix: &str,
+    status: StatusCode,
+    permission_hint: &str,
+) -> String {
+    match status {
+        StatusCode::UNAUTHORIZED => format!("{prefix}_authentication_required"),
+        StatusCode::FORBIDDEN => format!("{prefix}_permission_denied:{permission_hint}"),
+        _ => format!("{prefix}_unavailable"),
+    }
+}
 
 /// Sends a request and returns the response only when it succeeded.
 ///

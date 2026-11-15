@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TimelineAsset, TimelineBucket } from "../contracts";
 import { createAlbumTimelineController } from "./album-timeline-controller.svelte";
+import { createPlaceTimelineController } from "./place-timeline-controller.svelte";
 import { createFavoritesTimelineController } from "./favorites-timeline-controller.svelte";
 import { createPersonTimelineController } from "./person-timeline-controller.svelte";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
@@ -35,6 +36,9 @@ const timelines: Array<[string, () => TimelineController]> = [
   ["Album Timeline", () => createAlbumTimelineController({
     getAlbumTimeline: async () => ({ buckets, assetsByBucket }),
   }, "album-1")],
+  ["Place Timeline", () => createPlaceTimelineController({
+    getPlaceTimeline: async () => ({ buckets, assetsByBucket }),
+  }, "Paris")],
   ["Person Timeline", () => createPersonTimelineController({
     getPersonTimelineBuckets: bucketSource.getBuckets,
     getPersonTimelineBucketAssets: (_personId, timeBucket) => bucketSource.getBucketAssets(timeBucket),

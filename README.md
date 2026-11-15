@@ -36,6 +36,7 @@
 - **Media-aware uploads** — Supports broad, extension-based media detection, recognized live-photo/motion pairs, and optional XMP sidecars.
 - **Media timeline** — Responsive photo and video timeline with masonry layout, date scrubber, thumbnail caching, and full lightbox preview.
 - **People discovery** — Browse recognized persons with cached avatars and filter the timeline by person.
+- **Explore** — An overview after Photos with recognized people, places (cities) and memories; open a place or memory as a timeline. Read-only, and it needs the `asset.read`, `person.read` and `memory.read` API key permissions (see [Required Permissions](#required-permissions-scopes)).
 - **Album browsing** — Browse accessible Immich albums with cover thumbnails and asset counts, and explore album media in a dedicated timeline view.
 
 ---
@@ -169,6 +170,10 @@ If Immich is protected by Cloudflare Access, open **Advanced login options** and
 | `album.create` | Create a target album from the app |
 | `albumAsset.create` | Add synchronized media to a target album |
 | `user.read` | Retrieve the signed-in user during login |
+| `person.read` | Explore: show recognized people |
+| `memory.read` | Explore: show memories |
+
+Explore also uses `asset.read` (listed above) for places and place timelines. Each Explore section depends on its own permission: a key that lacks `person.read` or `memory.read` disables only the People or Memories section, and a key that lacks `asset.read` disables only Places, while the rest of Explore keeps working. The section explains the missing permission where it can. Memories additionally need a recent Immich server release; Lymic documents no minimum version. Viewing thumbnails and photos in the timelines also needs `asset.view`.
 
 Lymic normally does not require `asset.delete` or `album.update` permissions.
 

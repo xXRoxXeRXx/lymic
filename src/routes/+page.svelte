@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, ArrowLeft, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon } from "lucide-svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon, Compass } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
@@ -8,7 +8,11 @@
   import DashboardView from "#lib/components/DashboardView.svelte";
   import TimelineView from "#lib/components/TimelineView.svelte";
   import MapView from "#lib/components/MapView.svelte";
+  import ExploreView from "#lib/components/ExploreView.svelte";
+  import BackBarView from "#lib/components/BackBarView.svelte";
+  import AllMemoriesView from "#lib/components/AllMemoriesView.svelte";
   import PeopleView from "#lib/components/PeopleView.svelte";
+  import PlacesView from "#lib/components/PlacesView.svelte";
   import AlbumCatalogueView from "#lib/components/AlbumCatalogueView.svelte";
   import ActivityLog from "#lib/components/ActivityLog.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
@@ -21,7 +25,10 @@
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
   import { createAlbumTimelineController } from "#lib/controllers/album-timeline-controller.svelte.ts";
   import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
-  import type { AlbumCatalogueItem, RecognizedPerson } from "#lib/contracts.ts";
+  import { createPlaceTimelineController } from "#lib/controllers/place-timeline-controller.svelte.ts";
+  import { createMemoryTimelineController } from "#lib/controllers/memory-timeline-controller.svelte.ts";
+  import { localizedMemoryTitle } from "#lib/memory-title.ts";
+  import type { AlbumCatalogueItem, Memory, Place, RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
@@ -31,16 +38,48 @@
   let albumTimeline = $state<ReturnType<typeof createAlbumTimelineController> | null>(null);
   let selectedPerson = $state<RecognizedPerson | null>(null);
   let personTimeline = $state<ReturnType<typeof createPersonTimelineController> | null>(null);
+  let selectedMemory = $state<Memory | null>(null);
+  let memoryTimeline = $state<ReturnType<typeof createMemoryTimelineController> | null>(null);
+  let personOrigin = $state<"people" | "explore">("people");
+  let memoryOrigin = $state<"explore" | "all-memories">("explore");
+  let selectedPlace = $state<Place | null>(null);
+  let placeTimeline = $state<ReturnType<typeof createPlaceTimelineController> | null>(null);
+  let placeOrigin = $state<"explore" | "places">("explore");
+  let placesScrollTop = 0;
   let peopleScrollTop = 0;
+  let exploreScrollTop = 0;
+  let allMemoriesScrollTop = 0;
   let albumsScrollTop = 0;
   let content = $state<HTMLElement>();
 
   function selectPerson(person: RecognizedPerson) {
-    peopleScrollTop = content?.scrollTop ?? 0;
+    personOrigin = currentView === "explore" ? "explore" : "people";
+    if (personOrigin === "explore") exploreScrollTop = content?.scrollTop ?? 0;
+    else peopleScrollTop = content?.scrollTop ?? 0;
     selectedPerson = person;
     personTimeline = createPersonTimelineController(desktop, person.id);
     currentView = "person-timeline";
     void personTimeline.refresh();
+  }
+
+  function selectPlace(place: Place) {
+    placeOrigin = currentView === "places" ? "places" : "explore";
+    if (placeOrigin === "places") placesScrollTop = content?.scrollTop ?? 0;
+    else exploreScrollTop = content?.scrollTop ?? 0;
+    selectedPlace = place;
+    placeTimeline = createPlaceTimelineController(desktop, place.city);
+    currentView = "place-timeline";
+    void placeTimeline.refresh();
+  }
+
+  function selectMemory(memory: Memory) {
+    memoryOrigin = currentView === "all-memories" ? "all-memories" : "explore";
+    if (memoryOrigin === "all-memories") allMemoriesScrollTop = content?.scrollTop ?? 0;
+    else exploreScrollTop = content?.scrollTop ?? 0;
+    selectedMemory = memory;
+    memoryTimeline = createMemoryTimelineController(memory);
+    currentView = "memory-timeline";
+    void memoryTimeline.refresh();
   }
 
   function selectAlbum(album: AlbumCatalogueItem) {
@@ -54,12 +93,17 @@
   const pageTitle = $derived.by(() => {
     switch (currentView) {
       case "photos": return $t("timeline_title");
+      case "explore": return $t("explore_title");
       case "favorites": return $t("favorites_title");
       case "map": return $t("map_title");
       case "people": return $t("people_title");
+      case "places": return $t("places_all_title");
+      case "all-memories": return $t("memories_all_title");
       case "albums": return $t("albums_title");
       case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
+      case "place-timeline": return selectedPlace?.city ?? $t("places_title");
       case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
+      case "memory-timeline": return selectedMemory ? localizedMemoryTitle(selectedMemory, $t, $locale) : $t("memories_title");
       case "dashboard": return $t("dashboard");
       case "logs": return $t("logs");
       case "settings": return $t("settings");
@@ -71,6 +115,18 @@
     personTimeline?.clear();
     personTimeline = null;
     selectedPerson = null;
+  }
+
+  function closePlaceTimeline() {
+    placeTimeline?.clear();
+    placeTimeline = null;
+    selectedPlace = null;
+  }
+
+  function closeMemoryTimeline() {
+    memoryTimeline?.clear();
+    memoryTimeline = null;
+    selectedMemory = null;
   }
 
   function closeAlbumTimeline() {
@@ -92,6 +148,11 @@
     void map.refresh();
   }
 
+  function openExplore() {
+    currentView = "explore";
+    void explore.refresh();
+  }
+
   function openPeople() {
     currentView = "people";
     void people.refresh();
@@ -102,10 +163,49 @@
     void albumCatalogue.refresh();
   }
 
-  function returnToPeople() {
+  /** "All Places" has no navigation entry; it is only opened from the Explore Overview. */
+  function openAllPlaces() {
+    placesScrollTop = 0;
+    exploreScrollTop = content?.scrollTop ?? 0;
+    currentView = "places";
+  }
+
+  /** "All Memories" has no navigation entry; it is only opened from the Explore Overview. */
+  function openAllMemories() {
+    allMemoriesScrollTop = 0;
+    exploreScrollTop = content?.scrollTop ?? 0;
+    currentView = "all-memories";
+    void allMemories.refresh();
+  }
+
+  function returnToExplore() {
+    currentView = "explore";
+    void explore.refreshIfStale();
+    queueMicrotask(() => { if (content) content.scrollTop = exploreScrollTop; });
+  }
+
+  function returnFromPersonTimeline() {
     closePersonTimeline();
-    currentView = "people";
-    queueMicrotask(() => { if (content) content.scrollTop = peopleScrollTop; });
+    currentView = personOrigin;
+    if (personOrigin === "explore") void explore.refreshIfStale();
+    const scrollTop = personOrigin === "explore" ? exploreScrollTop : peopleScrollTop;
+    queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
+  }
+
+  function returnFromPlaceTimeline() {
+    closePlaceTimeline();
+    currentView = placeOrigin;
+    if (placeOrigin === "explore") void explore.refreshIfStale();
+    const scrollTop = placeOrigin === "places" ? placesScrollTop : exploreScrollTop;
+    queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
+  }
+
+  function returnFromMemoryTimeline() {
+    closeMemoryTimeline();
+    if (memoryOrigin === "all-memories") {
+      currentView = "all-memories";
+      queueMicrotask(() => { if (content) content.scrollTop = allMemoriesScrollTop; });
+    } else returnToExplore();
   }
 
   function returnToAlbums() {
@@ -121,11 +221,20 @@
     resetView: () => {
       mapCreated = false;
       peopleScrollTop = 0;
+      exploreScrollTop = 0;
+      allMemoriesScrollTop = 0;
+      personOrigin = "people";
+      memoryOrigin = "explore";
+      placeOrigin = "explore";
+      placesScrollTop = 0;
       albumsScrollTop = 0;
       closeAlbumTimeline();
       closePersonTimeline();
+      closePlaceTimeline();
+      closeMemoryTimeline();
       currentView = "photos";
     },
+    isExploreActive: () => currentView === "explore",
   });
   const {
     feedback,
@@ -136,6 +245,10 @@
     timeline,
     favorites,
     people,
+    places,
+    memories,
+    allMemories,
+    explore,
     map,
     albumCatalogue,
   } = auth;
@@ -255,6 +368,15 @@
           </button>
           <button
             type="button"
+            class="nav-item {currentView === 'explore' ? 'active' : ''}"
+            onclick={openExplore}
+            aria-label={$t('explore_title')}
+          >
+            <Compass class="w-4 h-4 shrink-0 {currentView === 'explore' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('explore_title')}</span>
+          </button>
+          <button
+            type="button"
             class="nav-item {currentView === 'favorites' ? 'active' : ''}"
             onclick={openFavorites}
             aria-label={$t('favorites_title')}
@@ -354,7 +476,7 @@
         </div>
       </header>
 
-      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'favorites' || currentView === 'person-timeline' || currentView === 'album-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'favorites' || currentView === 'person-timeline' || currentView === 'album-timeline' || currentView === 'place-timeline' || currentView === 'memory-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
@@ -395,26 +517,36 @@
             loadErrorMessage={$t("favorites_error")}
             offlineMessage={$t("favorites_offline")}
           />
+        {:else if currentView === "explore"}
+          <ExploreView {explore} {people} {places} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} onViewAllMemories={openAllMemories} onSelectMemory={selectMemory} />
+        {:else if currentView === "all-memories"}
+          <BackBarView label={$t('explore_return')} onBack={returnToExplore}>
+            <AllMemoriesView {allMemories} onSelect={selectMemory} />
+          </BackBarView>
+        {:else if currentView === "places"}
+          <BackBarView label={$t('explore_return')} onBack={returnToExplore}>
+            <PlacesView {places} onSelect={selectPlace} />
+          </BackBarView>
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
         {:else if currentView === "albums"}
           <AlbumCatalogueView catalogue={albumCatalogue} onSelect={selectAlbum} />
         {:else if currentView === "album-timeline" && albumTimeline}
-          <div class="flex h-full min-h-0 flex-col gap-2">
-            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToAlbums}>
-              <ArrowLeft class="h-4 w-4" />
-              {$t('albums_return')}
-            </button>
+          <BackBarView label={$t('albums_return')} onBack={returnToAlbums}>
             <TimelineView timeline={albumTimeline} {...sharedTimelineProps} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
-          </div>
+          </BackBarView>
+        {:else if currentView === "place-timeline" && placeTimeline}
+          <BackBarView label={$t(placeOrigin === "places" ? 'places_return' : 'explore_return')} onBack={returnFromPlaceTimeline}>
+            <TimelineView timeline={placeTimeline} {...sharedTimelineProps} emptyMessage={$t('places_timeline_empty')} loadErrorMessage={$t('places_timeline_error')} />
+          </BackBarView>
         {:else if currentView === "person-timeline" && personTimeline}
-          <div class="flex h-full min-h-0 flex-col gap-2">
-            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToPeople}>
-              <ArrowLeft class="h-4 w-4" />
-              {$t('people_return')}
-            </button>
+          <BackBarView label={$t(personOrigin === "explore" ? 'explore_return' : 'people_return')} onBack={returnFromPersonTimeline}>
             <TimelineView timeline={personTimeline} {...sharedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
-          </div>
+          </BackBarView>
+        {:else if currentView === "memory-timeline" && memoryTimeline}
+          <BackBarView label={$t(memoryOrigin === "all-memories" ? 'memories_all_return' : 'explore_return')} onBack={returnFromMemoryTimeline}>
+            <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} />
+          </BackBarView>
         {:else if currentView === "dashboard"}
           <DashboardView
             status={sync.status}

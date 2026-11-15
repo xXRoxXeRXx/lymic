@@ -1,9 +1,13 @@
 import { createAlbumCatalogueController } from "./album-catalogue-controller.svelte";
 import { createAuthController } from "./auth-controller.svelte";
+import { createExploreController } from "./explore-controller.svelte";
 import { createFavoritesTimelineController } from "./favorites-timeline-controller.svelte";
 import { createFeedbackController } from "./feedback-controller.svelte";
+import { createAllMemoriesController } from "./all-memories-controller.svelte";
+import { createMemoriesController } from "./memories-controller.svelte";
 import { createMapController } from "./map-controller.svelte";
 import { createPeopleController } from "./people-controller.svelte";
+import { createPlacesController } from "./places-controller.svelte";
 import { createRemovableVolumeController } from "./removable-volume-controller.svelte";
 import { createSyncController } from "./sync-controller.svelte";
 import { createTargetAlbumCatalogue } from "./target-album-catalogue.svelte";
@@ -11,11 +15,14 @@ import { createTimelineController } from "./timeline-controller.svelte";
 import { createWatchedFoldersController } from "./watched-folders-controller.svelte";
 import type {
   AlbumCatalogueDesktopAdapter,
+  AllMemoriesDesktopAdapter,
   AlbumsDesktopAdapter,
   AuthDesktopAdapter,
   FavoritesTimelineDesktopAdapter,
   MapDesktopAdapter,
+  MemoriesDesktopAdapter,
   PeopleDesktopAdapter,
+  PlacesDesktopAdapter,
   RemovableVolumeDesktopAdapter,
   SyncDesktopAdapter,
   TimelineDesktopAdapter,
@@ -32,6 +39,9 @@ export type SessionDesktopAdapter =
   FavoritesTimelineDesktopAdapter &
   MapDesktopAdapter &
   PeopleDesktopAdapter &
+  PlacesDesktopAdapter &
+  MemoriesDesktopAdapter &
+  AllMemoriesDesktopAdapter &
   RemovableVolumeDesktopAdapter;
 
 export function createSessionController(options: {
@@ -39,6 +49,8 @@ export function createSessionController(options: {
   t(key: string, params?: Record<string, string>): string;
   locale?(): string;
   resetView?(): void;
+  /** Whether the Explore Overview is the open view; it refreshes after Synchronization settles only then. */
+  isExploreActive?(): boolean;
 }) {
   const { adapter, t } = options;
   const feedback = createFeedbackController(() => t("unknown_error"));
@@ -63,12 +75,17 @@ export function createSessionController(options: {
     canStartSync: () => watchedFolders.hasFolders,
     onSyncSettled: () => {
       void timeline.refresh();
+      void explore.refreshIfActive();
       return watchedFolders.refresh();
     },
   });
   const timeline = createTimelineController(adapter);
   const favorites = createFavoritesTimelineController(adapter);
   const people = createPeopleController(adapter);
+  const places = createPlacesController(adapter);
+  const memories = createMemoriesController(adapter);
+  const allMemories = createAllMemoriesController(adapter);
+  const explore = createExploreController({ people, places, memories, isActive: () => options.isExploreActive?.() ?? false });
   const map = createMapController(adapter);
   const albumCatalogue = createAlbumCatalogueController(adapter);
 
@@ -81,6 +98,9 @@ export function createSessionController(options: {
     timeline,
     favorites,
     people,
+    places,
+    memories,
+    allMemories,
     map,
     albumCatalogue,
   ];
@@ -148,6 +168,10 @@ export function createSessionController(options: {
     timeline,
     favorites,
     people,
+    places,
+    memories,
+    allMemories,
+    explore,
     map,
     albumCatalogue,
     startLifecycle,

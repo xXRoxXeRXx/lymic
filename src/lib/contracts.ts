@@ -91,6 +91,9 @@ export interface AlbumTimeline {
   assetsByBucket: Record<string, TimelineAsset[]>;
 }
 
+/** A Place Timeline has the same complete, locally indexed shape as an Album Timeline. */
+export type PlaceTimeline = AlbumTimeline;
+
 export interface RecognizedPerson {
   id: string;
   name: string | null;
@@ -99,6 +102,34 @@ export interface RecognizedPerson {
 
 export interface PeoplePage {
   people: RecognizedPerson[];
+  hasNextPage: boolean;
+}
+
+/** A city in which the user has Remote Assets, shown with one Remote Asset's thumbnail. */
+export interface Place {
+  city: string;
+  thumbnailAssetId: string;
+}
+
+export type MemoryKind = "onThisDay" | "birthday" | "unknown";
+
+/** An Immich Memory with the Remote Assets it selected, already grouped for the Memory Timeline. */
+export interface Memory {
+  id: string;
+  kind: MemoryKind;
+  /** ISO timestamp of the day the Memory looks back on; absent for some Immich versions. */
+  memoryAt: string | null;
+  /** Year an on-this-day Memory looks back on. */
+  year: number | null;
+  /** Name of the Recognized Person a birthday Memory celebrates. */
+  personName: string | null;
+  coverAssetId: string;
+  timeline: AlbumTimeline;
+}
+
+/** One page of Memories, newest first, for the All Memories view. */
+export interface MemoriesPage {
+  memories: Memory[];
   hasNextPage: boolean;
 }
 

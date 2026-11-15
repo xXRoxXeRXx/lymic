@@ -85,6 +85,10 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve([]);
       case "get_album_timeline":
         return Promise.resolve({ buckets: [], assetsByBucket: {} });
+      case "get_places":
+        return Promise.resolve([]);
+      case "get_memories":
+        return Promise.resolve([]);
       case "update_locale":
         return Promise.resolve();
       case "get_release_channel":
@@ -1926,5 +1930,720 @@ describe("Favorites Timeline", () => {
     rejectPendingRemoval(new Error("offline"));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not update favorite"));
     expect(within(lightbox).queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("Explore Overview", () => {
+  const people = [
+    { id: "person-1", name: "Ada", thumbnailPath: "/p/1.jpeg" },
+    { id: "person-2", name: null, thumbnailPath: null },
+  ];
+
+  it("adds an Explore entry directly after Photos while Photos stays the opened view", async () => {
+    renderAuthenticatedPage();
+
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+    const names = within(screen.getByRole("navigation", { name: "Main navigation" }))
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label"));
+    expect(names.slice(0, 3)).toEqual(["Photos", "Explore", "Favorites"]);
+    expect(names).toContain("People");
+  });
+
+  it("shows Recognized People in the People section like the People view does", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }) });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    const section = await screen.findByRole("region", { name: "People" });
+    expect(within(section).getByRole("button", { name: "Ada" })).toBeInTheDocument();
+    expect(within(section).getByRole("img", { name: "Ada" })).toHaveAttribute("src", "lymic-thumb://person/person-1?v=%2Fp%2F1.jpeg");
+    expect(within(section).getByRole("button", { name: "Unnamed person" })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_people", { page: 1, size: 50 });
+  });
+
+  it("opens the People view from View all and a person's Photo Timeline from a tile", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }) });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    const section = await screen.findByRole("region", { name: "People" });
+
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    expect(await screen.findByRole("heading", { name: "People", level: 1 })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Explore" })[0]);
+    await fireEvent.click(await screen.findByRole("button", { name: "Ada" }));
+    expect(await screen.findByRole("heading", { name: "Ada", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_person_timeline_buckets", { personId: "person-1" });
+  });
+
+  it("returns from a person's Photo Timeline to the view it was opened from", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }) });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Ada" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Explore" }));
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "People" })).toBeInTheDocument();
+
+    await fireEvent.click(within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("button", { name: "People" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Ada" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to People" }));
+    expect(await screen.findByRole("heading", { name: "People", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "People" })).not.toBeInTheDocument();
+  });
+
+  it("restores the Explore scroll position after returning from a Photo Timeline", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }) });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    const tile = await screen.findByRole("button", { name: "Ada" });
+    const main = tile.closest("main")!;
+    main.scrollTop = 240;
+
+    await fireEvent.click(tile);
+    main.scrollTop = 0;
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Explore" }));
+
+    await waitFor(() => expect(main.scrollTop).toBe(240));
+  });
+
+  it("shows a People failure in its section only and retries it", async () => {
+    renderAuthenticatedPage({
+      get_people: vi.fn()
+        .mockRejectedValueOnce("recognized_people_permission_denied:person.read")
+        .mockResolvedValueOnce({ people, hasNextPage: false }),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    const section = await screen.findByRole("region", { name: "People" });
+    expect(await within(section).findByRole("alert")).toHaveTextContent("People is unavailable");
+    expect(screen.queryByText(/Nothing to explore yet/)).not.toBeInTheDocument();
+
+    await fireEvent.click(within(section).getByRole("button", { name: "Retry" }));
+    expect(await within(section).findByRole("button", { name: "Ada" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a generic People error for other failures", async () => {
+    renderAuthenticatedPage({ get_people: async () => { throw new Error("boom"); } });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    expect(await within(await screen.findByRole("region", { name: "People" })).findByRole("alert")).toHaveTextContent("People could not be loaded.");
+  });
+
+  it("keeps cached people visible with an offline indication when a refresh fails", async () => {
+    renderAuthenticatedPage({
+      get_people: vi.fn()
+        .mockResolvedValueOnce({ people, hasNextPage: false })
+        .mockRejectedValueOnce(new Error("offline")),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    await screen.findByRole("button", { name: "Ada" });
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Photos" })[0]);
+    await fireEvent.click(screen.getAllByRole("button", { name: "Explore" })[0]);
+
+    const section = await screen.findByRole("region", { name: "People" });
+    expect(await within(section).findByRole("status")).toHaveTextContent("People is offline");
+    expect(within(section).getByRole("button", { name: "Ada" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("hides an empty People section and shows the placeholder when nothing else is left", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people: [], hasNextPage: false }) });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    expect(await screen.findByText(/Nothing to explore yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "People" })).not.toBeInTheDocument();
+  });
+
+  it("refreshes when opened and after Synchronization settles while open", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }) });
+    const peopleCalls = () => tauri.invoke.mock.calls.filter(([command]) => command === "get_people").length;
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(tauri.invoke.mock.calls.filter(([command]) => command === "get_timeline_buckets")).toHaveLength(2));
+    expect(peopleCalls()).toBe(0);
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    await screen.findByRole("button", { name: "Ada" });
+    expect(peopleCalls()).toBe(1);
+
+    syncIdle!();
+    await waitFor(() => expect(peopleCalls()).toBe(2));
+  });
+
+  it("shows only as many people as fit in one row", async () => {
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        this.callback([{ target, contentRect: { width: 500 } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+      disconnect() {}
+    });
+    const many = Array.from({ length: 8 }, (_, index) => ({ id: `p-${index}`, name: `Person ${index}`, thumbnailPath: null }));
+    renderAuthenticatedPage({ get_people: async () => ({ people: many, hasNextPage: false }) });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    const section = await screen.findByRole("region", { name: "People" });
+    await waitFor(() => expect(within(section).getAllByRole("button", { name: /^Person / })).toHaveLength(3));
+    expect(within(section).getByRole("button", { name: "Person 0" })).toBeInTheDocument();
+    expect(within(section).queryByRole("button", { name: "Person 3" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Explore Places", () => {
+  const places = [
+    { city: "Paris", thumbnailAssetId: "asset-1" },
+    { city: "Berlin", thumbnailAssetId: "asset-2" },
+  ];
+  const openExplore = async () => fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+  it("shows one tile per Place with its thumbnail and city name as an accessible button", async () => {
+    renderAuthenticatedPage({ get_places: async () => places });
+    await openExplore();
+
+    const section = await screen.findByRole("region", { name: "Places" });
+    expect(await within(section).findByRole("button", { name: "Paris" })).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: "Berlin" })).toBeInTheDocument();
+    expect(within(section).getByRole("img", { name: "Paris" })).toHaveAttribute("src", "lymic-thumb://asset/asset-1");
+    expect(within(section).getByText("Berlin")).toBeVisible();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_places");
+  });
+
+  it("hides the Places section when there are no Places", async () => {
+    renderAuthenticatedPage({ get_places: async () => [], get_people: async () => ({ people: [{ id: "p", name: "Ada", thumbnailPath: null }], hasNextPage: false }) });
+    await openExplore();
+
+    await screen.findByRole("region", { name: "People" });
+    expect(screen.queryByRole("region", { name: "Places" })).not.toBeInTheDocument();
+  });
+
+  it("opens All Places from View all with every Place and returns to Explore with Back", async () => {
+    renderAuthenticatedPage({ get_places: async () => places });
+    await openExplore();
+    const section = await screen.findByRole("region", { name: "Places" });
+
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+
+    expect(await screen.findByRole("heading", { name: "All Places", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Paris" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Berlin" })).toBeInTheDocument();
+    const navigation = within(screen.getByRole("navigation", { name: "Main navigation" }));
+    expect(navigation.queryByRole("button", { name: /places/i })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Places" })).toBeInTheDocument();
+  });
+
+  it("shows every Place in All Places while the Explore row shows only as many as fit", async () => {
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        this.callback([{ target, contentRect: { width: 500 } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+      disconnect() {}
+    });
+    const many = Array.from({ length: 8 }, (_, index) => ({ city: `City ${index}`, thumbnailAssetId: `a-${index}` }));
+    renderAuthenticatedPage({ get_places: async () => many });
+    await openExplore();
+
+    const section = await screen.findByRole("region", { name: "Places" });
+    await waitFor(() => expect(within(section).getAllByRole("button", { name: /^City / })).toHaveLength(3));
+
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /^City / })).toHaveLength(8));
+  });
+
+  it("reports a Places failure in its own section only and retries it", async () => {
+    renderAuthenticatedPage({
+      get_places: vi.fn().mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce(places),
+      get_people: async () => ({ people: [{ id: "p", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+    });
+    await openExplore();
+
+    const section = await screen.findByRole("region", { name: "Places" });
+    expect(await within(section).findByRole("alert")).toHaveTextContent("Places could not be loaded.");
+    expect(within(await screen.findByRole("region", { name: "People" })).queryByRole("alert")).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Ada" })).toBeInTheDocument();
+
+    await fireEvent.click(within(section).getByRole("button", { name: "Retry" }));
+    expect(await within(section).findByRole("button", { name: "Paris" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("names the asset.read permission when Places is permission-denied", async () => {
+    renderAuthenticatedPage({ get_places: async () => { throw "places_permission_denied:configure an API key with asset.read permission"; } });
+    await openExplore();
+
+    const section = await screen.findByRole("region", { name: "Places" });
+    expect(await within(section).findByRole("alert")).toHaveTextContent("asset.read");
+    expect(within(section).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("keeps stale Places visible with an offline indication when a refresh fails", async () => {
+    renderAuthenticatedPage({
+      get_places: vi.fn().mockResolvedValueOnce(places).mockRejectedValueOnce(new Error("offline")),
+    });
+    await openExplore();
+    await screen.findByRole("button", { name: "Paris" });
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Photos" })[0]);
+    await fireEvent.click(screen.getAllByRole("button", { name: "Explore" })[0]);
+
+    const section = await screen.findByRole("region", { name: "Places" });
+    expect(await within(section).findByRole("status")).toHaveTextContent("Places is offline");
+    expect(within(section).getByRole("button", { name: "Paris" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("refreshes Places after Synchronization settles while Explore is open", async () => {
+    renderAuthenticatedPage({ get_places: async () => places });
+    const placeCalls = () => tauri.invoke.mock.calls.filter(([command]) => command === "get_places").length;
+    await openExplore();
+    await screen.findByRole("button", { name: "Paris" });
+    expect(placeCalls()).toBe(1);
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(placeCalls()).toBe(2));
+  });
+});
+
+describe("Place Timelines", () => {
+  const places = [
+    { city: "Paris", thumbnailAssetId: "asset-1" },
+    { city: "Berlin", thumbnailAssetId: "asset-2" },
+  ];
+  const parisTimeline = {
+    buckets: [{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }],
+    assetsByBucket: {
+      "2025-03-01T00:00:00.000Z": [{ id: "asset-1", width: 640, height: 480, type: "IMAGE", takenAt: "2025-03-02T00:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false }],
+    },
+  };
+  const openExplore = async () => fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+  it("opens a Place from Explore as a Place Timeline titled with the city and returns to Explore", async () => {
+    renderAuthenticatedPage({ get_places: async () => places, get_place_timeline: async () => parisTimeline });
+    await openExplore();
+    const section = await screen.findByRole("region", { name: "Places" });
+
+    await fireEvent.click(await within(section).findByRole("button", { name: "Paris" }));
+
+    expect(await screen.findByRole("heading", { name: "Paris", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_place_timeline", { city: "Paris" });
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Places" })).toBeInTheDocument();
+  });
+
+  it("opens a Place from All Places and returns to All Places with Back", async () => {
+    renderAuthenticatedPage({ get_places: async () => places, get_place_timeline: async () => parisTimeline });
+    await openExplore();
+    const section = await screen.findByRole("region", { name: "Places" });
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Berlin" }));
+
+    expect(await screen.findByRole("heading", { name: "Berlin", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_place_timeline", { city: "Berlin" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to All Places" }));
+    expect(await screen.findByRole("heading", { name: "All Places", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Paris" })).toBeInTheDocument();
+  });
+
+  it("shows a loading error instead of an empty or partial Place Timeline when the load fails", async () => {
+    renderAuthenticatedPage({
+      get_places: async () => places,
+      get_place_timeline: async () => { throw new Error("page 2 failed"); },
+    });
+    await openExplore();
+    await fireEvent.click(await screen.findByRole("button", { name: "Paris" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("This place could not be loaded.");
+    expect(screen.queryByText("This place has no reachable photos yet.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Timeline scrubber" })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+  });
+
+  it("explains an empty Place Timeline", async () => {
+    renderAuthenticatedPage({
+      get_places: async () => places,
+      get_place_timeline: async () => ({ buckets: [], assetsByBucket: {} }),
+    });
+    await openExplore();
+    await fireEvent.click(await screen.findByRole("button", { name: "Paris" }));
+
+    expect(await screen.findByText("This place has no reachable photos yet.")).toBeInTheDocument();
+  });
+});
+
+describe("Explore Memories", () => {
+  const asset = (id: string, takenAt: string) => ({ id, width: 1600, height: 1200, type: "IMAGE", takenAt, cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false });
+  const timelineOf = (...assets: ReturnType<typeof asset>[]) => {
+    const assetsByBucket: Record<string, ReturnType<typeof asset>[]> = {};
+    for (const item of assets) (assetsByBucket[`${item.takenAt.slice(0, 7)}-01T00:00:00.000Z`] ??= []).push(item);
+    return { buckets: Object.entries(assetsByBucket).map(([timeBucket, items]) => ({ timeBucket, count: items.length })), assetsByBucket };
+  };
+  const today = new Date();
+  const anniversary = new Date(Date.UTC(today.getFullYear() - 3, today.getMonth(), today.getDate())).toISOString();
+  const memories = [
+    { id: "m-today", kind: "onThisDay", memoryAt: anniversary, year: today.getFullYear() - 3, personName: null, coverAssetId: "cover-1", timeline: timelineOf(asset("cover-1", anniversary), asset("other-1", "2020-02-10T10:00:00.000Z")) },
+    { id: "m-other", kind: "onThisDay", memoryAt: "2019-01-02T00:00:00.000Z", year: 2019, personName: null, coverAssetId: "cover-2", timeline: timelineOf(asset("cover-2", "2019-01-02T10:00:00.000Z")) },
+    { id: "m-birthday", kind: "birthday", memoryAt: "2018-05-06T00:00:00.000Z", year: 2018, personName: "Ada", coverAssetId: "cover-3", timeline: timelineOf(asset("cover-3", "2018-05-06T10:00:00.000Z")) },
+    { id: "m-unknown", kind: "unknown", memoryAt: "2017-07-08T00:00:00.000Z", year: null, personName: null, coverAssetId: "cover-4", timeline: timelineOf(asset("cover-4", "2017-07-08T10:00:00.000Z")) },
+  ];
+  const memoryAssetDetails = async () => ({
+    originalFileName: "memory.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  });
+
+  function stubImmediateObservers() {
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) { this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver); }
+      disconnect() {}
+    });
+  }
+
+  it("shows Memory cards with cover thumbnails and titles for each Memory type", async () => {
+    renderAuthenticatedPage({ get_memories: async () => memories });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    const section = await screen.findByRole("region", { name: "Memories" });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_memories", { size: 12 });
+    const cards = within(section).getAllByRole("button").filter((button) => button.textContent?.trim() !== "View all");
+    expect(cards.map((card) => card.getAttribute("aria-label"))).toEqual(["3 years ago", "Jan 2, 2019", "Ada's birthday", "Jul 8, 2017"]);
+    expect(cards[0].querySelector("img")).toHaveAttribute("src", "lymic-thumb://asset/cover-1");
+  });
+
+  it("opens a Memory Timeline containing exactly that Memory's assets and returns to Explore", async () => {
+    stubImmediateObservers();
+    renderAuthenticatedPage({ get_memories: async () => memories, get_asset_details: memoryAssetDetails });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Jan 2, 2019" }));
+
+    expect(await screen.findByRole("heading", { name: "Jan 2, 2019", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByText("January 2019")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+    expect(screen.queryByText("February 2020")).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/cover-2");
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Memories" })).toBeInTheDocument();
+  });
+
+  it("shows a permission failure naming memory.read in the Memories section only and retries it", async () => {
+    renderAuthenticatedPage({
+      get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+      get_memories: vi.fn()
+        .mockRejectedValueOnce("memories_permission_denied:configure an API key with memory.read and asset.read permissions")
+        .mockResolvedValueOnce(memories),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    const section = await screen.findByRole("region", { name: "Memories" });
+    expect(await within(section).findByRole("alert")).toHaveTextContent("memory.read");
+    expect(within(await screen.findByRole("region", { name: "People" })).queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ada" })).toBeInTheDocument();
+
+    await fireEvent.click(within(section).getByRole("button", { name: "Retry" }));
+    expect(await within(section).findByRole("button", { name: "3 years ago" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a generic Memories error for other failures", async () => {
+    renderAuthenticatedPage({ get_memories: async () => { throw "memories_invalid_response"; } });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    expect(await within(await screen.findByRole("region", { name: "Memories" })).findByRole("alert")).toHaveTextContent("Memories could not be loaded.");
+  });
+
+  it("shows the unavailable message in the Memories section when authentication is required", async () => {
+    renderAuthenticatedPage({ get_memories: async () => { throw "memories_authentication_required"; } });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    expect(await within(await screen.findByRole("region", { name: "Memories" })).findByRole("alert")).toHaveTextContent("Memories is unavailable. Check your connection and sign-in.");
+  });
+
+  it("keeps cached Memories visible with an offline indication when a refresh fails", async () => {
+    renderAuthenticatedPage({
+      get_memories: vi.fn().mockResolvedValueOnce(memories).mockRejectedValueOnce(new Error("offline")),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    await screen.findByRole("button", { name: "3 years ago" });
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Photos" })[0]);
+    await fireEvent.click(screen.getAllByRole("button", { name: "Explore" })[0]);
+
+    const section = await screen.findByRole("region", { name: "Memories" });
+    expect(await within(section).findByRole("status")).toHaveTextContent("Memories is offline");
+    expect(within(section).getByRole("button", { name: "3 years ago" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("hides an empty Memories section", async () => {
+    renderAuthenticatedPage({
+      get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+      get_memories: async () => [],
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    await screen.findByRole("region", { name: "People" });
+    expect(screen.queryByRole("region", { name: "Memories" })).not.toBeInTheDocument();
+  });
+
+  describe("All Memories", () => {
+    const [today, other, birthday, unknown] = memories;
+    const pageCalls = () => tauri.invoke.mock.calls.filter(([command]) => command === "get_memories_page").map(([, args]) => args);
+    const cardLabels = () => screen.getAllByRole("button").map((button) => button.getAttribute("aria-label")).filter((label) => label && /ago|, 20|birthday/.test(label));
+
+    /** Lets a test decide when the scroll sentinel becomes visible instead of firing on observe. */
+    function stubScrollObservers() {
+      const active = new Set<{ callback: IntersectionObserverCallback; target: Element }>();
+      vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+      vi.stubGlobal("IntersectionObserver", class {
+        private entry?: { callback: IntersectionObserverCallback; target: Element };
+        constructor(private readonly callback: IntersectionObserverCallback) {}
+        observe(target: Element) { this.entry = { callback: this.callback, target }; active.add(this.entry); }
+        disconnect() { if (this.entry) active.delete(this.entry); }
+      });
+      return {
+        scrollToEnd: async () => {
+          for (const { callback, target } of [...active]) callback([{ isIntersecting: true, target } as IntersectionObserverEntry], {} as IntersectionObserver);
+          await Promise.resolve();
+        },
+        observed: () => active.size,
+      };
+    }
+
+    async function openAllMemories() {
+      await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+      const section = await screen.findByRole("region", { name: "Memories" });
+      await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    }
+
+    it("opens All Memories from View all and loads further pages while scrolling until none are left", async () => {
+      const scroll = stubScrollObservers();
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: async (args) => (args as { page: number }).page === 1
+          ? { memories: [today, other], hasNextPage: true }
+          : { memories: [birthday, unknown], hasNextPage: false },
+      });
+
+      await openAllMemories();
+
+      expect(await screen.findByRole("heading", { name: "All Memories", level: 1 })).toBeInTheDocument();
+      await waitFor(() => expect(cardLabels()).toEqual(["3 years ago", "Jan 2, 2019"]));
+      expect(pageCalls()).toEqual([{ page: 1, size: 24 }]);
+
+      await scroll.scrollToEnd();
+      await waitFor(() => expect(cardLabels()).toEqual(["3 years ago", "Jan 2, 2019", "Ada's birthday", "Jul 8, 2017"]));
+      expect(pageCalls()).toEqual([{ page: 1, size: 24 }, { page: 2, size: 24 }]);
+
+      await waitFor(() => expect(scroll.observed()).toBe(0));
+      await scroll.scrollToEnd();
+      expect(pageCalls()).toHaveLength(2);
+    });
+
+    it("keeps the pages already shown when a further page fails and offers retry", async () => {
+      const scroll = stubScrollObservers();
+      const secondPage = vi.fn().mockRejectedValueOnce("memories_unavailable").mockResolvedValueOnce({ memories: [birthday], hasNextPage: false });
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: async (args) => (args as { page: number }).page === 1 ? { memories: [today, other], hasNextPage: true } : secondPage(),
+      });
+      await openAllMemories();
+      await waitFor(() => expect(cardLabels()).toHaveLength(2));
+
+      await scroll.scrollToEnd();
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("More memories could not be loaded.");
+      expect(cardLabels()).toEqual(["3 years ago", "Jan 2, 2019"]);
+      await scroll.scrollToEnd();
+      expect(secondPage).toHaveBeenCalledOnce();
+
+      await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+
+      await waitFor(() => expect(cardLabels()).toEqual(["3 years ago", "Jan 2, 2019", "Ada's birthday"]));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(pageCalls()).toEqual([{ page: 1, size: 24 }, { page: 2, size: 24 }, { page: 2, size: 24 }]);
+    });
+
+    it("reports a failed first page with retry and names memory.read when permission is denied", async () => {
+      stubScrollObservers();
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: vi.fn()
+          .mockRejectedValueOnce("memories_permission_denied:configure an API key with memory.read and asset.read permissions")
+          .mockResolvedValueOnce({ memories: [today], hasNextPage: false }),
+      });
+      await openAllMemories();
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("memory.read");
+
+      await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+      expect(await screen.findByRole("button", { name: "3 years ago" })).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("shows the unavailable message in All Memories when authentication is required", async () => {
+      stubScrollObservers();
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: async () => { throw "memories_authentication_required"; },
+      });
+      await openAllMemories();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Memories is unavailable. Check your connection and sign-in.");
+    });
+
+    it("returns to All Memories from a Memory Timeline and to the Explore Overview from All Memories", async () => {
+      stubScrollObservers();
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: async () => ({ memories: [today, other], hasNextPage: false }),
+      });
+      await openAllMemories();
+
+      await fireEvent.click(await screen.findByRole("button", { name: "Jan 2, 2019" }));
+      expect(await screen.findByRole("heading", { name: "Jan 2, 2019", level: 1 })).toBeInTheDocument();
+
+      await fireEvent.click(screen.getByRole("button", { name: "Back to All Memories" }));
+      expect(await screen.findByRole("heading", { name: "All Memories", level: 1 })).toBeInTheDocument();
+      expect(cardLabels()).toEqual(["3 years ago", "Jan 2, 2019"]);
+      expect(pageCalls()).toHaveLength(1);
+
+      await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+      expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Memories" })).toBeInTheDocument();
+    });
+
+    it("still returns a Memory opened from the Explore Overview to the Explore Overview", async () => {
+      stubScrollObservers();
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: async () => ({ memories: [today, other], hasNextPage: false }),
+      });
+      await openAllMemories();
+      await screen.findByRole("heading", { name: "All Memories", level: 1 });
+      await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+
+      await fireEvent.click(await screen.findByRole("button", { name: "Jan 2, 2019" }));
+      await fireEvent.click(await screen.findByRole("button", { name: "Back to Explore" }));
+
+      expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    });
+
+    it("has no navigation entry of its own", async () => {
+      renderAuthenticatedPage({ get_memories: async () => memories });
+      await screen.findByRole("button", { name: "Explore" });
+      expect(screen.queryByRole("button", { name: "All Memories" })).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("Explore Overview across sections", () => {
+  const people = [{ id: "person-1", name: "Ada", thumbnailPath: null }];
+  const places = [{ city: "Paris", thumbnailAssetId: "asset-1" }];
+  const now = new Date();
+  const memory = { id: "m-1", kind: "onThisDay", memoryAt: new Date(Date.UTC(now.getFullYear() - 3, now.getMonth(), now.getDate())).toISOString(), year: now.getFullYear() - 3, personName: null, coverAssetId: "cover-1", timeline: { buckets: [], assetsByBucket: {} } };
+  const calls = (command: string) => tauri.invoke.mock.calls.filter(([name]) => name === command).length;
+  const openExplore = async () => fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+  it("shows the placeholder instead of sections when People, Places and Memories are all empty", async () => {
+    renderAuthenticatedPage({
+      get_people: async () => ({ people: [], hasNextPage: false }),
+      get_places: async () => [],
+      get_memories: async () => [],
+    });
+    await openExplore();
+
+    expect(await screen.findByText(/Nothing to explore yet/)).toBeInTheDocument();
+    for (const name of ["People", "Places", "Memories"]) expect(screen.queryByRole("region", { name })).not.toBeInTheDocument();
+  });
+
+  it("hides only the empty People section and shows no placeholder while Places and Memories have data", async () => {
+    renderAuthenticatedPage({
+      get_people: async () => ({ people: [], hasNextPage: false }),
+      get_places: async () => places,
+      get_memories: async () => [memory],
+    });
+    await openExplore();
+
+    expect(await screen.findByRole("region", { name: "Places" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Memories" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "People" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing to explore yet/)).not.toBeInTheDocument();
+  });
+
+  it("names the person.read permission when People is permission denied", async () => {
+    renderAuthenticatedPage({ get_people: async () => { throw "recognized_people_permission_denied:people:configure an API key with person.read and asset.read permissions"; } });
+    await openExplore();
+
+    const section = await screen.findByRole("region", { name: "People" });
+    expect(await within(section).findByRole("alert")).toHaveTextContent("person.read");
+  });
+
+  it("refreshes Explore when returning to it after Synchronization settled in All Places", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }), get_places: async () => places });
+    await openExplore();
+    const section = await screen.findByRole("region", { name: "Places" });
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    await screen.findByRole("heading", { name: "All Places", level: 1 });
+    expect(calls("get_places")).toBe(1);
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(calls("get_timeline_buckets")).toBe(2));
+    expect(calls("get_places")).toBe(1);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    await waitFor(() => expect(calls("get_places")).toBe(2));
+    expect(calls("get_people")).toBe(2);
+  });
+
+  it("refreshes Explore when returning to it from a Memory Timeline opened there after Synchronization settled", async () => {
+    renderAuthenticatedPage({ get_places: async () => places, get_memories: async () => [memory] });
+    await openExplore();
+    await fireEvent.click(await screen.findByRole("button", { name: "3 years ago" }));
+    await screen.findByRole("button", { name: "Back to Explore" });
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(calls("get_timeline_buckets")).toBe(2));
+    expect(calls("get_memories")).toBe(1);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    await waitFor(() => expect(calls("get_memories")).toBe(2));
+  });
+
+  it("does not refresh again when returning to Explore if nothing changed meanwhile", async () => {
+    renderAuthenticatedPage({ get_places: async () => places });
+    await openExplore();
+    const section = await screen.findByRole("region", { name: "Places" });
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Explore" }));
+    await screen.findByRole("region", { name: "Places" });
+
+    expect(calls("get_places")).toBe(1);
   });
 });

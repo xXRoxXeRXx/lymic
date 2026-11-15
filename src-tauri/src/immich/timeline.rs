@@ -37,6 +37,9 @@ pub struct AlbumTimeline {
     pub assets_by_bucket: BTreeMap<String, Vec<TimelineAsset>>,
 }
 
+/// A Place Timeline has the same complete, locally indexed shape as an Album Timeline.
+pub type PlaceTimeline = AlbumTimeline;
+
 fn recognized_people_access_error(status: StatusCode, resource: &str) -> String {
     match status {
         StatusCode::UNAUTHORIZED => format!("recognized_people_authentication_required:{resource}"),
@@ -53,7 +56,7 @@ enum TimelineBucketPayload {
 }
 
 #[derive(Deserialize)]
-struct TimelineAssetResponse {
+pub(super) struct TimelineAssetResponse {
     id: String,
     #[serde(rename = "type", default = "default_image_type")]
     asset_type: String,
@@ -208,27 +211,45 @@ fn dimensions_from_ratio(ratio: Option<f64>) -> (u32, u32) {
 
 impl ImmichClient {
     pub async fn get_album_timeline(&self, album_id: &str) -> Result<AlbumTimeline, String> {
+        self.search_complete_timeline(serde_json::json!({ "albumIds": [album_id] }), "album")
+            .await
+    }
+
+    /// Loads a Place Timeline: every Remote Asset Immich records in `city`. Immich's
+    /// metadata search matches the city name only, so same-named cities in different
+    /// countries share one Place (ADR-0007).
+    pub async fn get_place_timeline(&self, city: &str) -> Result<PlaceTimeline, String> {
+        self.search_complete_timeline(serde_json::json!({ "city": city }), "place")
+            .await
+    }
+
+    /// Pages through Immich's metadata search with `filter` until the result is
+    /// complete, then groups it by local capture month (ADR-0006). `subject` only
+    /// names the timeline kind in error messages.
+    async fn search_complete_timeline(
+        &self,
+        filter: serde_json::Value,
+        subject: &str,
+    ) -> Result<AlbumTimeline, String> {
         const PAGE_SIZE: u64 = 1_000;
         let mut page = 1_u64;
         let mut assets = Vec::new();
 
         loop {
+            let mut body = filter.clone();
+            body["order"] = "desc".into();
+            body["withExif"] = true.into();
+            body["page"] = page.into();
+            body["size"] = PAGE_SIZE.into();
             let response = send_checked(
-                self.request(Method::POST, "search/metadata")
-                    .json(&serde_json::json!({
-                        "albumIds": [album_id],
-                        "order": "desc",
-                        "withExif": true,
-                        "page": page,
-                        "size": PAGE_SIZE,
-                    })),
-                "Failed to fetch album timeline",
+                self.request(Method::POST, "search/metadata").json(&body),
+                &format!("Failed to fetch {subject} timeline"),
             )
             .await?;
 
             let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
             let payload: MetadataSearchResponse = serde_json::from_slice(&body)
-                .map_err(|error| format!("Invalid album timeline response: {error}"))?;
+                .map_err(|error| format!("Invalid {subject} timeline response: {error}"))?;
             assets.extend(
                 payload
                     .assets
@@ -239,7 +260,7 @@ impl ImmichClient {
 
             match payload.assets.next_page {
                 Some(next_page) if next_page > page => page = next_page,
-                Some(_) => return Err("Invalid album timeline pagination response".to_string()),
+                Some(_) => return Err(format!("Invalid {subject} timeline pagination response")),
                 None => break,
             }
         }
@@ -433,7 +454,7 @@ fn parse_timeline_bucket_assets(
     })
 }
 
-fn timeline_asset_from_response(
+pub(super) fn timeline_asset_from_response(
     asset: TimelineAssetResponse,
     default_favorite: bool,
 ) -> TimelineAsset {
@@ -470,7 +491,7 @@ fn album_bucket_for(asset: &TimelineAsset) -> Option<String> {
     Some(format!("{}-01T00:00:00.000Z", captured_at.format("%Y-%m")))
 }
 
-fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTimeline {
+pub(super) fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTimeline {
     let mut assets_by_bucket: BTreeMap<String, Vec<TimelineAsset>> = BTreeMap::new();
     for asset in assets {
         // An asset without a trustworthy capture timestamp cannot be placed in
@@ -504,6 +525,7 @@ fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTimeline {
 #[cfg(test)]
 mod tests {
     use super::{group_album_timeline_assets, ImmichClient, TimelineAsset};
+    use crate::immich::test_support::{serve_pages, test_client};
     use crate::immich::AssetDetails;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -706,40 +728,15 @@ mod tests {
 
     #[tokio::test]
     async fn reports_asset_detail_response_errors() {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0_u8; 2048];
-            let read = stream.read(&mut request).await.unwrap();
-            let request = String::from_utf8_lossy(&request[..read]);
-            assert!(request.starts_with("GET /api/assets/asset-1 HTTP/1.1"));
-            let body = b"server error";
-            stream
-                .write_all(
-                    format!(
-                        "HTTP/1.1 500 Internal Server Error\r\ncontent-length: {}\r\n\r\n",
-                        body.len()
-                    )
-                    .as_bytes(),
-                )
-                .await
-                .unwrap();
-            stream.write_all(body).await.unwrap();
-        });
-        let client = ImmichClient::new(
-            format!("http://{address}"),
-            "test-key".to_string(),
-            true,
-            None,
-            None,
-        )
-        .unwrap();
+        let (url, server) = serve_pages(vec![("500 Internal Server Error", "server error")]).await;
 
-        let error = client.get_asset_details("asset-1").await.unwrap_err();
+        let error = test_client(url, "test-key")
+            .get_asset_details("asset-1")
+            .await
+            .unwrap_err();
 
         assert!(error.starts_with("Failed to fetch asset details:"));
-        server.await.unwrap();
+        assert!(server.await.unwrap()[0].starts_with("GET /api/assets/asset-1 HTTP/1.1"));
     }
 
     #[tokio::test]
@@ -775,43 +772,15 @@ mod tests {
 
     #[tokio::test]
     async fn reports_asset_favorite_update_response_errors() {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0_u8; 2048];
-            let read = stream.read(&mut request).await.unwrap();
-            let request = String::from_utf8_lossy(&request[..read]);
-            assert!(request.starts_with("PUT /api/assets/asset-1 HTTP/1.1"));
-            let body = b"server error";
-            stream
-                .write_all(
-                    format!(
-                        "HTTP/1.1 500 Internal Server Error\r\ncontent-length: {}\r\n\r\n",
-                        body.len()
-                    )
-                    .as_bytes(),
-                )
-                .await
-                .unwrap();
-            stream.write_all(body).await.unwrap();
-        });
-        let client = ImmichClient::new(
-            format!("http://{address}"),
-            "test-key".to_string(),
-            true,
-            None,
-            None,
-        )
-        .unwrap();
+        let (url, server) = serve_pages(vec![("500 Internal Server Error", "server error")]).await;
 
-        let error = client
+        let error = test_client(url, "test-key")
             .set_asset_favorite("asset-1", true)
             .await
             .unwrap_err();
 
         assert!(error.starts_with("Failed to update asset favorite:"));
-        server.await.unwrap();
+        assert!(server.await.unwrap()[0].starts_with("PUT /api/assets/asset-1 HTTP/1.1"));
     }
 
     #[tokio::test]
@@ -1028,27 +997,14 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_non_advancing_album_metadata_page_markers() {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0_u8; 2048];
-            let _ = stream.read(&mut request).await.unwrap();
-            let body = br#"{"assets":{"items":[],"nextPage":1}}"#;
-            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
-            stream.write_all(body).await.unwrap();
-        });
-        let client = ImmichClient::new(
-            format!("http://{address}"),
-            "test-key".to_string(),
-            true,
-            None,
-            None,
-        )
-        .unwrap();
+        let (url, server) =
+            serve_pages(vec![("200 OK", r#"{"assets":{"items":[],"nextPage":1}}"#)]).await;
 
         assert_eq!(
-            client.get_album_timeline("album-1").await.unwrap_err(),
+            test_client(url, "test-key")
+                .get_album_timeline("album-1")
+                .await
+                .unwrap_err(),
             "Invalid album timeline pagination response"
         );
         server.await.unwrap();
@@ -1056,28 +1012,117 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_malformed_album_metadata_responses_without_exposing_the_api_key() {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0_u8; 2048];
-            let _ = stream.read(&mut request).await.unwrap();
-            let body = br#"{not-json"#;
-            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
-            stream.write_all(body).await.unwrap();
-        });
-        let client = ImmichClient::new(
-            format!("http://{address}"),
-            "album-api-key".to_string(),
-            true,
-            None,
-            None,
-        )
-        .unwrap();
+        let (url, server) = serve_pages(vec![("200 OK", "{not-json")]).await;
 
-        let error = client.get_album_timeline("album-1").await.unwrap_err();
+        let error = test_client(url, "album-api-key")
+            .get_album_timeline("album-1")
+            .await
+            .unwrap_err();
         assert!(error.starts_with("Invalid album timeline response:"));
         assert!(!error.contains("album-api-key"));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetches_every_city_filtered_metadata_page_and_groups_dated_assets_by_month() {
+        let (url, server) = serve_pages(vec![
+            ("200 OK", r#"{"assets":{"items":[{"id":"feb","type":"IMAGE","fileCreatedAt":"2025-02-10T10:00:00.000Z","exifInfo":{}},{"id":"undated","type":"IMAGE","exifInfo":{}}],"nextPage":"2"}}"#),
+            ("200 OK", r#"{"assets":{"items":[{"id":"march","type":"IMAGE","fileCreatedAt":"2025-03-15T10:00:00.000Z","exifInfo":{}}],"nextPage":null}}"#),
+        ])
+        .await;
+
+        let timeline = test_client(url, "test-key")
+            .get_place_timeline("Paris")
+            .await
+            .unwrap();
+
+        let requests = server.await.unwrap();
+        for (index, request) in requests.iter().enumerate() {
+            assert!(request.starts_with("POST /api/search/metadata HTTP/1.1"));
+            assert!(request.contains("x-api-key: test-key"));
+            assert!(request.contains(r#""city":"Paris""#));
+            assert!(!request.contains("albumIds"));
+            assert!(request.contains(r#""size":1000"#));
+            assert!(request.contains(r#""order":"desc""#));
+            assert!(request.contains(r#""withExif":true"#));
+            assert!(request.contains(&format!(r#""page":{}"#, index + 1)));
+        }
+        assert_eq!(
+            timeline.buckets,
+            vec![
+                super::TimelineBucket {
+                    time_bucket: "2025-03-01T00:00:00.000Z".to_string(),
+                    count: 1
+                },
+                super::TimelineBucket {
+                    time_bucket: "2025-02-01T00:00:00.000Z".to_string(),
+                    count: 1
+                },
+            ]
+        );
+        assert!(timeline
+            .assets_by_bucket
+            .values()
+            .flatten()
+            .all(|asset| asset.id != "undated"));
+    }
+
+    #[tokio::test]
+    async fn rejects_non_advancing_place_metadata_page_markers() {
+        let (url, server) =
+            serve_pages(vec![("200 OK", r#"{"assets":{"items":[],"nextPage":1}}"#)]).await;
+
+        assert_eq!(
+            test_client(url, "test-key")
+                .get_place_timeline("Paris")
+                .await
+                .unwrap_err(),
+            "Invalid place timeline pagination response"
+        );
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fails_the_whole_place_load_when_a_later_page_fails() {
+        let (url, server) = serve_pages(vec![
+            (
+                "200 OK",
+                r#"{"assets":{"items":[{"id":"a","type":"IMAGE","fileCreatedAt":"2025-02-10T10:00:00.000Z","exifInfo":{}}],"nextPage":"2"}}"#,
+            ),
+            ("500 Internal Server Error", "secret-detail"),
+        ])
+        .await;
+
+        let error = test_client(url, "place-api-key")
+            .get_place_timeline("Paris")
+            .await
+            .unwrap_err();
+
+        assert!(error.starts_with("Failed to fetch place timeline:"));
+        assert!(!error.contains("secret-detail"));
+        assert!(!error.contains("place-api-key"));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn maps_place_timeline_status_and_malformed_body_errors_without_leaking_either() {
+        let (url, server) = serve_pages(vec![("403 Forbidden", "secret-detail")]).await;
+        let error = test_client(url, "place-api-key")
+            .get_place_timeline("Paris")
+            .await
+            .unwrap_err();
+        assert!(error.starts_with("Failed to fetch place timeline:"));
+        assert!(error.contains("403"));
+        assert!(!error.contains("secret-detail"));
+        server.await.unwrap();
+
+        let (url, server) = serve_pages(vec![("200 OK", "{not-json")]).await;
+        let error = test_client(url, "place-api-key")
+            .get_place_timeline("Paris")
+            .await
+            .unwrap_err();
+        assert!(error.starts_with("Invalid place timeline response:"));
+        assert!(!error.contains("place-api-key"));
         server.await.unwrap();
     }
 
@@ -1196,35 +1241,16 @@ mod tests {
 
     #[tokio::test]
     async fn reports_favorites_timeline_errors_without_leaking_body_or_api_key() {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0_u8; 2048];
-            let _ = stream.read(&mut request).await.unwrap();
-            let body = b"internal secret stacktrace";
-            stream
-                .write_all(
-                    format!(
-                        "HTTP/1.1 500 Internal Server Error\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
-                        body.len()
-                    )
-                    .as_bytes(),
-                )
-                .await
-                .unwrap();
-            stream.write_all(body).await.unwrap();
-        });
-        let client = ImmichClient::new(
-            format!("http://{address}"),
-            "fav-secret-key".to_string(),
-            true,
-            None,
-            None,
-        )
-        .unwrap();
+        let (url, server) = serve_pages(vec![(
+            "500 Internal Server Error",
+            "internal secret stacktrace",
+        )])
+        .await;
 
-        let error = client.get_favorites_timeline_buckets().await.unwrap_err();
+        let error = test_client(url, "fav-secret-key")
+            .get_favorites_timeline_buckets()
+            .await
+            .unwrap_err();
         assert!(error.starts_with("Failed to fetch favorites timeline buckets:"));
         assert!(!error.contains("internal secret stacktrace"));
         assert!(!error.contains("fav-secret-key"));
