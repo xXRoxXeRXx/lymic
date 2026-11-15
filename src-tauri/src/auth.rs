@@ -28,6 +28,11 @@ pub struct AuthConfig {
 }
 
 impl AuthConfig {
+    /// Stable identity of the account these credentials belong to; the one place it is derived.
+    pub fn account_id(&self) -> String {
+        crate::audit::actor_id(&self.server_url, &self.api_key)
+    }
+
     /// Makes an error safe for logs, errors and UI events by replacing every credential.
     ///
     /// The server URL is also replaced in the form the HTTP client reports it

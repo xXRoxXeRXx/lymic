@@ -47,7 +47,14 @@ pub(crate) async fn login(
         "log_connecting_to_server",
     );
     let operation_id = crate::audit::AuditEvent::operation_id();
-    let actor_id = Some(crate::audit::actor_id(&server_url, &api_key));
+    let submitted = auth::AuthConfig {
+        server_url: server_url.clone(),
+        api_key: api_key.clone(),
+        allow_local_http,
+        cloudflare_client_id: cloudflare_client_id.clone(),
+        cloudflare_client_secret: cloudflare_client_secret.clone(),
+    };
+    let actor_id = Some(submitted.account_id());
     audit_event(
         &app,
         crate::audit::AuditEvent::new(
@@ -64,13 +71,6 @@ pub(crate) async fn login(
 
     // Build a temporary ImmichClient purely to reuse its URL normalisation and
     // pooled reqwest Client. The client is discarded after the connection test.
-    let submitted = auth::AuthConfig {
-        server_url: server_url.clone(),
-        api_key: api_key.clone(),
-        allow_local_http,
-        cloudflare_client_id: cloudflare_client_id.clone(),
-        cloudflare_client_secret: cloudflare_client_secret.clone(),
-    };
     let result: Result<(), String> = async {
         let temp_client = immich::ImmichClient::new(
             server_url.clone(),
@@ -127,7 +127,7 @@ pub(crate) async fn logout(app: tauri::AppHandle) -> Result<(), String> {
     let actor_id = auth::get_credentials()
         .ok()
         .flatten()
-        .map(|credentials| crate::audit::actor_id(&credentials.server_url, &credentials.api_key));
+        .map(|credentials| credentials.account_id());
     let result = auth::delete_credentials();
     if result.is_ok() {
         if let Ok(cache_dir) = profile_cache_dir(&app) {
@@ -186,7 +186,7 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
         Ok(None) => return Err("Not logged in".to_string()),
         Err(e) => return Err(e),
     };
-    let account_id = ImmichSession::account_id_of(&credentials);
+    let account_id = credentials.account_id();
 
     let session = match ImmichSession::from_credentials(credentials) {
         Ok(session) => session,
@@ -244,7 +244,7 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
     let current_creds = auth::get_credentials().ok().flatten();
     let is_still_same_account = current_creds
         .as_ref()
-        .map(|c| ImmichSession::account_id_of(c) == account_id)
+        .map(|c| c.account_id() == account_id)
         .unwrap_or(false);
 
     if !is_still_same_account {

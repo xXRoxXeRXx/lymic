@@ -103,7 +103,7 @@ impl SyncAuditContext {
     pub fn from_credentials(credentials: &crate::auth::AuthConfig, source: &'static str) -> Self {
         Self {
             operation_id: AuditEvent::operation_id(),
-            actor_id: Some(actor_id(&credentials.server_url, &credentials.api_key)),
+            actor_id: Some(credentials.account_id()),
             source,
             credentials: credentials.clone(),
         }

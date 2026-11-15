@@ -47,11 +47,6 @@ impl ImmichSession {
         Self::open(Some(credentials))
     }
 
-    /// The identity of the account these credentials belong to; the one place it is derived.
-    pub(crate) fn account_id_of(credentials: &AuthConfig) -> String {
-        crate::audit::actor_id(&credentials.server_url, &credentials.api_key)
-    }
-
     fn from_credentials_source(
         source: impl FnOnce() -> Result<Option<AuthConfig>, String>,
     ) -> Result<Self, String> {
@@ -71,7 +66,7 @@ impl ImmichSession {
                 }
             }
         }
-        let account_id = Self::account_id_of(&credentials);
+        let account_id = credentials.account_id();
         let client = Arc::new(
             ImmichClient::new(
                 credentials.server_url.clone(),
@@ -225,14 +220,6 @@ mod tests {
 
         assert_eq!(first.account_id(), second.account_id());
         assert_ne!(first.account_id(), other.account_id());
-    }
-
-    #[test]
-    fn session_identity_matches_the_identity_derived_from_its_credentials() {
-        let config = credentials("http://127.0.0.1:1".to_string());
-        let session = ImmichSession::from_credentials(config.clone()).unwrap();
-
-        assert_eq!(session.account_id(), ImmichSession::account_id_of(&config));
     }
 
     #[tokio::test]
