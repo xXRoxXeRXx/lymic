@@ -83,6 +83,10 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve([]);
       case "get_favorites_timeline_bucket_assets":
         return Promise.resolve([]);
+      case "get_archive_timeline_buckets":
+        return Promise.resolve([]);
+      case "get_archive_timeline_bucket_assets":
+        return Promise.resolve([]);
       case "get_album_timeline":
         return Promise.resolve({ buckets: [], assetsByBucket: {} });
       case "get_places":
@@ -2645,5 +2649,184 @@ describe("Explore Overview across sections", () => {
     await screen.findByRole("region", { name: "Places" });
 
     expect(calls("get_places")).toBe(1);
+  });
+});
+
+describe("Archive Timeline", () => {
+  function stubImmediateIntersectionObserver() {
+    vi.stubGlobal("ResizeObserver", class {
+      observe() {}
+      disconnect() {}
+    });
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+      disconnect() {}
+    });
+  }
+
+  const march = "2025-03-01T00:00:00.000Z";
+  const december = "2024-12-01T00:00:00.000Z";
+  const archivedAsset = (id: string, type: "IMAGE" | "VIDEO" = "IMAGE", isFavorite = false) => ({
+    id, width: 1600, height: 1200, type, takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: type === "VIDEO" ? 65 : null, isFavorite,
+  });
+  const assetDetails = {
+    originalFileName: "archived.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  };
+
+  it("lists Archive directly after Favorites in the navigation with an accessible name and no count badge", async () => {
+    renderAuthenticatedPage();
+
+    const favorites = await screen.findByRole("button", { name: "Favorites" });
+    const archive = screen.getByRole("button", { name: "Archive" });
+    expect(favorites.nextElementSibling).toBe(archive);
+    expect(archive).toHaveTextContent("Archive");
+    expect(archive).not.toHaveTextContent(/\d/);
+  });
+
+  it("opens the Archive Timeline with buckets, scrubber and thumbnails, and offers no archive or unarchive action", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_archive_timeline_buckets: async () => [{ timeBucket: march, count: 2 }, { timeBucket: december, count: 1 }],
+      get_archive_timeline_bucket_assets: async (args) => {
+        const { timeBucket } = args as { timeBucket: string };
+        return timeBucket === march ? [archivedAsset("arch-photo"), archivedAsset("arch-video", "VIDEO")] : [archivedAsset("arch-photo-2")];
+      },
+      get_albums: async () => [{ id: "album-1", albumName: "Holiday" }],
+      get_asset_details: async () => assetDetails,
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+
+    expect(await screen.findByRole("heading", { name: "Archive" })).toBeInTheDocument();
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByText("December 2024")).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_archive_timeline_buckets");
+    expect(tauri.invoke).toHaveBeenCalledWith("get_archive_timeline_bucket_assets", { timeBucket: march });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_archive_timeline_bucket_assets", { timeBucket: december });
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_favorites_timeline_buckets");
+    expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /unarchive|move to archive/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Explore" })).not.toBeInTheDocument();
+  });
+
+  it("offers Favorite, Download and Add to album from the Lightbox and from multi-selection, without any archive action", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_archive_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
+      get_archive_timeline_bucket_assets: async () => [archivedAsset("arch-1"), archivedAsset("arch-2")],
+      get_albums: async () => [{ id: "album-1", albumName: "Holiday" }],
+      get_asset_details: async () => assetDetails,
+      set_asset_favorite: async () => undefined,
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    await fireEvent.click((await screen.findAllByRole("button", { name: "Open photo" }))[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+
+    expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Add to album" })).toBeInTheDocument();
+    expect(within(lightbox).queryByRole("button", { name: /archive/i })).not.toBeInTheDocument();
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Add to favorites" }));
+    expect(tauri.invoke).toHaveBeenCalledWith("set_asset_favorite", { assetId: "arch-1", isFavorite: true });
+    // Favoriting keeps the asset in the Archive Timeline.
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+
+    await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
+    expect(await screen.findByText("1 selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /unarchive|move to archive|add to archive/i })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
+    expect(await screen.findByText("Holiday")).toBeInTheDocument();
+  });
+
+  it("refreshes on every entry from another view and does nothing when already open", async () => {
+    const getArchiveBuckets = vi.fn()
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }, { timeBucket: december, count: 1 }])
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
+    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(await screen.findByText("December 2024")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    expect(getArchiveBuckets).toHaveBeenCalledTimes(1);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    await waitFor(() => {
+      expect(getArchiveBuckets).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText("December 2024")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows loading, then the empty state when nothing is archived", async () => {
+    let resolveBuckets!: (value: unknown) => void;
+    renderAuthenticatedPage({ get_archive_timeline_buckets: () => new Promise((resolve) => { resolveBuckets = resolve; }) });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading archive…");
+    expect(screen.queryByText("Your archive is empty.")).not.toBeInTheDocument();
+
+    resolveBuckets([]);
+    expect(await screen.findByText("Your archive is empty.")).toHaveAttribute("role", "status");
+    expect(screen.queryByText("Loading archive…")).not.toBeInTheDocument();
+  });
+
+  it("shows an error with a retry that reloads the archive", async () => {
+    const getArchiveBuckets = vi.fn()
+      .mockRejectedValueOnce(new Error("rejected visibility"))
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
+    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The archive could not be loaded.");
+    expect(screen.queryByText("Your archive is empty.")).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Retry timeline connection" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(getArchiveBuckets).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps already shown archived assets visible and announces offline when a refresh fails", async () => {
+    const getArchiveBuckets = vi.fn()
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
+      .mockRejectedValueOnce(new Error("offline"));
+    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Archive is offline. Showing cached archive.");
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
+  });
+
+  it("clears the Archive Timeline on logout so the next session does not inherit it", async () => {
+    const getArchiveBuckets = vi.fn()
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
+      .mockImplementationOnce(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+    expect(await screen.findByRole("heading", { name: "Login" })).toBeInTheDocument();
+    await fireEvent.input(screen.getByLabelText("Server URL"), { target: { value: "https://immich.example" } });
+    await fireEvent.input(screen.getByLabelText("API Key"), { target: { value: "secret-key" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Login" }));
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading archive…");
+    expect(screen.queryByText("March 2025")).not.toBeInTheDocument();
   });
 });

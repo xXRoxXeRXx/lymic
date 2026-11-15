@@ -178,6 +178,19 @@ describe('i18n catalogs', () => {
     }
   });
 
+  it('translates the Archive Timeline strings in every locale', () => {
+    const keys = ['archive_title', 'archive_loading', 'archive_empty', 'archive_error', 'archive_offline'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+    }
+    expect(en.archive_title).toBe('Archive');
+    expect(en.archive_empty).toBe('Your archive is empty.');
+    expect(de.archive_title).toBe('Archiv');
+  });
+
   it('uses consistent timeline and video terminology in favorites strings', () => {
     expect(de.favorites_offline).toContain('Zeitachse');
     expect(de.favorites_offline).not.toContain('Timeline');
