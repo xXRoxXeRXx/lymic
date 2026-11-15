@@ -20,6 +20,7 @@ Lymic is designed as an **upload-oriented client**, not a two-way filesystem mir
 - Pause and resume synchronization safely.
 - Show synchronization status, progress, errors, and logs in the desktop UI.
 - Retry failed files.
+- Browse the Immich Library read-only from the Explore view: recognized people, places (cities) and memories, with place and memory timelines.
 - Support native credential storage, system-tray controls, desktop notifications, optional autostart, signed in-app updates, English, German, and light/dark appearance preferences.
 
 ## 3. Requirements
@@ -50,6 +51,10 @@ The existing project guidance recommends these scopes:
 | `asset.upload` | Upload new media assets. |
 | `asset.read` | Check whether an asset already exists. |
 | `user.read` | Retrieve the signed-in user during login. |
+| `person.read` | Explore: show recognized people. |
+| `memory.read` | Explore: show memories. |
+
+The Explore view (people, places and memories, each openable as a timeline) is read-only and needs `asset.read` (places and place timelines), `person.read` (people) and `memory.read` (memories). Each Explore section depends on its own permission: a key lacking one only disables that section, which reports the missing permission where it can, and the other sections keep working. Memories also need a recent Immich server release; no minimum version is documented. Viewing thumbnails and photos also needs `asset.view`.
 
 Lymic normally does not need deletion or album-write privileges.
 
