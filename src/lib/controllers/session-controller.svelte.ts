@@ -1,3 +1,4 @@
+import { createArchiveTimelineController } from "./archive-timeline-controller.svelte";
 import { createAlbumCatalogueController } from "./album-catalogue-controller.svelte";
 import { createAuthController } from "./auth-controller.svelte";
 import { createExploreController } from "./explore-controller.svelte";
@@ -17,6 +18,7 @@ import type {
   AlbumCatalogueDesktopAdapter,
   AllMemoriesDesktopAdapter,
   AlbumsDesktopAdapter,
+  ArchiveTimelineDesktopAdapter,
   AuthDesktopAdapter,
   FavoritesTimelineDesktopAdapter,
   MapDesktopAdapter,
@@ -37,6 +39,7 @@ export type SessionDesktopAdapter =
   AlbumCatalogueDesktopAdapter &
   TimelineDesktopAdapter &
   FavoritesTimelineDesktopAdapter &
+  ArchiveTimelineDesktopAdapter &
   MapDesktopAdapter &
   PeopleDesktopAdapter &
   PlacesDesktopAdapter &
@@ -81,6 +84,7 @@ export function createSessionController(options: {
   });
   const timeline = createTimelineController(adapter);
   const favorites = createFavoritesTimelineController(adapter);
+  const archive = createArchiveTimelineController(adapter);
   const people = createPeopleController(adapter);
   const places = createPlacesController(adapter);
   const memories = createMemoriesController(adapter);
@@ -97,6 +101,7 @@ export function createSessionController(options: {
     watchedFolders,
     timeline,
     favorites,
+    archive,
     people,
     places,
     memories,
@@ -167,6 +172,7 @@ export function createSessionController(options: {
     sync,
     timeline,
     favorites,
+    archive,
     people,
     places,
     memories,
