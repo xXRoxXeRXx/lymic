@@ -49,7 +49,7 @@ The existing project guidance recommends these scopes:
 | Scope | Purpose |
 | --- | --- |
 | `asset.upload` | Upload new media assets. |
-| `asset.read` | Check whether an asset already exists. |
+| `asset.read` | Check whether an asset already exists; Archive: browse archived photos and videos. |
 | `user.read` | Retrieve the signed-in user during login. |
 | `person.read` | Explore: show recognized people. |
 | `memory.read` | Explore: show memories. |

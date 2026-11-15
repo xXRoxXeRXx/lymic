@@ -136,6 +136,10 @@ _Avoid_: album grid, album gallery
 The chronological presentation of Remote Assets marked as Favorites in the authenticated user's Immich Library.
 _Avoid_: favorites album, favorites folder
 
+**Archive Timeline**:
+The chronological presentation of the Remote Assets that are Archived Assets in the authenticated user's Immich Library, grouped into time buckets like the Photo Timeline. It is read-only: Lymic neither archives nor unarchives a Remote Asset.
+_Avoid_: archive folder, archive album, hidden gallery
+
 ## Map
 
 **Map View**:

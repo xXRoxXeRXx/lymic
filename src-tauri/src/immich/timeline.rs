@@ -1,7 +1,10 @@
 use super::client::ImmichClient;
-use super::response::{read_response_body_limited, send_checked, MAX_SUCCESS_RESPONSE_BYTES};
+use super::response::{
+    explore_status_error, read_response_body_limited, response_status_error, send_checked,
+    MAX_SUCCESS_RESPONSE_BYTES,
+};
 use chrono::DateTime;
-use reqwest::{Method, StatusCode};
+use reqwest::{Method, RequestBuilder, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -35,6 +38,50 @@ pub struct TimelineAsset {
 pub struct AlbumTimeline {
     pub buckets: Vec<TimelineBucket>,
     pub assets_by_bucket: BTreeMap<String, Vec<TimelineAsset>>,
+}
+
+/// How a library timeline request reports HTTP 403: with the shared Explore permission code
+/// (`{prefix}_permission_denied:{hint}`) instead of the generic status message.
+#[derive(Clone, Copy)]
+struct PermissionCode {
+    prefix: &'static str,
+    hint: &'static str,
+}
+
+/// The Archive Timeline names the missing `asset.read` API key permission.
+const ARCHIVE_PERMISSION_CODE: PermissionCode = PermissionCode {
+    prefix: "archive",
+    hint: "asset.read",
+};
+
+/// Like `send_checked`, except that a 403 becomes the credential-free permission code when
+/// `permission` is given. Every other failure keeps `send_checked`'s message.
+async fn send_timeline_request(
+    request: RequestBuilder,
+    failure: &str,
+    permission: Option<PermissionCode>,
+) -> Result<Response, String> {
+    let Some(permission) = permission else {
+        return send_checked(request, failure).await;
+    };
+    let response = request
+        .send()
+        .await
+        .map_err(|error| format!("{failure}: {error}"))?;
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response);
+    }
+    // The status line is all that leaves this function; the body is discarded unread.
+    let detail = response_status_error(response).await?;
+    if status == StatusCode::FORBIDDEN {
+        return Err(explore_status_error(
+            permission.prefix,
+            status,
+            permission.hint,
+        ));
+    }
+    Err(format!("{failure}: {detail}"))
 }
 
 /// A Place Timeline has the same complete, locally indexed shape as an Album Timeline.
@@ -324,11 +371,13 @@ impl ImmichClient {
         &self,
         query: &[(&str, &str)],
         context: &str,
+        permission: Option<PermissionCode>,
     ) -> Result<Vec<TimelineBucket>, String> {
         let failure = format!("Failed to fetch {context}");
-        let response = send_checked(
+        let response = send_timeline_request(
             self.request(Method::GET, "timeline/buckets").query(query),
             &failure,
+            permission,
         )
         .await?;
 
@@ -344,11 +393,13 @@ impl ImmichClient {
         query: &[(&str, &str)],
         context: &str,
         default_favorite: bool,
+        permission: Option<PermissionCode>,
     ) -> Result<Vec<TimelineAsset>, String> {
         let failure = format!("Failed to fetch {context}");
-        let response = send_checked(
+        let response = send_timeline_request(
             self.request(Method::GET, "timeline/bucket").query(query),
             &failure,
+            permission,
         )
         .await?;
         parse_timeline_bucket_assets(
@@ -358,7 +409,7 @@ impl ImmichClient {
     }
 
     pub async fn get_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
-        self.fetch_timeline_buckets_with_query(&[("size", "MONTH")], "timeline buckets")
+        self.fetch_timeline_buckets_with_query(&[("size", "MONTH")], "timeline buckets", None)
             .await
     }
 
@@ -370,6 +421,7 @@ impl ImmichClient {
             &[("size", "MONTH"), ("timeBucket", time_bucket)],
             "timeline bucket",
             false,
+            None,
         )
         .await
     }
@@ -378,6 +430,7 @@ impl ImmichClient {
         self.fetch_timeline_buckets_with_query(
             &[("size", "MONTH"), ("isFavorite", "true")],
             "favorites timeline buckets",
+            None,
         )
         .await
     }
@@ -394,6 +447,34 @@ impl ImmichClient {
             ],
             "favorites timeline bucket",
             true,
+            None,
+        )
+        .await
+    }
+
+    /// Timeline buckets of the user's Archived Assets (visibility filter `archive`).
+    pub async fn get_archive_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
+        self.fetch_timeline_buckets_with_query(
+            &[("size", "MONTH"), ("visibility", "archive")],
+            "archive timeline buckets",
+            Some(ARCHIVE_PERMISSION_CODE),
+        )
+        .await
+    }
+
+    pub async fn get_archive_timeline_bucket_assets(
+        &self,
+        time_bucket: &str,
+    ) -> Result<Vec<TimelineAsset>, String> {
+        self.fetch_timeline_bucket_assets_with_query(
+            &[
+                ("size", "MONTH"),
+                ("timeBucket", time_bucket),
+                ("visibility", "archive"),
+            ],
+            "archive timeline bucket",
+            false,
+            Some(ARCHIVE_PERMISSION_CODE),
         )
         .await
     }
@@ -1255,5 +1336,140 @@ mod tests {
         assert!(!error.contains("internal secret stacktrace"));
         assert!(!error.contains("fav-secret-key"));
         server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetches_archive_timeline_buckets_and_assets_with_archive_visibility() {
+        let (url, server) = serve_pages(vec![
+            (
+                "200 OK",
+                r#"[{"timeBucket":"2025-02-01T00:00:00.000Z","count":1},{"timeBucket":"2025-03-01T00:00:00.000Z","count":2}]"#,
+            ),
+            (
+                "200 OK",
+                r#"{"id":["arch-photo","arch-video"],"isImage":[true,false],"isFavorite":[null,true],"ratio":[1.5,1.7778],"duration":[null,"0:00:42.000"],"fileCreatedAt":["2025-03-10T10:00:00.000Z","2025-03-05T10:00:00.000Z"]}"#,
+            ),
+            (
+                "200 OK",
+                r#"[{"id":"legacy-arch","type":"IMAGE","fileCreatedAt":"2025-02-14T10:00:00.000Z"}]"#,
+            ),
+        ])
+        .await;
+        let client = test_client(url, "test-key");
+
+        let buckets = client.get_archive_timeline_buckets().await.unwrap();
+        assert_eq!(
+            buckets,
+            vec![
+                super::TimelineBucket {
+                    time_bucket: "2025-03-01T00:00:00.000Z".to_string(),
+                    count: 2,
+                },
+                super::TimelineBucket {
+                    time_bucket: "2025-02-01T00:00:00.000Z".to_string(),
+                    count: 1,
+                },
+            ]
+        );
+        let march = client
+            .get_archive_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap();
+        assert_eq!(march.len(), 2);
+        assert_eq!(march[0].id, "arch-photo");
+        assert_eq!(march[0].r#type, "IMAGE");
+        assert!(!march[0].is_favorite);
+        assert_eq!(march[1].id, "arch-video");
+        assert_eq!(march[1].r#type, "VIDEO");
+        assert_eq!(march[1].duration, Some(42));
+        assert!(march[1].is_favorite);
+        let february = client
+            .get_archive_timeline_bucket_assets("2025-02-01T00:00:00.000Z")
+            .await
+            .unwrap();
+        assert_eq!(february.len(), 1);
+        assert_eq!(february[0].id, "legacy-arch");
+        assert!(!february[0].is_favorite);
+
+        let requests = server.await.unwrap();
+        assert!(requests[0]
+            .starts_with("GET /api/timeline/buckets?size=MONTH&visibility=archive HTTP/1.1"));
+        assert!(requests[1].starts_with(
+            "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&visibility=archive HTTP/1.1"
+        ));
+        assert!(requests[2].starts_with(
+            "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-02-01T00%3A00%3A00.000Z&visibility=archive HTTP/1.1"
+        ));
+        for request in &requests {
+            assert!(request.contains("x-api-key: test-key"));
+            assert!(!request.contains("isFavorite"));
+            assert!(!request.contains("isArchived"));
+            assert!(!request.contains("isTrashed"));
+            assert!(!request.contains("withPartners"));
+        }
+    }
+
+    #[tokio::test]
+    async fn classifies_archive_timeline_failures_without_leaking_body_or_api_key() {
+        for status in ["401 Unauthorized", "500 Internal Server Error"] {
+            let (url, server) = serve_pages(vec![(status, "internal secret stacktrace")]).await;
+            let error = test_client(url, "arch-secret-key")
+                .get_archive_timeline_buckets()
+                .await
+                .unwrap_err();
+            server.await.unwrap();
+            assert!(error.starts_with("Failed to fetch archive timeline buckets:"));
+            assert!(error.contains(&status[..3]), "{error}");
+            assert!(!error.contains("internal secret stacktrace"));
+            assert!(!error.contains("arch-secret-key"));
+
+            let (url, server) = serve_pages(vec![(status, "internal secret stacktrace")]).await;
+            let error = test_client(url, "arch-secret-key")
+                .get_archive_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+                .await
+                .unwrap_err();
+            server.await.unwrap();
+            assert!(error.starts_with("Failed to fetch archive timeline bucket:"));
+            assert!(error.contains(&status[..3]), "{error}");
+            assert!(!error.contains("internal secret stacktrace"));
+            assert!(!error.contains("arch-secret-key"));
+        }
+
+        // A permission failure carries a stable, credential-free code that names the missing permission.
+        let (url, server) =
+            serve_pages(vec![("403 Forbidden", "internal secret stacktrace")]).await;
+        let error = test_client(url, "arch-secret-key")
+            .get_archive_timeline_buckets()
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+        assert_eq!(error, "archive_permission_denied:asset.read");
+
+        let (url, server) =
+            serve_pages(vec![("403 Forbidden", "internal secret stacktrace")]).await;
+        let error = test_client(url, "arch-secret-key")
+            .get_archive_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+        assert_eq!(error, "archive_permission_denied:asset.read");
+
+        let (url, server) = serve_pages(vec![("200 OK", "{not-json")]).await;
+        let error = test_client(url, "arch-secret-key")
+            .get_archive_timeline_buckets()
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+        assert!(error.starts_with("Invalid archive timeline buckets response:"));
+        assert!(!error.contains("arch-secret-key"));
+
+        let (url, server) = serve_pages(vec![("200 OK", "{not-json")]).await;
+        let error = test_client(url, "arch-secret-key")
+            .get_archive_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+        assert!(error.starts_with("Invalid timeline bucket response:"));
+        assert!(!error.contains("arch-secret-key"));
     }
 }
