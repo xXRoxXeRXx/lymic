@@ -208,26 +208,35 @@ pub(crate) struct TauriFolderScanTrigger<'a> {
 
 impl FolderScanTrigger for TauriFolderScanTrigger<'_> {
     fn trigger_folder_scan(&self, folder: WatchedFolder, source: crate::sync::SyncSource) {
-        let pool_inner = self.pool.clone();
-        let app_for_scan = self.app.clone();
-        tauri::async_runtime::spawn(async move {
-            let scan_result = match scan_single_folder(folder.clone()).await {
-                Ok(result) => result,
-                Err(error) => {
-                    crate::app::events::log_to_ui_folder_error(
-                        &app_for_scan,
-                        "ERROR",
-                        &format!("Folder scanning failed for '{}': {error}", folder.path),
-                        "log_folder_scan_failed",
-                        &folder.path,
-                        &error,
-                    );
-                    return;
-                }
-            };
-            crate::sync::admit_and_run(app_for_scan, pool_inner, scan_result, source).await;
-        });
+        spawn_folder_scan(self.app, self.pool, folder, source);
     }
+}
+
+fn spawn_folder_scan(
+    app: &tauri::AppHandle,
+    pool: &sqlx::SqlitePool,
+    folder: WatchedFolder,
+    source: crate::sync::SyncSource,
+) {
+    let pool_inner = pool.clone();
+    let app_for_scan = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let scan_result = match scan_single_folder(folder.clone()).await {
+            Ok(result) => result,
+            Err(error) => {
+                crate::app::events::log_to_ui_folder_error(
+                    &app_for_scan,
+                    "ERROR",
+                    &format!("Folder scanning failed for '{}': {error}", folder.path),
+                    "log_folder_scan_failed",
+                    &folder.path,
+                    &error,
+                );
+                return;
+            }
+        };
+        crate::sync::admit_and_run(app_for_scan, pool_inner, scan_result, source).await;
+    });
 }
 
 pub(crate) struct TauriFolderEffects<'a> {
@@ -237,11 +246,7 @@ pub(crate) struct TauriFolderEffects<'a> {
 
 impl FolderScanTrigger for TauriFolderEffects<'_> {
     fn trigger_folder_scan(&self, folder: WatchedFolder, source: crate::sync::SyncSource) {
-        TauriFolderScanTrigger {
-            app: self.app,
-            pool: self.pool,
-        }
-        .trigger_folder_scan(folder, source);
+        spawn_folder_scan(self.app, self.pool, folder, source);
     }
 }
 

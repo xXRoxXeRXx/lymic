@@ -106,6 +106,8 @@ where
                                 .await
                                 .map_err(|e| e.to_string())?;
 
+                                // The old mount may already be gone; failing to release its
+                                // watch must not block watching the new path.
                                 let _ = self.watcher.unwatch(&folder.path).await;
                             }
                             self.watcher.watch_available(&norm_new_str).await?;
@@ -117,8 +119,23 @@ where
                             .await
                             .map_err(|e| e.to_string())?;
 
-                            let mut remounted_folder = folder.clone();
-                            remounted_folder.path = norm_new_str;
+                            // Scan the folder as persisted: the remap stores a canonical path
+                            // form that can differ from the raw mount-derived path.
+                            let remounted_folder = if path_changed {
+                                crate::db::get_folders(&self.pool)
+                                    .await
+                                    .map_err(|e| e.to_string())?
+                                    .into_iter()
+                                    .find(|f| f.id == folder.id)
+                                    .ok_or_else(|| {
+                                        format!(
+                                            "Remounted folder {} disappeared after remap",
+                                            folder.id
+                                        )
+                                    })?
+                            } else {
+                                folder.clone()
+                            };
                             self.scan_trigger.trigger_folder_scan(
                                 remounted_folder,
                                 crate::sync::SyncSource::RemovableMediaReconnect,
@@ -169,7 +186,12 @@ where
                 for binding in bindings {
                     if let Some(folder) = folders.iter().find(|f| f.id == binding.watched_folder_id)
                     {
-                        self.watcher.unwatch(&folder.path).await?;
+                        self.watcher.unwatch(&folder.path).await.map_err(|error| {
+                            format!(
+                                "Could not unwatch unavailable path '{}': {error}",
+                                folder.path
+                            )
+                        })?;
                     }
                 }
 

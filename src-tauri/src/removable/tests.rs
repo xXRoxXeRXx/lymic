@@ -779,7 +779,7 @@ async fn volume_removal_by_volume_id_clears_active_volumes_and_unwatches() {
 }
 
 #[tokio::test]
-async fn volume_removal_propagates_unwatch_error_when_reconcile_folder_unavailable_fails() {
+async fn volume_removal_propagates_unwatch_error_with_path_context_when_unwatch_fails() {
     let pool = test_pool().await;
     let deps = TestCoordinatorDeps::default();
     *deps.watcher.unwatch_error.lock().unwrap() = Some("simulated unwatch failure".to_string());
@@ -813,5 +813,41 @@ async fn volume_removal_propagates_unwatch_error_when_reconcile_folder_unavailab
         .await;
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err(), "simulated unwatch failure");
+    assert_eq!(
+        result.unwrap_err(),
+        "Could not unwatch unavailable path 'E:/DCIM': simulated unwatch failure"
+    );
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn remount_scan_uses_the_persisted_folder_path_for_a_volume_root_mount() {
+    let pool = test_pool().await;
+    let deps = TestCoordinatorDeps::default();
+    let coordinator = deps.coordinator(pool.clone());
+
+    let volume_id = "{12345678-1234-1234-1234-123456789abc}";
+    let folder_id = crate::db::add_folder(&pool, "E:/", None).await.unwrap();
+    crate::db::bind_removable_folder(&pool, folder_id, volume_id, "")
+        .await
+        .unwrap();
+
+    coordinator
+        .handle_event(VolumeEvent::Arrival(VolumeInfo {
+            volume_id: volume_id.to_string(),
+            mount_path: "f:/".to_string(),
+            display_name: "EOS_DIGITAL".to_string(),
+        }))
+        .await
+        .unwrap();
+
+    let persisted = crate::db::get_folders(&pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|f| f.id == folder_id)
+        .unwrap();
+    let triggered = deps.scan_trigger.triggered.lock().unwrap().clone();
+    assert_eq!(triggered.len(), 1);
+    assert_eq!(triggered[0].folder.path, persisted.path);
 }
