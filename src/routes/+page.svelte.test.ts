@@ -2833,6 +2833,42 @@ describe("Archive Timeline", () => {
     expect(screen.getByText("March 2025")).toBeInTheDocument();
   });
 
+  it("shows a permission denial on a refresh as an alert with retry, not as offline, and keeps the shown assets", async () => {
+    const getArchiveBuckets = vi.fn()
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
+      .mockRejectedValueOnce("archive_permission_denied:asset.read")
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
+    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The archive could not be loaded. Give the API key the asset.read permission.");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
+
+    await fireEvent.click(within(alert).getByRole("button", { name: "Retry timeline connection" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(getArchiveBuckets).toHaveBeenCalledTimes(3);
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
+  });
+
+  it("shows a permission denial while loading bucket assets as an alert, not as offline", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_archive_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+      get_archive_timeline_bucket_assets: () => Promise.reject("archive_permission_denied:asset.read"),
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Give the API key the asset.read permission.");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
+  });
+
   it("clears the Archive Timeline on logout so the next session does not inherit it", async () => {
     const getArchiveBuckets = vi.fn()
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])

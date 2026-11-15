@@ -32,6 +32,8 @@
     emptyMessage?: string;
     loadErrorMessage?: string;
     offlineMessage?: string;
+    /** Shows a failed load as an error alert with Retry, even over cached assets, instead of the offline status. */
+    failureIsError?: boolean;
     ariaLabel?: string;
   }
 
@@ -53,8 +55,10 @@
     emptyMessage = "",
     loadErrorMessage = "",
     offlineMessage = "",
+    failureIsError = false,
     ariaLabel = "",
   }: Props = $props();
+  const showLoadError = $derived(!timeline.isLoading && (timeline.hasInitialLoadError || (failureIsError && timeline.isOffline)));
   const numberLocale = $derived(toBcp47Locale($locale));
   const scrubberIndex = $derived(buildTimelineScrubberIndex(timeline.buckets));
   const scrubberMonths = $derived(scrubberIndex.flatMap((entry) => entry.months));
@@ -385,7 +389,7 @@
 <svelte:window onkeydown={handleKeydown} onresize={handleWindowResize} />
 
 <div class="relative flex h-full min-h-0 flex-col">
-  {#if (timeline.hasInitialLoadError && !timeline.isLoading) || (timeline.isOffline && !timeline.isLoading) || showRefreshButton}
+  {#if (showLoadError || (timeline.isOffline && !timeline.isLoading)) || showRefreshButton}
     <div class="mb-2 flex shrink-0 items-center justify-end gap-3">
       {#snippet retryButton()}
         {#if showRefreshButton}
@@ -397,7 +401,7 @@
           >{$t("timeline_retry")}</button>
         {/if}
       {/snippet}
-      {#if timeline.hasInitialLoadError && !timeline.isLoading}
+      {#if showLoadError}
         <div class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
           <span>{loadErrorMessage || $t("timeline_offline")}</span>
           {@render retryButton()}
