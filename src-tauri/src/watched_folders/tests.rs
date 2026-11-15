@@ -812,7 +812,9 @@ async fn unconfirmed_removal_changes_nothing_and_reports_whether_sync_work_would
 
     // 2. Active in-flight work: reports true and does not cancel active work or remove folder.
     let active_unit = test_upload_unit(&expected_path, "active.jpg");
-    let lease = coordinator.active_work.acquire(&[active_unit.clone()]);
+    let lease = coordinator
+        .active_work
+        .acquire(std::slice::from_ref(&active_unit));
     assert_eq!(
         removal.remove(folder_id, None).await.unwrap(),
         RemoveFolderResult {
@@ -892,7 +894,9 @@ async fn confirmed_removal_stops_watcher_before_cancelling_and_discarding_then_d
     let active_unit = test_upload_unit(&expected_path, "active.jpg");
     let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-    let lease = coordinator.active_work.acquire(&[active_unit.clone()]);
+    let lease = coordinator
+        .active_work
+        .acquire(std::slice::from_ref(&active_unit));
 
     enqueue_test_files(&pool, &[PathBuf::from(&expected_path).join("queued.jpg")]).await;
 
@@ -966,7 +970,9 @@ async fn unwatch_failure_aborts_removal_before_cancelling_or_deleting() {
     let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
     let active_unit = test_upload_unit(&expected_path, "active.jpg");
-    let lease = coordinator.active_work.acquire(&[active_unit.clone()]);
+    let lease = coordinator
+        .active_work
+        .acquire(std::slice::from_ref(&active_unit));
 
     let removal_effects = RecordedRemovalEffects::default();
     let removal = WatchedFolderRemoval::new(

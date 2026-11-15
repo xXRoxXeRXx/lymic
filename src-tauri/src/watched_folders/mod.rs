@@ -665,7 +665,11 @@ where
             // The watcher is gone before cancellation so no new work can be produced for this root.
             // The queue cleanup is path-component based and leaves sibling roots untouched.
             self.sync.cancel_work_in_folder(&folder.path);
-            if let Err(error) = self.discard_and_delete_folder(id, &folder.path).await {
+            let discarded_and_deleted = match self.sync.discard_folder_queue(&folder.path).await {
+                Ok(()) => self.persistence.remove_folder(id).await,
+                Err(error) => Err(error),
+            };
+            if let Err(error) = discarded_and_deleted {
                 self.restore_watcher_after_failure(&folder.path).await;
                 return Err(error);
             }
@@ -692,11 +696,6 @@ where
         Ok(RemoveFolderResult {
             requires_sync_cancellation: false,
         })
-    }
-
-    async fn discard_and_delete_folder(&self, id: i64, path: &str) -> Result<(), String> {
-        self.sync.discard_folder_queue(path).await?;
-        self.persistence.remove_folder(id).await
     }
 
     async fn restore_watcher_after_failure(&self, path: &str) {
