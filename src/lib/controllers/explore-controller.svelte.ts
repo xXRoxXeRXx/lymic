@@ -1,3 +1,4 @@
+import type { MemoriesViewState } from "./memories-controller.svelte";
 import type { PeopleViewState } from "./people-controller.svelte";
 import type { PlacesViewState } from "./places-controller.svelte";
 
@@ -28,6 +29,7 @@ export function isExploreSectionVisible(section: ExploreSectionState): boolean {
 export interface ExploreViewState {
   readonly people: ExploreSectionState;
   readonly places: ExploreSectionState;
+  readonly memories: ExploreSectionState;
   readonly sections: readonly ExploreSectionState[];
   /** True when no section has anything to show, so the placeholder replaces them. */
   readonly isAllEmpty: boolean;
@@ -40,6 +42,7 @@ export interface ExploreViewState {
 export function createExploreController(options: {
   people: PeopleViewState;
   places: PlacesViewState;
+  memories: MemoriesViewState;
   isActive(): boolean;
 }): ExploreViewState {
   const { people: peopleController } = options;
@@ -58,7 +61,15 @@ export function createExploreController(options: {
     get itemCount() { return placesController.places.length; },
     refresh: () => placesController.refresh(),
   };
-  const sections = [people, places] as const;
+  const { memories: memoriesController } = options;
+  const memories: ExploreSectionState = {
+    get isLoading() { return memoriesController.isLoading; },
+    get isOffline() { return memoriesController.isOffline; },
+    get error() { return memoriesController.error; },
+    get itemCount() { return memoriesController.memories.length; },
+    refresh: () => memoriesController.refresh(),
+  };
+  const sections = [people, places, memories] as const;
 
   function refresh() {
     return Promise.all(sections.map((section) => section.refresh())).then(() => undefined);
@@ -67,6 +78,7 @@ export function createExploreController(options: {
   return {
     people,
     places,
+    memories,
     sections,
     get isAllEmpty() { return !sections.some(isExploreSectionVisible); },
     refresh,

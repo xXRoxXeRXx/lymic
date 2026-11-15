@@ -65,6 +65,19 @@ describe('i18n catalogs', () => {
     }
   });
 
+  it('translates the Memories strings in every locale', () => {
+    const keys = ['memories_title', 'memories_loading', 'memories_offline', 'memories_error', 'memories_permission_denied', 'memory_year_ago', 'memory_years_ago', 'memory_birthday', 'memory_untitled', 'memories_timeline_empty'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+      expect((translations as Record<string, string>).memories_permission_denied, localeCode).toContain('memory.read');
+      expect((translations as Record<string, string>).memory_birthday, localeCode).toContain('{name}');
+    }
+    expect(de.memories_title).toBe('Erinnerungen');
+  });
+
   it('updates the document language when the active locale changes', async () => {
     await locale.set('de');
     expect(document.documentElement.lang).toBe('de-DE');
