@@ -13,17 +13,23 @@ export function createArchiveTimelineController(
   adapter: Pick<ArchiveTimelineDesktopAdapter, "getArchiveTimelineBuckets" | "getArchiveTimelineBucketAssets">,
 ): ArchiveTimelineController {
   let permissionDenied = $state(false);
+  // Bumped by clear() so a request still in flight when the session ends cannot
+  // mark the next account's Archive Timeline as permission-denied.
+  let generation = 0;
 
   // The shared timeline controller reports only that a load failed, so the
   // archive adapter calls record whether the backend's credential-free error
   // code (`archive_permission_denied:<permission>`) was the reason.
   async function tracked<T>(request: Promise<T>): Promise<T> {
+    const requestGeneration = generation;
     try {
       const result = await request;
-      permissionDenied = false;
+      if (requestGeneration === generation) permissionDenied = false;
       return result;
     } catch (error) {
-      permissionDenied = classifyExploreError(error, "archive") === "permission_denied";
+      if (requestGeneration === generation) {
+        permissionDenied = classifyExploreError(error, "archive") === "permission_denied";
+      }
       throw error;
     }
   }
@@ -33,14 +39,24 @@ export function createArchiveTimelineController(
     getTimelineBucketAssets: (timeBucket) => tracked(adapter.getArchiveTimelineBucketAssets(timeBucket)),
   });
 
-  const clear = timeline.clear;
-  return Object.defineProperties(timeline, {
-    permissionDenied: { get: () => permissionDenied, enumerable: true },
-    clear: {
-      value: () => {
-        clear();
-        permissionDenied = false;
-      },
+  return {
+    get buckets() { return timeline.buckets; },
+    get refreshGeneration() { return timeline.refreshGeneration; },
+    get isLoading() { return timeline.isLoading; },
+    get isRefreshing() { return timeline.isRefreshing; },
+    get isOffline() { return timeline.isOffline; },
+    get hasInitialLoadError() { return timeline.hasInitialLoadError; },
+    get permissionDenied() { return permissionDenied; },
+    assetsFor: timeline.assetsFor,
+    activateBucket: timeline.activateBucket,
+    refresh: timeline.refresh,
+    removeAsset: timeline.removeAsset,
+    locateAsset: timeline.locateAsset,
+    stepAsset: timeline.stepAsset,
+    clear() {
+      generation += 1;
+      timeline.clear();
+      permissionDenied = false;
     },
-  }) as ArchiveTimelineController;
+  };
 }
