@@ -280,4 +280,9 @@
   ,"favorites_empty": "Noch keine Favoriten. Markiere Fotos oder Videos als Favorit, um sie hier zu sehen."
   ,"favorites_error": "Favoriten konnten nicht geladen werden."
   ,"favorites_offline": "Favoriten-Zeitachse ist offline. Zwischengespeicherte Favoriten werden angezeigt."
+  ,"explore_title": "Erkunden"
+  ,"explore_view_all": "Alle anzeigen"
+  ,"explore_retry": "Erneut versuchen"
+  ,"explore_empty": "Noch nichts zu erkunden. Personen, Orte und Erinnerungen erscheinen hier, sobald Ihre Bibliothek sie enthält."
+  ,"explore_return": "Zurück zu Erkunden"
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, ArrowLeft, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon } from "lucide-svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, ArrowLeft, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon, Compass } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
@@ -8,6 +8,7 @@
   import DashboardView from "#lib/components/DashboardView.svelte";
   import TimelineView from "#lib/components/TimelineView.svelte";
   import MapView from "#lib/components/MapView.svelte";
+  import ExploreView from "#lib/components/ExploreView.svelte";
   import PeopleView from "#lib/components/PeopleView.svelte";
   import AlbumCatalogueView from "#lib/components/AlbumCatalogueView.svelte";
   import ActivityLog from "#lib/components/ActivityLog.svelte";
@@ -31,12 +32,16 @@
   let albumTimeline = $state<ReturnType<typeof createAlbumTimelineController> | null>(null);
   let selectedPerson = $state<RecognizedPerson | null>(null);
   let personTimeline = $state<ReturnType<typeof createPersonTimelineController> | null>(null);
+  let personOrigin = $state<"people" | "explore">("people");
   let peopleScrollTop = 0;
+  let exploreScrollTop = 0;
   let albumsScrollTop = 0;
   let content = $state<HTMLElement>();
 
   function selectPerson(person: RecognizedPerson) {
-    peopleScrollTop = content?.scrollTop ?? 0;
+    personOrigin = currentView === "explore" ? "explore" : "people";
+    if (personOrigin === "explore") exploreScrollTop = content?.scrollTop ?? 0;
+    else peopleScrollTop = content?.scrollTop ?? 0;
     selectedPerson = person;
     personTimeline = createPersonTimelineController(desktop, person.id);
     currentView = "person-timeline";
@@ -54,6 +59,7 @@
   const pageTitle = $derived.by(() => {
     switch (currentView) {
       case "photos": return $t("timeline_title");
+      case "explore": return $t("explore_title");
       case "favorites": return $t("favorites_title");
       case "map": return $t("map_title");
       case "people": return $t("people_title");
@@ -92,6 +98,11 @@
     void map.refresh();
   }
 
+  function openExplore() {
+    currentView = "explore";
+    void explore.refresh();
+  }
+
   function openPeople() {
     currentView = "people";
     void people.refresh();
@@ -102,10 +113,11 @@
     void albumCatalogue.refresh();
   }
 
-  function returnToPeople() {
+  function returnFromPersonTimeline() {
     closePersonTimeline();
-    currentView = "people";
-    queueMicrotask(() => { if (content) content.scrollTop = peopleScrollTop; });
+    currentView = personOrigin;
+    const scrollTop = personOrigin === "explore" ? exploreScrollTop : peopleScrollTop;
+    queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
   }
 
   function returnToAlbums() {
@@ -121,11 +133,14 @@
     resetView: () => {
       mapCreated = false;
       peopleScrollTop = 0;
+      exploreScrollTop = 0;
+      personOrigin = "people";
       albumsScrollTop = 0;
       closeAlbumTimeline();
       closePersonTimeline();
       currentView = "photos";
     },
+    isExploreActive: () => currentView === "explore",
   });
   const {
     feedback,
@@ -136,6 +151,7 @@
     timeline,
     favorites,
     people,
+    explore,
     map,
     albumCatalogue,
   } = auth;
@@ -252,6 +268,15 @@
           >
             <Images class="w-4 h-4 shrink-0 {currentView === 'photos' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('timeline_title')}</span>
+          </button>
+          <button
+            type="button"
+            class="nav-item {currentView === 'explore' ? 'active' : ''}"
+            onclick={openExplore}
+            aria-label={$t('explore_title')}
+          >
+            <Compass class="w-4 h-4 shrink-0 {currentView === 'explore' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('explore_title')}</span>
           </button>
           <button
             type="button"
@@ -395,6 +420,8 @@
             loadErrorMessage={$t("favorites_error")}
             offlineMessage={$t("favorites_offline")}
           />
+        {:else if currentView === "explore"}
+          <ExploreView {explore} {people} onViewAllPeople={openPeople} onSelectPerson={selectPerson} />
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
         {:else if currentView === "albums"}
@@ -409,9 +436,9 @@
           </div>
         {:else if currentView === "person-timeline" && personTimeline}
           <div class="flex h-full min-h-0 flex-col gap-2">
-            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToPeople}>
+            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnFromPersonTimeline}>
               <ArrowLeft class="h-4 w-4" />
-              {$t('people_return')}
+              {$t(personOrigin === "explore" ? 'explore_return' : 'people_return')}
             </button>
             <TimelineView timeline={personTimeline} {...sharedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
           </div>

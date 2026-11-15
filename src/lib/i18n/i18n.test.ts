@@ -34,6 +34,17 @@ describe('i18n catalogs', () => {
       }
     }
   });
+  it('translates the Explore Overview strings in every locale', () => {
+    const keys = ['explore_title', 'explore_view_all', 'explore_retry', 'explore_empty', 'explore_return'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+    }
+    expect(de.explore_title).toBe('Erkunden');
+  });
+
   it('updates the document language when the active locale changes', async () => {
     await locale.set('de');
     expect(document.documentElement.lang).toBe('de-DE');

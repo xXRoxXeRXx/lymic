@@ -280,4 +280,9 @@
   ,"favorites_empty": "No favorites yet. Mark photos or videos as favorites to see them here."
   ,"favorites_error": "Favorites could not be loaded."
   ,"favorites_offline": "Favorites Timeline is offline. Showing cached favorites."
+  ,"explore_title": "Explore"
+  ,"explore_view_all": "View all"
+  ,"explore_retry": "Retry"
+  ,"explore_empty": "Nothing to explore yet. People, places and memories appear here once your library has them."
+  ,"explore_return": "Back to Explore"
 }

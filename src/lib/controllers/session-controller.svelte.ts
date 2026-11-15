@@ -1,5 +1,6 @@
 import { createAlbumCatalogueController } from "./album-catalogue-controller.svelte";
 import { createAuthController } from "./auth-controller.svelte";
+import { createExploreController } from "./explore-controller.svelte";
 import { createFavoritesTimelineController } from "./favorites-timeline-controller.svelte";
 import { createFeedbackController } from "./feedback-controller.svelte";
 import { createMapController } from "./map-controller.svelte";
@@ -39,6 +40,8 @@ export function createSessionController(options: {
   t(key: string, params?: Record<string, string>): string;
   locale?(): string;
   resetView?(): void;
+  /** Whether the Explore Overview is the open view; it refreshes after Synchronization settles only then. */
+  isExploreActive?(): boolean;
 }) {
   const { adapter, t } = options;
   const feedback = createFeedbackController(() => t("unknown_error"));
@@ -63,12 +66,14 @@ export function createSessionController(options: {
     canStartSync: () => watchedFolders.hasFolders,
     onSyncSettled: () => {
       void timeline.refresh();
+      void explore.refreshIfActive();
       return watchedFolders.refresh();
     },
   });
   const timeline = createTimelineController(adapter);
   const favorites = createFavoritesTimelineController(adapter);
   const people = createPeopleController(adapter);
+  const explore = createExploreController({ people, isActive: () => options.isExploreActive?.() ?? false });
   const map = createMapController(adapter);
   const albumCatalogue = createAlbumCatalogueController(adapter);
 
@@ -148,6 +153,7 @@ export function createSessionController(options: {
     timeline,
     favorites,
     people,
+    explore,
     map,
     albumCatalogue,
     startLifecycle,
