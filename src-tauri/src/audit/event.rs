@@ -130,15 +130,7 @@ impl SyncAuditContext {
     }
 
     pub fn safe_error(&self, error: &str) -> String {
-        audit_safe_error(
-            error,
-            &[
-                Some(&self.credentials.server_url),
-                Some(&self.credentials.api_key),
-                self.credentials.cloudflare_client_id.as_deref(),
-                self.credentials.cloudflare_client_secret.as_deref(),
-            ],
-        )
+        self.credentials.redact(error)
     }
 }
 

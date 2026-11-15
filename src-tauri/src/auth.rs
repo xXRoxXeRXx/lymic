@@ -27,6 +27,30 @@ pub struct AuthConfig {
     pub cloudflare_client_secret: Option<String>,
 }
 
+impl AuthConfig {
+    /// Makes an error safe for logs, errors and UI events by replacing every credential.
+    ///
+    /// The server URL is also replaced in the form the HTTP client reports it
+    /// (trimmed and normalized), so a mixed-case or padded stored URL cannot slip through.
+    pub fn redact(&self, error: &str) -> String {
+        let mut server_urls = vec![self.server_url.clone(), self.server_url.trim().to_string()];
+        if let Ok(normalized) = url::Url::parse(self.server_url.trim()) {
+            server_urls.push(normalized.as_str().to_string());
+            server_urls.push(normalized.as_str().trim_end_matches('/').to_string());
+        }
+        server_urls.sort_by_key(|url| std::cmp::Reverse(url.len()));
+        server_urls.dedup();
+        let mut secrets: Vec<Option<&str>> =
+            server_urls.iter().map(|url| Some(url.as_str())).collect();
+        secrets.extend([
+            Some(self.api_key.as_str()),
+            self.cloudflare_client_id.as_deref(),
+            self.cloudflare_client_secret.as_deref(),
+        ]);
+        crate::audit::audit_safe_error(error, &secrets)
+    }
+}
+
 impl fmt::Debug for AuthConfig {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter

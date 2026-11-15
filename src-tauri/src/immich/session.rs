@@ -17,19 +17,6 @@ fn session_cache() -> &'static Mutex<Option<CachedSession>> {
     CACHE.get_or_init(|| Mutex::new(None))
 }
 
-/// Replaces credentials in an Immich error so it is safe for logs, errors and UI events.
-fn redact_error(error: &str, credentials: &AuthConfig) -> String {
-    crate::audit::audit_safe_error(
-        error,
-        &[
-            Some(&credentials.server_url),
-            Some(&credentials.api_key),
-            credentials.cloudflare_client_id.as_deref(),
-            credentials.cloudflare_client_secret.as_deref(),
-        ],
-    )
-}
-
 /// An authenticated Immich session obtained from the stored credentials.
 ///
 /// Every error leaving the session is already credential-free, so callers never
@@ -83,7 +70,7 @@ impl ImmichSession {
                 credentials.cloudflare_client_id.clone(),
                 credentials.cloudflare_client_secret.clone(),
             )
-            .map_err(|error| redact_error(&error, &credentials))?,
+            .map_err(|error| credentials.redact(&error))?,
         );
         if let Ok(mut cache) = session_cache().lock() {
             *cache = Some(CachedSession {
@@ -112,7 +99,7 @@ impl ImmichSession {
     {
         operation(self.client.clone())
             .await
-            .map_err(|error| redact_error(&error, &self.credentials))
+            .map_err(|error| self.credentials.redact(&error))
     }
 
     /// Streams a prepared archive to `destination_path`, redacting errors like `run`.
@@ -124,7 +111,7 @@ impl ImmichSession {
         archive
             .save_to(destination_path)
             .await
-            .map_err(|error| redact_error(&error, &self.credentials))
+            .map_err(|error| self.credentials.redact(&error))
     }
 }
 
@@ -311,6 +298,23 @@ mod tests {
         ] {
             assert!(!error.contains(secret.as_str()), "{error}");
         }
+    }
+
+    #[tokio::test]
+    async fn redacts_the_server_url_even_when_the_client_normalizes_it() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let config = credentials(format!("HTTP://LocalHost:{port} "));
+        let session = ImmichSession::open(Some(config)).unwrap();
+
+        let error = session
+            .run(|client| async move { client.get_albums().await })
+            .await
+            .unwrap_err();
+
+        assert!(!error.to_lowercase().contains("localhost"), "{error}");
+        assert!(!error.contains(&port.to_string()), "{error}");
     }
 
     #[tokio::test]

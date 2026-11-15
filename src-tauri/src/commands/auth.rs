@@ -28,15 +28,7 @@ fn normalize_cloudflare_access_credentials(
 }
 
 fn safe_profile_error(error: &str, credentials: &auth::AuthConfig) -> String {
-    audit_safe_error(
-        error,
-        &[
-            Some(&credentials.server_url),
-            Some(&credentials.api_key),
-            credentials.cloudflare_client_id.as_deref(),
-            credentials.cloudflare_client_secret.as_deref(),
-        ],
-    )
+    credentials.redact(error)
 }
 
 // (security): credential values are intentionally kept out of all log and error messages below.
