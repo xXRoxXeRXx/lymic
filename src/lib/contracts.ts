@@ -108,6 +108,22 @@ export interface Place {
   thumbnailAssetId: string;
 }
 
+export type MemoryKind = "onThisDay" | "birthday" | "unknown";
+
+/** An Immich Memory with the Remote Assets it selected, already grouped for the Memory Timeline. */
+export interface Memory {
+  id: string;
+  kind: MemoryKind;
+  /** ISO timestamp of the day the Memory looks back on; absent for some Immich versions. */
+  memoryAt: string | null;
+  /** Year an on-this-day Memory looks back on. */
+  year: number | null;
+  /** Name of the Recognized Person a birthday Memory celebrates. */
+  personName: string | null;
+  coverAssetId: string;
+  timeline: AlbumTimeline;
+}
+
 export interface UiLogMessage {
   level?: string;
   message?: string;

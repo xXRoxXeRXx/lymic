@@ -53,7 +53,7 @@ enum TimelineBucketPayload {
 }
 
 #[derive(Deserialize)]
-struct TimelineAssetResponse {
+pub(super) struct TimelineAssetResponse {
     id: String,
     #[serde(rename = "type", default = "default_image_type")]
     asset_type: String,
@@ -433,7 +433,7 @@ fn parse_timeline_bucket_assets(
     })
 }
 
-fn timeline_asset_from_response(
+pub(super) fn timeline_asset_from_response(
     asset: TimelineAssetResponse,
     default_favorite: bool,
 ) -> TimelineAsset {
@@ -470,7 +470,7 @@ fn album_bucket_for(asset: &TimelineAsset) -> Option<String> {
     Some(format!("{}-01T00:00:00.000Z", captured_at.format("%Y-%m")))
 }
 
-fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTimeline {
+pub(super) fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTimeline {
     let mut assets_by_bucket: BTreeMap<String, Vec<TimelineAsset>> = BTreeMap::new();
     for asset in assets {
         // An asset without a trustworthy capture timestamp cannot be placed in

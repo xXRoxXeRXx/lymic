@@ -87,6 +87,8 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve({ buckets: [], assetsByBucket: {} });
       case "get_places":
         return Promise.resolve([]);
+      case "get_memories":
+        return Promise.resolve([]);
       case "update_locale":
         return Promise.resolve();
       case "get_release_channel":
@@ -2207,5 +2209,122 @@ describe("Explore Places", () => {
     await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
     syncIdle!();
     await waitFor(() => expect(placeCalls()).toBe(2));
+  });
+});
+
+describe("Explore Memories", () => {
+  const asset = (id: string, takenAt: string) => ({ id, width: 1600, height: 1200, type: "IMAGE", takenAt, cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false });
+  const timelineOf = (...assets: ReturnType<typeof asset>[]) => {
+    const assetsByBucket: Record<string, ReturnType<typeof asset>[]> = {};
+    for (const item of assets) (assetsByBucket[`${item.takenAt.slice(0, 7)}-01T00:00:00.000Z`] ??= []).push(item);
+    return { buckets: Object.entries(assetsByBucket).map(([timeBucket, items]) => ({ timeBucket, count: items.length })), assetsByBucket };
+  };
+  const today = new Date();
+  const anniversary = new Date(Date.UTC(today.getFullYear() - 3, today.getMonth(), today.getDate())).toISOString();
+  const memories = [
+    { id: "m-today", kind: "onThisDay", memoryAt: anniversary, year: today.getFullYear() - 3, personName: null, coverAssetId: "cover-1", timeline: timelineOf(asset("cover-1", anniversary), asset("other-1", "2020-02-10T10:00:00.000Z")) },
+    { id: "m-other", kind: "onThisDay", memoryAt: "2019-01-02T00:00:00.000Z", year: 2019, personName: null, coverAssetId: "cover-2", timeline: timelineOf(asset("cover-2", "2019-01-02T10:00:00.000Z")) },
+    { id: "m-birthday", kind: "birthday", memoryAt: "2018-05-06T00:00:00.000Z", year: 2018, personName: "Ada", coverAssetId: "cover-3", timeline: timelineOf(asset("cover-3", "2018-05-06T10:00:00.000Z")) },
+    { id: "m-unknown", kind: "unknown", memoryAt: "2017-07-08T00:00:00.000Z", year: null, personName: null, coverAssetId: "cover-4", timeline: timelineOf(asset("cover-4", "2017-07-08T10:00:00.000Z")) },
+  ];
+  const memoryAssetDetails = async () => ({
+    originalFileName: "memory.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  });
+
+  function stubImmediateObservers() {
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) { this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver); }
+      disconnect() {}
+    });
+  }
+
+  it("shows Memory cards with cover thumbnails and titles for each Memory type", async () => {
+    renderAuthenticatedPage({ get_memories: async () => memories });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    const section = await screen.findByRole("region", { name: "Memories" });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_memories", { size: 12 });
+    const cards = within(section).getAllByRole("button").filter((button) => button.textContent?.trim() !== "View all");
+    expect(cards.map((card) => card.getAttribute("aria-label"))).toEqual(["3 years ago", "Jan 2, 2019", "Ada's birthday", "Jul 8, 2017"]);
+    expect(cards[0].querySelector("img")).toHaveAttribute("src", "lymic-thumb://asset/cover-1");
+  });
+
+  it("opens a Memory Timeline containing exactly that Memory's assets and returns to Explore", async () => {
+    stubImmediateObservers();
+    renderAuthenticatedPage({ get_memories: async () => memories, get_asset_details: memoryAssetDetails });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Jan 2, 2019" }));
+
+    expect(await screen.findByRole("heading", { name: "Jan 2, 2019", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByText("January 2019")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+    expect(screen.queryByText("February 2020")).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    expect(within(lightbox).getByRole("img", { name: "Photo preview" })).toHaveAttribute("src", "lymic-asset://asset/cover-2");
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Memories" })).toBeInTheDocument();
+  });
+
+  it("shows a permission failure naming memory.read in the Memories section only and retries it", async () => {
+    renderAuthenticatedPage({
+      get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+      get_memories: vi.fn()
+        .mockRejectedValueOnce("memories_permission_denied:configure an API key with memory.read and asset.read permissions")
+        .mockResolvedValueOnce(memories),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    const section = await screen.findByRole("region", { name: "Memories" });
+    expect(await within(section).findByRole("alert")).toHaveTextContent("memory.read");
+    expect(within(await screen.findByRole("region", { name: "People" })).queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ada" })).toBeInTheDocument();
+
+    await fireEvent.click(within(section).getByRole("button", { name: "Retry" }));
+    expect(await within(section).findByRole("button", { name: "3 years ago" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a generic Memories error for other failures", async () => {
+    renderAuthenticatedPage({ get_memories: async () => { throw "memories_unavailable"; } });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    expect(await within(await screen.findByRole("region", { name: "Memories" })).findByRole("alert")).toHaveTextContent("Memories could not be loaded.");
+  });
+
+  it("keeps cached Memories visible with an offline indication when a refresh fails", async () => {
+    renderAuthenticatedPage({
+      get_memories: vi.fn().mockResolvedValueOnce(memories).mockRejectedValueOnce(new Error("offline")),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    await screen.findByRole("button", { name: "3 years ago" });
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Photos" })[0]);
+    await fireEvent.click(screen.getAllByRole("button", { name: "Explore" })[0]);
+
+    const section = await screen.findByRole("region", { name: "Memories" });
+    expect(await within(section).findByRole("status")).toHaveTextContent("Memories is offline");
+    expect(within(section).getByRole("button", { name: "3 years ago" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("hides an empty Memories section", async () => {
+    renderAuthenticatedPage({
+      get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+      get_memories: async () => [],
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    await screen.findByRole("region", { name: "People" });
+    expect(screen.queryByRole("region", { name: "Memories" })).not.toBeInTheDocument();
   });
 });
