@@ -1,10 +1,10 @@
 use super::client::ImmichClient;
-use super::response::read_response_body_limited;
+use super::response::{explore_status_error, read_response_body_limited};
 use super::timeline::{
     group_album_timeline_assets, timeline_asset_from_response, AlbumTimeline, TimelineAsset,
     TimelineAssetResponse,
 };
-use reqwest::{Method, StatusCode};
+use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
 // Memories embed their full asset lists with EXIF, so they exceed the default cap.
@@ -95,17 +95,6 @@ fn memory_from_response(response: MemoryResponse) -> Option<Memory> {
     })
 }
 
-fn memories_access_error(status: StatusCode) -> String {
-    match status {
-        StatusCode::UNAUTHORIZED => "memories_authentication_required".to_string(),
-        StatusCode::FORBIDDEN => {
-            "memories_permission_denied:configure an API key with the memory.read permission"
-                .to_string()
-        }
-        _ => "memories_unavailable".to_string(),
-    }
-}
-
 /// One page of Memories for the All Memories view.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -123,7 +112,11 @@ impl ImmichClient {
             .await
             .map_err(|_| "memories_unavailable".to_string())?;
         if !response.status().is_success() {
-            return Err(memories_access_error(response.status()));
+            return Err(explore_status_error(
+                "memories",
+                response.status(),
+                "configure an API key with the memory.read permission",
+            ));
         }
         let body = read_response_body_limited(response, MAX_MEMORIES_RESPONSE_BYTES).await?;
         serde_json::from_slice(&body).map_err(|_| "memories_invalid_response".to_string())
@@ -169,37 +162,15 @@ impl ImmichClient {
 
 #[cfg(test)]
 mod tests {
-    use crate::immich::ImmichClient;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpListener;
+    use crate::immich::test_support::{serve_once, test_client};
 
     /// Serves one canned response and returns the request line and headers received.
     async fn get_memories_from(
         status: &str,
         body: &str,
     ) -> (Result<Vec<super::Memory>, String>, String) {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let response = format!(
-            "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0_u8; 4096];
-            let read = stream.read(&mut request).await.unwrap();
-            stream.write_all(response.as_bytes()).await.unwrap();
-            String::from_utf8_lossy(&request[..read]).to_string()
-        });
-        let client = ImmichClient::new(
-            format!("http://{address}"),
-            "memory-api-key".to_string(),
-            true,
-            None,
-            None,
-        )
-        .unwrap();
-        let result = client.get_memories(12).await;
+        let (url, server) = serve_once(status, body).await;
+        let result = test_client(url, "memory-api-key").get_memories(12).await;
         (result, server.await.unwrap())
     }
 
@@ -210,28 +181,10 @@ mod tests {
         status: &str,
         body: &str,
     ) -> (Result<super::MemoriesPage, String>, String) {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let response = format!(
-            "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0_u8; 4096];
-            let read = stream.read(&mut request).await.unwrap();
-            stream.write_all(response.as_bytes()).await.unwrap();
-            String::from_utf8_lossy(&request[..read]).to_string()
-        });
-        let client = ImmichClient::new(
-            format!("http://{address}"),
-            "memory-api-key".to_string(),
-            true,
-            None,
-            None,
-        )
-        .unwrap();
-        let result = client.get_memories_page(page, size).await;
+        let (url, server) = serve_once(status, body).await;
+        let result = test_client(url, "memory-api-key")
+            .get_memories_page(page, size)
+            .await;
         (result, server.await.unwrap())
     }
 

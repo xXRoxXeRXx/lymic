@@ -302,6 +302,7 @@
   ,"memories_offline": "স্মৃতি অফলাইন। ক্যাশ করা স্মৃতি দেখানো হচ্ছে।"
   ,"memories_error": "স্মৃতি লোড করা যায়নি।"
   ,"memories_permission_denied": "স্মৃতি পাওয়া যাচ্ছে না। memory.read অনুমতিসহ একটি API কী কনফিগার করুন।"
+  ,"memories_unavailable": "স্মৃতি উপলব্ধ নয়। সংযোগ ও সাইন-ইন পরীক্ষা করুন।"
   ,"memory_year_ago": "১ বছর আগে"
   ,"memory_years_ago": "{count} বছর আগে"
   ,"memory_birthday": "{name}-এর জন্মদিন"

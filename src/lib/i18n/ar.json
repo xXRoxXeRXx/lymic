@@ -302,6 +302,7 @@
   ,"memories_offline": "الذكريات غير متصلة. يتم عرض الذكريات المخزنة مؤقتًا."
   ,"memories_error": "تعذّر تحميل الذكريات."
   ,"memories_permission_denied": "الذكريات غير متاحة. اضبط مفتاح API يملك إذن memory.read."
+  ,"memories_unavailable": "الذكريات غير متاحة. تحقق من الاتصال وتسجيل الدخول."
   ,"memory_year_ago": "قبل سنة"
   ,"memory_years_ago": "قبل {count} سنة"
   ,"memory_birthday": "عيد ميلاد {name}"

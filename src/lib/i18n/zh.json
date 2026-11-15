@@ -302,6 +302,7 @@
   ,"memories_offline": "回忆处于离线状态。显示缓存的回忆。"
   ,"memories_error": "无法加载回忆。"
   ,"memories_permission_denied": "回忆不可用。请配置具有 memory.read 权限的 API 密钥。"
+  ,"memories_unavailable": "回忆不可用。请检查连接和登录状态。"
   ,"memory_year_ago": "1 年前"
   ,"memory_years_ago": "{count} 年前"
   ,"memory_birthday": "{name}的生日"

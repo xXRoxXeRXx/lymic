@@ -2,13 +2,11 @@
   import { t, locale } from "svelte-i18n";
   import type { Memory } from "../contracts";
   import type { AllMemoriesViewState } from "../controllers/all-memories-controller.svelte";
-  import { memoryTitle } from "../memory-title";
+  import { localizedMemoryTitle } from "../memory-title";
   import MemoryCard from "./MemoryCard.svelte";
 
   /** "All Memories": every Memory in a grid that loads further pages on scroll. It has no navigation entry; Explore opens it. */
   let { allMemories, onSelect }: { allMemories: AllMemoriesViewState; onSelect: (memory: Memory) => void } = $props();
-
-  const translate = (key: string, values?: Record<string, string | number>) => $t(key, { values });
 
   function loadMoreWhenVisible(node: HTMLElement) {
     if (typeof IntersectionObserver === "undefined") return {};
@@ -24,7 +22,7 @@
   {#if allMemories.isOffline}<p role="status" class="text-sm text-amber-700 dark:text-amber-300">{$t("memories_offline")}</p>{/if}
   {#if allMemories.error}
     <div role="alert" class="flex items-center gap-3 text-sm text-red-600 dark:text-red-300">
-      <p>{allMemories.error === "permission_denied" ? $t("memories_permission_denied") : $t("memories_error")}</p>
+      <p>{allMemories.error === "permission_denied" ? $t("memories_permission_denied") : allMemories.error === "unavailable" ? $t("memories_unavailable") : $t("memories_error")}</p>
       <button type="button" class="rounded-lg px-2 py-1 font-medium hover:bg-slate-200 dark:hover:bg-zinc-800" onclick={() => void allMemories.refresh()}>{$t("explore_retry")}</button>
     </div>
   {:else if allMemories.isLoading}<p role="status">{$t("memories_loading")}</p>
@@ -32,7 +30,7 @@
   {:else}
     <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));">
       {#each allMemories.memories as memory (memory.id)}
-        <MemoryCard {memory} title={memoryTitle(memory, translate, { locale: $locale ?? "en" })} {onSelect} />
+        <MemoryCard {memory} title={localizedMemoryTitle(memory, $t, $locale)} {onSelect} />
       {/each}
     </div>
     {#if allMemories.loadMoreFailed}

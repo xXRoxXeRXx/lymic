@@ -302,6 +302,7 @@
   ,"memories_offline": "Recuerdos está sin conexión. Se muestran los recuerdos almacenados."
   ,"memories_error": "No se pudieron cargar los recuerdos."
   ,"memories_permission_denied": "Recuerdos no está disponible. Configure una clave de API con el permiso memory.read."
+  ,"memories_unavailable": "Recuerdos no está disponible. Comprueba la conexión y el inicio de sesión."
   ,"memory_year_ago": "Hace 1 año"
   ,"memory_years_ago": "Hace {count} años"
   ,"memory_birthday": "Cumpleaños de {name}"

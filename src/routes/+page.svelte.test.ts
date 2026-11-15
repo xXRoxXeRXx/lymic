@@ -2368,10 +2368,17 @@ describe("Explore Memories", () => {
   });
 
   it("shows a generic Memories error for other failures", async () => {
-    renderAuthenticatedPage({ get_memories: async () => { throw "memories_unavailable"; } });
+    renderAuthenticatedPage({ get_memories: async () => { throw "memories_invalid_response"; } });
     await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
 
     expect(await within(await screen.findByRole("region", { name: "Memories" })).findByRole("alert")).toHaveTextContent("Memories could not be loaded.");
+  });
+
+  it("shows the unavailable message in the Memories section when authentication is required", async () => {
+    renderAuthenticatedPage({ get_memories: async () => { throw "memories_authentication_required"; } });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    expect(await within(await screen.findByRole("region", { name: "Memories" })).findByRole("alert")).toHaveTextContent("Memories is unavailable. Check your connection and sign-in.");
   });
 
   it("keeps cached Memories visible with an offline indication when a refresh fails", async () => {
@@ -2496,6 +2503,17 @@ describe("Explore Memories", () => {
       await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
       expect(await screen.findByRole("button", { name: "3 years ago" })).toBeInTheDocument();
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("shows the unavailable message in All Memories when authentication is required", async () => {
+      stubScrollObservers();
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: async () => { throw "memories_authentication_required"; },
+      });
+      await openAllMemories();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Memories is unavailable. Check your connection and sign-in.");
     });
 
     it("returns to All Memories from a Memory Timeline and to the Explore Overview from All Memories", async () => {

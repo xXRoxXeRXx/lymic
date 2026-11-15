@@ -1,6 +1,8 @@
 use super::client::ImmichClient;
-use super::response::{read_response_body_limited, MAX_SUCCESS_RESPONSE_BYTES};
-use reqwest::{Method, StatusCode};
+use super::response::{
+    explore_status_error, read_response_body_limited, MAX_SUCCESS_RESPONSE_BYTES,
+};
+use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
 /// A city in which the user has Remote Assets, with the Remote Asset Immich picked for it.
@@ -47,16 +49,12 @@ impl ImmichClient {
             .send()
             .await
             .map_err(|_| "places_unavailable".to_string())?;
-        match response.status() {
-            StatusCode::UNAUTHORIZED => return Err("places_authentication_required".into()),
-            StatusCode::FORBIDDEN => {
-                return Err(
-                    "places_permission_denied:configure an API key with asset.read permission"
-                        .into(),
-                )
-            }
-            status if !status.is_success() => return Err("places_unavailable".into()),
-            _ => {}
+        if !response.status().is_success() {
+            return Err(explore_status_error(
+                "places",
+                response.status(),
+                "configure an API key with asset.read permission",
+            ));
         }
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         let cities: Vec<CityAssetResponse> =
@@ -71,37 +69,15 @@ impl ImmichClient {
 #[cfg(test)]
 mod tests {
     use super::Place;
-    use crate::immich::ImmichClient;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpListener;
+    use crate::immich::test_support::{serve_once, test_client};
 
     /// Serves one canned response and returns the request line plus headers it received.
     async fn request_with_response(
         status: &str,
         body: &str,
     ) -> (Result<Vec<Place>, String>, String) {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let response = format!(
-            "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0_u8; 2048];
-            let read = stream.read(&mut request).await.unwrap();
-            stream.write_all(response.as_bytes()).await.unwrap();
-            String::from_utf8_lossy(&request[..read]).into_owned()
-        });
-        let client = ImmichClient::new(
-            format!("http://{address}"),
-            "test-key".into(),
-            true,
-            None,
-            None,
-        )
-        .unwrap();
-        let result = client.get_places().await;
+        let (url, server) = serve_once(status, body).await;
+        let result = test_client(url, "test-key").get_places().await;
         (result, server.await.unwrap())
     }
 
