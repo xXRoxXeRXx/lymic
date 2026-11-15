@@ -70,7 +70,17 @@ pub fn store_credentials(
 
 #[cfg(test)]
 mod tests {
-    use super::AuthConfig;
+    use super::{parse_stored_credentials, AuthConfig};
+
+    #[test]
+    fn unreadable_stored_credentials_do_not_echo_stored_values() {
+        let error = parse_stored_credentials(
+            r#"{"server_url":"https://immich.example","api_key":"secret-key","allow_local_http":"secret-flag"}"#,
+        )
+        .unwrap_err();
+
+        assert_eq!(error, "Stored credentials are unreadable");
+    }
 
     #[test]
     fn legacy_credential_json_defaults_cloudflare_access_to_disabled() {
@@ -117,6 +127,11 @@ mod tests {
     }
 }
 
+/// Parses the keyring payload without surfacing serde's message, which can echo stored values.
+fn parse_stored_credentials(json: &str) -> Result<AuthConfig, String> {
+    serde_json::from_str(json).map_err(|_| "Stored credentials are unreadable".to_string())
+}
+
 pub fn get_credentials() -> Result<Option<AuthConfig>, String> {
     if let Ok(cache) = credential_cache().lock() {
         if let Some((cached_at, ref config)) = *cache {
@@ -127,10 +142,7 @@ pub fn get_credentials() -> Result<Option<AuthConfig>, String> {
     }
     let entry = Entry::new(SERVICE_NAME, ACCOUNT_NAME).map_err(|e| e.to_string())?;
     let loaded = match entry.get_password() {
-        Ok(json) => {
-            let config: AuthConfig = serde_json::from_str(&json).map_err(|e| e.to_string())?;
-            Ok(Some(config))
-        }
+        Ok(json) => Ok(Some(parse_stored_credentials(&json)?)),
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(e.to_string()),
     }?;
