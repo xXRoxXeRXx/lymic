@@ -166,7 +166,7 @@ If Immich is protected by Cloudflare Access, open **Advanced login options** and
 | Scope | Purpose |
 |---|---|
 | `asset.upload` | Transmit new media files to the server |
-| `asset.read` | Verify whether a file already exists before uploading |
+| `asset.read` | Verify whether a file already exists before uploading; Archive: browse archived photos and videos |
 | `album.read` | List available target albums |
 | `album.create` | Create a target album from the app |
 | `albumAsset.create` | Add synchronized media to a target album |
