@@ -1,11 +1,8 @@
 use crate::watched_folders::{
-    RegisterFolderParams, RemoveFolderResult, WatchedFolderRegistration, WatchedFolderRemoval,
+    RegisterFolderParams, RemoveFolderResult, WatchedFolderExclusionUpdate,
+    WatchedFolderRegistration, WatchedFolderRemoval,
 };
-use crate::{
-    db,
-    sync::{admit_and_run, scan_watched_folders_for_media, SyncCoordinator, SyncSource},
-    watcher,
-};
+use crate::{db, sync::SyncCoordinator, watcher};
 
 // tokio::sync::Mutex avoids blocking the async executor while waiting
 //         for the lock (std::sync::Mutex::lock blocks the current thread).
@@ -65,28 +62,9 @@ pub(crate) async fn update_folder_exclusion_patterns(
     id: i64,
     exclusion_patterns: Vec<String>,
 ) -> Result<(), String> {
-    let exclusion_patterns = crate::media::admission::normalize_patterns(exclusion_patterns)?;
-    if !db::update_exclusion_patterns(pool.inner(), id, &exclusion_patterns)
+    WatchedFolderExclusionUpdate::for_tauri(&app, pool.inner())
+        .update(id, exclusion_patterns)
         .await
-        .map_err(|error| error.to_string())?
-    {
-        return Err("Watched folder was not found.".to_string());
-    }
-    let folder = db::get_folders(pool.inner())
-        .await
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .find(|folder| folder.id == id)
-        .ok_or("Watched folder was not found.")?;
-    let scan_result = scan_watched_folders_for_media(vec![folder]).await?;
-    admit_and_run(
-        app,
-        pool.inner().clone(),
-        scan_result,
-        SyncSource::ExclusionPatternsChanged,
-    )
-    .await;
-    Ok(())
 }
 
 #[tauri::command]
@@ -106,24 +84,4 @@ pub(crate) async fn remove_folder(
     )
     .remove(id, confirm_cancellation)
     .await
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn exclusion_patterns_are_normalized_deduplicated_and_validated() {
-        assert_eq!(
-            crate::media::admission::normalize_patterns(vec![
-                " Screenshots/** ".into(),
-                "screenshots/**".into(),
-                "".into()
-            ])
-            .unwrap(),
-            vec!["Screenshots/**"]
-        );
-        assert!(crate::media::admission::normalize_patterns(vec!["../private/**".into()]).is_err());
-        for invalid in ["Screenshots\\**", "/private/**", "!keep.jpg", "*.{jpg,png}"] {
-            assert!(crate::media::admission::normalize_patterns(vec![invalid.into()]).is_err());
-        }
-    }
 }

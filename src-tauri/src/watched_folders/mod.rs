@@ -32,6 +32,11 @@ mod internal {
             volume_id: &str,
             relative_path: &str,
         ) -> Result<(), String>;
+        async fn update_exclusion_patterns(
+            &self,
+            folder_id: i64,
+            exclusion_patterns: &[String],
+        ) -> Result<bool, String>;
         async fn remove_folder(&self, folder_id: i64) -> Result<(), String>;
     }
 
@@ -62,6 +67,14 @@ mod internal {
         fn log_watcher_restore_failed(&self, path: &str, error: &str);
         fn set_sync_enabled(&self, enabled: bool);
         fn log_tray_refresh_after_remove_failed(&self, error: &str);
+    }
+
+    pub(crate) trait ExclusionUpdateEffects {
+        async fn admit_rescan(
+            &self,
+            scan_result: crate::sync::ScanResult,
+            source: crate::sync::SyncSource,
+        );
     }
 
     pub(crate) struct SqliteFolderPersistence<'a> {
@@ -101,6 +114,16 @@ mod internal {
             relative_path: &str,
         ) -> Result<(), String> {
             db::bind_removable_folder(self.pool, folder_id, volume_id, relative_path)
+                .await
+                .map_err(|error| error.to_string())
+        }
+
+        async fn update_exclusion_patterns(
+            &self,
+            folder_id: i64,
+            exclusion_patterns: &[String],
+        ) -> Result<bool, String> {
+            db::update_exclusion_patterns(self.pool, folder_id, exclusion_patterns)
                 .await
                 .map_err(|error| error.to_string())
         }
@@ -268,11 +291,23 @@ mod internal {
             );
         }
     }
+
+    impl ExclusionUpdateEffects for TauriFolderEffects<'_> {
+        async fn admit_rescan(
+            &self,
+            scan_result: crate::sync::ScanResult,
+            source: crate::sync::SyncSource,
+        ) {
+            crate::sync::admit_and_run(self.app.clone(), self.pool.clone(), scan_result, source)
+                .await;
+        }
+    }
 }
 
 use internal::{
-    CoordinatorSyncWork, FolderPersistence, FolderSyncWork, FolderWatcher, NotifyFolderWatcher,
-    RegistrationEffects, RemovalEffects, SqliteFolderPersistence, TauriFolderEffects,
+    CoordinatorSyncWork, ExclusionUpdateEffects, FolderPersistence, FolderSyncWork, FolderWatcher,
+    NotifyFolderWatcher, RegistrationEffects, RemovalEffects, SqliteFolderPersistence,
+    TauriFolderEffects,
 };
 
 fn sanitize_target_album_id(target_album_id: Option<String>) -> Option<AlbumId> {
@@ -709,6 +744,63 @@ where
                     .log_watcher_restore_failed(path, &rewatch_error);
             }
         }
+    }
+}
+
+pub(crate) struct WatchedFolderExclusionUpdate<P, E> {
+    persistence: P,
+    effects: E,
+}
+
+impl<'a> WatchedFolderExclusionUpdate<SqliteFolderPersistence<'a>, TauriFolderEffects<'a>> {
+    pub(crate) fn for_tauri(app: &'a tauri::AppHandle, pool: &'a sqlx::SqlitePool) -> Self {
+        Self::new(
+            SqliteFolderPersistence { pool },
+            TauriFolderEffects { app, pool },
+        )
+    }
+}
+
+impl<P, E> WatchedFolderExclusionUpdate<P, E>
+where
+    P: FolderPersistence,
+    E: ExclusionUpdateEffects,
+{
+    pub(crate) fn new(persistence: P, effects: E) -> Self {
+        Self {
+            persistence,
+            effects,
+        }
+    }
+
+    pub(crate) async fn update(
+        &self,
+        id: i64,
+        exclusion_patterns: Vec<String>,
+    ) -> Result<(), String> {
+        let exclusion_patterns = crate::media::admission::normalize_patterns(exclusion_patterns)?;
+        if !self
+            .persistence
+            .update_exclusion_patterns(id, &exclusion_patterns)
+            .await?
+        {
+            return Err("Watched folder was not found.".to_string());
+        }
+        let folder = self
+            .persistence
+            .list_folders()
+            .await?
+            .into_iter()
+            .find(|folder| folder.id == id)
+            .ok_or_else(|| "Watched folder was not found.".to_string())?;
+        let scan_result = crate::sync::scan_watched_folders_for_media(vec![folder]).await?;
+        self.effects
+            .admit_rescan(
+                scan_result,
+                crate::sync::SyncSource::ExclusionPatternsChanged,
+            )
+            .await;
+        Ok(())
     }
 }
 

@@ -1,10 +1,11 @@
 use super::internal::{
-    AuditEffects, CoordinatorSyncWork, FolderPersistence, FolderSyncWork, FolderWatcher,
-    NotifyFolderWatcher, RegistrationEffects, RemovalEffects, SqliteFolderPersistence,
+    AuditEffects, CoordinatorSyncWork, ExclusionUpdateEffects, FolderPersistence, FolderSyncWork,
+    FolderWatcher, NotifyFolderWatcher, RegistrationEffects, RemovalEffects,
+    SqliteFolderPersistence,
 };
 use super::{
-    RegisterFolderParams, RemovableVolumeBinding, RemoveFolderResult, WatchedFolderRegistration,
-    WatchedFolderRemoval,
+    RegisterFolderParams, RemovableVolumeBinding, RemoveFolderResult, WatchedFolderExclusionUpdate,
+    WatchedFolderRegistration, WatchedFolderRemoval,
 };
 use crate::audit::AuditEvent;
 use crate::db::{RemovableFolderBinding, WatchedFolder};
@@ -118,6 +119,20 @@ impl FolderPersistence for ConfiguredFolderPersistence {
         _relative_path: &str,
     ) -> Result<(), String> {
         Ok(())
+    }
+
+    async fn update_exclusion_patterns(
+        &self,
+        folder_id: i64,
+        exclusion_patterns: &[String],
+    ) -> Result<bool, String> {
+        let mut guard = self.folder.lock().unwrap();
+        if let Some(folder) = guard.as_mut().filter(|folder| folder.id == folder_id) {
+            folder.exclusion_patterns = exclusion_patterns.to_vec();
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     async fn remove_folder(&self, _folder_id: i64) -> Result<(), String> {
@@ -1255,4 +1270,144 @@ async fn removing_missing_folder_requires_confirmation_before_auditing_or_refres
         vec![false]
     );
     assert_eq!(removal_effects.audit_events.lock().unwrap().len(), 1);
+}
+
+#[derive(Default, Clone)]
+struct RecordedExclusionEffects {
+    admitted_scans: Arc<Mutex<Vec<(crate::sync::ScanResult, crate::sync::SyncSource)>>>,
+}
+
+impl ExclusionUpdateEffects for &RecordedExclusionEffects {
+    async fn admit_rescan(
+        &self,
+        scan_result: crate::sync::ScanResult,
+        source: crate::sync::SyncSource,
+    ) {
+        self.admitted_scans
+            .lock()
+            .unwrap()
+            .push((scan_result, source));
+    }
+}
+
+#[tokio::test]
+async fn invalid_exclusion_patterns_are_rejected_before_anything_is_persisted_or_scanned() {
+    let pool = test_pool().await;
+    let watcher = test_watcher();
+    let temp = TempDir::new("exclusion-invalid");
+    let (folder_id, _expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
+    let initial_patterns = vec!["old/**".to_string()];
+    crate::db::update_exclusion_patterns(&pool, folder_id, &initial_patterns)
+        .await
+        .unwrap();
+
+    let exclusion_effects = RecordedExclusionEffects::default();
+    let updater = WatchedFolderExclusionUpdate::new(
+        SqliteFolderPersistence { pool: &pool },
+        &exclusion_effects,
+    );
+
+    for invalid in [
+        "../private/**",
+        "Screenshots\\**",
+        "/private/**",
+        "!keep.jpg",
+        "*.{jpg,png}",
+    ] {
+        let err = updater
+            .update(folder_id, vec![invalid.to_string()])
+            .await
+            .unwrap_err();
+        assert!(
+            err.contains("Invalid exclusion pattern"),
+            "unexpected error: {err}"
+        );
+    }
+
+    let folders = crate::db::get_folders(&pool).await.unwrap();
+    assert_eq!(folders[0].exclusion_patterns, initial_patterns);
+    assert!(exclusion_effects.admitted_scans.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn unknown_folder_reports_not_found_and_triggers_no_scan() {
+    let pool = test_pool().await;
+    let watcher = test_watcher();
+    let temp = TempDir::new("exclusion-unknown");
+    std::fs::write(temp.path().join("photo.jpg"), b"img").unwrap();
+    let (_folder_id, _expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
+
+    let exclusion_effects = RecordedExclusionEffects::default();
+    let updater = WatchedFolderExclusionUpdate::new(
+        SqliteFolderPersistence { pool: &pool },
+        &exclusion_effects,
+    );
+
+    let err = updater
+        .update(999, vec!["*.mov".to_string()])
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_ascii_lowercase().contains("not found"),
+        "expected 'not found' error, got: {err}"
+    );
+    assert!(exclusion_effects.admitted_scans.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn successful_exclusion_update_normalizes_persists_and_rescans_only_target_folder() {
+    let pool = test_pool().await;
+    let watcher = test_watcher();
+    let root = TempDir::new("exclusion-rescan");
+    let target = root.path().join("Target");
+    let sibling = root.path().join("Sibling");
+    std::fs::create_dir_all(target.join("Screenshots")).unwrap();
+    std::fs::create_dir_all(&sibling).unwrap();
+    std::fs::write(target.join("keep.jpg"), b"keep").unwrap();
+    std::fs::write(target.join("Screenshots").join("excluded.jpg"), b"excluded").unwrap();
+    std::fs::write(sibling.join("sibling.jpg"), b"sibling").unwrap();
+
+    let (target_id, target_path) = register_test_folder(&pool, &watcher, &target).await;
+    let (sibling_id, _) = register_test_folder(&pool, &watcher, &sibling).await;
+
+    let exclusion_effects = RecordedExclusionEffects::default();
+    let updater = WatchedFolderExclusionUpdate::new(
+        SqliteFolderPersistence { pool: &pool },
+        &exclusion_effects,
+    );
+
+    updater
+        .update(
+            target_id,
+            vec![
+                " Screenshots/** ".to_string(),
+                "screenshots/**".to_string(),
+                "".to_string(),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let folders = crate::db::get_folders(&pool).await.unwrap();
+    let updated_target = folders.iter().find(|f| f.id == target_id).unwrap();
+    let untouched_sibling = folders.iter().find(|f| f.id == sibling_id).unwrap();
+    assert_eq!(updated_target.exclusion_patterns, vec!["Screenshots/**"]);
+    assert!(untouched_sibling.exclusion_patterns.is_empty());
+
+    let admitted = exclusion_effects.admitted_scans.lock().unwrap();
+    assert_eq!(admitted.len(), 1);
+    assert_eq!(
+        admitted[0].1,
+        crate::sync::SyncSource::ExclusionPatternsChanged
+    );
+
+    let expected_keep =
+        crate::media::paths::normalize_path_lexical(&PathBuf::from(&target_path).join("keep.jpg"));
+    let scanned_paths: Vec<PathBuf> = admitted[0]
+        .0
+        .files
+        .iter()
+        .map(|asset| crate::media::paths::normalize_path_lexical(Path::new(&asset.path)))
+        .collect();
+    assert_eq!(scanned_paths, vec![expected_keep]);
 }
