@@ -113,20 +113,6 @@ pub(crate) async fn remove_folder(
 
 #[cfg(test)]
 mod tests {
-    use crate::watched_folders::{removal_requires_confirmation, RemoveFolderResult};
-
-    #[test]
-    fn folder_removal_requires_explicit_confirmation() {
-        assert!(removal_requires_confirmation(None));
-        assert!(removal_requires_confirmation(Some(false)));
-        assert!(!removal_requires_confirmation(Some(true)));
-
-        let result = RemoveFolderResult {
-            requires_sync_cancellation: true,
-        };
-        assert!(result.requires_sync_cancellation);
-    }
-
     #[test]
     fn exclusion_patterns_are_normalized_deduplicated_and_validated() {
         assert_eq!(

@@ -580,7 +580,7 @@ where
     }
 }
 
-pub(crate) fn removal_requires_confirmation(confirm_cancellation: Option<bool>) -> bool {
+fn removal_requires_confirmation(confirm_cancellation: Option<bool>) -> bool {
     !confirm_cancellation.unwrap_or(false)
 }
 
@@ -649,6 +649,7 @@ where
         let folders = self.persistence.list_folders().await?;
         let folder = folders.into_iter().find(|folder| folder.id == id);
 
+        // Unconfirmed calls never mutate state, refresh tray, or emit audit events—even if the ID is absent.
         if removal_requires_confirmation(confirm_cancellation) {
             let requires_sync_cancellation = match folder {
                 Some(ref folder) => self.sync.has_work_in_folder(&folder.path).await?,
