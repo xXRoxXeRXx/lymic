@@ -13,6 +13,7 @@ import type {
   AlbumAssignmentResult,
   AlbumCatalogueItem,
   AlbumTimeline,
+  PlaceTimeline,
   AssetDetails,
   CurrentUser,
   DatabaseRecoveryNotice,
@@ -99,6 +100,10 @@ export interface AssetDesktopAdapter {
 export interface AlbumTimelineDesktopAdapter {
   getAlbumTimeline(albumId: string): Promise<AlbumTimeline>;
 }
+export interface PlaceTimelineDesktopAdapter {
+  getPlaceTimeline(city: string): Promise<PlaceTimeline>;
+}
+
 export interface MemoriesDesktopAdapter {
   /** The newest Memories, at most `size`, each with its assets grouped for the Memory Timeline. */
   getMemories(size: number): Promise<Memory[]>;
@@ -161,6 +166,7 @@ export interface DesktopAdapter
     MapDesktopAdapter,
     AssetDesktopAdapter,
     AlbumTimelineDesktopAdapter,
+    PlaceTimelineDesktopAdapter,
     PeopleDesktopAdapter,
     PlacesDesktopAdapter,
     MemoriesDesktopAdapter,
@@ -216,6 +222,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   downloadAsset: (assetId, destinationPath) => invoke<void>("download_asset", { assetId, destinationPath }),
   downloadArchive: (assetIds) => invoke<void>("download_archive", { assetIds }),
   getAlbumTimeline: (albumId) => invoke<AlbumTimeline>("get_album_timeline", { albumId }),
+  getPlaceTimeline: (city) => invoke<PlaceTimeline>("get_place_timeline", { city }),
   getMemories: (size) => invoke<Memory[]>("get_memories", { size }),
   getPeople: (page, size) => invoke<PeoplePage>("get_people", { page, size }),
   getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),

@@ -56,6 +56,15 @@ describe('i18n catalogs', () => {
     }
   });
 
+  it('translates the Place Timeline strings in every locale', () => {
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of ['places_return', 'places_timeline_empty', 'places_timeline_error']) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+    }
+  });
+
   it('translates the Memories strings in every locale', () => {
     const keys = ['memories_title', 'memories_loading', 'memories_offline', 'memories_error', 'memories_permission_denied', 'memory_year_ago', 'memory_years_ago', 'memory_birthday', 'memory_untitled', 'memories_timeline_empty'];
     for (const [localeCode, translations] of Object.entries(catalog)) {

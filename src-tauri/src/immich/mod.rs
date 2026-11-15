@@ -16,7 +16,7 @@ pub(crate) use ids::{AlbumId, RemoteAssetId};
 pub(crate) use people::PeoplePage;
 pub(crate) use places::Place;
 pub(crate) use session::ImmichSession;
-pub(crate) use timeline::{AlbumTimeline, TimelineAsset, TimelineBucket};
+pub(crate) use timeline::{AlbumTimeline, PlaceTimeline, TimelineAsset, TimelineBucket};
 pub(crate) use upload::SidecarDirectoryCache;
 
 mod map;
