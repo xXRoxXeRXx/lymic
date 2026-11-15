@@ -31,6 +31,7 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
     getMapMarkers: vi.fn().mockResolvedValue([]),
     getMemories: vi.fn().mockResolvedValue([]),
     getPeople: vi.fn().mockResolvedValue({ people: [], hasNextPage: false }),
+    getPlaces: vi.fn().mockResolvedValue([]),
     getPersonTimelineBuckets: vi.fn().mockResolvedValue([]),
     getPersonTimelineBucketAssets: vi.fn().mockResolvedValue([]),
     subscribeToRemovableVolumeDetected: vi.fn().mockResolvedValue(() => {}),
@@ -65,6 +66,7 @@ describe("authenticated session", () => {
       getAlbumCatalogue: vi.fn().mockResolvedValue([{ id: "album-1", albumName: "Trips", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null }]),
       getFavoritesTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]),
       getPeople: vi.fn().mockResolvedValue({ people: [{ id: "person-1", name: "Alice", thumbnailPath: "" }], hasNextPage: false }),
+      getPlaces: vi.fn().mockResolvedValue([{ city: "Paris", thumbnailAssetId: "asset-1" }]),
       getMapMarkers: vi.fn().mockResolvedValue([{ id: "asset-1", lat: 48.8, lon: 2.3 }]),
       getCurrentUser: vi.fn()
         .mockResolvedValueOnce({ displayName: "Alice", profileImage: null })
@@ -87,6 +89,7 @@ describe("authenticated session", () => {
       session.albumCatalogue.refresh(),
       session.favorites.refresh(),
       session.people.refresh(),
+      session.places.refresh(),
       session.map.refresh(),
     ]);
     session.feedback.report("Stale error");
@@ -94,6 +97,7 @@ describe("authenticated session", () => {
     expect(session.albumCatalogue.albums).toHaveLength(1);
     expect(session.favorites.buckets).toHaveLength(1);
     expect(session.people.people).toHaveLength(1);
+    expect(session.places.places).toHaveLength(1);
     expect(session.map.markers).toHaveLength(1);
     expect(session.feedback.error).toBe("Stale error");
 
@@ -108,6 +112,7 @@ describe("authenticated session", () => {
     expect(session.albumCatalogue.albums).toEqual([]);
     expect(session.favorites.buckets).toEqual([]);
     expect(session.people.people).toEqual([]);
+    expect(session.places.places).toEqual([]);
     expect(session.map.markers).toEqual([]);
     expect(session.feedback.error).toBe("");
 

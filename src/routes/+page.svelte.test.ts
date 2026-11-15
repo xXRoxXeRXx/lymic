@@ -85,6 +85,8 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve([]);
       case "get_album_timeline":
         return Promise.resolve({ buckets: [], assetsByBucket: {} });
+      case "get_places":
+        return Promise.resolve([]);
       case "get_memories":
         return Promise.resolve([]);
       case "update_locale":
@@ -2088,6 +2090,125 @@ describe("Explore Overview", () => {
     await waitFor(() => expect(within(section).getAllByRole("button", { name: /^Person / })).toHaveLength(3));
     expect(within(section).getByRole("button", { name: "Person 0" })).toBeInTheDocument();
     expect(within(section).queryByRole("button", { name: "Person 3" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Explore Places", () => {
+  const places = [
+    { city: "Paris", thumbnailAssetId: "asset-1" },
+    { city: "Berlin", thumbnailAssetId: "asset-2" },
+  ];
+  const openExplore = async () => fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+  it("shows one tile per Place with its thumbnail and city name as an accessible button", async () => {
+    renderAuthenticatedPage({ get_places: async () => places });
+    await openExplore();
+
+    const section = await screen.findByRole("region", { name: "Places" });
+    expect(await within(section).findByRole("button", { name: "Paris" })).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: "Berlin" })).toBeInTheDocument();
+    expect(within(section).getByRole("img", { name: "Paris" })).toHaveAttribute("src", "lymic-thumb://asset/asset-1");
+    expect(within(section).getByText("Berlin")).toBeVisible();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_places");
+  });
+
+  it("hides the Places section when there are no Places", async () => {
+    renderAuthenticatedPage({ get_places: async () => [], get_people: async () => ({ people: [{ id: "p", name: "Ada", thumbnailPath: null }], hasNextPage: false }) });
+    await openExplore();
+
+    await screen.findByRole("region", { name: "People" });
+    expect(screen.queryByRole("region", { name: "Places" })).not.toBeInTheDocument();
+  });
+
+  it("opens All Places from View all with every Place and returns to Explore with Back", async () => {
+    renderAuthenticatedPage({ get_places: async () => places });
+    await openExplore();
+    const section = await screen.findByRole("region", { name: "Places" });
+
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+
+    expect(await screen.findByRole("heading", { name: "All Places", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Paris" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Berlin" })).toBeInTheDocument();
+    const navigation = within(screen.getByRole("navigation", { name: "Main navigation" }));
+    expect(navigation.queryByRole("button", { name: /places/i })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Places" })).toBeInTheDocument();
+  });
+
+  it("shows every Place in All Places while the Explore row shows only as many as fit", async () => {
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        this.callback([{ target, contentRect: { width: 500 } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+      disconnect() {}
+    });
+    const many = Array.from({ length: 8 }, (_, index) => ({ city: `City ${index}`, thumbnailAssetId: `a-${index}` }));
+    renderAuthenticatedPage({ get_places: async () => many });
+    await openExplore();
+
+    const section = await screen.findByRole("region", { name: "Places" });
+    await waitFor(() => expect(within(section).getAllByRole("button", { name: /^City / })).toHaveLength(3));
+
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /^City / })).toHaveLength(8));
+  });
+
+  it("reports a Places failure in its own section only and retries it", async () => {
+    renderAuthenticatedPage({
+      get_places: vi.fn().mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce(places),
+      get_people: async () => ({ people: [{ id: "p", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+    });
+    await openExplore();
+
+    const section = await screen.findByRole("region", { name: "Places" });
+    expect(await within(section).findByRole("alert")).toHaveTextContent("Places could not be loaded.");
+    expect(within(await screen.findByRole("region", { name: "People" })).queryByRole("alert")).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Ada" })).toBeInTheDocument();
+
+    await fireEvent.click(within(section).getByRole("button", { name: "Retry" }));
+    expect(await within(section).findByRole("button", { name: "Paris" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("names the asset.read permission when Places is permission-denied", async () => {
+    renderAuthenticatedPage({ get_places: async () => { throw "places_permission_denied:configure an API key with asset.read permission"; } });
+    await openExplore();
+
+    const section = await screen.findByRole("region", { name: "Places" });
+    expect(await within(section).findByRole("alert")).toHaveTextContent("asset.read");
+    expect(within(section).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("keeps stale Places visible with an offline indication when a refresh fails", async () => {
+    renderAuthenticatedPage({
+      get_places: vi.fn().mockResolvedValueOnce(places).mockRejectedValueOnce(new Error("offline")),
+    });
+    await openExplore();
+    await screen.findByRole("button", { name: "Paris" });
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Photos" })[0]);
+    await fireEvent.click(screen.getAllByRole("button", { name: "Explore" })[0]);
+
+    const section = await screen.findByRole("region", { name: "Places" });
+    expect(await within(section).findByRole("status")).toHaveTextContent("Places is offline");
+    expect(within(section).getByRole("button", { name: "Paris" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("refreshes Places after Synchronization settles while Explore is open", async () => {
+    renderAuthenticatedPage({ get_places: async () => places });
+    const placeCalls = () => tauri.invoke.mock.calls.filter(([command]) => command === "get_places").length;
+    await openExplore();
+    await screen.findByRole("button", { name: "Paris" });
+    expect(placeCalls()).toBe(1);
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(placeCalls()).toBe(2));
   });
 });
 

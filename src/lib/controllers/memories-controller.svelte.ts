@@ -5,7 +5,7 @@ export interface MemoriesViewState {
   readonly memories: Memory[];
   readonly isLoading: boolean;
   readonly isOffline: boolean;
-  readonly error: "unavailable" | "error" | null;
+  readonly error: "permission_denied" | "error" | null;
   refresh(): Promise<void>;
   clear(): void;
 }
@@ -13,16 +13,16 @@ export interface MemoriesViewState {
 /** The Explore Overview shows at most this many Memories, newest first. */
 export const MEMORIES_SECTION_SIZE = 12;
 
-function classifyError(reason: unknown): "unavailable" | "error" {
+function classifyError(reason: unknown): "permission_denied" | "error" {
   const message = typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "";
-  return message.startsWith("memories_permission_denied:") ? "unavailable" : "error";
+  return message.startsWith("memories_permission_denied:") ? "permission_denied" : "error";
 }
 
 export function createMemoriesController(adapter: MemoriesDesktopAdapter): MemoriesViewState {
   let memories = $state<Memory[]>([]);
   let isLoading = $state(false);
   let isOffline = $state(false);
-  let error = $state<"unavailable" | "error" | null>(null);
+  let error = $state<"permission_denied" | "error" | null>(null);
   let generation = 0;
 
   async function refresh() {

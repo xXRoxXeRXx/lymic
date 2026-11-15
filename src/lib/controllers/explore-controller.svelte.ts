@@ -1,5 +1,6 @@
 import type { MemoriesViewState } from "./memories-controller.svelte";
 import type { PeopleViewState } from "./people-controller.svelte";
+import type { PlacesViewState } from "./places-controller.svelte";
 
 /**
  * The state every Explore Overview section exposes. Each section owns its own
@@ -13,7 +14,7 @@ export interface ExploreSectionState {
   /** True when a refresh failed but previously loaded data stays visible. */
   readonly isOffline: boolean;
   /** Failure of a load that has no cached data to fall back on. */
-  readonly error: "unavailable" | "error" | null;
+  readonly error: "permission_denied" | "unavailable" | "error" | null;
   /** Number of items the section would show; 0 means empty. */
   readonly itemCount: number;
   /** Reloads this section only; also serves as the retry action. */
@@ -27,6 +28,7 @@ export function isExploreSectionVisible(section: ExploreSectionState): boolean {
 
 export interface ExploreViewState {
   readonly people: ExploreSectionState;
+  readonly places: ExploreSectionState;
   readonly memories: ExploreSectionState;
   readonly sections: readonly ExploreSectionState[];
   /** True when no section has anything to show, so the placeholder replaces them. */
@@ -39,6 +41,7 @@ export interface ExploreViewState {
 
 export function createExploreController(options: {
   people: PeopleViewState;
+  places: PlacesViewState;
   memories: MemoriesViewState;
   isActive(): boolean;
 }): ExploreViewState {
@@ -50,6 +53,14 @@ export function createExploreController(options: {
     get itemCount() { return peopleController.people.length; },
     refresh: () => peopleController.refresh(),
   };
+  const { places: placesController } = options;
+  const places: ExploreSectionState = {
+    get isLoading() { return placesController.isLoading; },
+    get isOffline() { return placesController.isOffline; },
+    get error() { return placesController.error; },
+    get itemCount() { return placesController.places.length; },
+    refresh: () => placesController.refresh(),
+  };
   const { memories: memoriesController } = options;
   const memories: ExploreSectionState = {
     get isLoading() { return memoriesController.isLoading; },
@@ -58,7 +69,7 @@ export function createExploreController(options: {
     get itemCount() { return memoriesController.memories.length; },
     refresh: () => memoriesController.refresh(),
   };
-  const sections = [people, memories] as const;
+  const sections = [people, places, memories] as const;
 
   function refresh() {
     return Promise.all(sections.map((section) => section.refresh())).then(() => undefined);
@@ -66,6 +77,7 @@ export function createExploreController(options: {
 
   return {
     people,
+    places,
     memories,
     sections,
     get isAllEmpty() { return !sections.some(isExploreSectionVisible); },

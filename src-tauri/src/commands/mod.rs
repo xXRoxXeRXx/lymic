@@ -4,6 +4,7 @@ pub(crate) mod folders;
 pub(crate) mod map;
 pub(crate) mod memories;
 pub(crate) mod people;
+pub(crate) mod places;
 pub(crate) mod profile_cache;
 pub(crate) mod settings;
 pub(crate) mod sync;

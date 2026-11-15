@@ -102,6 +102,12 @@ export interface PeoplePage {
   hasNextPage: boolean;
 }
 
+/** A city in which the user has Remote Assets, shown with one Remote Asset's thumbnail. */
+export interface Place {
+  city: string;
+  thumbnailAssetId: string;
+}
+
 export type MemoryKind = "onThisDay" | "birthday" | "unknown";
 
 /** An Immich Memory with the Remote Assets it selected, already grouped for the Memory Timeline. */

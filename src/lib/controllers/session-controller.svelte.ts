@@ -6,6 +6,7 @@ import { createFeedbackController } from "./feedback-controller.svelte";
 import { createMemoriesController } from "./memories-controller.svelte";
 import { createMapController } from "./map-controller.svelte";
 import { createPeopleController } from "./people-controller.svelte";
+import { createPlacesController } from "./places-controller.svelte";
 import { createRemovableVolumeController } from "./removable-volume-controller.svelte";
 import { createSyncController } from "./sync-controller.svelte";
 import { createTargetAlbumCatalogue } from "./target-album-catalogue.svelte";
@@ -19,6 +20,7 @@ import type {
   MapDesktopAdapter,
   MemoriesDesktopAdapter,
   PeopleDesktopAdapter,
+  PlacesDesktopAdapter,
   RemovableVolumeDesktopAdapter,
   SyncDesktopAdapter,
   TimelineDesktopAdapter,
@@ -35,6 +37,7 @@ export type SessionDesktopAdapter =
   FavoritesTimelineDesktopAdapter &
   MapDesktopAdapter &
   PeopleDesktopAdapter &
+  PlacesDesktopAdapter &
   MemoriesDesktopAdapter &
   RemovableVolumeDesktopAdapter;
 
@@ -76,8 +79,9 @@ export function createSessionController(options: {
   const timeline = createTimelineController(adapter);
   const favorites = createFavoritesTimelineController(adapter);
   const people = createPeopleController(adapter);
+  const places = createPlacesController(adapter);
   const memories = createMemoriesController(adapter);
-  const explore = createExploreController({ people, memories, isActive: () => options.isExploreActive?.() ?? false });
+  const explore = createExploreController({ people, places, memories, isActive: () => options.isExploreActive?.() ?? false });
   const map = createMapController(adapter);
   const albumCatalogue = createAlbumCatalogueController(adapter);
 
@@ -90,6 +94,7 @@ export function createSessionController(options: {
     timeline,
     favorites,
     people,
+    places,
     memories,
     map,
     albumCatalogue,
@@ -158,6 +163,7 @@ export function createSessionController(options: {
     timeline,
     favorites,
     people,
+    places,
     memories,
     explore,
     map,

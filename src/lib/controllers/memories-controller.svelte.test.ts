@@ -21,7 +21,7 @@ describe("Memories controller", () => {
     expect(memories.isLoading).toBe(false);
   });
 
-  it("reports a permission failure naming the permission as unavailable and any other failure as an error", async () => {
+  it("reports a permission failure as permission denied and any other failure as an error", async () => {
     const getMemories = vi.fn()
       .mockRejectedValueOnce("memories_permission_denied:configure an API key with memory.read and asset.read permissions")
       .mockRejectedValueOnce("memories_unavailable")
@@ -29,7 +29,7 @@ describe("Memories controller", () => {
     const memories = createMemoriesController({ getMemories });
 
     await memories.refresh();
-    expect(memories.error).toBe("unavailable");
+    expect(memories.error).toBe("permission_denied");
     await memories.refresh();
     expect(memories.error).toBe("error");
     await memories.refresh();

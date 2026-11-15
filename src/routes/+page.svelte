@@ -10,6 +10,7 @@
   import MapView from "#lib/components/MapView.svelte";
   import ExploreView from "#lib/components/ExploreView.svelte";
   import PeopleView from "#lib/components/PeopleView.svelte";
+  import PlacesView from "#lib/components/PlacesView.svelte";
   import AlbumCatalogueView from "#lib/components/AlbumCatalogueView.svelte";
   import ActivityLog from "#lib/components/ActivityLog.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
@@ -75,6 +76,7 @@
       case "favorites": return $t("favorites_title");
       case "map": return $t("map_title");
       case "people": return $t("people_title");
+      case "places": return $t("places_all_title");
       case "albums": return $t("albums_title");
       case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
       case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
@@ -132,6 +134,17 @@
     void albumCatalogue.refresh();
   }
 
+  /** "All Places" has no navigation entry; it is only opened from the Explore Overview. */
+  function openAllPlaces() {
+    exploreScrollTop = content?.scrollTop ?? 0;
+    currentView = "places";
+  }
+
+  function returnToExplore() {
+    currentView = "explore";
+    queueMicrotask(() => { if (content) content.scrollTop = exploreScrollTop; });
+  }
+
   function returnFromPersonTimeline() {
     closePersonTimeline();
     currentView = personOrigin;
@@ -141,8 +154,7 @@
 
   function returnFromMemoryTimeline() {
     closeMemoryTimeline();
-    currentView = "explore";
-    queueMicrotask(() => { if (content) content.scrollTop = exploreScrollTop; });
+    returnToExplore();
   }
 
   function returnToAlbums() {
@@ -177,6 +189,7 @@
     timeline,
     favorites,
     people,
+    places,
     memories,
     explore,
     map,
@@ -448,7 +461,15 @@
             offlineMessage={$t("favorites_offline")}
           />
         {:else if currentView === "explore"}
-          <ExploreView {explore} {people} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onSelectMemory={selectMemory} />
+          <ExploreView {explore} {people} {places} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectMemory={selectMemory} />
+        {:else if currentView === "places"}
+          <div class="flex h-full min-h-0 flex-col gap-2">
+            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToExplore}>
+              <ArrowLeft class="h-4 w-4" />
+              {$t('explore_return')}
+            </button>
+            <PlacesView {places} />
+          </div>
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
         {:else if currentView === "albums"}

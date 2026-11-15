@@ -15,6 +15,7 @@
     loadingMessage,
     errorMessage,
     unavailableMessage = errorMessage,
+    permissionDeniedMessage = unavailableMessage,
     offlineMessage,
     onViewAll,
     children,
@@ -25,6 +26,8 @@
     loadingMessage: string;
     errorMessage: string;
     unavailableMessage?: string;
+    /** Shown when the API key lacks the permission this section needs; defaults to the unavailable message. */
+    permissionDeniedMessage?: string;
     offlineMessage: string;
     onViewAll: () => void;
     children: Snippet;
@@ -42,7 +45,7 @@
     </div>
     {#if section.error}
       <div role="alert" class="flex items-center gap-3 text-sm text-red-600 dark:text-red-300">
-        <p>{section.error === "unavailable" ? unavailableMessage : errorMessage}</p>
+        <p>{section.error === "permission_denied" ? permissionDeniedMessage : section.error === "unavailable" ? unavailableMessage : errorMessage}</p>
         <button type="button" class="rounded-lg px-2 py-1 font-medium hover:bg-slate-200 dark:hover:bg-zinc-800" onclick={() => void section.refresh()}>{$t("explore_retry")}</button>
       </div>
     {:else if section.isLoading}

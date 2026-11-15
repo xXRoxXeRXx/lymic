@@ -1,20 +1,25 @@
 <script lang="ts">
   import { t, locale } from "svelte-i18n";
-  import type { Memory, RecognizedPerson } from "../contracts";
+  import type { Memory, Place, RecognizedPerson } from "../contracts";
   import type { MemoriesViewState } from "../controllers/memories-controller.svelte";
   import { memoryTitle } from "../memory-title";
   import MemoryCard from "./MemoryCard.svelte";
   import type { PeopleViewState } from "../controllers/people-controller.svelte";
+  import type { PlacesViewState } from "../controllers/places-controller.svelte";
   import type { ExploreViewState } from "../controllers/explore-controller.svelte";
   import ExploreSection from "./ExploreSection.svelte";
+  import PlaceTile from "./PlaceTile.svelte";
   import RecognizedPersonTile from "./RecognizedPersonTile.svelte";
 
-  let { explore, people, memories, onViewAllPeople, onSelectPerson, onViewAllMemories = () => {}, onSelectMemory }: {
+  let { explore, people, places, memories, onViewAllPeople, onSelectPerson, onViewAllPlaces, onSelectPlace, onViewAllMemories = () => {}, onSelectMemory }: {
     explore: ExploreViewState;
     people: PeopleViewState;
+    places: PlacesViewState;
     memories: MemoriesViewState;
     onViewAllPeople: () => void;
     onSelectPerson: (person: RecognizedPerson) => void;
+    onViewAllPlaces: () => void;
+    onSelectPlace?: (place: Place) => void;
     /** Inert until the All Memories view exists. */
     onViewAllMemories?: () => void;
     onSelectMemory: (memory: Memory) => void;
@@ -26,13 +31,13 @@
   const TILE_MIN_WIDTH = 144;
   const TILE_GAP = 16;
   const FALLBACK_COLUMNS = 6;
-  let peopleColumns = $state(FALLBACK_COLUMNS);
+  let rowColumns = $state(FALLBACK_COLUMNS);
 
   function measureColumns(node: HTMLElement) {
     if (typeof ResizeObserver === "undefined") return {};
     const observer = new ResizeObserver(([entry]) => {
       const width = entry?.contentRect.width ?? 0;
-      if (width > 0) peopleColumns = Math.max(1, Math.floor((width + TILE_GAP) / (TILE_MIN_WIDTH + TILE_GAP)));
+      if (width > 0) rowColumns = Math.max(1, Math.floor((width + TILE_GAP) / (TILE_MIN_WIDTH + TILE_GAP)));
     });
     observer.observe(node);
     return { destroy: () => observer.disconnect() };
@@ -50,9 +55,27 @@
     offlineMessage={$t("people_offline")}
     onViewAll={onViewAllPeople}
   >
-    <div use:measureColumns class="grid gap-4" style="grid-template-columns: repeat({peopleColumns}, minmax(0, 1fr));">
-      {#each people.people.slice(0, peopleColumns) as person (person.id)}
+    <div use:measureColumns class="grid gap-4" style="grid-template-columns: repeat({rowColumns}, minmax(0, 1fr));">
+      {#each people.people.slice(0, rowColumns) as person (person.id)}
         <RecognizedPersonTile {person} onSelect={onSelectPerson} />
+      {/each}
+    </div>
+  </ExploreSection>
+
+  <ExploreSection
+    id="places"
+    title={$t("places_title")}
+    section={explore.places}
+    loadingMessage={$t("places_loading")}
+    errorMessage={$t("places_error")}
+    unavailableMessage={$t("places_unavailable")}
+    permissionDeniedMessage={$t("places_permission_denied")}
+    offlineMessage={$t("places_offline")}
+    onViewAll={onViewAllPlaces}
+  >
+    <div use:measureColumns class="grid gap-4" style="grid-template-columns: repeat({rowColumns}, minmax(0, 1fr));">
+      {#each places.places.slice(0, rowColumns) as place (place.thumbnailAssetId)}
+        <PlaceTile {place} onSelect={onSelectPlace} />
       {/each}
     </div>
   </ExploreSection>
@@ -63,7 +86,7 @@
     section={explore.memories}
     loadingMessage={$t("memories_loading")}
     errorMessage={$t("memories_error")}
-    unavailableMessage={$t("memories_unavailable")}
+    permissionDeniedMessage={$t("memories_permission_denied")}
     offlineMessage={$t("memories_offline")}
     onViewAll={onViewAllMemories}
   >
