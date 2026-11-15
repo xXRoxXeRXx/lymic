@@ -2400,4 +2400,145 @@ describe("Explore Memories", () => {
     await screen.findByRole("region", { name: "People" });
     expect(screen.queryByRole("region", { name: "Memories" })).not.toBeInTheDocument();
   });
+
+  describe("All Memories", () => {
+    const [today, other, birthday, unknown] = memories;
+    const pageCalls = () => tauri.invoke.mock.calls.filter(([command]) => command === "get_memories_page").map(([, args]) => args);
+    const cardLabels = () => screen.getAllByRole("button").map((button) => button.getAttribute("aria-label")).filter((label) => label && /ago|, 20|birthday/.test(label));
+
+    /** Lets a test decide when the scroll sentinel becomes visible instead of firing on observe. */
+    function stubScrollObservers() {
+      const active = new Set<{ callback: IntersectionObserverCallback; target: Element }>();
+      vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+      vi.stubGlobal("IntersectionObserver", class {
+        private entry?: { callback: IntersectionObserverCallback; target: Element };
+        constructor(private readonly callback: IntersectionObserverCallback) {}
+        observe(target: Element) { this.entry = { callback: this.callback, target }; active.add(this.entry); }
+        disconnect() { if (this.entry) active.delete(this.entry); }
+      });
+      return {
+        scrollToEnd: async () => {
+          for (const { callback, target } of [...active]) callback([{ isIntersecting: true, target } as IntersectionObserverEntry], {} as IntersectionObserver);
+          await Promise.resolve();
+        },
+        observed: () => active.size,
+      };
+    }
+
+    async function openAllMemories() {
+      await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+      const section = await screen.findByRole("region", { name: "Memories" });
+      await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    }
+
+    it("opens All Memories from View all and loads further pages while scrolling until none are left", async () => {
+      const scroll = stubScrollObservers();
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: async (args) => (args as { page: number }).page === 1
+          ? { memories: [today, other], hasNextPage: true }
+          : { memories: [birthday, unknown], hasNextPage: false },
+      });
+
+      await openAllMemories();
+
+      expect(await screen.findByRole("heading", { name: "All Memories", level: 1 })).toBeInTheDocument();
+      await waitFor(() => expect(cardLabels()).toEqual(["3 years ago", "Jan 2, 2019"]));
+      expect(pageCalls()).toEqual([{ page: 1, size: 24 }]);
+
+      await scroll.scrollToEnd();
+      await waitFor(() => expect(cardLabels()).toEqual(["3 years ago", "Jan 2, 2019", "Ada's birthday", "Jul 8, 2017"]));
+      expect(pageCalls()).toEqual([{ page: 1, size: 24 }, { page: 2, size: 24 }]);
+
+      await waitFor(() => expect(scroll.observed()).toBe(0));
+      await scroll.scrollToEnd();
+      expect(pageCalls()).toHaveLength(2);
+    });
+
+    it("keeps the pages already shown when a further page fails and offers retry", async () => {
+      const scroll = stubScrollObservers();
+      const secondPage = vi.fn().mockRejectedValueOnce("memories_unavailable").mockResolvedValueOnce({ memories: [birthday], hasNextPage: false });
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: async (args) => (args as { page: number }).page === 1 ? { memories: [today, other], hasNextPage: true } : secondPage(),
+      });
+      await openAllMemories();
+      await waitFor(() => expect(cardLabels()).toHaveLength(2));
+
+      await scroll.scrollToEnd();
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("More memories could not be loaded.");
+      expect(cardLabels()).toEqual(["3 years ago", "Jan 2, 2019"]);
+      await scroll.scrollToEnd();
+      expect(secondPage).toHaveBeenCalledOnce();
+
+      await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+
+      await waitFor(() => expect(cardLabels()).toEqual(["3 years ago", "Jan 2, 2019", "Ada's birthday"]));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(pageCalls()).toEqual([{ page: 1, size: 24 }, { page: 2, size: 24 }, { page: 2, size: 24 }]);
+    });
+
+    it("reports a failed first page with retry and names memory.read when permission is denied", async () => {
+      stubScrollObservers();
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: vi.fn()
+          .mockRejectedValueOnce("memories_permission_denied:configure an API key with memory.read and asset.read permissions")
+          .mockResolvedValueOnce({ memories: [today], hasNextPage: false }),
+      });
+      await openAllMemories();
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("memory.read");
+
+      await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+      expect(await screen.findByRole("button", { name: "3 years ago" })).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("returns to All Memories from a Memory Timeline and to the Explore Overview from All Memories", async () => {
+      stubScrollObservers();
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: async () => ({ memories: [today, other], hasNextPage: false }),
+      });
+      await openAllMemories();
+
+      await fireEvent.click(await screen.findByRole("button", { name: "Jan 2, 2019" }));
+      expect(await screen.findByRole("heading", { name: "Jan 2, 2019", level: 1 })).toBeInTheDocument();
+
+      await fireEvent.click(screen.getByRole("button", { name: "Back to All Memories" }));
+      expect(await screen.findByRole("heading", { name: "All Memories", level: 1 })).toBeInTheDocument();
+      expect(cardLabels()).toEqual(["3 years ago", "Jan 2, 2019"]);
+      expect(pageCalls()).toHaveLength(1);
+
+      await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+      expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Memories" })).toBeInTheDocument();
+    });
+
+    it("still returns a Memory opened from the Explore Overview to the Explore Overview", async () => {
+      stubScrollObservers();
+      renderAuthenticatedPage({
+        get_memories: async () => memories,
+        get_memories_page: async () => ({ memories: [today, other], hasNextPage: false }),
+      });
+      await openAllMemories();
+      await screen.findByRole("heading", { name: "All Memories", level: 1 });
+      await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+
+      await fireEvent.click(await screen.findByRole("button", { name: "Jan 2, 2019" }));
+      await fireEvent.click(await screen.findByRole("button", { name: "Back to Explore" }));
+
+      expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    });
+
+    it("has no navigation entry of its own", async () => {
+      renderAuthenticatedPage({ get_memories: async () => memories });
+      await screen.findByRole("button", { name: "Explore" });
+      expect(screen.queryByRole("button", { name: "All Memories" })).not.toBeInTheDocument();
+    });
+  });
 });

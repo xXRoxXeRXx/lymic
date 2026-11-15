@@ -306,4 +306,9 @@
   ,"memory_birthday": "Cumpleaños de {name}"
   ,"memory_untitled": "Recuerdo"
   ,"memories_timeline_empty": "Este recuerdo no tiene fotos ni vídeos que se puedan mostrar."
+  ,"memories_all_title": "Todos los recuerdos"
+  ,"memories_all_empty": "Aún no hay recuerdos."
+  ,"memories_loading_more": "Cargando más recuerdos…"
+  ,"memories_more_error": "No se pudieron cargar más recuerdos."
+  ,"memories_all_return": "Volver a Todos los recuerdos"
 }

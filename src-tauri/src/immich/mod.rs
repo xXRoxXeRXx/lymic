@@ -22,4 +22,4 @@ pub(crate) use upload::SidecarDirectoryCache;
 mod map;
 mod memory;
 pub(crate) use map::MapMarker;
-pub(crate) use memory::Memory;
+pub(crate) use memory::{MemoriesPage, Memory};

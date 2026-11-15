@@ -306,4 +306,9 @@
   ,"memory_birthday": "{name}的生日"
   ,"memory_untitled": "回忆"
   ,"memories_timeline_empty": "此回忆中没有可显示的照片或视频。"
+  ,"memories_all_title": "所有回忆"
+  ,"memories_all_empty": "还没有回忆。"
+  ,"memories_loading_more": "正在加载更多回忆…"
+  ,"memories_more_error": "无法加载更多回忆。"
+  ,"memories_all_return": "返回所有回忆"
 }

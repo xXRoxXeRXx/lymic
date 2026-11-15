@@ -127,6 +127,12 @@ export interface Memory {
   timeline: AlbumTimeline;
 }
 
+/** One page of Memories, newest first, for the All Memories view. */
+export interface MemoriesPage {
+  memories: Memory[];
+  hasNextPage: boolean;
+}
+
 export interface UiLogMessage {
   level?: string;
   message?: string;

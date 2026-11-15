@@ -306,4 +306,9 @@
   ,"memory_birthday": "Anniversaire de {name}"
   ,"memory_untitled": "Souvenir"
   ,"memories_timeline_empty": "Ce souvenir ne contient aucune photo ni vidéo à afficher."
+  ,"memories_all_title": "Tous les souvenirs"
+  ,"memories_all_empty": "Aucun souvenir pour le moment."
+  ,"memories_loading_more": "Chargement d'autres souvenirs…"
+  ,"memories_more_error": "Impossible de charger d'autres souvenirs."
+  ,"memories_all_return": "Retour à Tous les souvenirs"
 }

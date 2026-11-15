@@ -306,4 +306,9 @@
   ,"memory_birthday": "Aniversário de {name}"
   ,"memory_untitled": "Memória"
   ,"memories_timeline_empty": "Esta memória não tem fotos nem vídeos que possam ser exibidos."
+  ,"memories_all_title": "Todas as memórias"
+  ,"memories_all_empty": "Ainda não há memórias."
+  ,"memories_loading_more": "Carregando mais memórias…"
+  ,"memories_more_error": "Não foi possível carregar mais memórias."
+  ,"memories_all_return": "Voltar para Todas as memórias"
 }

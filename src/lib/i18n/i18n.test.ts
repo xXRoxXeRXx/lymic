@@ -78,6 +78,17 @@ describe('i18n catalogs', () => {
     expect(de.memories_title).toBe('Erinnerungen');
   });
 
+  it('translates the All Memories strings in every locale', () => {
+    const keys = ['memories_all_title', 'memories_all_empty', 'memories_loading_more', 'memories_more_error', 'memories_all_return'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+    }
+    expect(de.memories_all_title).toBe('Alle Erinnerungen');
+  });
+
   it('updates the document language when the active locale changes', async () => {
     await locale.set('de');
     expect(document.documentElement.lang).toBe('de-DE');

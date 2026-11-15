@@ -90,10 +90,16 @@ fn memories_access_error(status: StatusCode) -> String {
     }
 }
 
+/// One page of Memories for the All Memories view.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoriesPage {
+    pub memories: Vec<Memory>,
+    pub has_next_page: bool,
+}
+
 impl ImmichClient {
-    /// The newest Memories (`GET /api/memories`, permission `memory.read`) with
-    /// their assets. Immich memory preferences are deliberately not evaluated.
-    pub async fn get_memories(&self, size: u32) -> Result<Vec<Memory>, String> {
+    async fn fetch_memory_responses(&self, size: u32) -> Result<Vec<MemoryResponse>, String> {
         let response = self
             .request(Method::GET, "memories")
             .query(&[("size", size.to_string().as_str()), ("order", "desc")])
@@ -104,12 +110,44 @@ impl ImmichClient {
             return Err(memories_access_error(response.status()));
         }
         let body = read_response_body_limited(response, MAX_MEMORIES_RESPONSE_BYTES).await?;
-        let memories: Vec<MemoryResponse> =
-            serde_json::from_slice(&body).map_err(|_| "memories_invalid_response".to_string())?;
-        Ok(memories
+        serde_json::from_slice(&body).map_err(|_| "memories_invalid_response".to_string())
+    }
+
+    /// The newest Memories (`GET /api/memories`, permission `memory.read`) with
+    /// their assets. Immich memory preferences are deliberately not evaluated.
+    pub async fn get_memories(&self, size: u32) -> Result<Vec<Memory>, String> {
+        Ok(self
+            .fetch_memory_responses(size)
+            .await?
             .into_iter()
             .filter_map(memory_from_response)
             .collect())
+    }
+
+    /// One page (1-based) of the newest Memories. Immich's `GET /api/memories`
+    /// has no offset or page parameter, so this asks for everything up to one
+    /// past the page and drops the earlier pages; the extra Memory tells whether
+    /// a next page exists. Paging counts Memories as Immich returns them, before
+    /// Memories without assets are dropped, so pages stay aligned.
+    pub async fn get_memories_page(&self, page: u32, size: u32) -> Result<MemoriesPage, String> {
+        let page = page.max(1);
+        let size = size.max(1);
+        let skip = (page - 1).saturating_mul(size);
+        let window_end = skip.saturating_add(size);
+        let mut responses = self
+            .fetch_memory_responses(window_end.saturating_add(1))
+            .await?;
+        let has_next_page = responses.len() > window_end as usize;
+        responses.truncate(window_end as usize);
+        let memories = responses
+            .into_iter()
+            .skip(skip as usize)
+            .filter_map(memory_from_response)
+            .collect();
+        Ok(MemoriesPage {
+            memories,
+            has_next_page,
+        })
     }
 }
 
@@ -147,6 +185,119 @@ mod tests {
         .unwrap();
         let result = client.get_memories(12).await;
         (result, server.await.unwrap())
+    }
+
+    /// Serves one canned response to a paged request and returns the request line and headers received.
+    async fn get_memories_page_from(
+        page: u32,
+        size: u32,
+        status: &str,
+        body: &str,
+    ) -> (Result<super::MemoriesPage, String>, String) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let response = format!(
+            "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 4096];
+            let read = stream.read(&mut request).await.unwrap();
+            stream.write_all(response.as_bytes()).await.unwrap();
+            String::from_utf8_lossy(&request[..read]).to_string()
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "memory-api-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+        let result = client.get_memories_page(page, size).await;
+        (result, server.await.unwrap())
+    }
+
+    fn memory_json(id: &str) -> String {
+        format!(
+            r#"{{"id":"{id}","type":"on_this_day","data":{{"year":2020}},"assets":[{{"id":"{id}-cover","type":"IMAGE","fileCreatedAt":"2020-11-15T10:00:00.000Z"}}]}}"#
+        )
+    }
+
+    fn memories_json(ids: &[&str]) -> String {
+        format!(
+            "[{}]",
+            ids.iter()
+                .map(|id| memory_json(id))
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    }
+
+    #[tokio::test]
+    async fn pages_through_memories_by_requesting_one_more_than_the_window_and_skipping_earlier_pages(
+    ) {
+        // Immich has no offset: page 2 of size 2 asks for the newest 5 and shows items 3 and 4.
+        let body = memories_json(&["m1", "m2", "m3", "m4", "m5"]);
+
+        let (result, request) = get_memories_page_from(2, 2, "200 OK", &body).await;
+
+        assert!(request.starts_with("GET /api/memories?size=5&order=desc HTTP/1.1"));
+        let page = result.unwrap();
+        assert_eq!(
+            page.memories
+                .iter()
+                .map(|m| m.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["m3", "m4"]
+        );
+        assert!(page.has_next_page);
+    }
+
+    #[tokio::test]
+    async fn reports_no_next_page_when_immich_returns_no_more_than_the_window() {
+        let (last, _) =
+            get_memories_page_from(2, 2, "200 OK", &memories_json(&["m1", "m2", "m3", "m4"])).await;
+        let last = last.unwrap();
+        assert_eq!(last.memories.len(), 2);
+        assert!(!last.has_next_page);
+
+        let (past_end, _) =
+            get_memories_page_from(3, 2, "200 OK", &memories_json(&["m1", "m2", "m3"])).await;
+        let past_end = past_end.unwrap();
+        assert!(past_end.memories.is_empty());
+        assert!(!past_end.has_next_page);
+    }
+
+    #[tokio::test]
+    async fn paging_counts_memories_without_assets_so_pages_stay_aligned() {
+        let body = r#"[
+            {"id":"empty","type":"on_this_day","assets":[]},
+            {"id":"m2","type":"on_this_day","assets":[{"id":"c2","type":"IMAGE"}]},
+            {"id":"m3","type":"on_this_day","assets":[{"id":"c3","type":"IMAGE"}]}]"#;
+
+        let (result, _) = get_memories_page_from(1, 2, "200 OK", body).await;
+
+        let page = result.unwrap();
+        assert_eq!(
+            page.memories
+                .iter()
+                .map(|m| m.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["m2"]
+        );
+        assert!(page.has_next_page);
+    }
+
+    #[tokio::test]
+    async fn maps_paged_access_failures_like_the_overview_request() {
+        let (forbidden, _) = get_memories_page_from(1, 2, "403 Forbidden", "{}").await;
+        assert!(forbidden
+            .unwrap_err()
+            .starts_with("memories_permission_denied:"));
+        let (failed, _) = get_memories_page_from(1, 2, "500 Internal Server Error", "x").await;
+        assert_eq!(failed.unwrap_err(), "memories_unavailable");
     }
 
     #[tokio::test]

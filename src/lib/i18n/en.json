@@ -306,4 +306,9 @@
   ,"memory_birthday": "{name}'s birthday"
   ,"memory_untitled": "Memory"
   ,"memories_timeline_empty": "This Memory has no photos or videos that can be shown."
+  ,"memories_all_title": "All Memories"
+  ,"memories_all_empty": "No memories yet."
+  ,"memories_loading_more": "Loading more memories…"
+  ,"memories_more_error": "More memories could not be loaded."
+  ,"memories_all_return": "Back to All Memories"
 }

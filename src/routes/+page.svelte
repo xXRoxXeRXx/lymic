@@ -9,6 +9,7 @@
   import TimelineView from "#lib/components/TimelineView.svelte";
   import MapView from "#lib/components/MapView.svelte";
   import ExploreView from "#lib/components/ExploreView.svelte";
+  import AllMemoriesView from "#lib/components/AllMemoriesView.svelte";
   import PeopleView from "#lib/components/PeopleView.svelte";
   import PlacesView from "#lib/components/PlacesView.svelte";
   import AlbumCatalogueView from "#lib/components/AlbumCatalogueView.svelte";
@@ -39,12 +40,14 @@
   let selectedMemory = $state<Memory | null>(null);
   let memoryTimeline = $state<ReturnType<typeof createMemoryTimelineController> | null>(null);
   let personOrigin = $state<"people" | "explore">("people");
+  let memoryOrigin = $state<"explore" | "all-memories">("explore");
   let selectedPlace = $state<Place | null>(null);
   let placeTimeline = $state<ReturnType<typeof createPlaceTimelineController> | null>(null);
   let placeOrigin = $state<"explore" | "places">("explore");
   let placesScrollTop = 0;
   let peopleScrollTop = 0;
   let exploreScrollTop = 0;
+  let allMemoriesScrollTop = 0;
   let albumsScrollTop = 0;
   let content = $state<HTMLElement>();
 
@@ -69,7 +72,9 @@
   }
 
   function selectMemory(memory: Memory) {
-    exploreScrollTop = content?.scrollTop ?? 0;
+    memoryOrigin = currentView === "all-memories" ? "all-memories" : "explore";
+    if (memoryOrigin === "all-memories") allMemoriesScrollTop = content?.scrollTop ?? 0;
+    else exploreScrollTop = content?.scrollTop ?? 0;
     selectedMemory = memory;
     memoryTimeline = createMemoryTimelineController(memory);
     currentView = "memory-timeline";
@@ -92,6 +97,7 @@
       case "map": return $t("map_title");
       case "people": return $t("people_title");
       case "places": return $t("places_all_title");
+      case "all-memories": return $t("memories_all_title");
       case "albums": return $t("albums_title");
       case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
       case "place-timeline": return selectedPlace?.city ?? $t("places_title");
@@ -163,6 +169,13 @@
     currentView = "places";
   }
 
+  /** "All Memories" has no navigation entry; it is only opened from the Explore Overview. */
+  function openAllMemories() {
+    exploreScrollTop = content?.scrollTop ?? 0;
+    currentView = "all-memories";
+    void allMemories.refresh();
+  }
+
   function returnToExplore() {
     currentView = "explore";
     queueMicrotask(() => { if (content) content.scrollTop = exploreScrollTop; });
@@ -184,7 +197,10 @@
 
   function returnFromMemoryTimeline() {
     closeMemoryTimeline();
-    returnToExplore();
+    if (memoryOrigin === "all-memories") {
+      currentView = "all-memories";
+      queueMicrotask(() => { if (content) content.scrollTop = allMemoriesScrollTop; });
+    } else returnToExplore();
   }
 
   function returnToAlbums() {
@@ -201,7 +217,9 @@
       mapCreated = false;
       peopleScrollTop = 0;
       exploreScrollTop = 0;
+      allMemoriesScrollTop = 0;
       personOrigin = "people";
+      memoryOrigin = "explore";
       placeOrigin = "explore";
       placesScrollTop = 0;
       albumsScrollTop = 0;
@@ -224,6 +242,7 @@
     people,
     places,
     memories,
+    allMemories,
     explore,
     map,
     albumCatalogue,
@@ -494,7 +513,15 @@
             offlineMessage={$t("favorites_offline")}
           />
         {:else if currentView === "explore"}
-          <ExploreView {explore} {people} {places} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} onSelectMemory={selectMemory} />
+          <ExploreView {explore} {people} {places} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} onViewAllMemories={openAllMemories} onSelectMemory={selectMemory} />
+        {:else if currentView === "all-memories"}
+          <div class="flex h-full min-h-0 flex-col gap-2">
+            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToExplore}>
+              <ArrowLeft class="h-4 w-4" />
+              {$t('explore_return')}
+            </button>
+            <AllMemoriesView {allMemories} onSelect={selectMemory} />
+          </div>
         {:else if currentView === "places"}
           <div class="flex h-full min-h-0 flex-col gap-2">
             <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToExplore}>
@@ -535,7 +562,7 @@
           <div class="flex h-full min-h-0 flex-col gap-2">
             <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnFromMemoryTimeline}>
               <ArrowLeft class="h-4 w-4" />
-              {$t('explore_return')}
+              {$t(memoryOrigin === "all-memories" ? 'memories_all_return' : 'explore_return')}
             </button>
             <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} loadErrorMessage={$t('memories_error')} />
           </div>
