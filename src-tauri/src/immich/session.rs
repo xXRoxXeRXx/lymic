@@ -11,7 +11,7 @@ fn session_cache() -> &'static Mutex<Option<CachedSession>> {
 }
 
 /// Replaces credentials in an Immich error so it is safe for logs, errors and UI events.
-pub(super) fn redact_error(error: &str, credentials: &AuthConfig) -> String {
+fn redact_error(error: &str, credentials: &AuthConfig) -> String {
     crate::audit::audit_safe_error(
         error,
         &[
@@ -72,15 +72,9 @@ impl ImmichSession {
         })
     }
 
-    #[allow(dead_code)]
     /// Stable identity of the authenticated account, for per-account caches.
     pub(crate) fn account_id(&self) -> &str {
         &self.account_id
-    }
-
-    /// Hands the parts to callers still redacting by hand; removed once they move to the session.
-    pub(super) fn into_parts(self) -> (Arc<ImmichClient>, AuthConfig, String) {
-        (self.client, self.credentials, self.account_id)
     }
 
     /// Runs an Immich operation and returns its error with credentials redacted.

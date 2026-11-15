@@ -334,16 +334,6 @@ impl ImmichClient {
             .expect("validated base URL must support relative endpoint paths")
     }
 
-    pub(crate) fn from_stored_credentials(
-    ) -> Result<(std::sync::Arc<Self>, crate::auth::AuthConfig, String), String> {
-        let session = super::session::ImmichSession::from_stored_credentials()?;
-        Ok(session.into_parts())
-    }
-
-    pub(crate) fn redact_error(error: &str, credentials: &crate::auth::AuthConfig) -> String {
-        super::session::redact_error(error, credentials)
-    }
-
     pub(crate) fn validate_path_segment(value: &str, name: &str) -> Result<(), String> {
         if value.trim().is_empty()
             || value.contains("..")

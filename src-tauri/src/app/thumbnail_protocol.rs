@@ -1,4 +1,4 @@
-use crate::immich::ImmichClient;
+use crate::immich::ImmichSession;
 use sha2::{Digest, Sha256};
 use std::{
     collections::VecDeque,
@@ -149,11 +149,11 @@ async fn serve(
         return error_response(StatusCode::BAD_REQUEST, "Invalid thumbnail URI".to_string());
     };
     let cache_id = cache_identity(kind, &id, thumbnail_version(&uri));
-    let (client, credentials, account_id) = match ImmichClient::from_stored_credentials() {
-        Ok(authenticated) => authenticated,
+    let session = match ImmichSession::from_stored_credentials() {
+        Ok(session) => session,
         Err(error) => return error_response(StatusCode::UNAUTHORIZED, error),
     };
-    let cache_dir = account_cache_dir(&cache_root, &account_id);
+    let cache_dir = account_cache_dir(&cache_root, session.account_id());
     if let Ok(Ok(Some(bytes))) = tokio::task::spawn_blocking({
         let cache_dir = cache_dir.clone();
         let cache_id = cache_id.clone();
@@ -182,10 +182,14 @@ async fn serve(
         drop(permit);
         return image_response(bytes);
     }
-    let result = match kind {
-        ThumbnailKind::Asset => client.get_thumbnail(&id).await,
-        ThumbnailKind::Person => client.get_person_thumbnail(&id).await,
-    };
+    let result = session
+        .run(|client| async move {
+            match kind {
+                ThumbnailKind::Asset => client.get_thumbnail(&id).await,
+                ThumbnailKind::Person => client.get_person_thumbnail(&id).await,
+            }
+        })
+        .await;
     drop(permit);
     match result {
         Ok(bytes) if is_valid_image(kind, &bytes) => {
@@ -205,10 +209,7 @@ async fn serve(
             StatusCode::BAD_GATEWAY,
             "Invalid thumbnail format returned by server".to_string(),
         ),
-        Err(error) => error_response(
-            StatusCode::BAD_GATEWAY,
-            ImmichClient::redact_error(&error, &credentials),
-        ),
+        Err(error) => error_response(StatusCode::BAD_GATEWAY, error),
     }
 }
 

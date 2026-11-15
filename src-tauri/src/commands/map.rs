@@ -1,10 +1,9 @@
-use crate::immich::{ImmichClient, MapMarker};
+use crate::immich::{ImmichSession, MapMarker};
 
 #[tauri::command]
 pub(crate) async fn get_map_markers() -> Result<Vec<MapMarker>, String> {
-    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
-    client
-        .get_map_markers()
+    let session = ImmichSession::from_stored_credentials()?;
+    session
+        .run(|client| async move { client.get_map_markers().await })
         .await
-        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }

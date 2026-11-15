@@ -1,4 +1,4 @@
-use crate::immich::{AssetResponse, ImmichClient};
+use crate::immich::{AssetResponse, ImmichClient, ImmichSession};
 use tauri::http::{header, Response, StatusCode, Uri};
 
 const MAX_VIDEO_RANGE_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
@@ -24,23 +24,24 @@ async fn serve(uri: Uri, range: Option<&str>) -> Response<Vec<u8>> {
     let Some((kind, asset_id)) = asset_target(&uri) else {
         return error_response(StatusCode::BAD_REQUEST, "Invalid asset URI");
     };
-    let (client, credentials, _) = match ImmichClient::from_stored_credentials() {
-        Ok(authenticated) => authenticated,
+    let session = match ImmichSession::from_stored_credentials() {
+        Ok(session) => session,
         Err(error) => return error_response(StatusCode::UNAUTHORIZED, &error),
     };
-    let result = match kind {
-        "video" => {
-            let effective_range = bounded_video_range(range);
-            client.get_asset(asset_id, Some(&effective_range)).await
-        }
-        _ => client.get_asset_preview(asset_id).await,
-    };
+    let result = session
+        .run(|client| async move {
+            match kind {
+                "video" => {
+                    let effective_range = bounded_video_range(range);
+                    client.get_asset(asset_id, Some(&effective_range)).await
+                }
+                _ => client.get_asset_preview(asset_id).await,
+            }
+        })
+        .await;
     match result {
         Ok(response) => asset_response(response),
-        Err(error) => error_response(
-            StatusCode::BAD_GATEWAY,
-            &ImmichClient::redact_error(&error, &credentials),
-        ),
+        Err(error) => error_response(StatusCode::BAD_GATEWAY, &error),
     }
 }
 
