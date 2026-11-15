@@ -28,6 +28,7 @@ import type {
   TimelineBucket,
   TimelineAsset,
   PeoplePage,
+  Place,
 } from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
 
@@ -103,6 +104,10 @@ export interface PeopleDesktopAdapter {
   getPersonTimelineBucketAssets(personId: string, timeBucket: string): Promise<TimelineAsset[]>;
 }
 
+export interface PlacesDesktopAdapter {
+  getPlaces(): Promise<Place[]>;
+}
+
 export interface PreferencesDesktopAdapter {
   getUploadParallelism(): Promise<number>;
   setUploadParallelism(uploadParallelism: number): Promise<void>;
@@ -152,6 +157,7 @@ export interface DesktopAdapter
     AssetDesktopAdapter,
     AlbumTimelineDesktopAdapter,
     PeopleDesktopAdapter,
+    PlacesDesktopAdapter,
     PreferencesDesktopAdapter,
     UpdateDesktopAdapter,
     RemovableVolumeDesktopAdapter {}
@@ -207,6 +213,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getPeople: (page, size) => invoke<PeoplePage>("get_people", { page, size }),
   getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),
   getPersonTimelineBucketAssets: (personId, timeBucket) => invoke<TimelineAsset[]>("get_person_timeline_bucket_assets", { personId, timeBucket }),
+  getPlaces: () => invoke<Place[]>("get_places"),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),
