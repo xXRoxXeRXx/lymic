@@ -22,7 +22,9 @@
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
   import { createAlbumTimelineController } from "#lib/controllers/album-timeline-controller.svelte.ts";
   import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
-  import type { AlbumCatalogueItem, RecognizedPerson } from "#lib/contracts.ts";
+  import { createMemoryTimelineController } from "#lib/controllers/memory-timeline-controller.svelte.ts";
+  import { memoryTitle } from "#lib/memory-title.ts";
+  import type { AlbumCatalogueItem, Memory, RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
@@ -32,6 +34,8 @@
   let albumTimeline = $state<ReturnType<typeof createAlbumTimelineController> | null>(null);
   let selectedPerson = $state<RecognizedPerson | null>(null);
   let personTimeline = $state<ReturnType<typeof createPersonTimelineController> | null>(null);
+  let selectedMemory = $state<Memory | null>(null);
+  let memoryTimeline = $state<ReturnType<typeof createMemoryTimelineController> | null>(null);
   let personOrigin = $state<"people" | "explore">("people");
   let peopleScrollTop = 0;
   let exploreScrollTop = 0;
@@ -46,6 +50,14 @@
     personTimeline = createPersonTimelineController(desktop, person.id);
     currentView = "person-timeline";
     void personTimeline.refresh();
+  }
+
+  function selectMemory(memory: Memory) {
+    exploreScrollTop = content?.scrollTop ?? 0;
+    selectedMemory = memory;
+    memoryTimeline = createMemoryTimelineController(memory);
+    currentView = "memory-timeline";
+    void memoryTimeline.refresh();
   }
 
   function selectAlbum(album: AlbumCatalogueItem) {
@@ -66,6 +78,7 @@
       case "albums": return $t("albums_title");
       case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
       case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
+      case "memory-timeline": return selectedMemory ? memoryTitle(selectedMemory, (key, values) => $t(key, { values }), { locale: $locale ?? "en" }) : $t("memories_title");
       case "dashboard": return $t("dashboard");
       case "logs": return $t("logs");
       case "settings": return $t("settings");
@@ -77,6 +90,12 @@
     personTimeline?.clear();
     personTimeline = null;
     selectedPerson = null;
+  }
+
+  function closeMemoryTimeline() {
+    memoryTimeline?.clear();
+    memoryTimeline = null;
+    selectedMemory = null;
   }
 
   function closeAlbumTimeline() {
@@ -120,6 +139,12 @@
     queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
   }
 
+  function returnFromMemoryTimeline() {
+    closeMemoryTimeline();
+    currentView = "explore";
+    queueMicrotask(() => { if (content) content.scrollTop = exploreScrollTop; });
+  }
+
   function returnToAlbums() {
     closeAlbumTimeline();
     currentView = "albums";
@@ -138,6 +163,7 @@
       albumsScrollTop = 0;
       closeAlbumTimeline();
       closePersonTimeline();
+      closeMemoryTimeline();
       currentView = "photos";
     },
     isExploreActive: () => currentView === "explore",
@@ -151,6 +177,7 @@
     timeline,
     favorites,
     people,
+    memories,
     explore,
     map,
     albumCatalogue,
@@ -421,7 +448,7 @@
             offlineMessage={$t("favorites_offline")}
           />
         {:else if currentView === "explore"}
-          <ExploreView {explore} {people} onViewAllPeople={openPeople} onSelectPerson={selectPerson} />
+          <ExploreView {explore} {people} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onSelectMemory={selectMemory} />
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
         {:else if currentView === "albums"}
@@ -441,6 +468,14 @@
               {$t(personOrigin === "explore" ? 'explore_return' : 'people_return')}
             </button>
             <TimelineView timeline={personTimeline} {...sharedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
+          </div>
+        {:else if currentView === "memory-timeline" && memoryTimeline}
+          <div class="flex h-full min-h-0 flex-col gap-2">
+            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnFromMemoryTimeline}>
+              <ArrowLeft class="h-4 w-4" />
+              {$t('explore_return')}
+            </button>
+            <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} loadErrorMessage={$t('memories_error')} />
           </div>
         {:else if currentView === "dashboard"}
           <DashboardView

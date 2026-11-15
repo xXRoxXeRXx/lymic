@@ -29,6 +29,7 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
     getFavoritesTimelineBuckets: vi.fn().mockResolvedValue([]),
     getFavoritesTimelineBucketAssets: vi.fn().mockResolvedValue([]),
     getMapMarkers: vi.fn().mockResolvedValue([]),
+    getMemories: vi.fn().mockResolvedValue([]),
     getPeople: vi.fn().mockResolvedValue({ people: [], hasNextPage: false }),
     getPersonTimelineBuckets: vi.fn().mockResolvedValue([]),
     getPersonTimelineBucketAssets: vi.fn().mockResolvedValue([]),

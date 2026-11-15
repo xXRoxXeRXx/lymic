@@ -3,6 +3,7 @@ import { createAuthController } from "./auth-controller.svelte";
 import { createExploreController } from "./explore-controller.svelte";
 import { createFavoritesTimelineController } from "./favorites-timeline-controller.svelte";
 import { createFeedbackController } from "./feedback-controller.svelte";
+import { createMemoriesController } from "./memories-controller.svelte";
 import { createMapController } from "./map-controller.svelte";
 import { createPeopleController } from "./people-controller.svelte";
 import { createRemovableVolumeController } from "./removable-volume-controller.svelte";
@@ -16,6 +17,7 @@ import type {
   AuthDesktopAdapter,
   FavoritesTimelineDesktopAdapter,
   MapDesktopAdapter,
+  MemoriesDesktopAdapter,
   PeopleDesktopAdapter,
   RemovableVolumeDesktopAdapter,
   SyncDesktopAdapter,
@@ -33,6 +35,7 @@ export type SessionDesktopAdapter =
   FavoritesTimelineDesktopAdapter &
   MapDesktopAdapter &
   PeopleDesktopAdapter &
+  MemoriesDesktopAdapter &
   RemovableVolumeDesktopAdapter;
 
 export function createSessionController(options: {
@@ -73,7 +76,8 @@ export function createSessionController(options: {
   const timeline = createTimelineController(adapter);
   const favorites = createFavoritesTimelineController(adapter);
   const people = createPeopleController(adapter);
-  const explore = createExploreController({ people, isActive: () => options.isExploreActive?.() ?? false });
+  const memories = createMemoriesController(adapter);
+  const explore = createExploreController({ people, memories, isActive: () => options.isExploreActive?.() ?? false });
   const map = createMapController(adapter);
   const albumCatalogue = createAlbumCatalogueController(adapter);
 
@@ -86,6 +90,7 @@ export function createSessionController(options: {
     timeline,
     favorites,
     people,
+    memories,
     map,
     albumCatalogue,
   ];
@@ -153,6 +158,7 @@ export function createSessionController(options: {
     timeline,
     favorites,
     people,
+    memories,
     explore,
     map,
     albumCatalogue,
