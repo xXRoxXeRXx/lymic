@@ -2001,8 +2001,39 @@ mod database_tests {
         let predicate = crate::db::sql_path_is_or_descendant_of("local_path", "?1");
         assert_eq!(
             predicate,
-            "(local_path = ?1 OR (substr(local_path, 2, 1) = ':' AND substr(?1, 2, 1) = ':' AND substr(local_path, 1, 1) = substr(?1, 1, 1) COLLATE NOCASE AND substr(local_path, 2) = substr(?1, 2)) OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\\\' OR (substr(local_path, 2, 1) = ':' AND substr(?1, 2, 1) = ':' AND substr(local_path, 1, 1) = substr(?1, 1, 1) COLLATE NOCASE AND substr(local_path, 2, length(?1) - 1) = substr(?1, 2) AND substr(local_path, length(?1) + 1, 1) IN ('/', '\\\\')))"
+            "(local_path = ?1 OR (substr(local_path, 2, 1) = ':' AND substr(?1, 2, 1) = ':' AND substr(local_path, 1, 1) = substr(?1, 1, 1) COLLATE NOCASE AND substr(local_path, 2) = substr(?1, 2)) OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\' OR (substr(local_path, 2, 1) = ':' AND substr(?1, 2, 1) = ':' AND substr(local_path, 1, 1) = substr(?1, 1, 1) COLLATE NOCASE AND substr(local_path, 2, length(?1) - 1) = substr(?1, 2) AND substr(local_path, length(?1) + 1, 1) IN ('/', '\\')))"
         );
+    }
+
+    #[tokio::test]
+    async fn folder_sync_queries_match_backslash_descendants_without_matching_siblings() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let assets = [
+            QueueAsset {
+                path: r"C:\Photos\inside.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            },
+            QueueAsset {
+                path: r"C:\Photos-Vacation\outside.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            },
+        ];
+        enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+
+        assert!(has_sync_work_in_folder(&pool, r"C:\Photos").await.unwrap());
+        discard_sync_data_in_folder(&pool, r"C:\Photos")
+            .await
+            .unwrap();
+        assert!(!has_sync_work_in_folder(&pool, r"C:\Photos").await.unwrap());
+        assert!(has_sync_work_in_folder(&pool, r"C:\Photos-Vacation")
+            .await
+            .unwrap());
     }
 
     #[tokio::test]

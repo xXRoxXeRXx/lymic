@@ -47,6 +47,20 @@ mod internal {
         fn record_audit(&self, event: AuditEvent);
     }
 
+    pub(crate) trait FolderSync {
+        async fn has_work_in_folder(&self, path: &str) -> Result<bool, String>;
+        fn cancel_work_in_folder(&self, path: &str);
+        async fn discard_folder_queue(&self, path: &str) -> Result<(), String>;
+    }
+
+    pub(crate) trait RemovalEffects {
+        fn log_unwatch_failed(&self, path: &str, error: &str);
+        fn log_watcher_restore_failed(&self, path: &str, error: &str);
+        fn set_sync_enabled(&self, enabled: bool);
+        fn log_tray_refresh_after_remove_failed(&self, error: &str);
+        fn record_audit(&self, event: AuditEvent);
+    }
+
     pub(crate) struct SqliteFolderPersistence<'a> {
         pub(crate) pool: &'a sqlx::SqlitePool,
     }
@@ -177,11 +191,92 @@ mod internal {
             crate::audit::audit_event(self.app, event);
         }
     }
+
+    pub(crate) struct CoordinatorFolderSync<'a> {
+        pub(crate) pool: &'a sqlx::SqlitePool,
+        pub(crate) running: &'a std::sync::atomic::AtomicBool,
+        pub(crate) coordinator: std::sync::Arc<crate::sync::SyncCoordinatorInner>,
+    }
+
+    impl FolderSync for CoordinatorFolderSync<'_> {
+        async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
+            if self.coordinator.active_work.has_work_in(path) {
+                return Ok(true);
+            }
+            db::has_sync_work_in_folder(self.pool, path)
+                .await
+                .map_err(|error| error.to_string())
+        }
+
+        fn cancel_work_in_folder(&self, path: &str) {
+            self.coordinator.active_work.cancel_work_in(path);
+        }
+
+        async fn discard_folder_queue(&self, path: &str) -> Result<(), String> {
+            crate::sync::lifecycle::SynchronizationLifecycle::new(
+                self.pool,
+                self.running,
+                self.coordinator.clone(),
+            )
+            .discard_folder(path)
+            .await
+            .map_err(|error| error.to_string())
+        }
+    }
+
+    pub(crate) struct TauriRemovalEffects<'a> {
+        pub(crate) app: &'a tauri::AppHandle,
+    }
+
+    impl RemovalEffects for TauriRemovalEffects<'_> {
+        fn log_unwatch_failed(&self, path: &str, error: &str) {
+            crate::app::events::log_to_ui_folder_error(
+                self.app,
+                "WARN",
+                &format!("Failed to unwatch '{path}': {error}"),
+                "log_unwatch_failed",
+                path,
+                error,
+            );
+        }
+
+        fn log_watcher_restore_failed(&self, path: &str, error: &str) {
+            crate::app::events::log_to_ui_folder_error(
+                self.app,
+                "ERROR",
+                &format!("Could not restore watcher registration for '{path}': {error}"),
+                "log_watcher_restore_failed",
+                path,
+                error,
+            );
+        }
+
+        fn set_sync_enabled(&self, enabled: bool) {
+            crate::app::tray::set_sync_enabled(self.app, enabled);
+        }
+
+        fn log_tray_refresh_after_remove_failed(&self, error: &str) {
+            crate::app::events::log_to_ui_error(
+                self.app,
+                "ERROR",
+                &format!(
+                    "Folder was removed, but could not refresh tray sync availability: {error}"
+                ),
+                "log_tray_refresh_after_remove_failed",
+                error,
+            );
+        }
+
+        fn record_audit(&self, event: AuditEvent) {
+            crate::audit::audit_event(self.app, event);
+        }
+    }
 }
 
 use internal::{
-    FolderPersistence, FolderWatcher, NotifyFolderWatcher, RegistrationEffects,
-    SqliteFolderPersistence, TauriRegistrationEffects,
+    CoordinatorFolderSync, FolderPersistence, FolderSync, FolderWatcher, NotifyFolderWatcher,
+    RegistrationEffects, RemovalEffects, SqliteFolderPersistence, TauriRegistrationEffects,
+    TauriRemovalEffects,
 };
 
 fn sanitize_target_album_id(target_album_id: Option<String>) -> Option<AlbumId> {
@@ -482,6 +577,142 @@ where
         ));
 
         Ok(id)
+    }
+}
+
+pub(crate) fn removal_requires_confirmation(confirm_cancellation: Option<bool>) -> bool {
+    !confirm_cancellation.unwrap_or(false)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RemoveFolderResult {
+    pub(crate) requires_sync_cancellation: bool,
+}
+
+pub(crate) struct WatchedFolderRemoval<P, W, S, E> {
+    persistence: P,
+    watcher: W,
+    sync: S,
+    effects: E,
+}
+
+impl<'a>
+    WatchedFolderRemoval<
+        SqliteFolderPersistence<'a>,
+        NotifyFolderWatcher<'a>,
+        CoordinatorFolderSync<'a>,
+        TauriRemovalEffects<'a>,
+    >
+{
+    pub(crate) fn for_tauri(
+        app: &'a tauri::AppHandle,
+        pool: &'a sqlx::SqlitePool,
+        watcher: &'a tokio::sync::Mutex<crate::watcher::WatcherState>,
+        sync_state: &'a crate::sync::SyncState,
+        sync_coordinator: &'a crate::sync::SyncCoordinator,
+    ) -> Self {
+        Self::new(
+            SqliteFolderPersistence { pool },
+            NotifyFolderWatcher { watcher },
+            CoordinatorFolderSync {
+                pool,
+                running: &sync_state.0,
+                coordinator: sync_coordinator.0.clone(),
+            },
+            TauriRemovalEffects { app },
+        )
+    }
+}
+
+impl<P, W, S, E> WatchedFolderRemoval<P, W, S, E>
+where
+    P: FolderPersistence,
+    W: FolderWatcher,
+    S: FolderSync,
+    E: RemovalEffects,
+{
+    pub(crate) fn new(persistence: P, watcher: W, sync: S, effects: E) -> Self {
+        Self {
+            persistence,
+            watcher,
+            sync,
+            effects,
+        }
+    }
+
+    pub(crate) async fn remove(
+        &self,
+        id: i64,
+        confirm_cancellation: Option<bool>,
+    ) -> Result<RemoveFolderResult, String> {
+        let folders = self.persistence.list_folders().await?;
+        let folder = folders.into_iter().find(|folder| folder.id == id);
+
+        if removal_requires_confirmation(confirm_cancellation) {
+            let requires_sync_cancellation = match folder {
+                Some(ref folder) => self.sync.has_work_in_folder(&folder.path).await?,
+                None => false,
+            };
+            return Ok(RemoveFolderResult {
+                requires_sync_cancellation,
+            });
+        }
+
+        if let Some(folder) = folder {
+            if let Err(error) = self.watcher.unwatch(&folder.path).await {
+                self.effects.log_unwatch_failed(&folder.path, &error);
+                return Err(format!("Failed to unwatch '{}': {}", folder.path, error));
+            }
+
+            // The watcher is gone before cancellation so no new work can be produced for this root.
+            // The queue cleanup is path-component based and leaves sibling roots untouched.
+            self.sync.cancel_work_in_folder(&folder.path);
+            if let Err(error) = self.discard_and_delete_folder(id, &folder.path).await {
+                self.restore_watcher_after_failure(&folder.path).await;
+                return Err(error);
+            }
+        } else {
+            self.persistence.remove_folder(id).await?;
+        }
+
+        match self.persistence.list_folders().await {
+            Ok(folders) => self.effects.set_sync_enabled(!folders.is_empty()),
+            Err(error) => self.effects.log_tray_refresh_after_remove_failed(&error),
+        }
+
+        self.effects.record_audit(AuditEvent::new(
+            AuditEvent::operation_id(),
+            "folder.removed",
+            Outcome::Success,
+            Severity::Info,
+            None,
+            "command",
+            "Watched folder removed",
+            json!({ "folder_id": id }),
+        ));
+
+        Ok(RemoveFolderResult {
+            requires_sync_cancellation: false,
+        })
+    }
+
+    async fn discard_and_delete_folder(&self, id: i64, path: &str) -> Result<(), String> {
+        self.sync.discard_folder_queue(path).await?;
+        self.persistence.remove_folder(id).await
+    }
+
+    async fn restore_watcher_after_failure(&self, path: &str) {
+        let path_for_check = PathBuf::from(path);
+        let is_available = tokio::task::spawn_blocking(move || path_for_check.is_dir())
+            .await
+            .unwrap_or(false);
+        if is_available {
+            if let Err(rewatch_error) = self.watcher.watch_available(path).await {
+                self.effects
+                    .log_watcher_restore_failed(path, &rewatch_error);
+            }
+        }
     }
 }
 

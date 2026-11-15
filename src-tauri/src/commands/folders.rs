@@ -1,25 +1,12 @@
-use crate::app::events::{log_to_ui_error, log_to_ui_folder_error};
-use crate::app::tray::set_sync_enabled;
-use crate::audit::audit_event;
-use crate::watched_folders::{RegisterFolderParams, WatchedFolderRegistration};
+use crate::watched_folders::{
+    RegisterFolderParams, RemoveFolderResult, WatchedFolderRegistration, WatchedFolderRemoval,
+};
 use crate::{
     db,
     sync::{admit_and_run, scan_watched_folders_for_media, SyncCoordinator, SyncSource},
     watcher,
 };
-use serde_json::json;
-use std::path::PathBuf;
 use tauri::Manager;
-
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RemoveFolderResult {
-    requires_sync_cancellation: bool,
-}
-
-fn removal_requires_confirmation(confirm_cancellation: Option<bool>) -> bool {
-    !confirm_cancellation.unwrap_or(false)
-}
 
 // tokio::sync::Mutex avoids blocking the async executor while waiting
 //         for the lock (std::sync::Mutex::lock blocks the current thread).
@@ -112,115 +99,21 @@ pub(crate) async fn remove_folder(
     id: i64,
     confirm_cancellation: Option<bool>,
 ) -> Result<RemoveFolderResult, String> {
-    let folders = db::get_folders(pool.inner())
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if let Some(folder) = folders.iter().find(|f| f.id == id) {
-        let path = folder.path.clone();
-        let has_active_work = sync_coordinator.0.active_work.has_work_in(&path)
-            || db::has_sync_work_in_folder(pool.inner(), &path)
-                .await
-                .map_err(|error| error.to_string())?;
-        if removal_requires_confirmation(confirm_cancellation) {
-            return Ok(RemoveFolderResult {
-                requires_sync_cancellation: has_active_work,
-            });
-        }
-        {
-            let mut w = watcher.lock().await;
-            if let Err(e) = watcher::unwatch_path(&mut w, &path) {
-                log_to_ui_folder_error(
-                    &app,
-                    "WARN",
-                    &format!("Failed to unwatch '{}': {}", path, e),
-                    "log_unwatch_failed",
-                    &path,
-                    &e.to_string(),
-                );
-                return Err(format!("Failed to unwatch '{}': {}", path, e));
-            }
-        }
-
-        // The watcher is gone before cancellation so no new work can be produced for this root.
-        // The queue cleanup is path-component based and leaves sibling roots untouched.
-        sync_coordinator.0.active_work.cancel_work_in(&path);
-        let running = app.state::<crate::sync::SyncState>();
-        let lifecycle = crate::sync::lifecycle::SynchronizationLifecycle::new(
-            pool.inner(),
-            &running.0,
-            sync_coordinator.0.clone(),
-        );
-        if let Err(error) = lifecycle.discard_folder(&path).await {
-            let path_for_check = PathBuf::from(&path);
-            let is_available = tokio::task::spawn_blocking(move || path_for_check.is_dir())
-                .await
-                .unwrap_or(false);
-            let mut w = watcher.lock().await;
-            let _ = w.reconcile_path(&path, is_available);
-            return Err(error.to_string());
-        }
-
-        if let Err(error) = db::remove_folder(pool.inner(), id).await {
-            let path_for_check = PathBuf::from(&path);
-            let is_available = tokio::task::spawn_blocking(move || path_for_check.is_dir())
-                .await
-                .unwrap_or(false);
-            let mut w = watcher.lock().await;
-            if let Err(rewatch_error) = w.reconcile_path(&path, is_available) {
-                log_to_ui_folder_error(
-                    &app,
-                    "ERROR",
-                    &format!(
-                        "Could not restore watcher registration for '{}': {}",
-                        path, rewatch_error
-                    ),
-                    "log_watcher_restore_failed",
-                    &path,
-                    &rewatch_error.to_string(),
-                );
-            }
-            return Err(error.to_string());
-        }
-    } else {
-        db::remove_folder(pool.inner(), id)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    match db::get_folders(pool.inner()).await {
-        Ok(folders) => set_sync_enabled(&app, !folders.is_empty()),
-        Err(error) => log_to_ui_error(
-            &app,
-            "ERROR",
-            &format!(
-                "Folder was removed, but could not refresh tray sync availability: {}",
-                error
-            ),
-            "log_tray_refresh_after_remove_failed",
-            &error.to_string(),
-        ),
-    }
-    audit_event(
+    let running = app.state::<crate::sync::SyncState>();
+    WatchedFolderRemoval::for_tauri(
         &app,
-        crate::audit::AuditEvent::new(
-            crate::audit::AuditEvent::operation_id(),
-            "folder.removed",
-            crate::audit::Outcome::Success,
-            crate::audit::Severity::Info,
-            None,
-            "command",
-            "Watched folder removed",
-            json!({ "folder_id": id }),
-        ),
-    );
-    Ok(RemoveFolderResult {
-        requires_sync_cancellation: false,
-    })
+        pool.inner(),
+        watcher.inner(),
+        running.inner(),
+        sync_coordinator.inner(),
+    )
+    .remove(id, confirm_cancellation)
+    .await
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{removal_requires_confirmation, RemoveFolderResult};
+    use crate::watched_folders::{removal_requires_confirmation, RemoveFolderResult};
 
     #[test]
     fn folder_removal_requires_explicit_confirmation() {
