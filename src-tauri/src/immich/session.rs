@@ -68,14 +68,8 @@ impl ImmichSession {
         }
         let account_id = credentials.account_id();
         let client = Arc::new(
-            ImmichClient::new(
-                credentials.server_url.clone(),
-                credentials.api_key.clone(),
-                credentials.allow_local_http,
-                credentials.cloudflare_client_id.clone(),
-                credentials.cloudflare_client_secret.clone(),
-            )
-            .map_err(|error| credentials.redact(&error))?,
+            ImmichClient::from_credentials(&credentials)
+                .map_err(|error| credentials.redact(&error))?,
         );
         if let Ok(mut cache) = session_cache().lock() {
             *cache = Some(CachedSession {

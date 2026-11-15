@@ -102,6 +102,23 @@ mod tests {
     use super::{parse_stored_credentials, AuthConfig};
 
     #[test]
+    fn redaction_keeps_the_local_http_error_code_the_login_form_matches_on() {
+        let credentials = AuthConfig {
+            server_url: "http://192.168.1.5:2283".to_string(),
+            api_key: "api-key-secret".to_string(),
+            allow_local_http: true,
+            cloudflare_client_id: None,
+            cloudflare_client_secret: None,
+        };
+
+        let error = credentials.redact(
+            "LOCAL_HTTP_NOT_ALLOWED: HTTP is allowed only for localhost and loopback addresses.",
+        );
+
+        assert!(error.starts_with("LOCAL_HTTP_NOT_ALLOWED:"), "{error}");
+    }
+
+    #[test]
     fn redacts_all_credentials_from_diagnostic_errors() {
         let credentials = AuthConfig {
             server_url: "https://immich.example.test".to_string(),

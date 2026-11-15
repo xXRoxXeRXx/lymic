@@ -48,11 +48,11 @@ pub(crate) async fn login(
     );
     let operation_id = crate::audit::AuditEvent::operation_id();
     let submitted = auth::AuthConfig {
-        server_url: server_url.clone(),
-        api_key: api_key.clone(),
+        server_url,
+        api_key,
         allow_local_http,
-        cloudflare_client_id: cloudflare_client_id.clone(),
-        cloudflare_client_secret: cloudflare_client_secret.clone(),
+        cloudflare_client_id,
+        cloudflare_client_secret,
     };
     let actor_id = Some(submitted.account_id());
     audit_event(
@@ -72,27 +72,22 @@ pub(crate) async fn login(
     // Build a temporary ImmichClient purely to reuse its URL normalisation and
     // pooled reqwest Client. The client is discarded after the connection test.
     let result: Result<(), String> = async {
-        let temp_client = immich::ImmichClient::new(
-            server_url.clone(),
-            api_key.clone(),
-            allow_local_http,
-            cloudflare_client_id.clone(),
-            cloudflare_client_secret.clone(),
-        )?;
+        let temp_client = immich::ImmichClient::from_credentials(&submitted)?;
         temp_client.validate_connection().await?;
         auth::store_credentials(
-            &server_url,
-            &api_key,
+            &submitted.server_url,
+            &submitted.api_key,
             temp_client.uses_http(),
-            cloudflare_client_id.clone(),
-            cloudflare_client_secret.clone(),
+            submitted.cloudflare_client_id.clone(),
+            submitted.cloudflare_client_secret.clone(),
         )?;
         if let Ok(cache_dir) = profile_cache_dir(&app) {
             profile_cache::clear_profile_cache(&cache_dir);
         }
-        Ok(())
+        Ok::<(), String>(())
     }
-    .await;
+    .await
+    .map_err(|error| submitted.redact(&error));
     audit_event(
         &app,
         crate::audit::AuditEvent::new(
@@ -115,7 +110,7 @@ pub(crate) async fn login(
             } else {
                 "Login failed"
             },
-            json!({ "failure_reason": result.as_ref().err().map(|error| submitted.redact(error)) }),
+            json!({ "failure_reason": result.as_ref().err() }),
         ),
     );
     result

@@ -328,6 +328,16 @@ impl ImmichClient {
         })
     }
 
+    pub(crate) fn from_credentials(credentials: &crate::auth::AuthConfig) -> Result<Self, String> {
+        Self::new(
+            credentials.server_url.clone(),
+            credentials.api_key.clone(),
+            credentials.allow_local_http,
+            credentials.cloudflare_client_id.clone(),
+            credentials.cloudflare_client_secret.clone(),
+        )
+    }
+
     pub(super) fn endpoint_url(&self, path: &str) -> Url {
         self.server_url
             .join(path.trim_start_matches('/'))
