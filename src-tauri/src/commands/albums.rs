@@ -1,23 +1,21 @@
 use crate::immich::{
-    Album, AlbumAssignmentResult, AlbumCatalogueItem, AlbumId, ImmichClient, RemoteAssetId,
+    Album, AlbumAssignmentResult, AlbumCatalogueItem, AlbumId, ImmichSession, RemoteAssetId,
 };
 
 #[tauri::command]
 pub(crate) async fn get_album_catalogue() -> Result<Vec<AlbumCatalogueItem>, String> {
-    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
-    client
-        .get_album_catalogue()
+    let session = ImmichSession::from_stored_credentials()?;
+    session
+        .run(|client| async move { client.get_album_catalogue().await })
         .await
-        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }
 
 #[tauri::command]
 pub(crate) async fn get_albums() -> Result<Vec<Album>, String> {
-    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
-    client
-        .get_albums()
+    let session = ImmichSession::from_stored_credentials()?;
+    session
+        .run(|client| async move { client.get_albums().await })
         .await
-        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }
 
 #[tauri::command]
@@ -27,11 +25,11 @@ pub(crate) async fn create_album(name: String) -> Result<Album, String> {
         return Err("Album name cannot be empty".to_string());
     }
 
-    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
-    client
-        .create_album(trimmed)
+    let session = ImmichSession::from_stored_credentials()?;
+    let name = trimmed.to_string();
+    session
+        .run(|client| async move { client.create_album(&name).await })
         .await
-        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }
 
 #[tauri::command]
@@ -54,9 +52,13 @@ pub(crate) async fn add_assets_to_album(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let (client, credentials, _) = ImmichClient::from_stored_credentials()?;
-    client
-        .add_assets_to_album_with_result(&AlbumId::new(album_id), &asset_ids)
+    let session = ImmichSession::from_stored_credentials()?;
+    let album_id = AlbumId::new(album_id);
+    session
+        .run(|client| async move {
+            client
+                .add_assets_to_album_with_result(&album_id, &asset_ids)
+                .await
+        })
         .await
-        .map_err(|error| ImmichClient::redact_error(&error, &credentials))
 }

@@ -4,6 +4,7 @@ mod client;
 pub(crate) mod ids;
 mod people;
 mod response;
+mod session;
 mod timeline;
 mod upload;
 
@@ -12,6 +13,7 @@ pub(crate) use bulk_check::BulkCheckDuplicate;
 pub(crate) use client::{AssetDetails, AssetResponse, ImmichClient};
 pub(crate) use ids::{AlbumId, RemoteAssetId};
 pub(crate) use people::PeoplePage;
+pub(crate) use session::ImmichSession;
 pub(crate) use timeline::{AlbumTimeline, TimelineAsset, TimelineBucket};
 pub(crate) use upload::SidecarDirectoryCache;
 

@@ -23,18 +23,6 @@ const MAX_THUMBNAIL_BYTES: usize = 20 * 1024 * 1024;
 const MAX_ASSET_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
 pub(crate) const LOCAL_HTTP_NOT_ALLOWED_ERROR: &str = "LOCAL_HTTP_NOT_ALLOWED";
 
-type CachedAuthenticatedClient = (
-    crate::auth::AuthConfig,
-    std::sync::Arc<ImmichClient>,
-    String,
-);
-
-fn authenticated_client_cache() -> &'static std::sync::Mutex<Option<CachedAuthenticatedClient>> {
-    static CACHE: std::sync::OnceLock<std::sync::Mutex<Option<CachedAuthenticatedClient>>> =
-        std::sync::OnceLock::new();
-    CACHE.get_or_init(|| std::sync::Mutex::new(None))
-}
-
 fn upload_timeout(total_file_bytes: u64) -> std::time::Duration {
     let proportional_seconds = (u128::from(total_file_bytes)
         .saturating_mul(u128::from(UPLOAD_TIMEOUT_SECONDS_PER_GIB))
@@ -348,42 +336,12 @@ impl ImmichClient {
 
     pub(crate) fn from_stored_credentials(
     ) -> Result<(std::sync::Arc<Self>, crate::auth::AuthConfig, String), String> {
-        let credentials =
-            crate::auth::get_credentials()?.ok_or_else(|| "Not authenticated".to_string())?;
-        if let Ok(cache) = authenticated_client_cache().lock() {
-            if let Some((ref cached_creds, ref client, ref account_id)) = *cache {
-                if cached_creds == &credentials {
-                    return Ok((client.clone(), credentials, account_id.clone()));
-                }
-            }
-        }
-        let account_id = crate::audit::actor_id(&credentials.server_url, &credentials.api_key);
-        let client = std::sync::Arc::new(
-            Self::new(
-                credentials.server_url.clone(),
-                credentials.api_key.clone(),
-                credentials.allow_local_http,
-                credentials.cloudflare_client_id.clone(),
-                credentials.cloudflare_client_secret.clone(),
-            )
-            .map_err(|error| Self::redact_error(&error, &credentials))?,
-        );
-        if let Ok(mut cache) = authenticated_client_cache().lock() {
-            *cache = Some((credentials.clone(), client.clone(), account_id.clone()));
-        }
-        Ok((client, credentials, account_id))
+        let session = super::session::ImmichSession::from_stored_credentials()?;
+        Ok(session.into_parts())
     }
 
     pub(crate) fn redact_error(error: &str, credentials: &crate::auth::AuthConfig) -> String {
-        crate::audit::audit_safe_error(
-            error,
-            &[
-                Some(&credentials.server_url),
-                Some(&credentials.api_key),
-                credentials.cloudflare_client_id.as_deref(),
-                credentials.cloudflare_client_secret.as_deref(),
-            ],
-        )
+        super::session::redact_error(error, credentials)
     }
 
     pub(crate) fn validate_path_segment(value: &str, name: &str) -> Result<(), String> {
