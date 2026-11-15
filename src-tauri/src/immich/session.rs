@@ -85,6 +85,18 @@ impl ImmichSession {
         })
     }
 
+    /// The authenticated client, for work that outlives a single `run` call
+    /// (a Synchronization run). Its errors are not redacted by the session; pair
+    /// it with [`ImmichSession::credentials`] where they can reach logs.
+    pub(crate) fn client(&self) -> Arc<ImmichClient> {
+        self.client.clone()
+    }
+
+    /// The credentials this session was opened for.
+    pub(crate) fn credentials(&self) -> &AuthConfig {
+        &self.credentials
+    }
+
     /// Stable identity of the authenticated account, for per-account caches.
     pub(crate) fn account_id(&self) -> &str {
         &self.account_id
@@ -309,6 +321,30 @@ mod tests {
             .unwrap_err();
 
         config.assert_credential_free(&error);
+    }
+
+    #[test]
+    fn local_http_is_only_accepted_after_the_persisted_opt_in() {
+        let mut config = AuthConfig::test_fixture("http://localhost");
+        assert!(ImmichSession::open(Some(config.clone())).is_ok());
+
+        config.allow_local_http = false;
+        let error = ImmichSession::open(Some(config.clone())).err().unwrap();
+        config.assert_credential_free(&error);
+    }
+
+    #[test]
+    fn a_credential_change_yields_a_new_client_and_the_same_credentials_reuse_one() {
+        let first_config = AuthConfig::test_fixture("http://127.0.0.1:1");
+        let mut changed_config = first_config.clone();
+        changed_config.api_key = "rotated-api-key".to_string();
+
+        let first = ImmichSession::open(Some(first_config.clone())).unwrap();
+        let changed = ImmichSession::open(Some(changed_config.clone())).unwrap();
+
+        assert!(!Arc::ptr_eq(&first.client(), &changed.client()));
+        assert_eq!(changed.credentials(), &changed_config);
+        assert_ne!(first.account_id(), changed.account_id());
     }
 
     #[test]

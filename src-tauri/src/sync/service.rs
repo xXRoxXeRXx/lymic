@@ -4,7 +4,7 @@ use crate::{
     app::events::{emit_sync_error, log_to_ui_error},
     audit::SyncAuditContext,
     auth, db,
-    immich::ImmichClient,
+    immich::{ImmichClient, ImmichSession},
     sync::{
         lifecycle::{LifecycleClaim, SynchronizationLifecycle},
         queue_runner::run_sync_pipeline,
@@ -150,15 +150,10 @@ impl<'a> Synchronization<'a> {
         };
         crate::app::tray::update_sync_action(self.app, &started);
 
-        let credentials = match auth::get_credentials() {
-            Ok(Some(credentials)) => credentials,
-            Ok(None) => return self.fail_run(source, "Not logged in").await,
-            Err(error) => return self.fail_run(source, &error.to_string()).await,
-        };
-        let audit_context = SyncAuditContext::from_credentials(&credentials, source.audit_label());
-        let Some(client) = create_authenticated_client(self.app, credentials) else {
-            return self.fail_run(source, "Invalid server configuration").await;
-        };
+        let session = self.open_session(source).await?;
+        let audit_context =
+            SyncAuditContext::from_credentials(session.credentials(), source.audit_label());
+        let client = session.client();
 
         if source.is_manual() {
             let result = run_sync_pipeline(
@@ -186,6 +181,29 @@ impl<'a> Synchronization<'a> {
                 audit_context,
             );
             Ok(None)
+        }
+    }
+
+    /// Obtains the authenticated Immich session for a run, failing the run durably
+    /// when there is no login or the stored server configuration is invalid.
+    async fn open_session(&self, source: SyncSource) -> Result<ImmichSession, String> {
+        let credentials = match auth::get_credentials() {
+            Ok(Some(credentials)) => credentials,
+            Ok(None) => return self.fail_run(source, "Not logged in").await,
+            Err(error) => return self.fail_run(source, &error).await,
+        };
+        match ImmichSession::from_credentials(credentials) {
+            Ok(session) => Ok(session),
+            Err(error) => {
+                log_to_ui_error(
+                    self.app,
+                    "ERROR",
+                    &format!("Invalid server configuration: {}", error),
+                    "log_invalid_server_config",
+                    &error,
+                );
+                self.fail_run(source, "Invalid server configuration").await
+            }
         }
     }
 
@@ -244,22 +262,12 @@ impl<'a> Synchronization<'a> {
                     .await
             }
         }
-        let credentials = match auth::get_credentials() {
-            Ok(Some(credentials)) => credentials,
-            Ok(None) => return self.fail_run(SyncSource::Recovery, "Not logged in").await,
-            Err(error) => {
-                return self
-                    .fail_run(SyncSource::Recovery, &error.to_string())
-                    .await
-            }
-        };
-        let audit_context =
-            SyncAuditContext::from_credentials(&credentials, SyncSource::Recovery.audit_label());
-        let Some(client) = create_authenticated_client(self.app, credentials) else {
-            return self
-                .fail_run(SyncSource::Recovery, "Invalid server configuration")
-                .await;
-        };
+        let session = self.open_session(SyncSource::Recovery).await?;
+        let audit_context = SyncAuditContext::from_credentials(
+            session.credentials(),
+            SyncSource::Recovery.audit_label(),
+        );
+        let client = session.client();
         crate::audit::audit_event(
             self.app,
             audit_context.event(
@@ -370,35 +378,6 @@ pub(crate) fn ensure_sync_has_folders(folders: &[db::WatchedFolder]) -> Result<(
         return Err("Add at least one folder before starting a sync.".to_string());
     }
     Ok(())
-}
-
-pub(crate) fn create_authenticated_client(
-    app: &tauri::AppHandle,
-    credentials: auth::AuthConfig,
-) -> Option<Arc<ImmichClient>> {
-    match authenticated_client(credentials) {
-        Ok(client) => Some(Arc::new(client)),
-        Err(error) => {
-            log_to_ui_error(
-                app,
-                "ERROR",
-                &format!("Invalid server configuration: {}", error),
-                "log_invalid_server_config",
-                &error,
-            );
-            None
-        }
-    }
-}
-
-fn authenticated_client(credentials: auth::AuthConfig) -> Result<ImmichClient, String> {
-    ImmichClient::new(
-        credentials.server_url,
-        credentials.api_key,
-        credentials.allow_local_http,
-        credentials.cloudflare_client_id,
-        credentials.cloudflare_client_secret,
-    )
 }
 
 pub(crate) fn prepare_scan_for_queue(
@@ -1104,24 +1083,6 @@ mod tests {
         db::add_folder(&pool, "C:/photos", None).await.unwrap();
         let folders = db::get_folders(&pool).await.unwrap();
         assert!(ensure_sync_has_folders(&folders).is_ok());
-    }
-
-    #[test]
-    fn persisted_local_http_opt_in_is_used_for_sync_clients() {
-        let credentials = auth::AuthConfig {
-            server_url: "http://localhost".to_string(),
-            api_key: "key".to_string(),
-            allow_local_http: true,
-            cloudflare_client_id: None,
-            cloudflare_client_secret: None,
-        };
-
-        assert!(authenticated_client(credentials.clone()).is_ok());
-        let denied_credentials = auth::AuthConfig {
-            allow_local_http: false,
-            ..credentials
-        };
-        assert!(authenticated_client(denied_credentials).is_err());
     }
 
     #[tokio::test]
