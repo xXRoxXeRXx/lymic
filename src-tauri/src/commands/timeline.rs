@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use tauri_plugin_dialog::DialogExt;
 
-use crate::immich::{AlbumTimeline, AssetDetails, ImmichSession, TimelineAsset, TimelineBucket};
+use crate::immich::{
+    AlbumTimeline, AssetDetails, ImmichSession, PlaceTimeline, TimelineAsset, TimelineBucket,
+};
 
 #[tauri::command]
 pub(crate) async fn get_asset_details(asset_id: String) -> Result<AssetDetails, String> {
@@ -76,6 +78,14 @@ async fn download_archive_with(
 pub(crate) async fn get_album_timeline(album_id: String) -> Result<AlbumTimeline, String> {
     ImmichSession::with_stored_credentials(|client| async move {
         client.get_album_timeline(&album_id).await
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_place_timeline(city: String) -> Result<PlaceTimeline, String> {
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.get_place_timeline(&city).await
     })
     .await
 }

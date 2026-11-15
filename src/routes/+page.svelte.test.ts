@@ -2212,6 +2212,79 @@ describe("Explore Places", () => {
   });
 });
 
+describe("Place Timelines", () => {
+  const places = [
+    { city: "Paris", thumbnailAssetId: "asset-1" },
+    { city: "Berlin", thumbnailAssetId: "asset-2" },
+  ];
+  const parisTimeline = {
+    buckets: [{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }],
+    assetsByBucket: {
+      "2025-03-01T00:00:00.000Z": [{ id: "asset-1", width: 640, height: 480, type: "IMAGE", takenAt: "2025-03-02T00:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false }],
+    },
+  };
+  const openExplore = async () => fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+  it("opens a Place from Explore as a Place Timeline titled with the city and returns to Explore", async () => {
+    renderAuthenticatedPage({ get_places: async () => places, get_place_timeline: async () => parisTimeline });
+    await openExplore();
+    const section = await screen.findByRole("region", { name: "Places" });
+
+    await fireEvent.click(await within(section).findByRole("button", { name: "Paris" }));
+
+    expect(await screen.findByRole("heading", { name: "Paris", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_place_timeline", { city: "Paris" });
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Places" })).toBeInTheDocument();
+  });
+
+  it("opens a Place from All Places and returns to All Places with Back", async () => {
+    renderAuthenticatedPage({ get_places: async () => places, get_place_timeline: async () => parisTimeline });
+    await openExplore();
+    const section = await screen.findByRole("region", { name: "Places" });
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Berlin" }));
+
+    expect(await screen.findByRole("heading", { name: "Berlin", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_place_timeline", { city: "Berlin" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to All Places" }));
+    expect(await screen.findByRole("heading", { name: "All Places", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Paris" })).toBeInTheDocument();
+  });
+
+  it("shows a loading error instead of an empty or partial Place Timeline when the load fails", async () => {
+    renderAuthenticatedPage({
+      get_places: async () => places,
+      get_place_timeline: async () => { throw new Error("page 2 failed"); },
+    });
+    await openExplore();
+    await fireEvent.click(await screen.findByRole("button", { name: "Paris" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("This place could not be loaded.");
+    expect(screen.queryByText("This place has no reachable photos yet.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Timeline scrubber" })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+  });
+
+  it("explains an empty Place Timeline", async () => {
+    renderAuthenticatedPage({
+      get_places: async () => places,
+      get_place_timeline: async () => ({ buckets: [], assetsByBucket: {} }),
+    });
+    await openExplore();
+    await fireEvent.click(await screen.findByRole("button", { name: "Paris" }));
+
+    expect(await screen.findByText("This place has no reachable photos yet.")).toBeInTheDocument();
+  });
+});
+
 describe("Explore Memories", () => {
   const asset = (id: string, takenAt: string) => ({ id, width: 1600, height: 1200, type: "IMAGE", takenAt, cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false });
   const timelineOf = (...assets: ReturnType<typeof asset>[]) => {

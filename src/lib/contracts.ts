@@ -91,6 +91,9 @@ export interface AlbumTimeline {
   assetsByBucket: Record<string, TimelineAsset[]>;
 }
 
+/** A Place Timeline has the same complete, locally indexed shape as an Album Timeline. */
+export type PlaceTimeline = AlbumTimeline;
+
 export interface RecognizedPerson {
   id: string;
   name: string | null;
