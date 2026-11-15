@@ -53,8 +53,21 @@ fn memory_from_response(response: MemoryResponse) -> Option<Memory> {
         .into_iter()
         .map(|asset| timeline_asset_from_response(asset, false))
         .collect();
-    // A Memory without assets has nothing to show or open.
-    let cover_asset_id = assets.first()?.id.clone();
+    let timeline = group_album_timeline_assets(assets.clone());
+    // The cover must be an asset the Memory Timeline shows, so assets without a
+    // capture date (which the timeline omits) never qualify. A Memory with none
+    // has nothing to show or open.
+    let cover_asset_id = assets
+        .iter()
+        .find(|asset| {
+            timeline
+                .assets_by_bucket
+                .values()
+                .flatten()
+                .any(|placed| placed.id == asset.id)
+        })?
+        .id
+        .clone();
     let kind = match response.memory_type.as_deref() {
         Some("on_this_day") => MemoryKind::OnThisDay,
         Some("birthday") => MemoryKind::Birthday,
@@ -78,14 +91,17 @@ fn memory_from_response(response: MemoryResponse) -> Option<Memory> {
         year,
         person_name,
         cover_asset_id,
-        timeline: group_album_timeline_assets(assets),
+        timeline,
     })
 }
 
 fn memories_access_error(status: StatusCode) -> String {
     match status {
         StatusCode::UNAUTHORIZED => "memories_authentication_required".to_string(),
-        StatusCode::FORBIDDEN => "memories_permission_denied:configure an API key with memory.read and asset.read permissions".to_string(),
+        StatusCode::FORBIDDEN => {
+            "memories_permission_denied:configure an API key with the memory.read permission"
+                .to_string()
+        }
         _ => "memories_unavailable".to_string(),
     }
 }
@@ -128,7 +144,7 @@ impl ImmichClient {
     /// has no offset or page parameter, so this asks for everything up to one
     /// past the page and drops the earlier pages; the extra Memory tells whether
     /// a next page exists. Paging counts Memories as Immich returns them, before
-    /// Memories without assets are dropped, so pages stay aligned.
+    /// Memories without dated assets are dropped, so pages stay aligned.
     pub async fn get_memories_page(&self, page: u32, size: u32) -> Result<MemoriesPage, String> {
         let page = page.max(1);
         let size = size.max(1);
@@ -274,8 +290,8 @@ mod tests {
     async fn paging_counts_memories_without_assets_so_pages_stay_aligned() {
         let body = r#"[
             {"id":"empty","type":"on_this_day","assets":[]},
-            {"id":"m2","type":"on_this_day","assets":[{"id":"c2","type":"IMAGE"}]},
-            {"id":"m3","type":"on_this_day","assets":[{"id":"c3","type":"IMAGE"}]}]"#;
+            {"id":"m2","type":"on_this_day","assets":[{"id":"c2","type":"IMAGE","fileCreatedAt":"2020-01-01T10:00:00.000Z"}]},
+            {"id":"m3","type":"on_this_day","assets":[{"id":"c3","type":"IMAGE","fileCreatedAt":"2020-01-01T10:00:00.000Z"}]}]"#;
 
         let (result, _) = get_memories_page_from(1, 2, "200 OK", body).await;
 
@@ -339,7 +355,7 @@ mod tests {
     async fn parses_birthday_and_unknown_types_and_tolerates_missing_optional_fields() {
         let body = r#"[
             {"id":"b","type":"birthday","data":{"personName":"Ada","year":2015},"memoryAt":"2015-05-01T00:00:00.000Z","assets":[{"id":"b-1","type":"IMAGE","fileCreatedAt":"2015-05-01T10:00:00.000Z"}]},
-            {"id":"u","type":"holiday_special","assets":[{"id":"u-1","type":"IMAGE"}]},
+            {"id":"u","type":"holiday_special","assets":[{"id":"u-1","type":"IMAGE","fileCreatedAt":"2017-01-01T10:00:00.000Z"}]},
             {"id":"empty","type":"on_this_day","data":{"year":2019},"assets":[]},
             {"id":"noassets","type":"on_this_day"}]"#;
 
@@ -357,8 +373,30 @@ mod tests {
         assert_eq!(memories[1].year, None);
         assert_eq!(memories[1].person_name, None);
         assert_eq!(memories[1].cover_asset_id, "u-1");
-        // A cover can exist even when no asset has a date to place it in a bucket.
-        assert!(memories[1].timeline.buckets.is_empty());
+    }
+
+    #[tokio::test]
+    async fn picks_a_cover_that_appears_in_the_timeline_and_drops_memories_with_no_dated_asset() {
+        let body = r#"[
+            {"id":"mixed","type":"on_this_day","assets":[
+                {"id":"dateless","type":"IMAGE"},
+                {"id":"dated","type":"IMAGE","fileCreatedAt":"2020-11-15T10:00:00.000Z"}]},
+            {"id":"nodates","type":"on_this_day","assets":[{"id":"x","type":"IMAGE"}]}]"#;
+
+        let (result, _) = get_memories_from("200 OK", body).await;
+
+        let memories = result.unwrap();
+        assert_eq!(
+            memories.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+            vec!["mixed"]
+        );
+        assert_eq!(memories[0].cover_asset_id, "dated");
+        assert!(memories[0]
+            .timeline
+            .assets_by_bucket
+            .values()
+            .flatten()
+            .any(|asset| asset.id == memories[0].cover_asset_id));
     }
 
     #[tokio::test]
@@ -373,7 +411,7 @@ mod tests {
         let (forbidden, _) = get_memories_from("403 Forbidden", "{}").await;
         assert_eq!(
             forbidden.unwrap_err(),
-            "memories_permission_denied:configure an API key with memory.read and asset.read permissions"
+            "memories_permission_denied:configure an API key with the memory.read permission"
         );
 
         let (failed, _) =

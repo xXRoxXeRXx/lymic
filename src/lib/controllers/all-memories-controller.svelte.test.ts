@@ -7,6 +7,24 @@ function memory(id: string): Memory {
 }
 
 describe("All Memories controller", () => {
+  it("classifies first-page failures like the Explore sections do", async () => {
+    const getMemoriesPage = vi.fn()
+      .mockRejectedValueOnce("memories_permission_denied:configure an API key with the memory.read permission")
+      .mockRejectedValueOnce("memories_authentication_required")
+      .mockRejectedValueOnce("memories_unavailable")
+      .mockRejectedValueOnce(new Error("boom"));
+    const all = createAllMemoriesController({ getMemoriesPage });
+
+    await all.refresh();
+    expect(all.error).toBe("permission_denied");
+    await all.refresh();
+    expect(all.error).toBe("unavailable");
+    await all.refresh();
+    expect(all.error).toBe("unavailable");
+    await all.refresh();
+    expect(all.error).toBe("error");
+  });
+
   it("appends pages in order and stops requesting once Immich has no more", async () => {
     const getMemoriesPage = vi.fn()
       .mockResolvedValueOnce({ memories: [memory("a"), memory("b")], hasNextPage: true })

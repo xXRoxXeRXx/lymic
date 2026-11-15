@@ -32,6 +32,21 @@ describe("People controller", () => {
     const people = createPeopleController(adapter);
     await people.refresh();
 
+    expect(people.error).toBe("permission_denied");
+  });
+
+  it("maps authentication and unavailable failures to unavailable and anything else to an error", async () => {
+    const getPeople = vi.fn()
+      .mockRejectedValueOnce("recognized_people_authentication_required:people")
+      .mockRejectedValueOnce("recognized_people_unavailable:people")
+      .mockRejectedValueOnce(new Error("boom"));
+    const people = createPeopleController({ getPeople, getPersonTimelineBuckets: vi.fn(), getPersonTimelineBucketAssets: vi.fn() });
+
+    await people.refresh();
     expect(people.error).toBe("unavailable");
+    await people.refresh();
+    expect(people.error).toBe("unavailable");
+    await people.refresh();
+    expect(people.error).toBe("error");
   });
 });

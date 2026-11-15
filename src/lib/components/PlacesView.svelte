@@ -5,7 +5,7 @@
   import PlaceTile from "./PlaceTile.svelte";
 
   /** "All Places": every Place in a grid. It has no navigation entry; Explore opens it. */
-  let { places, onSelect }: { places: PlacesViewState; onSelect?: (place: Place) => void } = $props();
+  let { places, onSelect }: { places: PlacesViewState; onSelect: (place: Place) => void } = $props();
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-4" aria-label={$t("places_all_title")}>

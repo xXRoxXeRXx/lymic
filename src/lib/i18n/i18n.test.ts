@@ -78,6 +78,14 @@ describe('i18n catalogs', () => {
     expect(de.memories_title).toBe('Erinnerungen');
   });
 
+  it('names the person.read permission in the People permission message of every locale', () => {
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      const message = (translations as Record<string, string>).people_permission_denied;
+      expect(message?.trim(), localeCode).toBeTruthy();
+      expect(message, localeCode).toContain('person.read');
+    }
+  });
+
   it('translates the All Memories strings in every locale', () => {
     const keys = ['memories_all_title', 'memories_all_empty', 'memories_loading_more', 'memories_more_error', 'memories_all_return'];
     for (const [localeCode, translations] of Object.entries(catalog)) {
