@@ -140,6 +140,14 @@ _Avoid_: favorites album, favorites folder
 The chronological presentation of the Remote Assets that are Archived Assets in the authenticated user's Immich Library, grouped into time buckets like the Photo Timeline. It is read-only: Lymic neither archives nor unarchives a Remote Asset.
 _Avoid_: archive folder, archive album, hidden gallery
 
+**Trashed Asset**:
+A Remote Asset that sits in the Immich trash after being deleted in Immich, until Immich removes it permanently or it is restored. Lymic only reads this status and may restore a Trashed Asset; it never moves a Remote Asset into the trash and never deletes one permanently. Not related to the Windows Recycle Bin or to removing a Watched Folder.
+_Avoid_: deleted asset, recycle bin item, bin item
+
+**Trash Timeline**:
+The chronological presentation of the authenticated user's Trashed Assets, grouped into time buckets like the Photo Timeline. Restoring a Trashed Asset returns it to the Immich Library; it does not touch local files, Watched Folders or Synchronization state.
+_Avoid_: recycle bin, trash folder, deleted gallery
+
 ## Map
 
 **Map View**:
