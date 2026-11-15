@@ -7,6 +7,7 @@ use crate::removable::{ActiveRemovableVolumes, VolumeInfo};
 use crate::watcher::WatchRegistration;
 use serde_json::json;
 use std::path::{Path, PathBuf};
+use tauri::Manager;
 
 mod internal {
     use crate::audit::AuditEvent;
@@ -39,26 +40,28 @@ mod internal {
         async fn unwatch(&self, path: &str) -> Result<(), String>;
     }
 
-    pub(crate) trait RegistrationEffects {
+    pub(crate) trait AuditEffects {
+        fn record_audit(&self, event: AuditEvent);
+    }
+
+    pub(crate) trait RegistrationEffects: AuditEffects {
         fn enable_sync(&self);
         fn trigger_folder_added_sync(&self, folder: WatchedFolder);
         fn log_watcher_deferred(&self, path: &str);
         fn log_watcher_undo_failed(&self, path: &str, error: &str);
-        fn record_audit(&self, event: AuditEvent);
     }
 
-    pub(crate) trait FolderSync {
+    pub(crate) trait FolderSyncWork {
         async fn has_work_in_folder(&self, path: &str) -> Result<bool, String>;
         fn cancel_work_in_folder(&self, path: &str);
         async fn discard_folder_queue(&self, path: &str) -> Result<(), String>;
     }
 
-    pub(crate) trait RemovalEffects {
+    pub(crate) trait RemovalEffects: AuditEffects {
         fn log_unwatch_failed(&self, path: &str, error: &str);
         fn log_watcher_restore_failed(&self, path: &str, error: &str);
         fn set_sync_enabled(&self, enabled: bool);
         fn log_tray_refresh_after_remove_failed(&self, error: &str);
-        fn record_audit(&self, event: AuditEvent);
     }
 
     pub(crate) struct SqliteFolderPersistence<'a> {
@@ -127,12 +130,18 @@ mod internal {
         }
     }
 
-    pub(crate) struct TauriRegistrationEffects<'a> {
+    pub(crate) struct TauriFolderEffects<'a> {
         pub(crate) app: &'a tauri::AppHandle,
         pub(crate) pool: &'a sqlx::SqlitePool,
     }
 
-    impl RegistrationEffects for TauriRegistrationEffects<'_> {
+    impl AuditEffects for TauriFolderEffects<'_> {
+        fn record_audit(&self, event: AuditEvent) {
+            crate::audit::audit_event(self.app, event);
+        }
+    }
+
+    impl RegistrationEffects for TauriFolderEffects<'_> {
         fn enable_sync(&self) {
             crate::app::tray::set_sync_enabled(self.app, true);
         }
@@ -186,19 +195,15 @@ mod internal {
                 error,
             );
         }
-
-        fn record_audit(&self, event: AuditEvent) {
-            crate::audit::audit_event(self.app, event);
-        }
     }
 
-    pub(crate) struct CoordinatorFolderSync<'a> {
+    pub(crate) struct CoordinatorSyncWork<'a> {
         pub(crate) pool: &'a sqlx::SqlitePool,
-        pub(crate) running: &'a std::sync::atomic::AtomicBool,
+        pub(crate) running: std::sync::Arc<std::sync::atomic::AtomicBool>,
         pub(crate) coordinator: std::sync::Arc<crate::sync::SyncCoordinatorInner>,
     }
 
-    impl FolderSync for CoordinatorFolderSync<'_> {
+    impl FolderSyncWork for CoordinatorSyncWork<'_> {
         async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
             if self.coordinator.active_work.has_work_in(path) {
                 return Ok(true);
@@ -215,7 +220,7 @@ mod internal {
         async fn discard_folder_queue(&self, path: &str) -> Result<(), String> {
             crate::sync::lifecycle::SynchronizationLifecycle::new(
                 self.pool,
-                self.running,
+                &self.running,
                 self.coordinator.clone(),
             )
             .discard_folder(path)
@@ -224,11 +229,7 @@ mod internal {
         }
     }
 
-    pub(crate) struct TauriRemovalEffects<'a> {
-        pub(crate) app: &'a tauri::AppHandle,
-    }
-
-    impl RemovalEffects for TauriRemovalEffects<'_> {
+    impl RemovalEffects for TauriFolderEffects<'_> {
         fn log_unwatch_failed(&self, path: &str, error: &str) {
             crate::app::events::log_to_ui_folder_error(
                 self.app,
@@ -266,17 +267,12 @@ mod internal {
                 error,
             );
         }
-
-        fn record_audit(&self, event: AuditEvent) {
-            crate::audit::audit_event(self.app, event);
-        }
     }
 }
 
 use internal::{
-    CoordinatorFolderSync, FolderPersistence, FolderSync, FolderWatcher, NotifyFolderWatcher,
-    RegistrationEffects, RemovalEffects, SqliteFolderPersistence, TauriRegistrationEffects,
-    TauriRemovalEffects,
+    CoordinatorSyncWork, FolderPersistence, FolderSyncWork, FolderWatcher, NotifyFolderWatcher,
+    RegistrationEffects, RemovalEffects, SqliteFolderPersistence, TauriFolderEffects,
 };
 
 fn sanitize_target_album_id(target_album_id: Option<String>) -> Option<AlbumId> {
@@ -421,7 +417,7 @@ impl<'a>
     WatchedFolderRegistration<
         SqliteFolderPersistence<'a>,
         NotifyFolderWatcher<'a>,
-        TauriRegistrationEffects<'a>,
+        TauriFolderEffects<'a>,
     >
 {
     pub(crate) fn for_tauri(
@@ -432,7 +428,7 @@ impl<'a>
         Self::new(
             SqliteFolderPersistence { pool },
             NotifyFolderWatcher { watcher },
-            TauriRegistrationEffects { app, pool },
+            TauriFolderEffects { app, pool },
         )
     }
 }
@@ -601,26 +597,26 @@ impl<'a>
     WatchedFolderRemoval<
         SqliteFolderPersistence<'a>,
         NotifyFolderWatcher<'a>,
-        CoordinatorFolderSync<'a>,
-        TauriRemovalEffects<'a>,
+        CoordinatorSyncWork<'a>,
+        TauriFolderEffects<'a>,
     >
 {
     pub(crate) fn for_tauri(
         app: &'a tauri::AppHandle,
         pool: &'a sqlx::SqlitePool,
         watcher: &'a tokio::sync::Mutex<crate::watcher::WatcherState>,
-        sync_state: &'a crate::sync::SyncState,
         sync_coordinator: &'a crate::sync::SyncCoordinator,
     ) -> Self {
+        let running = app.state::<crate::sync::SyncState>().0.clone();
         Self::new(
             SqliteFolderPersistence { pool },
             NotifyFolderWatcher { watcher },
-            CoordinatorFolderSync {
+            CoordinatorSyncWork {
                 pool,
-                running: &sync_state.0,
+                running,
                 coordinator: sync_coordinator.0.clone(),
             },
-            TauriRemovalEffects { app },
+            TauriFolderEffects { app, pool },
         )
     }
 }
@@ -629,7 +625,7 @@ impl<P, W, S, E> WatchedFolderRemoval<P, W, S, E>
 where
     P: FolderPersistence,
     W: FolderWatcher,
-    S: FolderSync,
+    S: FolderSyncWork,
     E: RemovalEffects,
 {
     pub(crate) fn new(persistence: P, watcher: W, sync: S, effects: E) -> Self {

@@ -6,7 +6,6 @@ use crate::{
     sync::{admit_and_run, scan_watched_folders_for_media, SyncCoordinator, SyncSource},
     watcher,
 };
-use tauri::Manager;
 
 // tokio::sync::Mutex avoids blocking the async executor while waiting
 //         for the lock (std::sync::Mutex::lock blocks the current thread).
@@ -99,12 +98,10 @@ pub(crate) async fn remove_folder(
     id: i64,
     confirm_cancellation: Option<bool>,
 ) -> Result<RemoveFolderResult, String> {
-    let running = app.state::<crate::sync::SyncState>();
     WatchedFolderRemoval::for_tauri(
         &app,
         pool.inner(),
         watcher.inner(),
-        running.inner(),
         sync_coordinator.inner(),
     )
     .remove(id, confirm_cancellation)

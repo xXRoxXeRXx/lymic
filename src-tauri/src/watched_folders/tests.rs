@@ -1,6 +1,6 @@
 use super::internal::{
-    CoordinatorFolderSync, FolderPersistence, FolderSync, FolderWatcher, NotifyFolderWatcher,
-    RegistrationEffects, RemovalEffects, SqliteFolderPersistence,
+    AuditEffects, CoordinatorSyncWork, FolderPersistence, FolderSyncWork, FolderWatcher,
+    NotifyFolderWatcher, RegistrationEffects, RemovalEffects, SqliteFolderPersistence,
 };
 use super::{
     RegisterFolderParams, RemovableVolumeBinding, RemoveFolderResult, WatchedFolderRegistration,
@@ -148,7 +148,9 @@ impl RegistrationEffects for &RecordedEffects {
             .unwrap()
             .push((path.to_string(), error.to_string()));
     }
+}
 
+impl AuditEffects for &RecordedEffects {
     fn record_audit(&self, event: AuditEvent) {
         self.audit_events.lock().unwrap().push(event);
     }
@@ -703,7 +705,9 @@ impl RemovalEffects for &RecordedRemovalEffects {
             .unwrap()
             .push(error.to_string());
     }
+}
 
+impl AuditEffects for &RecordedRemovalEffects {
     fn record_audit(&self, event: AuditEvent) {
         self.audit_events.lock().unwrap().push(event);
     }
@@ -771,15 +775,15 @@ async fn unconfirmed_removal_changes_nothing_and_reports_whether_sync_work_would
     let temp = TempDir::new("remove-unconfirmed");
     let (folder_id, expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
 
-    let running = AtomicBool::new(false);
+    let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
     let removal_effects = RecordedRemovalEffects::default();
     let removal = WatchedFolderRemoval::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorFolderSync {
+        CoordinatorSyncWork {
             pool: &pool,
-            running: &running,
+            running: running.clone(),
             coordinator: coordinator.clone(),
         },
         &removal_effects,
@@ -857,11 +861,11 @@ impl FolderWatcher for OrderedWatcher<'_> {
 }
 
 struct OrderedSync<'a> {
-    inner: CoordinatorFolderSync<'a>,
+    inner: CoordinatorSyncWork<'a>,
     events: Arc<Mutex<Vec<&'static str>>>,
 }
 
-impl FolderSync for OrderedSync<'_> {
+impl FolderSyncWork for OrderedSync<'_> {
     async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
         self.inner.has_work_in_folder(path).await
     }
@@ -886,7 +890,7 @@ async fn confirmed_removal_stops_watcher_before_cancelling_and_discarding_then_d
     let (folder_id, expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
 
     let active_unit = test_upload_unit(&expected_path, "active.jpg");
-    let running = AtomicBool::new(false);
+    let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
     let lease = coordinator.active_work.acquire(&[active_unit.clone()]);
 
@@ -901,9 +905,9 @@ async fn confirmed_removal_stops_watcher_before_cancelling_and_discarding_then_d
             events: events.clone(),
         },
         OrderedSync {
-            inner: CoordinatorFolderSync {
+            inner: CoordinatorSyncWork {
                 pool: &pool,
-                running: &running,
+                running: running.clone(),
                 coordinator: coordinator.clone(),
             },
             events: events.clone(),
@@ -959,7 +963,7 @@ async fn unwatch_failure_aborts_removal_before_cancelling_or_deleting() {
     let temp = TempDir::new("remove-unwatch-fail");
     let (folder_id, expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
 
-    let running = AtomicBool::new(false);
+    let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
     let active_unit = test_upload_unit(&expected_path, "active.jpg");
     let lease = coordinator.active_work.acquire(&[active_unit.clone()]);
@@ -970,9 +974,9 @@ async fn unwatch_failure_aborts_removal_before_cancelling_or_deleting() {
         FailingUnwatchWatcher {
             inner: NotifyFolderWatcher { watcher: &watcher },
         },
-        CoordinatorFolderSync {
+        CoordinatorSyncWork {
             pool: &pool,
-            running: &running,
+            running: running.clone(),
             coordinator: coordinator.clone(),
         },
         &removal_effects,
@@ -993,10 +997,10 @@ async fn unwatch_failure_aborts_removal_before_cancelling_or_deleting() {
 }
 
 struct FailingDiscardSync<'a> {
-    inner: CoordinatorFolderSync<'a>,
+    inner: CoordinatorSyncWork<'a>,
 }
 
-impl FolderSync for FailingDiscardSync<'_> {
+impl FolderSyncWork for FailingDiscardSync<'_> {
     async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
         self.inner.has_work_in_folder(path).await
     }
@@ -1017,16 +1021,16 @@ async fn queue_discard_failure_restores_watcher_and_keeps_folder_configured() {
     let temp = TempDir::new("remove-discard-fail");
     let (folder_id, expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
 
-    let running = AtomicBool::new(false);
+    let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
     let removal_effects = RecordedRemovalEffects::default();
     let removal = WatchedFolderRemoval::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
         FailingDiscardSync {
-            inner: CoordinatorFolderSync {
+            inner: CoordinatorSyncWork {
                 pool: &pool,
-                running: &running,
+                running: running.clone(),
                 coordinator,
             },
         },
@@ -1077,15 +1081,15 @@ async fn delete_failure_restores_watcher_keeps_folder_and_logs_if_restore_fails(
     .await
     .unwrap();
 
-    let running = AtomicBool::new(false);
+    let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
     let removal_effects = RecordedRemovalEffects::default();
     let removal = WatchedFolderRemoval::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorFolderSync {
+        CoordinatorSyncWork {
             pool: &pool,
-            running: &running,
+            running: running.clone(),
             coordinator: coordinator.clone(),
         },
         &removal_effects,
@@ -1112,9 +1116,9 @@ async fn delete_failure_restores_watcher_keeps_folder_and_logs_if_restore_fails(
         FailingRewatchWatcher {
             inner: NotifyFolderWatcher { watcher: &watcher },
         },
-        CoordinatorFolderSync {
+        CoordinatorSyncWork {
             pool: &pool,
-            running: &running,
+            running: running.clone(),
             coordinator,
         },
         &removal_effects,
@@ -1146,7 +1150,7 @@ async fn removing_one_folder_leaves_sibling_folder_queue_active_work_and_watcher
     let photos_active = test_upload_unit(&photos_path, "a.jpg");
     let sibling_active = test_upload_unit(&sibling_path, "b.jpg");
 
-    let running = AtomicBool::new(false);
+    let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
     let lease = coordinator
         .active_work
@@ -1165,9 +1169,9 @@ async fn removing_one_folder_leaves_sibling_folder_queue_active_work_and_watcher
     let removal = WatchedFolderRemoval::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorFolderSync {
+        CoordinatorSyncWork {
             pool: &pool,
-            running: &running,
+            running: running.clone(),
             coordinator: coordinator.clone(),
         },
         &removal_effects,
@@ -1211,15 +1215,15 @@ async fn removing_one_folder_leaves_sibling_folder_queue_active_work_and_watcher
 async fn removing_missing_folder_requires_confirmation_before_auditing_or_refreshing_tray() {
     let pool = test_pool().await;
     let watcher = test_watcher();
-    let running = AtomicBool::new(false);
+    let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
     let removal_effects = RecordedRemovalEffects::default();
     let removal = WatchedFolderRemoval::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorFolderSync {
+        CoordinatorSyncWork {
             pool: &pool,
-            running: &running,
+            running: running.clone(),
             coordinator,
         },
         &removal_effects,
