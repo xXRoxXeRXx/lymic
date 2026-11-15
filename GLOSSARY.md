@@ -163,3 +163,47 @@ _Avoid_: story, highlight, flashback
 **Memory Timeline**:
 The chronological presentation of the Remote Assets belonging to one Memory, grouped into time buckets like the Photo Timeline. Assets without a usable capture time are omitted.
 _Avoid_: memory slideshow, memory player
+
+## Tags
+
+**Tag**:
+A named, optionally hierarchical label that Immich attaches to Remote Assets. A Tag's name is its full path, so a Tag can have a parent Tag and child Tags. Lymic only reads Tags; it never creates, edits, assigns or deletes them.
+_Avoid_: label, keyword, category
+
+**Tag Timeline**:
+The chronological presentation of the Remote Assets belonging to one Tag, grouped into time buckets like the Photo Timeline. Assets without a usable capture time are omitted.
+_Avoid_: tag gallery, tag feed
+
+## Search
+
+**Search**:
+A read-only query over the Immich Library made of an optional text and any number of Search Filters, answered by Immich. Searching never changes a Remote Asset.
+_Avoid_: find, lookup, query
+
+**Search Mode**:
+How Immich interprets the text of a Search: by the visual content of Remote Assets (Context, the default), by file name, by description, by full folder path, or by text recognized within the media (OCR). Exactly one Search Mode applies at a time.
+_Avoid_: search type, search scope
+
+**Search Filter**:
+A condition that narrows the Remote Assets a Search returns, such as Recognized Person, date, Location, Tag, media type, camera, Rating or Favorite status. A Remote Asset must satisfy every Search Filter that is set.
+_Avoid_: facet, refinement
+
+**Location**:
+A country, a state or region within it, and a city, each optional, used to narrow a Search. Distinct from a Place, which is identified by city name alone.
+_Avoid_: place (in a Search), geo filter
+
+**Archived Asset**:
+A Remote Asset that Immich hides from its main views. Lymic only reads this status and never sets or clears it. Not related to the archive file produced by a multi-asset Download.
+_Avoid_: archive (alone), hidden asset
+
+**Rating**:
+The one-to-five star evaluation Immich stores for a Remote Asset. Lymic only reads it.
+_Avoid_: stars, score, review
+
+**Unfiled Asset**:
+A Remote Asset that belongs to no Album.
+_Avoid_: orphan, loose asset, unalbumed asset
+
+**Search Results**:
+The Remote Assets a Search returns. Without a Context text they are presented chronologically in Timeline Buckets, like the Photo Timeline; with a Context text they are presented in order of relevance, without Timeline Buckets.
+_Avoid_: hits, matches, search timeline
