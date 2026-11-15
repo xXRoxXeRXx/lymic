@@ -2,6 +2,7 @@ use crate::app::events::log_to_ui_key;
 use crate::audit::{audit_event, audit_safe_error};
 use crate::commands::profile_cache::{self, CurrentUser};
 use crate::{auth, immich};
+use immich::ImmichSession;
 use serde_json::json;
 use std::path::PathBuf;
 use tauri::Manager;
@@ -25,10 +26,6 @@ fn normalize_cloudflare_access_credentials(
         client_secret
             .and_then(|value| (!value.trim().is_empty()).then(|| value.trim().to_string())),
     )
-}
-
-fn safe_profile_error(error: &str, credentials: &auth::AuthConfig) -> String {
-    credentials.redact(error)
 }
 
 // (security): credential values are intentionally kept out of all log and error messages below.
@@ -67,6 +64,13 @@ pub(crate) async fn login(
 
     // Build a temporary ImmichClient purely to reuse its URL normalisation and
     // pooled reqwest Client. The client is discarded after the connection test.
+    let submitted = auth::AuthConfig {
+        server_url: server_url.clone(),
+        api_key: api_key.clone(),
+        allow_local_http,
+        cloudflare_client_id: cloudflare_client_id.clone(),
+        cloudflare_client_secret: cloudflare_client_secret.clone(),
+    };
     let result: Result<(), String> = async {
         let temp_client = immich::ImmichClient::new(
             server_url.clone(),
@@ -111,7 +115,7 @@ pub(crate) async fn login(
             } else {
                 "Login failed"
             },
-            json!({ "failure_reason": result.as_ref().err().map(|error| audit_safe_error(error, &[Some(&server_url), Some(&api_key), cloudflare_client_id.as_deref(), cloudflare_client_secret.as_deref()])) }),
+            json!({ "failure_reason": result.as_ref().err().map(|error| submitted.redact(error)) }),
         ),
     );
     result
@@ -182,21 +186,12 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
         Ok(None) => return Err("Not logged in".to_string()),
         Err(e) => return Err(e),
     };
-    let account_id = crate::audit::actor_id(&credentials.server_url, &credentials.api_key);
+    let account_id = ImmichSession::account_id_of(&credentials);
 
-    let client = match immich::ImmichClient::new(
-        credentials.server_url.clone(),
-        credentials.api_key.clone(),
-        credentials.allow_local_http,
-        credentials.cloudflare_client_id.clone(),
-        credentials.cloudflare_client_secret.clone(),
-    ) {
-        Ok(c) => c,
+    let session = match ImmichSession::from_credentials(credentials) {
+        Ok(session) => session,
         Err(err) => {
-            eprintln!(
-                "Failed to initialize Immich client: {}",
-                safe_profile_error(&err, &credentials)
-            );
+            eprintln!("Failed to initialize Immich client: {err}");
             return Ok(profile_cache::resolve_profile(
                 &cache_dir,
                 &account_id,
@@ -205,10 +200,17 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
         }
     };
 
-    let outcome = match client.current_user_info().await {
+    let outcome = match session
+        .run(|client| async move { client.current_user_info().await })
+        .await
+    {
         Ok(user_info) => {
             if user_info.has_profile_image {
-                match client.get_profile_image(&user_info.id).await {
+                let user_id = user_info.id.clone();
+                match session
+                    .run(|client| async move { client.get_profile_image(&user_id).await })
+                    .await
+                {
                     Ok((bytes, content_type)) => {
                         profile_cache::ProfileFetchOutcome::SuccessWithImage {
                             user_id: user_info.id,
@@ -218,10 +220,7 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
                         }
                     }
                     Err(err) => {
-                        eprintln!(
-                            "Failed to fetch profile image: {}",
-                            safe_profile_error(&err, &credentials)
-                        );
+                        eprintln!("Failed to fetch profile image: {err}");
                         profile_cache::ProfileFetchOutcome::ImageFetchFailed {
                             user_id: user_info.id,
                             display_name: user_info.display_name,
@@ -236,10 +235,7 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
             }
         }
         Err(err) => {
-            eprintln!(
-                "Failed to refresh current user: {}",
-                safe_profile_error(&err, &credentials)
-            );
+            eprintln!("Failed to refresh current user: {err}");
             profile_cache::ProfileFetchOutcome::RefreshFailed
         }
     };
@@ -248,7 +244,7 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
     let current_creds = auth::get_credentials().ok().flatten();
     let is_still_same_account = current_creds
         .as_ref()
-        .map(|c| crate::audit::actor_id(&c.server_url, &c.api_key) == account_id)
+        .map(|c| ImmichSession::account_id_of(c) == account_id)
         .unwrap_or(false);
 
     if !is_still_same_account {
@@ -264,32 +260,7 @@ pub(crate) async fn get_current_user(app: tauri::AppHandle) -> Result<CurrentUse
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_cloudflare_access_credentials, safe_profile_error};
-    use crate::auth::AuthConfig;
-
-    #[test]
-    fn redacts_all_profile_credentials_from_diagnostic_errors() {
-        let credentials = AuthConfig {
-            server_url: "https://immich.example.test".to_string(),
-            api_key: "api-key-secret".to_string(),
-            allow_local_http: false,
-            cloudflare_client_id: Some("cloudflare-client-id".to_string()),
-            cloudflare_client_secret: Some("cloudflare-client-secret".to_string()),
-        };
-        let safe_error = safe_profile_error(
-            "failed https://immich.example.test api-key-secret cloudflare-client-id cloudflare-client-secret",
-            &credentials,
-        );
-
-        for secret in [
-            "https://immich.example.test",
-            "api-key-secret",
-            "cloudflare-client-id",
-            "cloudflare-client-secret",
-        ] {
-            assert!(!safe_error.contains(secret));
-        }
-    }
+    use super::normalize_cloudflare_access_credentials;
 
     #[test]
     fn normalizes_whitespace_only_cloudflare_access_credentials_to_disabled() {

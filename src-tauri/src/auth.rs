@@ -97,6 +97,29 @@ mod tests {
     use super::{parse_stored_credentials, AuthConfig};
 
     #[test]
+    fn redacts_all_credentials_from_diagnostic_errors() {
+        let credentials = AuthConfig {
+            server_url: "https://immich.example.test".to_string(),
+            api_key: "api-key-secret".to_string(),
+            allow_local_http: false,
+            cloudflare_client_id: Some("cloudflare-client-id".to_string()),
+            cloudflare_client_secret: Some("cloudflare-client-secret".to_string()),
+        };
+        let safe_error = credentials.redact(
+            "failed https://immich.example.test api-key-secret cloudflare-client-id cloudflare-client-secret",
+        );
+
+        for secret in [
+            "https://immich.example.test",
+            "api-key-secret",
+            "cloudflare-client-id",
+            "cloudflare-client-secret",
+        ] {
+            assert!(!safe_error.contains(secret));
+        }
+    }
+
+    #[test]
     fn unreadable_stored_credentials_do_not_echo_stored_values() {
         let error = parse_stored_credentials(
             r#"{"server_url":"https://immich.example","api_key":"secret-key","allow_local_http":"secret-flag"}"#,
