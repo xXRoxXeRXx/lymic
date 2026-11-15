@@ -194,7 +194,7 @@
   function returnFromPlaceTimeline() {
     closePlaceTimeline();
     currentView = placeOrigin;
-    void explore.refreshIfStale();
+    if (placeOrigin === "explore") void explore.refreshIfStale();
     const scrollTop = placeOrigin === "places" ? placesScrollTop : exploreScrollTop;
     queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
   }
@@ -475,7 +475,7 @@
         </div>
       </header>
 
-      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'favorites' || currentView === 'person-timeline' || currentView === 'album-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'favorites' || currentView === 'person-timeline' || currentView === 'album-timeline' || currentView === 'place-timeline' || currentView === 'memory-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
