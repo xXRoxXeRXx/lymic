@@ -6,18 +6,18 @@ use crate::immich::{AlbumTimeline, AssetDetails, ImmichSession, TimelineAsset, T
 
 #[tauri::command]
 pub(crate) async fn get_asset_details(asset_id: String) -> Result<AssetDetails, String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move { client.get_asset_details(&asset_id).await })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.get_asset_details(&asset_id).await
+    })
+    .await
 }
 
 #[tauri::command]
 pub(crate) async fn set_asset_favorite(asset_id: String, is_favorite: bool) -> Result<(), String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move { client.set_asset_favorite(&asset_id, is_favorite).await })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.set_asset_favorite(&asset_id, is_favorite).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -25,14 +25,12 @@ pub(crate) async fn download_asset(
     asset_id: String,
     destination_path: String,
 ) -> Result<(), String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move {
-            client
-                .download_asset(&asset_id, Path::new(&destination_path))
-                .await
-        })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move {
+        client
+            .download_asset(&asset_id, Path::new(&destination_path))
+            .await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -55,67 +53,63 @@ pub(crate) async fn download_archive(
     let destination_path = destination_path
         .as_path()
         .ok_or_else(|| "Selected download destination is not a local path".to_string())?;
-    session
-        .run(|_client| archive.save_to(destination_path))
-        .await
+    session.save_archive(archive, destination_path).await
 }
 
 #[tauri::command]
 pub(crate) async fn get_album_timeline(album_id: String) -> Result<AlbumTimeline, String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move { client.get_album_timeline(&album_id).await })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.get_album_timeline(&album_id).await
+    })
+    .await
 }
 
 #[tauri::command]
 pub(crate) async fn get_timeline_buckets() -> Result<Vec<TimelineBucket>, String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move { client.get_timeline_buckets().await })
-        .await
+    ImmichSession::with_stored_credentials(
+        |client| async move { client.get_timeline_buckets().await },
+    )
+    .await
 }
 
 #[tauri::command]
 pub(crate) async fn get_timeline_bucket_assets(
     time_bucket: String,
 ) -> Result<Vec<TimelineAsset>, String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move { client.get_timeline_bucket_assets(&time_bucket).await })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.get_timeline_bucket_assets(&time_bucket).await
+    })
+    .await
 }
 
 #[tauri::command]
 pub(crate) async fn get_favorites_timeline_buckets() -> Result<Vec<TimelineBucket>, String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move { client.get_favorites_timeline_buckets().await })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.get_favorites_timeline_buckets().await
+    })
+    .await
 }
 
 #[tauri::command]
 pub(crate) async fn get_favorites_timeline_bucket_assets(
     time_bucket: String,
 ) -> Result<Vec<TimelineAsset>, String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move {
-            client
-                .get_favorites_timeline_bucket_assets(&time_bucket)
-                .await
-        })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move {
+        client
+            .get_favorites_timeline_bucket_assets(&time_bucket)
+            .await
+    })
+    .await
 }
 
 #[tauri::command]
 pub(crate) async fn get_person_timeline_buckets(
     person_id: String,
 ) -> Result<Vec<TimelineBucket>, String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move { client.get_person_timeline_buckets(&person_id).await })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.get_person_timeline_buckets(&person_id).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -123,12 +117,10 @@ pub(crate) async fn get_person_timeline_bucket_assets(
     person_id: String,
     time_bucket: String,
 ) -> Result<Vec<TimelineAsset>, String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move {
-            client
-                .get_person_timeline_bucket_assets(&person_id, &time_bucket)
-                .await
-        })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move {
+        client
+            .get_person_timeline_bucket_assets(&person_id, &time_bucket)
+            .await
+    })
+    .await
 }

@@ -4,18 +4,15 @@ use crate::immich::{
 
 #[tauri::command]
 pub(crate) async fn get_album_catalogue() -> Result<Vec<AlbumCatalogueItem>, String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move { client.get_album_catalogue().await })
-        .await
+    ImmichSession::with_stored_credentials(
+        |client| async move { client.get_album_catalogue().await },
+    )
+    .await
 }
 
 #[tauri::command]
 pub(crate) async fn get_albums() -> Result<Vec<Album>, String> {
-    let session = ImmichSession::from_stored_credentials()?;
-    session
-        .run(|client| async move { client.get_albums().await })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move { client.get_albums().await }).await
 }
 
 #[tauri::command]
@@ -25,10 +22,8 @@ pub(crate) async fn create_album(name: String) -> Result<Album, String> {
         return Err("Album name cannot be empty".to_string());
     }
 
-    let session = ImmichSession::from_stored_credentials()?;
     let name = trimmed.to_string();
-    session
-        .run(|client| async move { client.create_album(&name).await })
+    ImmichSession::with_stored_credentials(|client| async move { client.create_album(&name).await })
         .await
 }
 
@@ -52,13 +47,11 @@ pub(crate) async fn add_assets_to_album(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let session = ImmichSession::from_stored_credentials()?;
     let album_id = AlbumId::new(album_id);
-    session
-        .run(|client| async move {
-            client
-                .add_assets_to_album_with_result(&album_id, &asset_ids)
-                .await
-        })
-        .await
+    ImmichSession::with_stored_credentials(|client| async move {
+        client
+            .add_assets_to_album_with_result(&album_id, &asset_ids)
+            .await
+    })
+    .await
 }
