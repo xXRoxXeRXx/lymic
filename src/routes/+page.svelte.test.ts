@@ -2794,6 +2794,30 @@ describe("Archive Timeline", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("names the missing asset.read permission when Immich denies access to the archive, and still offers retry", async () => {
+    const getArchiveBuckets = vi.fn()
+      .mockRejectedValueOnce("archive_permission_denied:asset.read")
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
+    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The archive could not be loaded. Give the API key the asset.read permission.");
+    expect(screen.queryByText("Your archive is empty.")).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Retry timeline connection" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(getArchiveBuckets).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps the generic archive error for failures that are not permission denials", async () => {
+    renderAuthenticatedPage({ get_archive_timeline_buckets: () => Promise.reject("archive_unavailable") });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The archive could not be loaded.");
+  });
+
   it("keeps already shown archived assets visible and announces offline when a refresh fails", async () => {
     const getArchiveBuckets = vi.fn()
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])

@@ -297,6 +297,7 @@
   ,"archive_empty": "الأرشيف فارغ."
   ,"archive_error": "تعذر تحميل الأرشيف."
   ,"archive_offline": "الأرشيف غير متصل. يتم عرض الأرشيف المخزّن مؤقتًا."
+  ,"archive_permission_error": "تعذر تحميل الأرشيف. امنح مفتاح API الإذن asset.read."
   ,"explore_title": "استكشاف"
   ,"explore_view_all": "عرض الكل"
   ,"explore_retry": "إعادة المحاولة"

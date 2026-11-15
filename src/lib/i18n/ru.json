@@ -297,6 +297,7 @@
   ,"archive_empty": "Ваш архив пуст."
   ,"archive_error": "Не удалось загрузить архив."
   ,"archive_offline": "Архив недоступен. Показан кэшированный архив."
+  ,"archive_permission_error": "Не удалось загрузить архив. Предоставьте API-ключу разрешение asset.read."
   ,"explore_title": "Обзор"
   ,"explore_view_all": "Показать все"
   ,"explore_retry": "Повторить"

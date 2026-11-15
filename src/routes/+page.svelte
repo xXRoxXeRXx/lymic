@@ -541,8 +541,8 @@
             ariaLabel={$t("archive_title")}
             loadingMessage={$t("archive_loading")}
             emptyMessage={$t("archive_empty")}
-            loadErrorMessage={$t("archive_error")}
-            offlineMessage={$t("archive_offline")}
+            loadErrorMessage={archive.permissionDenied ? $t("archive_permission_error") : $t("archive_error")}
+            offlineMessage={archive.permissionDenied ? $t("archive_permission_error") : $t("archive_offline")}
           />
         {:else if currentView === "explore"}
           <ExploreView {explore} {people} {places} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} onViewAllMemories={openAllMemories} onSelectMemory={selectMemory} />

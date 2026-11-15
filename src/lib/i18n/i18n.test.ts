@@ -179,7 +179,7 @@ describe('i18n catalogs', () => {
   });
 
   it('translates the Archive Timeline strings in every locale', () => {
-    const keys = ['archive_title', 'archive_loading', 'archive_empty', 'archive_error', 'archive_offline'];
+    const keys = ['archive_title', 'archive_loading', 'archive_empty', 'archive_error', 'archive_offline', 'archive_permission_error'];
     for (const [localeCode, translations] of Object.entries(catalog)) {
       for (const key of keys) {
         expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
@@ -189,6 +189,9 @@ describe('i18n catalogs', () => {
     expect(en.archive_title).toBe('Archive');
     expect(en.archive_empty).toBe('Your archive is empty.');
     expect(de.archive_title).toBe('Archiv');
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      expect((translations as Record<string, string>).archive_permission_error, `${localeCode} names the permission`).toContain('asset.read');
+    }
   });
 
   it('uses consistent timeline and video terminology in favorites strings', () => {

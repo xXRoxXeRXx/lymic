@@ -297,6 +297,7 @@
   ,"archive_empty": "您的归档为空。"
   ,"archive_error": "无法加载归档。"
   ,"archive_offline": "归档已离线。正在显示缓存的归档。"
+  ,"archive_permission_error": "无法加载归档。请为 API 密钥授予 asset.read 权限。"
   ,"explore_title": "探索"
   ,"explore_view_all": "查看全部"
   ,"explore_retry": "重试"

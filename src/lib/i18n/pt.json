@@ -297,6 +297,7 @@
   ,"archive_empty": "O seu arquivo está vazio."
   ,"archive_error": "Não foi possível carregar o arquivo."
   ,"archive_offline": "O arquivo está offline. A mostrar o arquivo em cache."
+  ,"archive_permission_error": "Não foi possível carregar o arquivo. Conceda à chave de API a permissão asset.read."
   ,"explore_title": "Explorar"
   ,"explore_view_all": "Ver tudo"
   ,"explore_retry": "Tentar novamente"

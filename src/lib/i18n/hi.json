@@ -297,6 +297,7 @@
   ,"archive_empty": "आपका संग्रह खाली है।"
   ,"archive_error": "संग्रह लोड नहीं किया जा सका।"
   ,"archive_offline": "संग्रह ऑफ़लाइन है। कैश किया गया संग्रह दिखाया जा रहा है।"
+  ,"archive_permission_error": "संग्रह लोड नहीं किया जा सका। API कुंजी को asset.read अनुमति दें।"
   ,"explore_title": "एक्सप्लोर"
   ,"explore_view_all": "सभी देखें"
   ,"explore_retry": "फिर से कोशिश करें"

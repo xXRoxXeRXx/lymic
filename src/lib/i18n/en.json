@@ -297,6 +297,7 @@
   ,"archive_empty": "Your archive is empty."
   ,"archive_error": "The archive could not be loaded."
   ,"archive_offline": "Archive is offline. Showing cached archive."
+  ,"archive_permission_error": "The archive could not be loaded. Give the API key the asset.read permission."
   ,"explore_title": "Explore"
   ,"explore_view_all": "View all"
   ,"explore_retry": "Retry"

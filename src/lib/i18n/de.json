@@ -297,6 +297,7 @@
   ,"archive_empty": "Dein Archiv ist leer."
   ,"archive_error": "Das Archiv konnte nicht geladen werden."
   ,"archive_offline": "Archiv ist offline. Zwischengespeichertes Archiv wird angezeigt."
+  ,"archive_permission_error": "Das Archiv konnte nicht geladen werden. Erteile dem API-Schlüssel die Berechtigung asset.read."
   ,"explore_title": "Erkunden"
   ,"explore_view_all": "Alle anzeigen"
   ,"explore_retry": "Erneut versuchen"

@@ -297,6 +297,7 @@
   ,"archive_empty": "Vos archives sont vides."
   ,"archive_error": "Les archives n'ont pas pu être chargées."
   ,"archive_offline": "Les archives sont hors ligne. Affichage des archives en cache."
+  ,"archive_permission_error": "Les archives n'ont pas pu être chargées. Accordez à la clé API l'autorisation asset.read."
   ,"explore_title": "Explorer"
   ,"explore_view_all": "Tout afficher"
   ,"explore_retry": "Réessayer"
