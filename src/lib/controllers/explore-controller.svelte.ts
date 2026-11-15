@@ -1,12 +1,13 @@
 import type { MemoriesViewState } from "./memories-controller.svelte";
 import type { PeopleViewState } from "./people-controller.svelte";
 import type { PlacesViewState } from "./places-controller.svelte";
+import type { ExploreError } from "./explore-error";
 
 /**
  * The state every Explore Overview section exposes. Each section owns its own
  * loading, error, offline and empty state so one failing section never blocks
- * the others. Later sections (Places, Memories) add an entry to
- * `createExploreController` that satisfies this interface.
+ * the others. `createExploreController` adapts the People, Places and
+ * Memories controllers to this interface.
  */
 export interface ExploreSectionState {
   /** True while the first load has no data to show yet. */
@@ -14,7 +15,7 @@ export interface ExploreSectionState {
   /** True when a refresh failed but previously loaded data stays visible. */
   readonly isOffline: boolean;
   /** Failure of a load that has no cached data to fall back on. */
-  readonly error: "permission_denied" | "unavailable" | "error" | null;
+  readonly error: ExploreError | null;
   /** Number of items the section would show; 0 means empty. */
   readonly itemCount: number;
   /** Reloads this section only; also serves as the retry action. */
@@ -35,8 +36,13 @@ export interface ExploreViewState {
   readonly isAllEmpty: boolean;
   /** Refreshes every section independently; one failure does not stop the others. */
   refresh(): Promise<void>;
-  /** Refreshes only while the Explore Overview is the open view (e.g. after Synchronization settles). */
+  /**
+   * Refreshes while the Explore Overview is the open view (e.g. after Synchronization settles).
+   * Otherwise it only remembers that the sections are stale, so `refreshIfStale` can catch up.
+   */
   refreshIfActive(): Promise<void>;
+  /** Refreshes only when Synchronization settled while Explore was not open; call when returning to it. */
+  refreshIfStale(): Promise<void>;
 }
 
 export function createExploreController(options: {
@@ -71,7 +77,10 @@ export function createExploreController(options: {
   };
   const sections = [people, places, memories] as const;
 
+  let stale = false;
+
   function refresh() {
+    stale = false;
     return Promise.all(sections.map((section) => section.refresh())).then(() => undefined);
   }
 
@@ -82,6 +91,11 @@ export function createExploreController(options: {
     sections,
     get isAllEmpty() { return !sections.some(isExploreSectionVisible); },
     refresh,
-    refreshIfActive: () => (options.isActive() ? refresh() : Promise.resolve()),
+    refreshIfActive() {
+      if (options.isActive()) return refresh();
+      stale = true;
+      return Promise.resolve();
+    },
+    refreshIfStale: () => (stale ? refresh() : Promise.resolve()),
   };
 }

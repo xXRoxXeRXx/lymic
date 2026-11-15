@@ -171,6 +171,7 @@
 
   /** "All Memories" has no navigation entry; it is only opened from the Explore Overview. */
   function openAllMemories() {
+    allMemoriesScrollTop = 0;
     exploreScrollTop = content?.scrollTop ?? 0;
     currentView = "all-memories";
     void allMemories.refresh();
@@ -178,12 +179,14 @@
 
   function returnToExplore() {
     currentView = "explore";
+    void explore.refreshIfStale();
     queueMicrotask(() => { if (content) content.scrollTop = exploreScrollTop; });
   }
 
   function returnFromPersonTimeline() {
     closePersonTimeline();
     currentView = personOrigin;
+    if (personOrigin === "explore") void explore.refreshIfStale();
     const scrollTop = personOrigin === "explore" ? exploreScrollTop : peopleScrollTop;
     queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
   }
@@ -191,6 +194,7 @@
   function returnFromPlaceTimeline() {
     closePlaceTimeline();
     currentView = placeOrigin;
+    void explore.refreshIfStale();
     const scrollTop = placeOrigin === "places" ? placesScrollTop : exploreScrollTop;
     queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
   }
@@ -564,7 +568,7 @@
               <ArrowLeft class="h-4 w-4" />
               {$t(memoryOrigin === "all-memories" ? 'memories_all_return' : 'explore_return')}
             </button>
-            <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} loadErrorMessage={$t('memories_error')} />
+            <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} />
           </div>
         {:else if currentView === "dashboard"}
           <DashboardView

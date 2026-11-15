@@ -21,9 +21,25 @@ describe("Memories controller", () => {
     expect(memories.isLoading).toBe(false);
   });
 
-  it("reports a permission failure as permission denied and any other failure as an error", async () => {
+  it("shows at most twelve Memories newest first even when the server ignores size and order", async () => {
+    const dated = (id: string, memoryAt: string | null): Memory => ({ ...memory(id), memoryAt });
+    const unordered = [
+      dated("undated", null),
+      ...Array.from({ length: 14 }, (_, index) => dated(`m-${index}`, `2020-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`)).reverse().sort((a, b) => (a.id < b.id ? -1 : 1)),
+    ];
+    const memories = createMemoriesController({ getMemories: vi.fn().mockResolvedValue(unordered) });
+
+    await memories.refresh();
+
+    expect(memories.memories.map((item) => item.id)).toEqual(
+      ["m-13", "m-12", "m-11", "m-10", "m-9", "m-8", "m-7", "m-6", "m-5", "m-4", "m-3", "m-2"],
+    );
+  });
+
+  it("reports a permission failure as permission denied, authentication and unavailable failures as unavailable, and any other failure as an error", async () => {
     const getMemories = vi.fn()
-      .mockRejectedValueOnce("memories_permission_denied:configure an API key with memory.read and asset.read permissions")
+      .mockRejectedValueOnce("memories_permission_denied:configure an API key with the memory.read permission")
+      .mockRejectedValueOnce("memories_authentication_required")
       .mockRejectedValueOnce("memories_unavailable")
       .mockRejectedValueOnce(new Error("boom"));
     const memories = createMemoriesController({ getMemories });
@@ -31,7 +47,9 @@ describe("Memories controller", () => {
     await memories.refresh();
     expect(memories.error).toBe("permission_denied");
     await memories.refresh();
-    expect(memories.error).toBe("error");
+    expect(memories.error).toBe("unavailable");
+    await memories.refresh();
+    expect(memories.error).toBe("unavailable");
     await memories.refresh();
     expect(memories.error).toBe("error");
     expect(memories.memories).toEqual([]);

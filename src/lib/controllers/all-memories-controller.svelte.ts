@@ -1,5 +1,6 @@
 import type { Memory } from "../contracts";
 import type { AllMemoriesDesktopAdapter } from "../tauri/desktop-adapter";
+import { classifyExploreError, type ExploreError } from "./explore-error";
 
 export interface AllMemoriesViewState {
   readonly memories: Memory[];
@@ -10,7 +11,7 @@ export interface AllMemoriesViewState {
   readonly isOffline: boolean;
   readonly hasNextPage: boolean;
   /** The first page failed and nothing can be shown. */
-  readonly error: "permission_denied" | "error" | null;
+  readonly error: ExploreError | null;
   /** A further page failed; the pages already shown are kept. */
   readonly loadMoreFailed: boolean;
   /** Reloads from the first page. */
@@ -23,18 +24,13 @@ export interface AllMemoriesViewState {
 /** Memories carry all their assets, so a page stays small. */
 export const ALL_MEMORIES_PAGE_SIZE = 24;
 
-function classifyError(reason: unknown): "permission_denied" | "error" {
-  const message = typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "";
-  return message.startsWith("memories_permission_denied:") ? "permission_denied" : "error";
-}
-
 export function createAllMemoriesController(adapter: AllMemoriesDesktopAdapter): AllMemoriesViewState {
   let memories = $state<Memory[]>([]);
   let isLoading = $state(false);
   let isLoadingMore = $state(false);
   let isOffline = $state(false);
   let hasNextPage = $state(false);
-  let error = $state<"permission_denied" | "error" | null>(null);
+  let error = $state<ExploreError | null>(null);
   let loadMoreFailed = $state(false);
   let page = 0;
   let generation = 0;
@@ -61,7 +57,7 @@ export function createAllMemoriesController(adapter: AllMemoriesDesktopAdapter):
       .catch((reason: unknown) => {
         if (requestGeneration !== generation) return;
         if (replace) {
-          error = memories.length === 0 ? classifyError(reason) : null;
+          error = memories.length === 0 ? classifyExploreError(reason, "memories") : null;
           isOffline = memories.length > 0;
         } else {
           loadMoreFailed = true;

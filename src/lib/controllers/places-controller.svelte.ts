@@ -1,29 +1,21 @@
 import type { Place } from "../contracts";
 import type { PlacesDesktopAdapter } from "../tauri/desktop-adapter";
-
-export type PlacesError = "permission_denied" | "unavailable" | "error";
+import { classifyExploreError, type ExploreError } from "./explore-error";
 
 export interface PlacesViewState {
   readonly places: Place[];
   readonly isLoading: boolean;
   readonly isOffline: boolean;
-  readonly error: PlacesError | null;
+  readonly error: ExploreError | null;
   refresh(): Promise<void>;
   clear(): void;
-}
-
-function classifyError(reason: unknown): PlacesError {
-  const message = typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "";
-  if (message.startsWith("places_permission_denied:")) return "permission_denied";
-  if (message.startsWith("places_authentication_required") || message.startsWith("places_unavailable")) return "unavailable";
-  return "error";
 }
 
 export function createPlacesController(adapter: PlacesDesktopAdapter): PlacesViewState {
   let places = $state<Place[]>([]);
   let isLoading = $state(false);
   let isOffline = $state(false);
-  let error = $state<PlacesError | null>(null);
+  let error = $state<ExploreError | null>(null);
   let generation = 0;
 
   async function refresh() {
@@ -37,7 +29,7 @@ export function createPlacesController(adapter: PlacesDesktopAdapter): PlacesVie
       isOffline = false;
     } catch (reason) {
       if (requestGeneration !== generation) return;
-      error = places.length === 0 ? classifyError(reason) : null;
+      error = places.length === 0 ? classifyExploreError(reason, "places") : null;
       isOffline = places.length > 0;
     } finally {
       if (requestGeneration === generation) isLoading = false;

@@ -2542,3 +2542,90 @@ describe("Explore Memories", () => {
     });
   });
 });
+
+describe("Explore Overview across sections", () => {
+  const people = [{ id: "person-1", name: "Ada", thumbnailPath: null }];
+  const places = [{ city: "Paris", thumbnailAssetId: "asset-1" }];
+  const now = new Date();
+  const memory = { id: "m-1", kind: "onThisDay", memoryAt: new Date(Date.UTC(now.getFullYear() - 3, now.getMonth(), now.getDate())).toISOString(), year: now.getFullYear() - 3, personName: null, coverAssetId: "cover-1", timeline: { buckets: [], assetsByBucket: {} } };
+  const calls = (command: string) => tauri.invoke.mock.calls.filter(([name]) => name === command).length;
+  const openExplore = async () => fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+  it("shows the placeholder instead of sections when People, Places and Memories are all empty", async () => {
+    renderAuthenticatedPage({
+      get_people: async () => ({ people: [], hasNextPage: false }),
+      get_places: async () => [],
+      get_memories: async () => [],
+    });
+    await openExplore();
+
+    expect(await screen.findByText(/Nothing to explore yet/)).toBeInTheDocument();
+    for (const name of ["People", "Places", "Memories"]) expect(screen.queryByRole("region", { name })).not.toBeInTheDocument();
+  });
+
+  it("hides only the empty People section and shows no placeholder while Places and Memories have data", async () => {
+    renderAuthenticatedPage({
+      get_people: async () => ({ people: [], hasNextPage: false }),
+      get_places: async () => places,
+      get_memories: async () => [memory],
+    });
+    await openExplore();
+
+    expect(await screen.findByRole("region", { name: "Places" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Memories" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "People" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing to explore yet/)).not.toBeInTheDocument();
+  });
+
+  it("names the person.read permission when People is permission denied", async () => {
+    renderAuthenticatedPage({ get_people: async () => { throw "recognized_people_permission_denied:people:configure an API key with person.read and asset.read permissions"; } });
+    await openExplore();
+
+    const section = await screen.findByRole("region", { name: "People" });
+    expect(await within(section).findByRole("alert")).toHaveTextContent("person.read");
+  });
+
+  it("refreshes Explore when returning to it after Synchronization settled in All Places", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }), get_places: async () => places });
+    await openExplore();
+    const section = await screen.findByRole("region", { name: "Places" });
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    await screen.findByRole("heading", { name: "All Places", level: 1 });
+    expect(calls("get_places")).toBe(1);
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(calls("get_timeline_buckets")).toBe(2));
+    expect(calls("get_places")).toBe(1);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    await waitFor(() => expect(calls("get_places")).toBe(2));
+    expect(calls("get_people")).toBe(2);
+  });
+
+  it("refreshes Explore when returning to it from a Memory Timeline opened there after Synchronization settled", async () => {
+    renderAuthenticatedPage({ get_places: async () => places, get_memories: async () => [memory] });
+    await openExplore();
+    await fireEvent.click(await screen.findByRole("button", { name: "3 years ago" }));
+    await screen.findByRole("button", { name: "Back to Explore" });
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(calls("get_timeline_buckets")).toBe(2));
+    expect(calls("get_memories")).toBe(1);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Explore" }));
+    await waitFor(() => expect(calls("get_memories")).toBe(2));
+  });
+
+  it("does not refresh again when returning to Explore if nothing changed meanwhile", async () => {
+    renderAuthenticatedPage({ get_places: async () => places });
+    await openExplore();
+    const section = await screen.findByRole("region", { name: "Places" });
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Explore" }));
+    await screen.findByRole("region", { name: "Places" });
+
+    expect(calls("get_places")).toBe(1);
+  });
+});

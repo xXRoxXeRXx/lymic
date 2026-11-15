@@ -11,7 +11,7 @@
   import PlaceTile from "./PlaceTile.svelte";
   import RecognizedPersonTile from "./RecognizedPersonTile.svelte";
 
-  let { explore, people, places, memories, onViewAllPeople, onSelectPerson, onViewAllPlaces, onSelectPlace, onViewAllMemories = () => {}, onSelectMemory }: {
+  let { explore, people, places, memories, onViewAllPeople, onSelectPerson, onViewAllPlaces, onSelectPlace, onViewAllMemories, onSelectMemory }: {
     explore: ExploreViewState;
     people: PeopleViewState;
     places: PlacesViewState;
@@ -19,8 +19,8 @@
     onViewAllPeople: () => void;
     onSelectPerson: (person: RecognizedPerson) => void;
     onViewAllPlaces: () => void;
-    onSelectPlace?: (place: Place) => void;
-    onViewAllMemories?: () => void;
+    onSelectPlace: (place: Place) => void;
+    onViewAllMemories: () => void;
     onSelectMemory: (memory: Memory) => void;
   } = $props();
 
@@ -51,6 +51,7 @@
     loadingMessage={$t("people_loading")}
     errorMessage={$t("people_error")}
     unavailableMessage={$t("people_unavailable")}
+    permissionDeniedMessage={$t("people_permission_denied")}
     offlineMessage={$t("people_offline")}
     onViewAll={onViewAllPeople}
   >
