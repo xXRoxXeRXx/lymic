@@ -2,6 +2,7 @@ use crate::audit::AuditEvent;
 use crate::db::{self, RemovableFolderBinding, WatchedFolder};
 use crate::immich::AlbumId;
 use crate::watcher::{self, WatchRegistration, WatcherState};
+use tauri::Manager;
 
 /// Validated, trimmed, and case-insensitively deduplicated exclusion patterns for a Watched Folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,9 +43,16 @@ pub(crate) trait FolderPersistence {
     async fn remove_folder(&self, folder_id: i64) -> Result<(), String>;
 }
 
-pub(crate) trait FolderWatcher {
-    async fn watch_available(&self, path: &str) -> Result<WatchRegistration, String>;
-    async fn unwatch(&self, path: &str) -> Result<(), String>;
+pub(crate) trait FolderWatcher: Send + Sync {
+    fn watch_available(
+        &self,
+        path: &str,
+    ) -> impl std::future::Future<Output = Result<WatchRegistration, String>> + Send;
+    fn unwatch(&self, path: &str) -> impl std::future::Future<Output = Result<(), String>> + Send;
+}
+
+pub(crate) trait FolderScanTrigger: Send + Sync {
+    fn trigger_folder_scan(&self, folder: WatchedFolder, source: crate::sync::SyncSource);
 }
 
 pub(crate) trait FolderSyncWork {
@@ -54,10 +62,9 @@ pub(crate) trait FolderSyncWork {
     async fn scan_folder(&self, folder: WatchedFolder) -> Result<crate::sync::ScanResult, String>;
 }
 
-pub(crate) trait FolderEffects {
+pub(crate) trait FolderEffects: FolderScanTrigger {
     fn record_audit(&self, event: AuditEvent);
     fn set_sync_enabled(&self, enabled: bool);
-    fn trigger_folder_added_sync(&self, folder: WatchedFolder);
     async fn admit_rescan(
         &self,
         scan_result: crate::sync::ScanResult,
@@ -132,6 +139,14 @@ pub(crate) struct NotifyFolderWatcher<'a> {
     pub(crate) watcher: &'a tokio::sync::Mutex<WatcherState>,
 }
 
+impl<'a> NotifyFolderWatcher<'a> {
+    pub(crate) fn for_tauri(app: &'a tauri::AppHandle) -> Self {
+        Self {
+            watcher: app.state::<tokio::sync::Mutex<WatcherState>>().inner(),
+        }
+    }
+}
+
 impl FolderWatcher for NotifyFolderWatcher<'_> {
     async fn watch_available(&self, path: &str) -> Result<WatchRegistration, String> {
         let mut watcher_guard = self.watcher.lock().await;
@@ -186,21 +201,13 @@ async fn scan_single_folder(folder: WatchedFolder) -> Result<crate::sync::ScanRe
     crate::sync::scan_watched_folders_for_media(vec![folder]).await
 }
 
-pub(crate) struct TauriFolderEffects<'a> {
+pub(crate) struct TauriFolderScanTrigger<'a> {
     pub(crate) app: &'a tauri::AppHandle,
     pub(crate) pool: &'a sqlx::SqlitePool,
 }
 
-impl FolderEffects for TauriFolderEffects<'_> {
-    fn record_audit(&self, event: AuditEvent) {
-        crate::audit::audit_event(self.app, event);
-    }
-
-    fn set_sync_enabled(&self, enabled: bool) {
-        crate::app::tray::set_sync_enabled(self.app, enabled);
-    }
-
-    fn trigger_folder_added_sync(&self, folder: WatchedFolder) {
+impl FolderScanTrigger for TauriFolderScanTrigger<'_> {
+    fn trigger_folder_scan(&self, folder: WatchedFolder, source: crate::sync::SyncSource) {
         let pool_inner = self.pool.clone();
         let app_for_scan = self.app.clone();
         tauri::async_runtime::spawn(async move {
@@ -218,14 +225,33 @@ impl FolderEffects for TauriFolderEffects<'_> {
                     return;
                 }
             };
-            crate::sync::admit_and_run(
-                app_for_scan,
-                pool_inner,
-                scan_result,
-                crate::sync::SyncSource::FolderAdded,
-            )
-            .await;
+            crate::sync::admit_and_run(app_for_scan, pool_inner, scan_result, source).await;
         });
+    }
+}
+
+pub(crate) struct TauriFolderEffects<'a> {
+    pub(crate) app: &'a tauri::AppHandle,
+    pub(crate) pool: &'a sqlx::SqlitePool,
+}
+
+impl FolderScanTrigger for TauriFolderEffects<'_> {
+    fn trigger_folder_scan(&self, folder: WatchedFolder, source: crate::sync::SyncSource) {
+        TauriFolderScanTrigger {
+            app: self.app,
+            pool: self.pool,
+        }
+        .trigger_folder_scan(folder, source);
+    }
+}
+
+impl FolderEffects for TauriFolderEffects<'_> {
+    fn record_audit(&self, event: AuditEvent) {
+        crate::audit::audit_event(self.app, event);
+    }
+
+    fn set_sync_enabled(&self, enabled: bool) {
+        crate::app::tray::set_sync_enabled(self.app, enabled);
     }
 
     async fn admit_rescan(

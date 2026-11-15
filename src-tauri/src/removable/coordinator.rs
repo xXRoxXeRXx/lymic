@@ -1,49 +1,62 @@
 use super::model::{ActiveRemovableVolumes, VolumeEvent, VolumeInfo, VolumeRemoval};
+use crate::watched_folders::{
+    FolderScanTrigger, FolderWatcher, NotifyFolderWatcher, TauriFolderScanTrigger,
+};
 use sqlx::SqlitePool;
 
-pub trait VolumeEventEmitter: Send + Sync {
+pub(crate) trait VolumeEventEmitter: Send + Sync {
     fn emit_volume_detected(&self, volume: &VolumeInfo) -> Result<(), String>;
     fn emit_volume_remounted(&self, volume: &VolumeInfo) -> Result<(), String>;
     fn emit_volume_removed(&self, volume_id: &str) -> Result<(), String>;
-
-    fn reconcile_remount_watcher(
-        &self,
-        old_path: Option<&str>,
-        new_path: &str,
-    ) -> impl std::future::Future<Output = Result<(), String>> + Send;
-
-    fn reconcile_folder_unavailable(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<(), String>> + Send;
-
-    fn trigger_remount_scan(
-        &self,
-        folder_path: &str,
-    ) -> impl std::future::Future<Output = Result<(), String>> + Send;
 }
 
-pub struct RemovableVolumeCoordinator<E: VolumeEventEmitter> {
+pub(crate) struct RemovableVolumeCoordinator<E, W, T> {
     pool: SqlitePool,
     emitter: E,
+    watcher: W,
+    scan_trigger: T,
     active_volumes: Option<ActiveRemovableVolumes>,
 }
 
-impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
-    pub fn new(pool: SqlitePool, emitter: E) -> Self {
+impl<'a>
+    RemovableVolumeCoordinator<
+        tauri::AppHandle,
+        NotifyFolderWatcher<'a>,
+        TauriFolderScanTrigger<'a>,
+    >
+{
+    pub(crate) fn for_tauri(app: &'a tauri::AppHandle, pool: &'a SqlitePool) -> Self {
+        Self::new(
+            pool.clone(),
+            app.clone(),
+            NotifyFolderWatcher::for_tauri(app),
+            TauriFolderScanTrigger { app, pool },
+        )
+    }
+}
+
+impl<E, W, T> RemovableVolumeCoordinator<E, W, T>
+where
+    E: VolumeEventEmitter,
+    W: FolderWatcher,
+    T: FolderScanTrigger,
+{
+    pub(crate) fn new(pool: SqlitePool, emitter: E, watcher: W, scan_trigger: T) -> Self {
         Self {
             pool,
             emitter,
+            watcher,
+            scan_trigger,
             active_volumes: None,
         }
     }
 
-    pub fn with_active_volumes(mut self, active_volumes: ActiveRemovableVolumes) -> Self {
+    pub(crate) fn with_active_volumes(mut self, active_volumes: ActiveRemovableVolumes) -> Self {
         self.active_volumes = Some(active_volumes);
         self
     }
 
-    pub async fn handle_event(&self, event: VolumeEvent) -> Result<(), String> {
+    pub(crate) async fn handle_event(&self, event: VolumeEvent) -> Result<(), String> {
         match event {
             VolumeEvent::Arrival(volume) => {
                 if let Some(ref active) = self.active_volumes {
@@ -93,14 +106,9 @@ impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
                                 .await
                                 .map_err(|e| e.to_string())?;
 
-                                self.emitter
-                                    .reconcile_remount_watcher(Some(&folder.path), &norm_new_str)
-                                    .await?;
-                            } else {
-                                self.emitter
-                                    .reconcile_remount_watcher(None, &norm_new_str)
-                                    .await?;
+                                let _ = self.watcher.unwatch(&folder.path).await;
                             }
+                            self.watcher.watch_available(&norm_new_str).await?;
 
                             crate::db::reset_failed_queue_items_for_folder(
                                 &self.pool,
@@ -109,7 +117,12 @@ impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
                             .await
                             .map_err(|e| e.to_string())?;
 
-                            self.emitter.trigger_remount_scan(&norm_new_str).await?;
+                            let mut remounted_folder = folder.clone();
+                            remounted_folder.path = norm_new_str;
+                            self.scan_trigger.trigger_folder_scan(
+                                remounted_folder,
+                                crate::sync::SyncSource::RemovableMediaReconnect,
+                            );
 
                             // Event delivery must not prevent the path remap, watcher
                             // reconciliation, or remount scan from completing. At this point
@@ -156,9 +169,7 @@ impl<E: VolumeEventEmitter> RemovableVolumeCoordinator<E> {
                 for binding in bindings {
                     if let Some(folder) = folders.iter().find(|f| f.id == binding.watched_folder_id)
                     {
-                        self.emitter
-                            .reconcile_folder_unavailable(&folder.path)
-                            .await?;
+                        self.watcher.unwatch(&folder.path).await?;
                     }
                 }
 

@@ -1,6 +1,6 @@
 use super::seams::{
-    CoordinatorSyncWork, ExclusionPatterns, FolderEffects, FolderPersistence, FolderSyncWork,
-    FolderWatcher, NotifyFolderWatcher, SqliteFolderPersistence,
+    CoordinatorSyncWork, ExclusionPatterns, FolderEffects, FolderPersistence, FolderScanTrigger,
+    FolderSyncWork, FolderWatcher, NotifyFolderWatcher, SqliteFolderPersistence,
 };
 use super::{RegisterFolderParams, RemovableVolumeBinding, RemoveFolderResult, WatchedFolders};
 use crate::audit::AuditEvent;
@@ -67,10 +67,16 @@ impl Drop for TempDir {
     }
 }
 
+#[derive(Debug, Clone)]
+struct TriggeredSync {
+    folder: crate::db::WatchedFolder,
+    source: crate::sync::SyncSource,
+}
+
 #[derive(Default, Clone)]
 struct RecordedEffects {
     tray_sync_enabled: Arc<Mutex<Vec<bool>>>,
-    triggered_syncs: Arc<Mutex<Vec<crate::db::WatchedFolder>>>,
+    triggered_syncs: Arc<Mutex<Vec<TriggeredSync>>>,
     admitted_scans: Arc<Mutex<Vec<(crate::sync::ScanResult, crate::sync::SyncSource)>>>,
     deferred_warnings: Arc<Mutex<Vec<String>>>,
     undo_errors: Arc<Mutex<Vec<(String, String)>>>,
@@ -152,6 +158,19 @@ impl FolderPersistence for ConfiguredFolderPersistence {
     }
 }
 
+impl FolderScanTrigger for &RecordedEffects {
+    fn trigger_folder_scan(
+        &self,
+        folder: crate::db::WatchedFolder,
+        source: crate::sync::SyncSource,
+    ) {
+        self.triggered_syncs
+            .lock()
+            .unwrap()
+            .push(TriggeredSync { folder, source });
+    }
+}
+
 impl FolderEffects for &RecordedEffects {
     fn record_audit(&self, event: AuditEvent) {
         self.audit_events.lock().unwrap().push(event);
@@ -159,10 +178,6 @@ impl FolderEffects for &RecordedEffects {
 
     fn set_sync_enabled(&self, enabled: bool) {
         self.tray_sync_enabled.lock().unwrap().push(enabled);
-    }
-
-    fn trigger_folder_added_sync(&self, folder: crate::db::WatchedFolder) {
-        self.triggered_syncs.lock().unwrap().push(folder);
     }
 
     async fn admit_rescan(
@@ -264,15 +279,20 @@ async fn registers_available_watched_folder_with_sanitized_target_album_and_trig
     assert!(effects.last_sync_enabled());
     let triggered_syncs = effects.triggered_syncs.lock().unwrap();
     assert_eq!(triggered_syncs.len(), 1);
-    assert_eq!(triggered_syncs[0].path, expected_path);
+    assert_eq!(triggered_syncs[0].folder.path, expected_path);
     assert_eq!(
         triggered_syncs[0]
+            .folder
             .target_album_id
             .as_ref()
             .map(|id| id.as_str()),
         Some("album-uuid-1")
     );
-    assert!(triggered_syncs[0].exclusion_patterns.is_empty());
+    assert!(triggered_syncs[0].folder.exclusion_patterns.is_empty());
+    assert_eq!(
+        triggered_syncs[0].source,
+        crate::sync::SyncSource::FolderAdded
+    );
     assert!(effects.deferred_warnings.lock().unwrap().is_empty());
 
     let audits = effects.audit_events.lock().unwrap();
@@ -307,7 +327,10 @@ async fn initial_folder_sync_receives_persisted_exclusion_patterns() {
 
     let triggered_syncs = effects.triggered_syncs.lock().unwrap();
     assert_eq!(triggered_syncs.len(), 1);
-    assert_eq!(triggered_syncs[0].exclusion_patterns, ["private.jpg"]);
+    assert_eq!(
+        triggered_syncs[0].folder.exclusion_patterns,
+        ["private.jpg"]
+    );
 }
 
 #[tokio::test]

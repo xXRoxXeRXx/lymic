@@ -24,10 +24,6 @@ struct MockEmitter {
     detected: Arc<Mutex<Vec<VolumeInfo>>>,
     remounted: Arc<Mutex<Vec<VolumeInfo>>>,
     removed: Arc<Mutex<Vec<String>>>,
-    reconciled: Arc<Mutex<Vec<(Option<String>, String)>>>,
-    unwatched: Arc<Mutex<Vec<String>>>,
-    scanned: Arc<Mutex<Vec<String>>>,
-    unwatch_error: Arc<Mutex<Option<String>>>,
 }
 
 impl VolumeEventEmitter for MockEmitter {
@@ -45,38 +41,83 @@ impl VolumeEventEmitter for MockEmitter {
         self.removed.lock().unwrap().push(volume_id.to_string());
         Ok(())
     }
+}
 
-    async fn reconcile_remount_watcher(
+#[derive(Default, Clone)]
+struct MockFolderWatcher {
+    watched: Arc<Mutex<Vec<String>>>,
+    unwatched: Arc<Mutex<Vec<String>>>,
+    unwatch_error: Arc<Mutex<Option<String>>>,
+}
+
+impl crate::watched_folders::FolderWatcher for MockFolderWatcher {
+    async fn watch_available(
         &self,
-        old_path: Option<&str>,
-        new_path: &str,
-    ) -> Result<(), String> {
-        self.reconciled
-            .lock()
-            .unwrap()
-            .push((old_path.map(|s| s.to_string()), new_path.to_string()));
-        Ok(())
+        path: &str,
+    ) -> Result<crate::watcher::WatchRegistration, String> {
+        self.watched.lock().unwrap().push(path.to_string());
+        Ok(crate::watcher::WatchRegistration::Registered)
     }
 
-    async fn reconcile_folder_unavailable(&self, path: &str) -> Result<(), String> {
+    async fn unwatch(&self, path: &str) -> Result<(), String> {
         if let Some(ref err) = *self.unwatch_error.lock().unwrap() {
             return Err(err.clone());
         }
         self.unwatched.lock().unwrap().push(path.to_string());
         Ok(())
     }
+}
 
-    async fn trigger_remount_scan(&self, folder_path: &str) -> Result<(), String> {
-        self.scanned.lock().unwrap().push(folder_path.to_string());
-        Ok(())
+#[derive(Debug, Clone)]
+struct TriggeredScan {
+    folder: crate::db::WatchedFolder,
+    source: crate::sync::SyncSource,
+}
+
+#[derive(Default, Clone)]
+struct MockFolderScanTrigger {
+    triggered: Arc<Mutex<Vec<TriggeredScan>>>,
+}
+
+impl crate::watched_folders::FolderScanTrigger for MockFolderScanTrigger {
+    fn trigger_folder_scan(
+        &self,
+        folder: crate::db::WatchedFolder,
+        source: crate::sync::SyncSource,
+    ) {
+        self.triggered
+            .lock()
+            .unwrap()
+            .push(TriggeredScan { folder, source });
+    }
+}
+
+#[derive(Default, Clone)]
+struct TestCoordinatorDeps {
+    emitter: MockEmitter,
+    watcher: MockFolderWatcher,
+    scan_trigger: MockFolderScanTrigger,
+}
+
+impl TestCoordinatorDeps {
+    fn coordinator(
+        &self,
+        pool: SqlitePool,
+    ) -> RemovableVolumeCoordinator<MockEmitter, MockFolderWatcher, MockFolderScanTrigger> {
+        RemovableVolumeCoordinator::new(
+            pool,
+            self.emitter.clone(),
+            self.watcher.clone(),
+            self.scan_trigger.clone(),
+        )
     }
 }
 
 #[tokio::test]
 async fn unknown_volume_arrival_emits_removable_volume_detected() {
     let pool = test_pool().await;
-    let emitter = MockEmitter::default();
-    let coordinator = RemovableVolumeCoordinator::new(pool, emitter.clone());
+    let deps = TestCoordinatorDeps::default();
+    let coordinator = deps.coordinator(pool);
 
     let volume = VolumeInfo {
         volume_id: "{12345678-1234-1234-1234-123456789abc}".to_string(),
@@ -89,16 +130,18 @@ async fn unknown_volume_arrival_emits_removable_volume_detected() {
         .await
         .unwrap();
 
-    let detected = emitter.detected.lock().unwrap().clone();
+    let detected = deps.emitter.detected.lock().unwrap().clone();
     assert_eq!(detected.len(), 1);
     assert_eq!(detected[0], volume);
+    assert!(deps.watcher.watched.lock().unwrap().is_empty());
+    assert!(deps.scan_trigger.triggered.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
 async fn known_volume_remount_emits_remounted_without_a_detection_prompt() {
     let pool = test_pool().await;
-    let emitter = MockEmitter::default();
-    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone());
+    let deps = TestCoordinatorDeps::default();
+    let coordinator = deps.coordinator(pool.clone());
 
     // Register a watched folder and bind it to the volume
     let initial_path = if cfg!(windows) {
@@ -125,9 +168,9 @@ async fn known_volume_remount_emits_remounted_without_a_detection_prompt() {
         .await
         .unwrap();
 
-    let detected = emitter.detected.lock().unwrap().clone();
+    let detected = deps.emitter.detected.lock().unwrap().clone();
     assert_eq!(detected.len(), 0);
-    assert_eq!(emitter.remounted.lock().unwrap().as_slice(), &[volume]);
+    assert_eq!(deps.emitter.remounted.lock().unwrap().as_slice(), &[volume]);
 }
 
 #[cfg(target_os = "windows")]
@@ -158,9 +201,10 @@ fn windows_startup_seeds_currently_mounted_removable_volumes() {
 #[tokio::test]
 async fn coordinator_arrival_and_removal_tracks_active_volumes() {
     let pool = test_pool().await;
-    let emitter = MockEmitter::default();
+    let deps = TestCoordinatorDeps::default();
     let active_volumes = ActiveRemovableVolumes::new();
-    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone())
+    let coordinator = deps
+        .coordinator(pool.clone())
         .with_active_volumes(active_volumes.clone());
 
     let volume = VolumeInfo {
@@ -192,8 +236,8 @@ async fn coordinator_arrival_and_removal_tracks_active_volumes() {
 async fn known_volume_arrival_with_changed_mount_remaps_path_reconciles_watcher_and_triggers_scan()
 {
     let pool = test_pool().await;
-    let emitter = MockEmitter::default();
-    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone());
+    let deps = TestCoordinatorDeps::default();
+    let coordinator = deps.coordinator(pool.clone());
 
     let volume_id = "{12345678-1234-1234-1234-123456789abc}";
     let initial_path = if cfg!(windows) {
@@ -212,7 +256,11 @@ async fn known_volume_arrival_with_changed_mount_remaps_path_reconciles_watcher_
         "/media/user/NEW/DCIM"
     };
 
-    let folder_id = crate::db::add_folder(&pool, initial_path, None)
+    let target_album_id = crate::immich::AlbumId::new("album-sd-1");
+    let folder_id = crate::db::add_folder(&pool, initial_path, Some(&target_album_id))
+        .await
+        .unwrap();
+    crate::db::update_exclusion_patterns(&pool, folder_id, &["*.tmp".to_string()])
         .await
         .unwrap();
     crate::db::bind_removable_folder(&pool, folder_id, volume_id, "DCIM")
@@ -245,7 +293,7 @@ async fn known_volume_arrival_with_changed_mount_remaps_path_reconciles_watcher_
         .unwrap();
 
     // 1. User prompts are suppressed
-    let detected = emitter.detected.lock().unwrap().clone();
+    let detected = deps.emitter.detected.lock().unwrap().clone();
     assert_eq!(detected.len(), 0);
 
     // 2. Watched folder is remapped in DB
@@ -265,24 +313,34 @@ async fn known_volume_arrival_with_changed_mount_remaps_path_reconciles_watcher_
         .unwrap();
     assert!(old_state.is_none());
 
-    // 4. Watcher was reconciled with old path and new path
-    let reconciled = emitter.reconciled.lock().unwrap().clone();
-    assert_eq!(reconciled.len(), 1);
-    assert_eq!(reconciled[0].0, Some(initial_path.to_string()));
-    assert_eq!(reconciled[0].1, norm_expected);
+    // 4. Watcher was reconciled with old path unwatched and new path watched via shared FolderWatcher
+    let unwatched = deps.watcher.unwatched.lock().unwrap().clone();
+    assert_eq!(unwatched, vec![initial_path.to_string()]);
+    let watched = deps.watcher.watched.lock().unwrap().clone();
+    assert_eq!(watched, vec![norm_expected.clone()]);
 
-    // 5. Media scan was triggered for the reconnected folder
-    let scanned = emitter.scanned.lock().unwrap().clone();
-    assert_eq!(scanned.len(), 1);
-    assert_eq!(scanned[0], norm_expected);
+    // 5. Media scan was triggered via shared FolderScanTrigger preserving folder metadata
+    let triggered = deps.scan_trigger.triggered.lock().unwrap().clone();
+    assert_eq!(triggered.len(), 1);
+    assert_eq!(triggered[0].folder.id, folder_id);
+    assert_eq!(triggered[0].folder.path, norm_expected);
+    assert_eq!(triggered[0].folder.target_album_id, Some(target_album_id));
+    assert_eq!(
+        triggered[0].folder.exclusion_patterns,
+        vec!["*.tmp".to_string()]
+    );
+    assert_eq!(
+        triggered[0].source,
+        crate::sync::SyncSource::RemovableMediaReconnect
+    );
 }
 
 #[tokio::test]
 async fn known_volume_arrival_with_same_mount_reconciles_watcher_and_triggers_scan_without_remapping(
 ) {
     let pool = test_pool().await;
-    let emitter = MockEmitter::default();
-    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone());
+    let deps = TestCoordinatorDeps::default();
+    let coordinator = deps.coordinator(pool.clone());
 
     let volume_id = "{12345678-1234-1234-1234-123456789abc}";
     let mount_path = if cfg!(windows) {
@@ -314,32 +372,36 @@ async fn known_volume_arrival_with_same_mount_reconciles_watcher_and_triggers_sc
         .await
         .unwrap();
 
-    let detected = emitter.detected.lock().unwrap().clone();
+    let detected = deps.emitter.detected.lock().unwrap().clone();
     assert_eq!(detected.len(), 0);
 
-    // Watcher reconciled with None for old_path (no unwatch needed since path is identical)
+    // Watcher reconciled without unwatching since path is identical
     let norm_path =
         crate::media::paths::canonicalize_folder_path(std::path::Path::new(folder_path))
             .to_string_lossy()
             .to_string();
-    let reconciled = emitter.reconciled.lock().unwrap().clone();
-    assert_eq!(reconciled.len(), 1);
-    assert_eq!(reconciled[0].0, None);
-    assert_eq!(reconciled[0].1, norm_path);
+    assert!(deps.watcher.unwatched.lock().unwrap().is_empty());
+    let watched = deps.watcher.watched.lock().unwrap().clone();
+    assert_eq!(watched, vec![norm_path.clone()]);
 
     // Scan triggered
-    let scanned = emitter.scanned.lock().unwrap().clone();
-    assert_eq!(scanned.len(), 1);
-    assert_eq!(scanned[0], norm_path);
+    let triggered = deps.scan_trigger.triggered.lock().unwrap().clone();
+    assert_eq!(triggered.len(), 1);
+    assert_eq!(triggered[0].folder.path, norm_path);
+    assert_eq!(
+        triggered[0].source,
+        crate::sync::SyncSource::RemovableMediaReconnect
+    );
 }
 
 #[tokio::test]
 async fn volume_removal_clears_active_volumes_emits_removal_and_unwatches_bound_folders_without_deleting_rows(
 ) {
     let pool = test_pool().await;
-    let emitter = MockEmitter::default();
+    let deps = TestCoordinatorDeps::default();
     let active_volumes = ActiveRemovableVolumes::new();
-    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone())
+    let coordinator = deps
+        .coordinator(pool.clone())
         .with_active_volumes(active_volumes.clone());
 
     let volume_id = "{12345678-1234-1234-1234-123456789abc}";
@@ -380,18 +442,17 @@ async fn volume_removal_clears_active_volumes_emits_removal_and_unwatches_bound_
     assert!(active_volumes.get(volume_id).is_none());
 
     // 2. Emits removal event with volume_id to clear pending prompt
-    let removed = emitter.removed.lock().unwrap().clone();
+    let removed = deps.emitter.removed.lock().unwrap().clone();
     assert_eq!(removed.len(), 1);
     assert_eq!(removed[0], volume_id);
 
-    // 3. Reconciles bound folder as unavailable to unwatch cleanly
+    // 3. Reconciles bound folder as unavailable via shared FolderWatcher::unwatch
     let norm_path =
         crate::media::paths::canonicalize_folder_path(std::path::Path::new(folder_path))
             .to_string_lossy()
             .to_string();
-    let unwatched = emitter.unwatched.lock().unwrap().clone();
-    assert_eq!(unwatched.len(), 1);
-    assert_eq!(unwatched[0], norm_path);
+    let unwatched = deps.watcher.unwatched.lock().unwrap().clone();
+    assert_eq!(unwatched, vec![norm_path]);
 
     // 4. Folder and binding rows are NOT deleted from SQLite
     let folders = crate::db::get_folders(&pool).await.unwrap();
@@ -467,8 +528,8 @@ async fn manual_folder_addition_detects_removable_volume_and_persists_binding() 
 #[tokio::test]
 async fn reconnecting_known_volume_resets_failed_queue_items_for_folder_to_pending() {
     let pool = test_pool().await;
-    let emitter = MockEmitter::default();
-    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone());
+    let deps = TestCoordinatorDeps::default();
+    let coordinator = deps.coordinator(pool.clone());
 
     let volume_id = "{12345678-1234-1234-1234-123456789abc}";
     let mount_path = if cfg!(windows) {
@@ -551,18 +612,23 @@ async fn reconnecting_known_volume_resets_failed_queue_items_for_folder_to_pendi
     assert_eq!(other_queue_status.1.as_deref(), Some("Server error"));
 
     // Media scan was triggered for the folder
-    let scanned = emitter.scanned.lock().unwrap().clone();
-    assert_eq!(scanned.len(), 1);
-    assert_eq!(scanned[0], norm_folder);
+    let triggered = deps.scan_trigger.triggered.lock().unwrap().clone();
+    assert_eq!(triggered.len(), 1);
+    assert_eq!(triggered[0].folder.path, norm_folder);
+    assert_eq!(
+        triggered[0].source,
+        crate::sync::SyncSource::RemovableMediaReconnect
+    );
 }
 
 #[tokio::test]
 async fn volume_removal_during_active_sync_transitions_inflight_to_failed_and_resumes_on_reconnect()
 {
     let pool = test_pool().await;
-    let emitter = MockEmitter::default();
+    let deps = TestCoordinatorDeps::default();
     let active_volumes = ActiveRemovableVolumes::new();
-    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone())
+    let coordinator = deps
+        .coordinator(pool.clone())
         .with_active_volumes(active_volumes.clone());
 
     let volume_id = "{abcdef12-3456-7890-abcd-ef1234567890}";
@@ -625,7 +691,7 @@ async fn volume_removal_during_active_sync_transitions_inflight_to_failed_and_re
 
     // Verification: Active volume removed, watcher unwatched, queue & state are in recoverable failure
     assert!(active_volumes.get(volume_id).is_none());
-    let unwatched = emitter.unwatched.lock().unwrap().clone();
+    let unwatched = deps.watcher.unwatched.lock().unwrap().clone();
     assert_eq!(unwatched.len(), 1);
     assert_eq!(unwatched[0], norm_folder);
 
@@ -654,16 +720,20 @@ async fn volume_removal_during_active_sync_transitions_inflight_to_failed_and_re
     assert!(queue_status_reconnected.1.is_none());
 
     // Rescan triggered
-    let scanned = emitter.scanned.lock().unwrap().clone();
-    assert_eq!(scanned.len(), 1);
-    assert_eq!(scanned[0], norm_folder);
+    let triggered = deps.scan_trigger.triggered.lock().unwrap().clone();
+    assert_eq!(triggered.len(), 1);
+    assert_eq!(triggered[0].folder.path, norm_folder);
+    assert_eq!(
+        triggered[0].source,
+        crate::sync::SyncSource::RemovableMediaReconnect
+    );
 }
 
 #[tokio::test]
 async fn volume_removal_by_volume_id_clears_active_volumes_and_unwatches() {
     let pool = test_pool().await;
-    let emitter = MockEmitter::default();
-    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone());
+    let deps = TestCoordinatorDeps::default();
+    let coordinator = deps.coordinator(pool.clone());
 
     let volume_id = "vol-test-id-123";
     let mount_path = "E:/";
@@ -698,12 +768,12 @@ async fn volume_removal_by_volume_id_clears_active_volumes_and_unwatches() {
     assert!(active_volumes.get(volume_id).is_none());
 
     // 2. Emits removal event with volume_id
-    let removed = emitter.removed.lock().unwrap().clone();
+    let removed = deps.emitter.removed.lock().unwrap().clone();
     assert_eq!(removed.len(), 1);
     assert_eq!(removed[0], volume_id);
 
     // 3. Unwatches bound folder
-    let unwatched = emitter.unwatched.lock().unwrap().clone();
+    let unwatched = deps.watcher.unwatched.lock().unwrap().clone();
     assert_eq!(unwatched.len(), 1);
     assert_eq!(unwatched[0], folder_path);
 }
@@ -711,10 +781,10 @@ async fn volume_removal_by_volume_id_clears_active_volumes_and_unwatches() {
 #[tokio::test]
 async fn volume_removal_propagates_unwatch_error_when_reconcile_folder_unavailable_fails() {
     let pool = test_pool().await;
-    let emitter = MockEmitter::default();
-    *emitter.unwatch_error.lock().unwrap() = Some("simulated unwatch failure".to_string());
+    let deps = TestCoordinatorDeps::default();
+    *deps.watcher.unwatch_error.lock().unwrap() = Some("simulated unwatch failure".to_string());
 
-    let coordinator = RemovableVolumeCoordinator::new(pool.clone(), emitter.clone());
+    let coordinator = deps.coordinator(pool.clone());
 
     let volume_id = "vol-error-test";
     let folder_path = "E:/DCIM";

@@ -33,7 +33,7 @@ fn spawn_removable_volume_consumer(
             .state::<crate::removable::ActiveRemovableVolumes>()
             .inner()
             .clone();
-        let coordinator = crate::removable::RemovableVolumeCoordinator::new(pool, handle.clone())
+        let coordinator = crate::removable::RemovableVolumeCoordinator::for_tauri(&handle, &pool)
             .with_active_volumes(active_volumes);
         while let Some(event) = volume_events.recv().await {
             if let Err(error) = coordinator.handle_event(event).await {

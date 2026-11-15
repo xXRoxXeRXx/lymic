@@ -18,7 +18,7 @@ pub(crate) use coordinator::*;
 pub(crate) use model::*;
 pub(crate) use monitor::*;
 
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 
 impl VolumeEventEmitter for tauri::AppHandle {
     fn emit_volume_detected(&self, volume: &VolumeInfo) -> Result<(), String> {
@@ -34,81 +34,6 @@ impl VolumeEventEmitter for tauri::AppHandle {
     fn emit_volume_removed(&self, volume_id: &str) -> Result<(), String> {
         self.emit("removable-volume-removed", volume_id)
             .map_err(|e| e.to_string())
-    }
-
-    async fn reconcile_remount_watcher(
-        &self,
-        old_path: Option<&str>,
-        new_path: &str,
-    ) -> Result<(), String> {
-        let watcher_state = self.state::<tokio::sync::Mutex<crate::watcher::WatcherState>>();
-        let mut w = watcher_state.lock().await;
-
-        if let Some(old) = old_path {
-            let _ = crate::watcher::unwatch_path(&mut w, old);
-        }
-
-        w.reconcile_path(new_path, true)
-            .map_err(|e| format!("Could not watch '{new_path}': {e}"))?;
-
-        Ok(())
-    }
-
-    async fn reconcile_folder_unavailable(&self, path: &str) -> Result<(), String> {
-        let watcher_state = self.state::<tokio::sync::Mutex<crate::watcher::WatcherState>>();
-        let mut w = watcher_state.lock().await;
-        w.reconcile_path(path, false)
-            .map_err(|e| format!("Could not unwatch unavailable path '{path}': {e}"))?;
-        Ok(())
-    }
-
-    async fn trigger_remount_scan(&self, folder_path: &str) -> Result<(), String> {
-        let app = self.clone();
-        let pool = self.state::<sqlx::SqlitePool>().inner().clone();
-        let path_str = folder_path.to_string();
-
-        tauri::async_runtime::spawn(async move {
-            let folder = match crate::db::get_folders(&pool).await {
-                Ok(folders) => folders.into_iter().find(|folder| folder.path == path_str),
-                Err(error) => {
-                    return crate::app::events::log_to_ui_folder_error(
-                        &app,
-                        "ERROR",
-                        &format!("Could not load folder for remount scan: {error}"),
-                        "log_folder_scan_failed",
-                        &path_str,
-                        &error.to_string(),
-                    )
-                }
-            };
-            let Some(folder) = folder else {
-                return;
-            };
-            let scan_result = match crate::sync::scan_watched_folders_for_media(vec![folder]).await
-            {
-                Ok(result) => result,
-                Err(error) => {
-                    crate::app::events::log_to_ui_folder_error(
-                        &app,
-                        "ERROR",
-                        &format!("Folder scanning failed for '{path_str}': {error}"),
-                        "log_folder_scan_failed",
-                        &path_str,
-                        &error,
-                    );
-                    return;
-                }
-            };
-            crate::sync::admit_and_run(
-                app,
-                pool,
-                scan_result,
-                crate::sync::SyncSource::RemovableMediaReconnect,
-            )
-            .await;
-        });
-
-        Ok(())
     }
 }
 

@@ -4,15 +4,17 @@ mod removal;
 mod seams;
 
 use seams::{
-    CoordinatorSyncWork, FolderEffects, FolderPersistence, FolderSyncWork, FolderWatcher,
-    NotifyFolderWatcher, SqliteFolderPersistence, TauriFolderEffects,
+    CoordinatorSyncWork, FolderEffects, FolderPersistence, FolderSyncWork, SqliteFolderPersistence,
+    TauriFolderEffects,
 };
-use tauri::Manager;
 
 pub(crate) use registration::RegisterFolderParams;
 #[cfg(test)]
 pub(crate) use registration::RemovableVolumeBinding;
 pub(crate) use removal::RemoveFolderResult;
+pub(crate) use seams::{
+    FolderScanTrigger, FolderWatcher, NotifyFolderWatcher, TauriFolderScanTrigger,
+};
 
 pub(crate) struct WatchedFolders<P, W, S, E> {
     persistence: P,
@@ -30,14 +32,12 @@ impl<'a>
     >
 {
     pub(crate) fn for_tauri(app: &'a tauri::AppHandle, pool: &'a sqlx::SqlitePool) -> Self {
-        let watcher = app.state::<tokio::sync::Mutex<crate::watcher::WatcherState>>();
+        use tauri::Manager;
         let sync_coordinator = app.state::<crate::sync::SyncCoordinator>();
         let running = app.state::<crate::sync::SyncState>().0.clone();
         Self::new(
             SqliteFolderPersistence { pool },
-            NotifyFolderWatcher {
-                watcher: watcher.inner(),
-            },
+            NotifyFolderWatcher::for_tauri(app),
             CoordinatorSyncWork {
                 pool,
                 running,
