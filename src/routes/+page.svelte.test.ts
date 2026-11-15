@@ -1928,3 +1928,163 @@ describe("Favorites Timeline", () => {
     expect(within(lightbox).queryByRole("alert")).not.toBeInTheDocument();
   });
 });
+
+describe("Explore Overview", () => {
+  const people = [
+    { id: "person-1", name: "Ada", thumbnailPath: "/p/1.jpeg" },
+    { id: "person-2", name: null, thumbnailPath: null },
+  ];
+
+  it("adds an Explore entry directly after Photos while Photos stays the opened view", async () => {
+    renderAuthenticatedPage();
+
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+    const names = within(screen.getByRole("navigation", { name: "Main navigation" }))
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label"));
+    expect(names.slice(0, 3)).toEqual(["Photos", "Explore", "Favorites"]);
+    expect(names).toContain("People");
+  });
+
+  it("shows Recognized People in the People section like the People view does", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }) });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    const section = await screen.findByRole("region", { name: "People" });
+    expect(within(section).getByRole("button", { name: "Ada" })).toBeInTheDocument();
+    expect(within(section).getByRole("img", { name: "Ada" })).toHaveAttribute("src", "lymic-thumb://person/person-1?v=%2Fp%2F1.jpeg");
+    expect(within(section).getByRole("button", { name: "Unnamed person" })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_people", { page: 1, size: 50 });
+  });
+
+  it("opens the People view from View all and a person's Photo Timeline from a tile", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }) });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    const section = await screen.findByRole("region", { name: "People" });
+
+    await fireEvent.click(within(section).getByRole("button", { name: "View all" }));
+    expect(await screen.findByRole("heading", { name: "People", level: 1 })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Explore" })[0]);
+    await fireEvent.click(await screen.findByRole("button", { name: "Ada" }));
+    expect(await screen.findByRole("heading", { name: "Ada", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_person_timeline_buckets", { personId: "person-1" });
+  });
+
+  it("returns from a person's Photo Timeline to the view it was opened from", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }) });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Ada" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Explore" }));
+    expect(await screen.findByRole("heading", { name: "Explore", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "People" })).toBeInTheDocument();
+
+    await fireEvent.click(within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("button", { name: "People" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Ada" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to People" }));
+    expect(await screen.findByRole("heading", { name: "People", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "People" })).not.toBeInTheDocument();
+  });
+
+  it("restores the Explore scroll position after returning from a Photo Timeline", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }) });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    const tile = await screen.findByRole("button", { name: "Ada" });
+    const main = tile.closest("main")!;
+    main.scrollTop = 240;
+
+    await fireEvent.click(tile);
+    main.scrollTop = 0;
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Explore" }));
+
+    await waitFor(() => expect(main.scrollTop).toBe(240));
+  });
+
+  it("shows a People failure in its section only and retries it", async () => {
+    renderAuthenticatedPage({
+      get_people: vi.fn()
+        .mockRejectedValueOnce("recognized_people_permission_denied:person.read")
+        .mockResolvedValueOnce({ people, hasNextPage: false }),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    const section = await screen.findByRole("region", { name: "People" });
+    expect(await within(section).findByRole("alert")).toHaveTextContent("People is unavailable");
+    expect(screen.queryByText(/Nothing to explore yet/)).not.toBeInTheDocument();
+
+    await fireEvent.click(within(section).getByRole("button", { name: "Retry" }));
+    expect(await within(section).findByRole("button", { name: "Ada" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a generic People error for other failures", async () => {
+    renderAuthenticatedPage({ get_people: async () => { throw new Error("boom"); } });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    expect(await within(await screen.findByRole("region", { name: "People" })).findByRole("alert")).toHaveTextContent("People could not be loaded.");
+  });
+
+  it("keeps cached people visible with an offline indication when a refresh fails", async () => {
+    renderAuthenticatedPage({
+      get_people: vi.fn()
+        .mockResolvedValueOnce({ people, hasNextPage: false })
+        .mockRejectedValueOnce(new Error("offline")),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    await screen.findByRole("button", { name: "Ada" });
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Photos" })[0]);
+    await fireEvent.click(screen.getAllByRole("button", { name: "Explore" })[0]);
+
+    const section = await screen.findByRole("region", { name: "People" });
+    expect(await within(section).findByRole("status")).toHaveTextContent("People is offline");
+    expect(within(section).getByRole("button", { name: "Ada" })).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("hides an empty People section and shows the placeholder when nothing else is left", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people: [], hasNextPage: false }) });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    expect(await screen.findByText(/Nothing to explore yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "People" })).not.toBeInTheDocument();
+  });
+
+  it("refreshes when opened and after Synchronization settles while open", async () => {
+    renderAuthenticatedPage({ get_people: async () => ({ people, hasNextPage: false }) });
+    const peopleCalls = () => tauri.invoke.mock.calls.filter(([command]) => command === "get_people").length;
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(tauri.invoke.mock.calls.filter(([command]) => command === "get_timeline_buckets")).toHaveLength(2));
+    expect(peopleCalls()).toBe(0);
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+    await screen.findByRole("button", { name: "Ada" });
+    expect(peopleCalls()).toBe(1);
+
+    syncIdle!();
+    await waitFor(() => expect(peopleCalls()).toBe(2));
+  });
+
+  it("shows only as many people as fit in one row", async () => {
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        this.callback([{ target, contentRect: { width: 500 } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+      disconnect() {}
+    });
+    const many = Array.from({ length: 8 }, (_, index) => ({ id: `p-${index}`, name: `Person ${index}`, thumbnailPath: null }));
+    renderAuthenticatedPage({ get_people: async () => ({ people: many, hasNextPage: false }) });
+    await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+
+    const section = await screen.findByRole("region", { name: "People" });
+    await waitFor(() => expect(within(section).getAllByRole("button", { name: /^Person / })).toHaveLength(3));
+    expect(within(section).getByRole("button", { name: "Person 0" })).toBeInTheDocument();
+    expect(within(section).queryByRole("button", { name: "Person 3" })).not.toBeInTheDocument();
+  });
+});

@@ -280,4 +280,9 @@
   ,"favorites_empty": "暂无收藏。将照片或视频标记为收藏后，将在此处显示。"
   ,"favorites_error": "无法加载收藏。"
   ,"favorites_offline": "收藏时间线处于离线状态。正在显示缓存的收藏。"
+  ,"explore_title": "探索"
+  ,"explore_view_all": "查看全部"
+  ,"explore_retry": "重试"
+  ,"explore_empty": "暂无可探索的内容。当您的图库中有人物、地点和回忆时，它们会显示在这里。"
+  ,"explore_return": "返回探索"
 }

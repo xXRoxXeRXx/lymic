@@ -280,4 +280,9 @@
   ,"favorites_empty": "Ainda não há favoritos. Marque fotos ou vídeos como favoritos para os ver aqui."
   ,"favorites_error": "Não foi possível carregar os favoritos."
   ,"favorites_offline": "A linha do tempo de favoritos está offline. A mostrar favoritos em cache."
+  ,"explore_title": "Explorar"
+  ,"explore_view_all": "Ver tudo"
+  ,"explore_retry": "Tentar novamente"
+  ,"explore_empty": "Ainda não há nada para explorar. Pessoas, lugares e memórias aparecerão aqui quando a sua biblioteca os tiver."
+  ,"explore_return": "Voltar para Explorar"
 }
