@@ -56,6 +56,15 @@ describe('i18n catalogs', () => {
     }
   });
 
+  it('translates the Place Timeline strings in every locale', () => {
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of ['places_return', 'places_timeline_empty', 'places_timeline_error']) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+    }
+  });
+
   it('updates the document language when the active locale changes', async () => {
     await locale.set('de');
     expect(document.documentElement.lang).toBe('de-DE');

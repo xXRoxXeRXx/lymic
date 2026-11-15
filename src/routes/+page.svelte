@@ -23,7 +23,8 @@
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
   import { createAlbumTimelineController } from "#lib/controllers/album-timeline-controller.svelte.ts";
   import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
-  import type { AlbumCatalogueItem, RecognizedPerson } from "#lib/contracts.ts";
+  import { createPlaceTimelineController } from "#lib/controllers/place-timeline-controller.svelte.ts";
+  import type { AlbumCatalogueItem, Place, RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
@@ -34,6 +35,10 @@
   let selectedPerson = $state<RecognizedPerson | null>(null);
   let personTimeline = $state<ReturnType<typeof createPersonTimelineController> | null>(null);
   let personOrigin = $state<"people" | "explore">("people");
+  let selectedPlace = $state<Place | null>(null);
+  let placeTimeline = $state<ReturnType<typeof createPlaceTimelineController> | null>(null);
+  let placeOrigin = $state<"explore" | "places">("explore");
+  let placesScrollTop = 0;
   let peopleScrollTop = 0;
   let exploreScrollTop = 0;
   let albumsScrollTop = 0;
@@ -47,6 +52,16 @@
     personTimeline = createPersonTimelineController(desktop, person.id);
     currentView = "person-timeline";
     void personTimeline.refresh();
+  }
+
+  function selectPlace(place: Place) {
+    placeOrigin = currentView === "places" ? "places" : "explore";
+    if (placeOrigin === "places") placesScrollTop = content?.scrollTop ?? 0;
+    else exploreScrollTop = content?.scrollTop ?? 0;
+    selectedPlace = place;
+    placeTimeline = createPlaceTimelineController(desktop, place.city);
+    currentView = "place-timeline";
+    void placeTimeline.refresh();
   }
 
   function selectAlbum(album: AlbumCatalogueItem) {
@@ -67,6 +82,7 @@
       case "places": return $t("places_all_title");
       case "albums": return $t("albums_title");
       case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
+      case "place-timeline": return selectedPlace?.city ?? $t("places_title");
       case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
       case "dashboard": return $t("dashboard");
       case "logs": return $t("logs");
@@ -79,6 +95,12 @@
     personTimeline?.clear();
     personTimeline = null;
     selectedPerson = null;
+  }
+
+  function closePlaceTimeline() {
+    placeTimeline?.clear();
+    placeTimeline = null;
+    selectedPlace = null;
   }
 
   function closeAlbumTimeline() {
@@ -117,6 +139,7 @@
 
   /** "All Places" has no navigation entry; it is only opened from the Explore Overview. */
   function openAllPlaces() {
+    placesScrollTop = 0;
     exploreScrollTop = content?.scrollTop ?? 0;
     currentView = "places";
   }
@@ -130,6 +153,13 @@
     closePersonTimeline();
     currentView = personOrigin;
     const scrollTop = personOrigin === "explore" ? exploreScrollTop : peopleScrollTop;
+    queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
+  }
+
+  function returnFromPlaceTimeline() {
+    closePlaceTimeline();
+    currentView = placeOrigin;
+    const scrollTop = placeOrigin === "places" ? placesScrollTop : exploreScrollTop;
     queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
   }
 
@@ -148,9 +178,12 @@
       peopleScrollTop = 0;
       exploreScrollTop = 0;
       personOrigin = "people";
+      placeOrigin = "explore";
+      placesScrollTop = 0;
       albumsScrollTop = 0;
       closeAlbumTimeline();
       closePersonTimeline();
+      closePlaceTimeline();
       currentView = "photos";
     },
     isExploreActive: () => currentView === "explore",
@@ -435,14 +468,14 @@
             offlineMessage={$t("favorites_offline")}
           />
         {:else if currentView === "explore"}
-          <ExploreView {explore} {people} {places} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} />
+          <ExploreView {explore} {people} {places} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} />
         {:else if currentView === "places"}
           <div class="flex h-full min-h-0 flex-col gap-2">
             <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToExplore}>
               <ArrowLeft class="h-4 w-4" />
               {$t('explore_return')}
             </button>
-            <PlacesView {places} />
+            <PlacesView {places} onSelect={selectPlace} />
           </div>
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
@@ -455,6 +488,14 @@
               {$t('albums_return')}
             </button>
             <TimelineView timeline={albumTimeline} {...sharedTimelineProps} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
+          </div>
+        {:else if currentView === "place-timeline" && placeTimeline}
+          <div class="flex h-full min-h-0 flex-col gap-2">
+            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnFromPlaceTimeline}>
+              <ArrowLeft class="h-4 w-4" />
+              {$t(placeOrigin === "places" ? 'places_return' : 'explore_return')}
+            </button>
+            <TimelineView timeline={placeTimeline} {...sharedTimelineProps} emptyMessage={$t('places_timeline_empty')} loadErrorMessage={$t('places_timeline_error')} />
           </div>
         {:else if currentView === "person-timeline" && personTimeline}
           <div class="flex h-full min-h-0 flex-col gap-2">
