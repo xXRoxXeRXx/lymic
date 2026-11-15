@@ -31,7 +31,6 @@ export interface ExploreViewState {
   readonly people: ExploreSectionState;
   readonly places: ExploreSectionState;
   readonly memories: ExploreSectionState;
-  readonly sections: readonly ExploreSectionState[];
   /** True when no section has anything to show, so the placeholder replaces them. */
   readonly isAllEmpty: boolean;
   /** Refreshes every section independently; one failure does not stop the others. */
@@ -88,7 +87,6 @@ export function createExploreController(options: {
     people,
     places,
     memories,
-    sections,
     get isAllEmpty() { return !sections.some(isExploreSectionVisible); },
     refresh,
     refreshIfActive() {

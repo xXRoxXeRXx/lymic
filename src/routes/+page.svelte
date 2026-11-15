@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, ArrowLeft, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon, Compass } from "lucide-svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon, Compass } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
@@ -9,6 +9,7 @@
   import TimelineView from "#lib/components/TimelineView.svelte";
   import MapView from "#lib/components/MapView.svelte";
   import ExploreView from "#lib/components/ExploreView.svelte";
+  import BackBarView from "#lib/components/BackBarView.svelte";
   import AllMemoriesView from "#lib/components/AllMemoriesView.svelte";
   import PeopleView from "#lib/components/PeopleView.svelte";
   import PlacesView from "#lib/components/PlacesView.svelte";
@@ -26,7 +27,7 @@
   import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
   import { createPlaceTimelineController } from "#lib/controllers/place-timeline-controller.svelte.ts";
   import { createMemoryTimelineController } from "#lib/controllers/memory-timeline-controller.svelte.ts";
-  import { memoryTitle } from "#lib/memory-title.ts";
+  import { localizedMemoryTitle } from "#lib/memory-title.ts";
   import type { AlbumCatalogueItem, Memory, Place, RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
@@ -102,7 +103,7 @@
       case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
       case "place-timeline": return selectedPlace?.city ?? $t("places_title");
       case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
-      case "memory-timeline": return selectedMemory ? memoryTitle(selectedMemory, (key, values) => $t(key, { values }), { locale: $locale ?? "en" }) : $t("memories_title");
+      case "memory-timeline": return selectedMemory ? localizedMemoryTitle(selectedMemory, $t, $locale) : $t("memories_title");
       case "dashboard": return $t("dashboard");
       case "logs": return $t("logs");
       case "settings": return $t("settings");
@@ -519,57 +520,33 @@
         {:else if currentView === "explore"}
           <ExploreView {explore} {people} {places} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} onViewAllMemories={openAllMemories} onSelectMemory={selectMemory} />
         {:else if currentView === "all-memories"}
-          <div class="flex h-full min-h-0 flex-col gap-2">
-            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToExplore}>
-              <ArrowLeft class="h-4 w-4" />
-              {$t('explore_return')}
-            </button>
+          <BackBarView label={$t('explore_return')} onBack={returnToExplore}>
             <AllMemoriesView {allMemories} onSelect={selectMemory} />
-          </div>
+          </BackBarView>
         {:else if currentView === "places"}
-          <div class="flex h-full min-h-0 flex-col gap-2">
-            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToExplore}>
-              <ArrowLeft class="h-4 w-4" />
-              {$t('explore_return')}
-            </button>
+          <BackBarView label={$t('explore_return')} onBack={returnToExplore}>
             <PlacesView {places} onSelect={selectPlace} />
-          </div>
+          </BackBarView>
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
         {:else if currentView === "albums"}
           <AlbumCatalogueView catalogue={albumCatalogue} onSelect={selectAlbum} />
         {:else if currentView === "album-timeline" && albumTimeline}
-          <div class="flex h-full min-h-0 flex-col gap-2">
-            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnToAlbums}>
-              <ArrowLeft class="h-4 w-4" />
-              {$t('albums_return')}
-            </button>
+          <BackBarView label={$t('albums_return')} onBack={returnToAlbums}>
             <TimelineView timeline={albumTimeline} {...sharedTimelineProps} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
-          </div>
+          </BackBarView>
         {:else if currentView === "place-timeline" && placeTimeline}
-          <div class="flex h-full min-h-0 flex-col gap-2">
-            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnFromPlaceTimeline}>
-              <ArrowLeft class="h-4 w-4" />
-              {$t(placeOrigin === "places" ? 'places_return' : 'explore_return')}
-            </button>
+          <BackBarView label={$t(placeOrigin === "places" ? 'places_return' : 'explore_return')} onBack={returnFromPlaceTimeline}>
             <TimelineView timeline={placeTimeline} {...sharedTimelineProps} emptyMessage={$t('places_timeline_empty')} loadErrorMessage={$t('places_timeline_error')} />
-          </div>
+          </BackBarView>
         {:else if currentView === "person-timeline" && personTimeline}
-          <div class="flex h-full min-h-0 flex-col gap-2">
-            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnFromPersonTimeline}>
-              <ArrowLeft class="h-4 w-4" />
-              {$t(personOrigin === "explore" ? 'explore_return' : 'people_return')}
-            </button>
+          <BackBarView label={$t(personOrigin === "explore" ? 'explore_return' : 'people_return')} onBack={returnFromPersonTimeline}>
             <TimelineView timeline={personTimeline} {...sharedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
-          </div>
+          </BackBarView>
         {:else if currentView === "memory-timeline" && memoryTimeline}
-          <div class="flex h-full min-h-0 flex-col gap-2">
-            <button type="button" class="inline-flex self-start items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onclick={returnFromMemoryTimeline}>
-              <ArrowLeft class="h-4 w-4" />
-              {$t(memoryOrigin === "all-memories" ? 'memories_all_return' : 'explore_return')}
-            </button>
+          <BackBarView label={$t(memoryOrigin === "all-memories" ? 'memories_all_return' : 'explore_return')} onBack={returnFromMemoryTimeline}>
             <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} />
-          </div>
+          </BackBarView>
         {:else if currentView === "dashboard"}
           <DashboardView
             status={sync.status}

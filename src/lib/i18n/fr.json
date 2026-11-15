@@ -302,6 +302,7 @@
   ,"memories_offline": "Les souvenirs sont hors ligne. Affichage des souvenirs en cache."
   ,"memories_error": "Impossible de charger les souvenirs."
   ,"memories_permission_denied": "Les souvenirs sont indisponibles. Configurez une clé API avec l’autorisation memory.read."
+  ,"memories_unavailable": "Les souvenirs sont indisponibles. Vérifiez la connexion et l’authentification."
   ,"memory_year_ago": "Il y a 1 an"
   ,"memory_years_ago": "Il y a {count} ans"
   ,"memory_birthday": "Anniversaire de {name}"

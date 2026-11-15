@@ -302,6 +302,7 @@
   ,"memories_offline": "यादें ऑफ़लाइन हैं। कैश की गई यादें दिखाई जा रही हैं।"
   ,"memories_error": "यादें लोड नहीं की जा सकीं।"
   ,"memories_permission_denied": "यादें उपलब्ध नहीं हैं। memory.read अनुमति वाली API कुंजी कॉन्फ़िगर करें।"
+  ,"memories_unavailable": "यादें उपलब्ध नहीं हैं। कनेक्शन और साइन-इन जाँचें।"
   ,"memory_year_ago": "1 साल पहले"
   ,"memory_years_ago": "{count} साल पहले"
   ,"memory_birthday": "{name} का जन्मदिन"

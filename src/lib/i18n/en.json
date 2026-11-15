@@ -302,6 +302,7 @@
   ,"memories_offline": "Memories is offline. Showing cached memories."
   ,"memories_error": "Memories could not be loaded."
   ,"memories_permission_denied": "Memories is unavailable. Configure an API key with the memory.read permission."
+  ,"memories_unavailable": "Memories is unavailable. Check your connection and sign-in."
   ,"memory_year_ago": "1 year ago"
   ,"memory_years_ago": "{count} years ago"
   ,"memory_birthday": "{name}'s birthday"

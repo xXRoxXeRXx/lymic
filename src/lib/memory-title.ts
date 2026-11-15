@@ -27,3 +27,15 @@ export function memoryTitle(memory: Memory, translate: Translate, options: { loc
   }
   return translate("memory_untitled");
 }
+
+/**
+ * `memoryTitle` bound to svelte-i18n: pass the `$t` formatter and the `$locale`
+ * value so the title follows the active locale (an unset locale means English).
+ */
+export function localizedMemoryTitle(
+  memory: Memory,
+  t: (key: string, options?: { values?: Record<string, string | number> }) => string,
+  locale: string | null | undefined,
+): string {
+  return memoryTitle(memory, (key, values) => t(key, { values }), { locale: locale ?? "en" });
+}

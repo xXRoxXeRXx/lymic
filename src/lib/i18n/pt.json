@@ -302,6 +302,7 @@
   ,"memories_offline": "Memórias está offline. Mostrando memórias em cache."
   ,"memories_error": "Não foi possível carregar as memórias."
   ,"memories_permission_denied": "Memórias não está disponível. Configure uma chave de API com a permissão memory.read."
+  ,"memories_unavailable": "Memórias não está disponível. Verifique a conexão e o login."
   ,"memory_year_ago": "Há 1 ano"
   ,"memory_years_ago": "Há {count} anos"
   ,"memory_birthday": "Aniversário de {name}"

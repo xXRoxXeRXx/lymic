@@ -302,6 +302,7 @@
   ,"memories_offline": "Erinnerungen sind offline. Zwischengespeicherte Erinnerungen werden angezeigt."
   ,"memories_error": "Erinnerungen konnten nicht geladen werden."
   ,"memories_permission_denied": "Erinnerungen sind nicht verfügbar. Konfigurieren Sie einen API-Schlüssel mit der Berechtigung memory.read."
+  ,"memories_unavailable": "Erinnerungen sind nicht verfügbar. Prüfen Sie Verbindung und Anmeldung."
   ,"memory_year_ago": "Vor 1 Jahr"
   ,"memory_years_ago": "Vor {count} Jahren"
   ,"memory_birthday": "Geburtstag von {name}"

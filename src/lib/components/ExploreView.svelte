@@ -2,7 +2,7 @@
   import { t, locale } from "svelte-i18n";
   import type { Memory, Place, RecognizedPerson } from "../contracts";
   import type { MemoriesViewState } from "../controllers/memories-controller.svelte";
-  import { memoryTitle } from "../memory-title";
+  import { localizedMemoryTitle } from "../memory-title";
   import MemoryCard from "./MemoryCard.svelte";
   import type { PeopleViewState } from "../controllers/people-controller.svelte";
   import type { PlacesViewState } from "../controllers/places-controller.svelte";
@@ -23,8 +23,6 @@
     onViewAllMemories: () => void;
     onSelectMemory: (memory: Memory) => void;
   } = $props();
-
-  const translate = (key: string, values?: Record<string, string | number>) => $t(key, { values });
 
   // One row of tiles: as many as fit the measured width, with a fixed fallback when unmeasured.
   const TILE_MIN_WIDTH = 144;
@@ -86,13 +84,14 @@
     section={explore.memories}
     loadingMessage={$t("memories_loading")}
     errorMessage={$t("memories_error")}
+    unavailableMessage={$t("memories_unavailable")}
     permissionDeniedMessage={$t("memories_permission_denied")}
     offlineMessage={$t("memories_offline")}
     onViewAll={onViewAllMemories}
   >
     <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));">
       {#each memories.memories as memory (memory.id)}
-        <MemoryCard {memory} title={memoryTitle(memory, translate, { locale: $locale ?? "en" })} onSelect={onSelectMemory} />
+        <MemoryCard {memory} title={localizedMemoryTitle(memory, $t, $locale)} onSelect={onSelectMemory} />
       {/each}
     </div>
   </ExploreSection>

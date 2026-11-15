@@ -302,6 +302,7 @@
   ,"memories_offline": "Нет соединения. Показаны сохранённые воспоминания."
   ,"memories_error": "Не удалось загрузить воспоминания."
   ,"memories_permission_denied": "Воспоминания недоступны. Настройте ключ API с разрешением memory.read."
+  ,"memories_unavailable": "Воспоминания недоступны. Проверьте подключение и вход в систему."
   ,"memory_year_ago": "1 год назад"
   ,"memory_years_ago": "Лет назад: {count}"
   ,"memory_birthday": "День рождения: {name}"
