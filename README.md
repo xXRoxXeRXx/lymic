@@ -37,7 +37,7 @@
 - **Media timeline** — Responsive photo and video timeline with masonry layout, date scrubber, thumbnail caching, and full lightbox preview.
 - **People discovery** — Browse recognized persons with cached avatars and filter the timeline by person.
 - **Explore** — An overview after Photos with recognized people, places (cities) and memories; open a place or memory as a timeline. Read-only, and it needs the `asset.read`, `person.read` and `memory.read` API key permissions (see [Required Permissions](#required-permissions-scopes)).
-- **Archive** — A read-only view of your archived photos and videos, directly after Favorites in the navigation, shown in the same timeline as Photos. Lymic never archives or unarchives anything; do that in Immich. It needs the `asset.read` API key permission (see [Required Permissions](#required-permissions-scopes)). Assets in the Immich trash or locked folder are not shown.
+- **Archive** — A read-only view of your archived photos and videos, directly after Favorites in the navigation, shown in the same timeline as Photos. Lymic never archives or unarchives anything; do that in Immich. It needs the `asset.read` API key permission (see [Required Permissions](#required-permissions-scopes)). Lymic requests only assets with archive visibility. Keeping Immich-trashed and locked-folder assets out relies on Immich's archive visibility filter and has not yet been verified against a live server.
 - **Album browsing** — Browse accessible Immich albums with cover thumbnails and asset counts, and explore album media in a dedicated timeline view.
 
 ---
