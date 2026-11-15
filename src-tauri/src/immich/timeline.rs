@@ -1,9 +1,7 @@
 use super::client::ImmichClient;
-use super::response::{
-    read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
-};
+use super::response::{read_response_body_limited, send_checked, MAX_SUCCESS_RESPONSE_BYTES};
 use chrono::DateTime;
-use reqwest::StatusCode;
+use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -215,26 +213,18 @@ impl ImmichClient {
         let mut assets = Vec::new();
 
         loop {
-            let response = self
-                .client
-                .post(self.endpoint_url("search/metadata"))
-                .header("x-api-key", &self.api_key)
-                .json(&serde_json::json!({
-                    "albumIds": [album_id],
-                    "order": "desc",
-                    "withExif": true,
-                    "page": page,
-                    "size": PAGE_SIZE,
-                }))
-                .send()
-                .await
-                .map_err(|error| format!("Failed to fetch album timeline: {error}"))?;
-            if !response.status().is_success() {
-                return Err(format!(
-                    "Failed to fetch album timeline: {}",
-                    response_status_error(response).await?
-                ));
-            }
+            let response = send_checked(
+                self.request(Method::POST, "search/metadata")
+                    .json(&serde_json::json!({
+                        "albumIds": [album_id],
+                        "order": "desc",
+                        "withExif": true,
+                        "page": page,
+                        "size": PAGE_SIZE,
+                    })),
+                "Failed to fetch album timeline",
+            )
+            .await?;
 
             let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
             let payload: MetadataSearchResponse = serde_json::from_slice(&body)
@@ -263,9 +253,7 @@ impl ImmichClient {
     ) -> Result<Vec<TimelineBucket>, String> {
         Self::validate_path_segment(person_id, "person ID")?;
         let response = self
-            .client
-            .get(self.endpoint_url("timeline/buckets"))
-            .header("x-api-key", &self.api_key)
+            .request(Method::GET, "timeline/buckets")
             .query(&[("size", "MONTH"), ("personId", person_id)])
             .send()
             .await
@@ -290,14 +278,12 @@ impl ImmichClient {
     ) -> Result<Vec<TimelineAsset>, String> {
         Self::validate_path_segment(person_id, "person ID")?;
         let response = self
-            .client
-            .get(self.endpoint_url("timeline/bucket"))
+            .request(Method::GET, "timeline/bucket")
             .query(&[
                 ("size", "MONTH"),
                 ("timeBucket", time_bucket),
                 ("personId", person_id),
             ])
-            .header("x-api-key", &self.api_key)
             .send()
             .await
             .map_err(|_| "Unable to load recognized person timeline assets".to_string())?;
@@ -318,21 +304,12 @@ impl ImmichClient {
         query: &[(&str, &str)],
         context: &str,
     ) -> Result<Vec<TimelineBucket>, String> {
-        let response = self
-            .client
-            .get(self.endpoint_url("timeline/buckets"))
-            .query(query)
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to fetch {context}: {error}"))?;
-
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to fetch {context}: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let failure = format!("Failed to fetch {context}");
+        let response = send_checked(
+            self.request(Method::GET, "timeline/buckets").query(query),
+            &failure,
+        )
+        .await?;
 
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         let mut buckets: Vec<TimelineBucket> = serde_json::from_slice(&body)
@@ -347,20 +324,12 @@ impl ImmichClient {
         context: &str,
         default_favorite: bool,
     ) -> Result<Vec<TimelineAsset>, String> {
-        let response = self
-            .client
-            .get(self.endpoint_url("timeline/bucket"))
-            .query(query)
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to fetch {context}: {error}"))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to fetch {context}: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let failure = format!("Failed to fetch {context}");
+        let response = send_checked(
+            self.request(Method::GET, "timeline/bucket").query(query),
+            &failure,
+        )
+        .await?;
         parse_timeline_bucket_assets(
             read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?,
             default_favorite,

@@ -1,7 +1,8 @@
 use super::client::ImmichClient;
 use super::response::{
-    read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
+    read_response_body_limited, send_checked, send_checked_as, MAX_SUCCESS_RESPONSE_BYTES,
 };
+use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
@@ -45,20 +46,11 @@ struct AlbumAssetAssignmentResponse {
 
 impl ImmichClient {
     pub async fn get_album_catalogue(&self) -> Result<Vec<AlbumCatalogueItem>, String> {
-        let response = self
-            .client
-            .get(self.endpoint_url("albums"))
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to fetch album catalogue: {}", error))?;
-
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to fetch album catalogue: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked(
+            self.request(Method::GET, "albums"),
+            "Failed to fetch album catalogue",
+        )
+        .await?;
 
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         serde_json::from_slice(&body)
@@ -69,20 +61,11 @@ impl ImmichClient {
         // Keep Target Album selection on its established id/name-only contract.
         // The read-only browse catalogue deliberately uses a separate request so
         // its Immich order and display metadata cannot change synchronization UI.
-        let response = self
-            .client
-            .get(self.endpoint_url("albums"))
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to fetch albums: {}", error))?;
-
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to fetch albums: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked(
+            self.request(Method::GET, "albums"),
+            "Failed to fetch albums",
+        )
+        .await?;
 
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         let mut albums: Vec<Album> = serde_json::from_slice(&body)
@@ -98,21 +81,12 @@ impl ImmichClient {
             return Err("Album name cannot be empty".to_string());
         }
 
-        let response = self
-            .client
-            .post(self.endpoint_url("albums"))
-            .header("x-api-key", &self.api_key)
-            .json(&json!({ "albumName": trimmed_name }))
-            .send()
-            .await
-            .map_err(|error| format!("Failed to create album: {}", error))?;
-
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to create album: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked(
+            self.request(Method::POST, "albums")
+                .json(&json!({ "albumName": trimmed_name })),
+            "Failed to create album",
+        )
+        .await?;
 
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         serde_json::from_slice(&body)
@@ -152,21 +126,12 @@ impl ImmichClient {
         }
 
         let endpoint = format!("albums/{}/assets", album_id);
-        let response = self
-            .client
-            .put(self.endpoint_url(&endpoint))
-            .header("x-api-key", &self.api_key)
-            .json(&json!({ "ids": asset_ids }))
-            .send()
-            .await
-            .map_err(|error| format!("Failed to assign assets to album: {}", error))?;
-
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to assign assets to album: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked(
+            self.request(Method::PUT, &endpoint)
+                .json(&json!({ "ids": asset_ids })),
+            "Failed to assign assets to album",
+        )
+        .await?;
 
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         let results: Vec<AlbumAssetAssignmentResponse> = serde_json::from_slice(&body)
@@ -190,21 +155,13 @@ impl ImmichClient {
         &self,
         checksum: &str,
     ) -> Result<Option<super::ids::RemoteAssetId>, String> {
-        let response = self
-            .client
-            .post(self.endpoint_url("search/metadata"))
-            .header("x-api-key", &self.api_key)
-            .json(&json!({ "checksum": checksum }))
-            .send()
-            .await
-            .map_err(|error| format!("Checksum search request failed: {}", error))?;
-
-        if !response.status().is_success() {
-            return Err(format!(
-                "Checksum search failed: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked_as(
+            self.request(Method::POST, "search/metadata")
+                .json(&json!({ "checksum": checksum })),
+            "Checksum search request failed",
+            "Checksum search failed",
+        )
+        .await?;
 
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
         let data: serde_json::Value = serde_json::from_slice(&body)

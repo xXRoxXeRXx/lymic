@@ -1,7 +1,39 @@
-use reqwest::Response;
+use reqwest::{RequestBuilder, Response};
 
 pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 8 * 1024;
 pub(super) const MAX_SUCCESS_RESPONSE_BYTES: usize = 1024 * 1024;
+
+/// Sends a request and returns the response only when it succeeded.
+///
+/// Transport failures and non-success statuses are both reported as
+/// `"{failure}: ..."`. The response body is never buffered here, so streaming
+/// callers receive the response untouched.
+pub(super) async fn send_checked(
+    request: RequestBuilder,
+    failure: &str,
+) -> Result<Response, String> {
+    send_checked_as(request, failure, failure).await
+}
+
+/// Like [`send_checked`] for endpoints whose transport and status failures use
+/// different message prefixes.
+pub(super) async fn send_checked_as(
+    request: RequestBuilder,
+    transport_failure: &str,
+    status_failure: &str,
+) -> Result<Response, String> {
+    let response = request
+        .send()
+        .await
+        .map_err(|error| format!("{transport_failure}: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "{status_failure}: {}",
+            response_status_error(response).await?
+        ));
+    }
+    Ok(response)
+}
 
 pub(super) async fn response_status_error(response: Response) -> Result<String, String> {
     let status = response.status();

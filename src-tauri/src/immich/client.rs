@@ -2,13 +2,13 @@ use super::bulk_check::{
     bulk_check_response_error, parse_bulk_check_response, BulkCheckDuplicate, BulkCheckError,
 };
 use super::response::{
-    read_response_body_limited, response_status_error, MAX_SUCCESS_RESPONSE_BYTES,
+    read_response_body_limited, send_checked, send_checked_as, MAX_SUCCESS_RESPONSE_BYTES,
 };
 use super::upload::{parse_upload_response, upload_form, SidecarDirectoryCache};
 use crate::sync::progress::TransferStatsTracker;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
-    Client, Response,
+    Client, Method, RequestBuilder, Response,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -344,6 +344,15 @@ impl ImmichClient {
             .expect("validated base URL must support relative endpoint paths")
     }
 
+    /// Starts an authenticated request to an API endpoint.
+    ///
+    /// This is the only place the API key header is attached.
+    pub(super) fn request(&self, method: Method, path: &str) -> RequestBuilder {
+        self.client
+            .request(method, self.endpoint_url(path))
+            .header("x-api-key", &self.api_key)
+    }
+
     pub(crate) fn validate_path_segment(value: &str, name: &str) -> Result<(), String> {
         if value.trim().is_empty()
             || value.contains("..")
@@ -368,19 +377,12 @@ impl ImmichClient {
     }
 
     pub(crate) async fn current_user_info(&self) -> Result<CurrentUserInfo, String> {
-        let response = self
-            .client
-            .get(self.endpoint_url("users/me"))
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Connection failed: {}", error))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "Server returned error: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked_as(
+            self.request(Method::GET, "users/me"),
+            "Connection failed",
+            "Server returned error",
+        )
+        .await?;
         let user: CurrentUserResponse = response
             .json()
             .await
@@ -411,19 +413,12 @@ impl ImmichClient {
     ) -> Result<(Vec<u8>, Option<String>), String> {
         const MAX_PROFILE_IMAGE_BYTES: usize = 10 * 1024 * 1024;
         Self::validate_path_segment(user_id, "user ID")?;
-        let response = self
-            .client
-            .get(self.endpoint_url(&format!("users/{user_id}/profile-image")))
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Connection failed: {}", error))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "Server returned error: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked_as(
+            self.request(Method::GET, &format!("users/{user_id}/profile-image")),
+            "Connection failed",
+            "Server returned error",
+        )
+        .await?;
         if let Some(len) = response.content_length() {
             if len as usize > MAX_PROFILE_IMAGE_BYTES {
                 return Err("Profile image exceeds maximum allowed size".to_string());
@@ -448,20 +443,12 @@ impl ImmichClient {
 
     pub(crate) async fn get_thumbnail(&self, asset_id: &str) -> Result<Vec<u8>, String> {
         Self::validate_path_segment(asset_id, "asset ID")?;
-        let response = self
-            .client
-            .get(self.endpoint_url(&format!("assets/{asset_id}/thumbnail")))
-            .query(&[("format", "WEBP")])
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to fetch thumbnail: {error}"))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to fetch thumbnail: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked(
+            self.request(Method::GET, &format!("assets/{asset_id}/thumbnail"))
+                .query(&[("format", "WEBP")]),
+            "Failed to fetch thumbnail",
+        )
+        .await?;
         read_response_body_limited(response, MAX_THUMBNAIL_BYTES)
             .await
             .map_err(|error| format!("Failed to read thumbnail: {error}"))
@@ -469,19 +456,11 @@ impl ImmichClient {
 
     pub(crate) async fn get_person_thumbnail(&self, person_id: &str) -> Result<Vec<u8>, String> {
         Self::validate_path_segment(person_id, "person ID")?;
-        let response = self
-            .client
-            .get(self.endpoint_url(&format!("people/{person_id}/thumbnail")))
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to fetch person thumbnail: {error}"))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to fetch person thumbnail: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked(
+            self.request(Method::GET, &format!("people/{person_id}/thumbnail")),
+            "Failed to fetch person thumbnail",
+        )
+        .await?;
         let bytes = response
             .bytes()
             .await
@@ -494,32 +473,23 @@ impl ImmichClient {
 
     pub(crate) async fn get_asset_preview(&self, asset_id: &str) -> Result<AssetResponse, String> {
         Self::validate_path_segment(asset_id, "asset ID")?;
-        let response = self
-            .client
-            .get(self.endpoint_url(&format!("assets/{asset_id}/thumbnail")))
-            .query(&[("size", "preview")])
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to fetch asset preview: {error}"))?;
+        let response = send_checked_as(
+            self.request(Method::GET, &format!("assets/{asset_id}/thumbnail"))
+                .query(&[("size", "preview")]),
+            "Failed to fetch asset preview",
+            "Failed to fetch asset",
+        )
+        .await?;
         Self::read_asset_response(response, MAX_THUMBNAIL_BYTES).await
     }
 
     pub(crate) async fn get_asset_details(&self, asset_id: &str) -> Result<AssetDetails, String> {
         Self::validate_path_segment(asset_id, "asset ID")?;
-        let response = self
-            .client
-            .get(self.endpoint_url(&format!("assets/{asset_id}")))
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to fetch asset details: {error}"))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to fetch asset details: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked(
+            self.request(Method::GET, &format!("assets/{asset_id}")),
+            "Failed to fetch asset details",
+        )
+        .await?;
         let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES)
             .await
             .map_err(|error| format!("Failed to read asset details: {error}"))?;
@@ -534,20 +504,12 @@ impl ImmichClient {
         is_favorite: bool,
     ) -> Result<(), String> {
         Self::validate_path_segment(asset_id, "asset ID")?;
-        let response = self
-            .client
-            .put(self.endpoint_url(&format!("assets/{asset_id}")))
-            .header("x-api-key", &self.api_key)
-            .json(&json!({ "isFavorite": is_favorite }))
-            .send()
-            .await
-            .map_err(|error| format!("Failed to update asset favorite: {error}"))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to update asset favorite: {}",
-                response_status_error(response).await?
-            ));
-        }
+        send_checked(
+            self.request(Method::PUT, &format!("assets/{asset_id}"))
+                .json(&json!({ "isFavorite": is_favorite })),
+            "Failed to update asset favorite",
+        )
+        .await?;
         Ok(())
     }
 
@@ -557,17 +519,11 @@ impl ImmichClient {
         range: Option<&str>,
     ) -> Result<AssetResponse, String> {
         Self::validate_path_segment(asset_id, "asset ID")?;
-        let mut request = self
-            .client
-            .get(self.endpoint_url(&format!("assets/{asset_id}/original")))
-            .header("x-api-key", &self.api_key);
+        let mut request = self.request(Method::GET, &format!("assets/{asset_id}/original"));
         if let Some(range) = range {
             request = request.header(reqwest::header::RANGE, range);
         }
-        let response = request
-            .send()
-            .await
-            .map_err(|error| format!("Failed to fetch asset: {error}"))?;
+        let response = send_checked(request, "Failed to fetch asset").await?;
         Self::read_asset_response(response, MAX_ASSET_RESPONSE_BYTES).await
     }
 
@@ -578,19 +534,11 @@ impl ImmichClient {
     ) -> Result<(), String> {
         Self::validate_path_segment(asset_id, "asset ID")?;
         Self::validate_download_destination(destination_path)?;
-        let response = self
-            .client
-            .get(self.endpoint_url(&format!("assets/{asset_id}/original")))
-            .header("x-api-key", &self.api_key)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to download asset: {error}"))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to download asset: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked(
+            self.request(Method::GET, &format!("assets/{asset_id}/original")),
+            "Failed to download asset",
+        )
+        .await?;
 
         stream_response_to_destination(response, destination_path, "Failed to download asset").await
     }
@@ -605,21 +553,13 @@ impl ImmichClient {
         for asset_id in asset_ids {
             Self::validate_path_segment(asset_id, "asset ID")?;
         }
-        let response = self
-            .client
-            .post(self.endpoint_url("download/archive"))
-            .header("x-api-key", &self.api_key)
-            .header(reqwest::header::ACCEPT, "application/octet-stream")
-            .json(&json!({ "assetIds": asset_ids }))
-            .send()
-            .await
-            .map_err(|error| format!("Failed to download archive: {error}"))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to download archive: {}",
-                response_status_error(response).await?
-            ));
-        }
+        let response = send_checked(
+            self.request(Method::POST, "download/archive")
+                .header(reqwest::header::ACCEPT, "application/octet-stream")
+                .json(&json!({ "assetIds": asset_ids })),
+            "Failed to download archive",
+        )
+        .await?;
         let suggested_file_name = content_disposition_file_name(response.headers())
             .unwrap_or_else(|| "immich-download.zip".to_string());
         Ok(ArchiveDownload {
@@ -647,12 +587,6 @@ impl ImmichClient {
         max_bytes: usize,
     ) -> Result<AssetResponse, String> {
         let status = response.status();
-        if !status.is_success() {
-            return Err(format!(
-                "Failed to fetch asset: {}",
-                response_status_error(response).await?
-            ));
-        }
         let headers = response.headers().clone();
         let body = read_response_body_limited(response, max_bytes)
             .await
@@ -685,9 +619,7 @@ impl ImmichClient {
             .map(|hash| json!({ "id": hash, "checksum": hash }))
             .collect();
         let response = self
-            .client
-            .post(self.endpoint_url("assets/bulk-upload-check"))
-            .header("x-api-key", &self.api_key)
+            .request(Method::POST, "assets/bulk-upload-check")
             .json(&json!({ "assets": assets }))
             .send()
             .await
@@ -731,26 +663,18 @@ impl ImmichClient {
         precomputed_hash: &str,
         timeout: std::time::Duration,
     ) -> Result<String, String> {
-        let response: Response = self
-            .client
-            .post(self.endpoint_url("assets"))
-            .header("x-api-key", &self.api_key)
-            .header("x-immich-checksum", precomputed_hash)
-            .timeout(timeout)
-            .multipart(form)
-            .send()
-            .await
-            .map_err(|error| format!("Network error during upload: {}", error))?;
-        if response.status().is_success() {
-            parse_upload_response(
-                &read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?,
-            )
-        } else {
-            Err(format!(
-                "Upload failed: {}",
-                response_status_error(response).await?
-            ))
-        }
+        let response = send_checked_as(
+            self.request(Method::POST, "assets")
+                .header("x-immich-checksum", precomputed_hash)
+                .timeout(timeout)
+                .multipart(form),
+            "Network error during upload",
+            "Upload failed",
+        )
+        .await?;
+        parse_upload_response(
+            &read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?,
+        )
     }
 }
 

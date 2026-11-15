@@ -1,6 +1,6 @@
 use super::client::ImmichClient;
 use super::response::{read_response_body_limited, MAX_SUCCESS_RESPONSE_BYTES};
-use reqwest::StatusCode;
+use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 
 fn recognized_people_access_error(status: StatusCode) -> String {
@@ -39,10 +39,8 @@ struct PeopleResponse {
 impl ImmichClient {
     pub async fn get_people(&self, page: u32, size: u32) -> Result<PeoplePage, String> {
         let response = self
-            .client
-            .get(self.endpoint_url("people"))
+            .request(Method::GET, "people")
             .query(&[("page", page), ("size", size)])
-            .header("x-api-key", &self.api_key)
             .send()
             .await
             .map_err(|_| "Unable to load recognized people".to_string())?;

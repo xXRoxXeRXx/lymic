@@ -1,6 +1,6 @@
 use super::client::ImmichClient;
 use super::response::read_response_body_limited;
-use reqwest::StatusCode;
+use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 
 // 300,000 typical marker objects fit comfortably; unrelated JSON remains capped at 1 MiB.
@@ -33,9 +33,7 @@ where
 impl ImmichClient {
     pub async fn get_map_markers(&self) -> Result<Vec<MapMarker>, String> {
         let response = self
-            .client
-            .get(self.endpoint_url("map/markers"))
-            .header("x-api-key", &self.api_key)
+            .request(Method::GET, "map/markers")
             .send()
             .await
             .map_err(|_| "map_unavailable".to_string())?;
