@@ -42,7 +42,7 @@ Rust application services
 | UI event bridge | `src/lib/tauri/sync-event-subscription.ts` | Stable frontend subscriptions and event payload expectations. |
 | Tauri surface | `src-tauri/src/commands/`, `src-tauri/src/app/mod.rs`, `src-tauri/src/app/thumbnail_protocol.rs`, `src-tauri/src/app/asset_protocol.rs` | Command inputs, responses, custom streaming URI schemes (`lymic-thumb://`, `lymic-asset://`), and registration. |
 | Sync orchestration | `src-tauri/src/sync/` | Scan results, durable queue, pause/resume, retries, upload processing, progress. |
-| Watched Folder registration | `src-tauri/src/watched_folders/` | Watched Folder validation, registration, exclusion-pattern updates, and removal, watcher registration, persistence with compensation, and initial sync trigger. |
+| Watched Folder lifecycle | `src-tauri/src/watched_folders/` | One interface for the **Watched Folder** lifecycle: registration (validation, watcher registration, persistence with compensation, initial sync trigger), **Exclusion Pattern** updates (normalise, persist, rescan that folder), and removal. |
 | Removable-volume monitoring | `src-tauri/src/removable/` | Windows uses `WindowsRemovableMediaMonitor` and `WM_DEVICECHANGE` to detect removable volumes. `MacOsRemovableMediaMonitor` and `LinuxRemovableMediaMonitor` are currently no-op stubs, so removable-volume arrival and remount reconciliation are not active on macOS or Linux. |
 | File discovery | `src-tauri/src/media/` | Supported extensions, pairing, sidecars, path handling, and scanning. |
 | Filesystem watching | `src-tauri/src/watcher/` | Recursive watcher lifecycle, debouncing, overflow recovery, unavailable-folder handling. |

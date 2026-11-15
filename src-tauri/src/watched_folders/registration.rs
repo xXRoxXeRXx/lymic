@@ -252,7 +252,7 @@ where
             .await?
             .into_iter()
             .find(|folder| folder.id == id)
-            .ok_or_else(|| "Added Watched Folder was not found.".to_string())?;
+            .ok_or_else(|| "Added watched folder was not found.".to_string())?;
         effects.trigger_folder_added_sync(folder);
     }
 

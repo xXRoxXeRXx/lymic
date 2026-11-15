@@ -178,8 +178,12 @@ impl FolderSyncWork for CoordinatorSyncWork<'_> {
     }
 
     async fn scan_folder(&self, folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
-        crate::sync::scan_watched_folders_for_media(vec![folder]).await
+        scan_single_folder(folder).await
     }
+}
+
+async fn scan_single_folder(folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
+    crate::sync::scan_watched_folders_for_media(vec![folder]).await
 }
 
 pub(crate) struct TauriFolderEffects<'a> {
@@ -200,21 +204,20 @@ impl FolderEffects for TauriFolderEffects<'_> {
         let pool_inner = self.pool.clone();
         let app_for_scan = self.app.clone();
         tauri::async_runtime::spawn(async move {
-            let scan_result =
-                match crate::sync::scan_watched_folders_for_media(vec![folder.clone()]).await {
-                    Ok(result) => result,
-                    Err(error) => {
-                        crate::app::events::log_to_ui_folder_error(
-                            &app_for_scan,
-                            "ERROR",
-                            &format!("Folder scanning failed for '{}': {error}", folder.path),
-                            "log_folder_scan_failed",
-                            &folder.path,
-                            &error,
-                        );
-                        return;
-                    }
-                };
+            let scan_result = match scan_single_folder(folder.clone()).await {
+                Ok(result) => result,
+                Err(error) => {
+                    crate::app::events::log_to_ui_folder_error(
+                        &app_for_scan,
+                        "ERROR",
+                        &format!("Folder scanning failed for '{}': {error}", folder.path),
+                        "log_folder_scan_failed",
+                        &folder.path,
+                        &error,
+                    );
+                    return;
+                }
+            };
             crate::sync::admit_and_run(
                 app_for_scan,
                 pool_inner,

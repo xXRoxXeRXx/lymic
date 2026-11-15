@@ -1465,3 +1465,138 @@ async fn successful_exclusion_update_normalizes_persists_and_rescans_only_target
         .collect();
     assert_eq!(scanned_paths, vec![expected_keep]);
 }
+
+struct FailingScanSync<'a>(CoordinatorSyncWork<'a>);
+
+impl FolderSyncWork for FailingScanSync<'_> {
+    async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
+        self.0.has_work_in_folder(path).await
+    }
+
+    fn cancel_work_in_folder(&self, path: &str) {
+        self.0.cancel_work_in_folder(path);
+    }
+
+    async fn discard_folder_queue(&self, path: &str) -> Result<(), String> {
+        self.0.discard_folder_queue(path).await
+    }
+
+    async fn scan_folder(&self, _folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
+        Err("scan exploded".to_string())
+    }
+}
+
+#[tokio::test]
+async fn scan_failure_after_update_keeps_new_patterns_and_admits_nothing() {
+    let pool = test_pool().await;
+    let watcher = test_watcher();
+    let persistence = ConfiguredFolderPersistence::default();
+    let folder_id = persistence.add_folder("/watched", None).await.unwrap();
+    let effects = RecordedEffects::default();
+    let folders = WatchedFolders::new(
+        persistence.clone(),
+        NotifyFolderWatcher { watcher: &watcher },
+        FailingScanSync(test_sync_work(&pool)),
+        &effects,
+    );
+
+    let err = folders
+        .update_exclusion_patterns(folder_id, vec!["*.mov".to_string()])
+        .await
+        .unwrap_err();
+
+    assert_eq!(err, "scan exploded");
+    let stored = persistence.list_folders().await.unwrap();
+    assert_eq!(stored[0].exclusion_patterns, vec!["*.mov"]);
+    assert!(effects.admitted_scans.lock().unwrap().is_empty());
+}
+
+/// Persists the update, then reports the folder as gone when listing.
+#[derive(Clone, Default)]
+struct VanishingFolderPersistence(ConfiguredFolderPersistence);
+
+impl FolderPersistence for VanishingFolderPersistence {
+    async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String> {
+        Ok(Vec::new())
+    }
+
+    async fn list_removable_bindings_by_volume(
+        &self,
+        volume_id: &str,
+    ) -> Result<Vec<RemovableFolderBinding>, String> {
+        self.0.list_removable_bindings_by_volume(volume_id).await
+    }
+
+    async fn add_folder(
+        &self,
+        path: &str,
+        target_album_id: Option<&AlbumId>,
+    ) -> Result<i64, String> {
+        self.0.add_folder(path, target_album_id).await
+    }
+
+    async fn bind_removable_folder(
+        &self,
+        folder_id: i64,
+        volume_id: &str,
+        relative_path: &str,
+    ) -> Result<(), String> {
+        self.0
+            .bind_removable_folder(folder_id, volume_id, relative_path)
+            .await
+    }
+
+    async fn update_exclusion_patterns(
+        &self,
+        folder_id: i64,
+        exclusion_patterns: &ExclusionPatterns,
+    ) -> Result<bool, String> {
+        self.0
+            .update_exclusion_patterns(folder_id, exclusion_patterns)
+            .await
+    }
+
+    async fn remove_folder(&self, folder_id: i64) -> Result<(), String> {
+        self.0.remove_folder(folder_id).await
+    }
+}
+
+#[tokio::test]
+async fn folder_vanishing_between_update_and_lookup_reports_not_found_and_triggers_no_scan() {
+    let pool = test_pool().await;
+    let watcher = test_watcher();
+    let persistence = VanishingFolderPersistence::default();
+    let folder_id = persistence.add_folder("/watched", None).await.unwrap();
+    let effects = RecordedEffects::default();
+    let scanned_folders = Arc::new(Mutex::new(Vec::new()));
+    let folders = WatchedFolders::new(
+        persistence,
+        NotifyFolderWatcher { watcher: &watcher },
+        CountingScanSync {
+            inner: test_sync_work(&pool),
+            scanned_folders: scanned_folders.clone(),
+        },
+        &effects,
+    );
+
+    let err = folders
+        .update_exclusion_patterns(folder_id, vec!["*.mov".to_string()])
+        .await
+        .unwrap_err();
+
+    assert_eq!(err, "Watched folder was not found.");
+    assert!(scanned_folders.lock().unwrap().is_empty());
+    assert!(effects.admitted_scans.lock().unwrap().is_empty());
+}
+
+#[test]
+fn exclusion_patterns_are_trimmed_deduplicated_and_validated() {
+    let parsed = ExclusionPatterns::parse(vec![
+        " Screenshots/** ".into(),
+        "screenshots/**".into(),
+        "".into(),
+    ])
+    .unwrap();
+    assert_eq!(parsed.as_slice(), ["Screenshots/**"]);
+    assert!(ExclusionPatterns::parse(vec!["../private/**".into()]).is_err());
+}
