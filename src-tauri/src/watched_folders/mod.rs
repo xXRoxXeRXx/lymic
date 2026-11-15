@@ -1,627 +1,20 @@
-use crate::audit::{AuditEvent, Outcome, Severity};
-use crate::immich::AlbumId;
-use crate::media::paths::{
-    canonicalize_folder_path, normalize_path_lexical, path_is_within_lexical,
+mod exclusions;
+mod registration;
+mod removal;
+mod seams;
+
+use seams::{
+    CoordinatorSyncWork, FolderEffects, FolderPersistence, FolderSyncWork, FolderWatcher,
+    NotifyFolderWatcher, SqliteFolderPersistence, TauriFolderEffects,
 };
-use crate::removable::{ActiveRemovableVolumes, VolumeInfo};
-use crate::watcher::WatchRegistration;
-use serde_json::json;
-use std::path::{Path, PathBuf};
 use tauri::Manager;
 
-mod internal {
-    use crate::audit::AuditEvent;
-    use crate::db::{self, RemovableFolderBinding, WatchedFolder};
-    use crate::immich::AlbumId;
-    use crate::watcher::{self, WatchRegistration, WatcherState};
-
-    pub(crate) trait FolderPersistence {
-        async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String>;
-        async fn list_removable_bindings_by_volume(
-            &self,
-            volume_id: &str,
-        ) -> Result<Vec<RemovableFolderBinding>, String>;
-        async fn add_folder(
-            &self,
-            path: &str,
-            target_album_id: Option<&AlbumId>,
-        ) -> Result<i64, String>;
-        async fn bind_removable_folder(
-            &self,
-            folder_id: i64,
-            volume_id: &str,
-            relative_path: &str,
-        ) -> Result<(), String>;
-        async fn update_exclusion_patterns(
-            &self,
-            folder_id: i64,
-            exclusion_patterns: &[String],
-        ) -> Result<bool, String>;
-        async fn remove_folder(&self, folder_id: i64) -> Result<(), String>;
-    }
-
-    pub(crate) trait FolderWatcher {
-        async fn watch_available(&self, path: &str) -> Result<WatchRegistration, String>;
-        async fn unwatch(&self, path: &str) -> Result<(), String>;
-    }
-
-    pub(crate) trait AuditEffects {
-        fn record_audit(&self, event: AuditEvent);
-    }
-
-    pub(crate) trait RegistrationEffects: AuditEffects {
-        fn enable_sync(&self);
-        fn trigger_folder_added_sync(&self, folder: WatchedFolder);
-        fn log_watcher_deferred(&self, path: &str);
-        fn log_watcher_undo_failed(&self, path: &str, error: &str);
-    }
-
-    pub(crate) trait FolderSyncWork {
-        async fn has_work_in_folder(&self, path: &str) -> Result<bool, String>;
-        fn cancel_work_in_folder(&self, path: &str);
-        async fn discard_folder_queue(&self, path: &str) -> Result<(), String>;
-    }
-
-    pub(crate) trait RemovalEffects: AuditEffects {
-        fn log_unwatch_failed(&self, path: &str, error: &str);
-        fn log_watcher_restore_failed(&self, path: &str, error: &str);
-        fn set_sync_enabled(&self, enabled: bool);
-        fn log_tray_refresh_after_remove_failed(&self, error: &str);
-    }
-
-    pub(crate) trait ExclusionUpdateEffects {
-        async fn admit_rescan(
-            &self,
-            scan_result: crate::sync::ScanResult,
-            source: crate::sync::SyncSource,
-        );
-    }
-
-    pub(crate) struct SqliteFolderPersistence<'a> {
-        pub(crate) pool: &'a sqlx::SqlitePool,
-    }
-
-    impl FolderPersistence for SqliteFolderPersistence<'_> {
-        async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String> {
-            db::get_folders(self.pool)
-                .await
-                .map_err(|error| error.to_string())
-        }
-
-        async fn list_removable_bindings_by_volume(
-            &self,
-            volume_id: &str,
-        ) -> Result<Vec<RemovableFolderBinding>, String> {
-            db::get_removable_folders_by_volume(self.pool, volume_id)
-                .await
-                .map_err(|error| error.to_string())
-        }
-
-        async fn add_folder(
-            &self,
-            path: &str,
-            target_album_id: Option<&AlbumId>,
-        ) -> Result<i64, String> {
-            db::add_folder(self.pool, path, target_album_id)
-                .await
-                .map_err(|error| error.to_string())
-        }
-
-        async fn bind_removable_folder(
-            &self,
-            folder_id: i64,
-            volume_id: &str,
-            relative_path: &str,
-        ) -> Result<(), String> {
-            db::bind_removable_folder(self.pool, folder_id, volume_id, relative_path)
-                .await
-                .map_err(|error| error.to_string())
-        }
-
-        async fn update_exclusion_patterns(
-            &self,
-            folder_id: i64,
-            exclusion_patterns: &[String],
-        ) -> Result<bool, String> {
-            db::update_exclusion_patterns(self.pool, folder_id, exclusion_patterns)
-                .await
-                .map_err(|error| error.to_string())
-        }
-
-        async fn remove_folder(&self, folder_id: i64) -> Result<(), String> {
-            db::remove_folder(self.pool, folder_id)
-                .await
-                .map_err(|error| error.to_string())
-        }
-    }
-
-    pub(crate) struct NotifyFolderWatcher<'a> {
-        pub(crate) watcher: &'a tokio::sync::Mutex<WatcherState>,
-    }
-
-    impl FolderWatcher for NotifyFolderWatcher<'_> {
-        async fn watch_available(&self, path: &str) -> Result<WatchRegistration, String> {
-            let mut watcher_guard = self.watcher.lock().await;
-            watcher_guard
-                .reconcile_path(path, true)
-                .map_err(|error| format!("Could not watch '{path}': {error}"))
-        }
-
-        async fn unwatch(&self, path: &str) -> Result<(), String> {
-            let mut watcher_guard = self.watcher.lock().await;
-            watcher::unwatch_path(&mut watcher_guard, path).map_err(|error| error.to_string())
-        }
-    }
-
-    pub(crate) struct TauriFolderEffects<'a> {
-        pub(crate) app: &'a tauri::AppHandle,
-        pub(crate) pool: &'a sqlx::SqlitePool,
-    }
-
-    impl AuditEffects for TauriFolderEffects<'_> {
-        fn record_audit(&self, event: AuditEvent) {
-            crate::audit::audit_event(self.app, event);
-        }
-    }
-
-    impl RegistrationEffects for TauriFolderEffects<'_> {
-        fn enable_sync(&self) {
-            crate::app::tray::set_sync_enabled(self.app, true);
-        }
-
-        fn trigger_folder_added_sync(&self, folder: WatchedFolder) {
-            let pool_inner = self.pool.clone();
-            let app_for_scan = self.app.clone();
-            tauri::async_runtime::spawn(async move {
-                let scan_result =
-                    match crate::sync::scan_watched_folders_for_media(vec![folder.clone()]).await {
-                        Ok(result) => result,
-                        Err(error) => {
-                            crate::app::events::log_to_ui_folder_error(
-                                &app_for_scan,
-                                "ERROR",
-                                &format!("Folder scanning failed for '{}': {error}", folder.path),
-                                "log_folder_scan_failed",
-                                &folder.path,
-                                &error,
-                            );
-                            return;
-                        }
-                    };
-                crate::sync::admit_and_run(
-                    app_for_scan,
-                    pool_inner,
-                    scan_result,
-                    crate::sync::SyncSource::FolderAdded,
-                )
-                .await;
-            });
-        }
-
-        fn log_watcher_deferred(&self, path: &str) {
-            crate::app::events::log_to_ui_folder(
-                self.app,
-                "WARN",
-                &format!("Folder '{path}' does not exist; watching deferred until it appears."),
-                "log_folder_deferred",
-                path,
-            );
-        }
-
-        fn log_watcher_undo_failed(&self, path: &str, error: &str) {
-            crate::app::events::log_to_ui_folder_error(
-                self.app,
-                "ERROR",
-                &format!("Could not undo watcher registration for '{path}': {error}"),
-                "log_watcher_undo_failed",
-                path,
-                error,
-            );
-        }
-    }
-
-    pub(crate) struct CoordinatorSyncWork<'a> {
-        pub(crate) pool: &'a sqlx::SqlitePool,
-        pub(crate) running: std::sync::Arc<std::sync::atomic::AtomicBool>,
-        pub(crate) coordinator: std::sync::Arc<crate::sync::SyncCoordinatorInner>,
-    }
-
-    impl FolderSyncWork for CoordinatorSyncWork<'_> {
-        async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
-            if self.coordinator.active_work.has_work_in(path) {
-                return Ok(true);
-            }
-            db::has_sync_work_in_folder(self.pool, path)
-                .await
-                .map_err(|error| error.to_string())
-        }
-
-        fn cancel_work_in_folder(&self, path: &str) {
-            self.coordinator.active_work.cancel_work_in(path);
-        }
-
-        async fn discard_folder_queue(&self, path: &str) -> Result<(), String> {
-            crate::sync::lifecycle::SynchronizationLifecycle::new(
-                self.pool,
-                &self.running,
-                self.coordinator.clone(),
-            )
-            .discard_folder(path)
-            .await
-            .map_err(|error| error.to_string())
-        }
-    }
-
-    impl RemovalEffects for TauriFolderEffects<'_> {
-        fn log_unwatch_failed(&self, path: &str, error: &str) {
-            crate::app::events::log_to_ui_folder_error(
-                self.app,
-                "WARN",
-                &format!("Failed to unwatch '{path}': {error}"),
-                "log_unwatch_failed",
-                path,
-                error,
-            );
-        }
-
-        fn log_watcher_restore_failed(&self, path: &str, error: &str) {
-            crate::app::events::log_to_ui_folder_error(
-                self.app,
-                "ERROR",
-                &format!("Could not restore watcher registration for '{path}': {error}"),
-                "log_watcher_restore_failed",
-                path,
-                error,
-            );
-        }
-
-        fn set_sync_enabled(&self, enabled: bool) {
-            crate::app::tray::set_sync_enabled(self.app, enabled);
-        }
-
-        fn log_tray_refresh_after_remove_failed(&self, error: &str) {
-            crate::app::events::log_to_ui_error(
-                self.app,
-                "ERROR",
-                &format!(
-                    "Folder was removed, but could not refresh tray sync availability: {error}"
-                ),
-                "log_tray_refresh_after_remove_failed",
-                error,
-            );
-        }
-    }
-
-    impl ExclusionUpdateEffects for TauriFolderEffects<'_> {
-        async fn admit_rescan(
-            &self,
-            scan_result: crate::sync::ScanResult,
-            source: crate::sync::SyncSource,
-        ) {
-            crate::sync::admit_and_run(self.app.clone(), self.pool.clone(), scan_result, source)
-                .await;
-        }
-    }
-}
-
-use internal::{
-    CoordinatorSyncWork, ExclusionUpdateEffects, FolderPersistence, FolderSyncWork, FolderWatcher,
-    NotifyFolderWatcher, RegistrationEffects, RemovalEffects, SqliteFolderPersistence,
-    TauriFolderEffects,
-};
-
-fn sanitize_target_album_id(target_album_id: Option<String>) -> Option<AlbumId> {
-    target_album_id.and_then(|id| {
-        let trimmed = id.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(AlbumId::new(trimmed))
-        }
-    })
-}
-
-fn check_folder_conflict(
-    candidate_path: &Path,
-    existing_paths: &[PathBuf],
-) -> Result<PathBuf, String> {
-    let normalized_path = canonicalize_folder_path(candidate_path);
-    let conflict = existing_paths.iter().find_map(|existing_path| {
-        let normalized_existing = normalize_path_lexical(existing_path);
-        let candidate_within = path_is_within_lexical(&normalized_path, &normalized_existing);
-        let existing_within = path_is_within_lexical(&normalized_existing, &normalized_path);
-        if candidate_within || existing_within {
-            Some((normalized_existing, candidate_within && existing_within))
-        } else {
-            None
-        }
-    });
-
-    if let Some((existing_path, is_duplicate)) = conflict {
-        let message = if is_duplicate {
-            format!(
-                "Folder '{}' is already being watched.",
-                normalized_path.display()
-            )
-        } else {
-            format!(
-                "Folder '{}' overlaps with already watched folder '{}'. Remove one of the folders before adding it.",
-                normalized_path.display(),
-                existing_path.display()
-            )
-        };
-        return Err(message);
-    }
-
-    Ok(normalized_path)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RemovableVolumeBinding {
-    volume_id: String,
-    relative_path: String,
-    reject_if_already_bound: bool,
-}
-
-impl RemovableVolumeBinding {
-    pub fn new(volume_id: impl Into<String>, relative_path: impl Into<String>) -> Self {
-        Self {
-            volume_id: volume_id.into(),
-            relative_path: relative_path.into(),
-            reject_if_already_bound: false,
-        }
-    }
-
-    pub fn volume_id(&self) -> &str {
-        &self.volume_id
-    }
-
-    pub fn relative_path(&self) -> &str {
-        &self.relative_path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RegisterFolderParams {
-    path: String,
-    target_album_id: Option<AlbumId>,
-    removable_binding: Option<RemovableVolumeBinding>,
-}
-
-impl RegisterFolderParams {
-    pub fn new(path: impl Into<String>, target_album_id: Option<String>) -> Self {
-        Self {
-            path: path.into(),
-            target_album_id: sanitize_target_album_id(target_album_id),
-            removable_binding: None,
-        }
-    }
-
-    pub fn from_local_path(
-        path: impl Into<String>,
-        target_album_id: Option<String>,
-        active_volumes: Option<&ActiveRemovableVolumes>,
-    ) -> Self {
-        let path = path.into();
-        let removable_binding = active_volumes
-            .and_then(|volumes| detect_removable_binding_for_path(volumes, Path::new(&path)));
-        Self {
-            path,
-            target_album_id: sanitize_target_album_id(target_album_id),
-            removable_binding,
-        }
-    }
-
-    pub fn from_removable_acceptance(
-        active_volumes: &ActiveRemovableVolumes,
-        volume_id: String,
-        path: String,
-        target_album_id: Option<String>,
-    ) -> Result<Self, String> {
-        let volume = active_volumes.get(&volume_id);
-        let relative_path =
-            validate_removable_volume_containment(volume.as_ref(), &volume_id, Path::new(&path))?;
-
-        Ok(
-            Self::new(path, target_album_id).with_removable_binding(RemovableVolumeBinding {
-                volume_id,
-                relative_path,
-                reject_if_already_bound: true,
-            }),
-        )
-    }
-
-    pub fn with_removable_binding(mut self, binding: RemovableVolumeBinding) -> Self {
-        self.removable_binding = Some(binding);
-        self
-    }
-
-    #[cfg(test)]
-    pub fn removable_binding(&self) -> Option<&RemovableVolumeBinding> {
-        self.removable_binding.as_ref()
-    }
-}
-
-pub(crate) struct WatchedFolderRegistration<P, W, E> {
-    persistence: P,
-    watcher: W,
-    effects: E,
-}
-
-impl<'a>
-    WatchedFolderRegistration<
-        SqliteFolderPersistence<'a>,
-        NotifyFolderWatcher<'a>,
-        TauriFolderEffects<'a>,
-    >
-{
-    pub(crate) fn for_tauri(
-        app: &'a tauri::AppHandle,
-        pool: &'a sqlx::SqlitePool,
-        watcher: &'a tokio::sync::Mutex<crate::watcher::WatcherState>,
-    ) -> Self {
-        Self::new(
-            SqliteFolderPersistence { pool },
-            NotifyFolderWatcher { watcher },
-            TauriFolderEffects { app, pool },
-        )
-    }
-}
-
-impl<P, W, E> WatchedFolderRegistration<P, W, E>
-where
-    P: FolderPersistence,
-    W: FolderWatcher,
-    E: RegistrationEffects,
-{
-    pub(crate) fn new(persistence: P, watcher: W, effects: E) -> Self {
-        Self {
-            persistence,
-            watcher,
-            effects,
-        }
-    }
-
-    pub(crate) async fn register(&self, input: RegisterFolderParams) -> Result<i64, String> {
-        if let Some(ref removable) = input.removable_binding {
-            if removable.reject_if_already_bound {
-                let existing = self
-                    .persistence
-                    .list_removable_bindings_by_volume(removable.volume_id())
-                    .await?;
-                if !existing.is_empty() {
-                    return Err(format!(
-                        "Removable volume '{}' is already bound to a watched folder.",
-                        removable.volume_id()
-                    ));
-                }
-            }
-        }
-
-        let folders = self.persistence.list_folders().await?;
-        let path_for_normalization = PathBuf::from(&input.path);
-        let existing_paths = folders
-            .into_iter()
-            .map(|folder| PathBuf::from(folder.path))
-            .collect::<Vec<_>>();
-
-        let normalized_path = tokio::task::spawn_blocking(move || {
-            check_folder_conflict(&path_for_normalization, &existing_paths)
-        })
-        .await
-        .map_err(|error| format!("Could not normalize folder '{}': {}", input.path, error))??;
-
-        let path_string = normalized_path.to_string_lossy().to_string();
-        let path_for_check = normalized_path.clone();
-
-        let is_available = match tokio::task::spawn_blocking(move || {
-            std::fs::metadata(path_for_check).map(|metadata| metadata.is_dir())
-        })
-        .await
-        {
-            Ok(Ok(true)) => true,
-            Ok(Ok(false)) => return Err(format!("Path '{}' is not a directory.", path_string)),
-            Ok(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => false,
-            Ok(Err(error)) => {
-                return Err(format!(
-                    "Could not access folder '{}': {}",
-                    path_string, error
-                ))
-            }
-            Err(error) => {
-                return Err(format!(
-                    "Could not check folder '{}': {}",
-                    path_string, error
-                ))
-            }
-        };
-
-        let registration = if is_available {
-            self.watcher.watch_available(&path_string).await?
-        } else {
-            WatchRegistration::PathUnavailable
-        };
-
-        let id = match self
-            .persistence
-            .add_folder(&path_string, input.target_album_id.as_ref())
-            .await
-        {
-            Ok(id) => id,
-            Err(error) => {
-                if registration == WatchRegistration::Registered {
-                    if let Err(unwatch_error) = self.watcher.unwatch(&path_string).await {
-                        self.effects
-                            .log_watcher_undo_failed(&path_string, &unwatch_error);
-                    }
-                }
-                return Err(error);
-            }
-        };
-
-        if let Some(removable) = input.removable_binding {
-            if let Err(error) = self
-                .persistence
-                .bind_removable_folder(id, removable.volume_id(), removable.relative_path())
-                .await
-            {
-                let _ = self.persistence.remove_folder(id).await;
-                if registration == WatchRegistration::Registered {
-                    let _ = self.watcher.unwatch(&path_string).await;
-                }
-                return Err(error);
-            }
-        }
-
-        // The persisted folder is the source of truth, even when its watcher is deferred.
-        self.effects.enable_sync();
-
-        if registration == WatchRegistration::PathUnavailable {
-            self.effects.log_watcher_deferred(&path_string);
-        }
-
-        // An offline folder will be scanned when the deferred-watch task registers it.
-        if is_available {
-            let folder = self
-                .persistence
-                .list_folders()
-                .await?
-                .into_iter()
-                .find(|folder| folder.id == id)
-                .ok_or_else(|| "Added Watched Folder was not found.".to_string())?;
-            self.effects.trigger_folder_added_sync(folder);
-        }
-
-        self.effects.record_audit(AuditEvent::new(
-            AuditEvent::operation_id(),
-            "folder.added",
-            Outcome::Success,
-            Severity::Info,
-            None,
-            "command",
-            "Watched folder added",
-            json!({
-                "folder_id": id,
-                "local_path": path_string,
-                "target_album_id": input.target_album_id.as_ref().map(AlbumId::as_str),
-            }),
-        ));
-
-        Ok(id)
-    }
-}
-
-fn removal_requires_confirmation(confirm_cancellation: Option<bool>) -> bool {
-    !confirm_cancellation.unwrap_or(false)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RemoveFolderResult {
-    pub(crate) requires_sync_cancellation: bool,
-}
-
-pub(crate) struct WatchedFolderRemoval<P, W, S, E> {
+pub(crate) use registration::RegisterFolderParams;
+#[cfg(test)]
+pub(crate) use registration::RemovableVolumeBinding;
+pub(crate) use removal::RemoveFolderResult;
+
+pub(crate) struct WatchedFolders<P, W, S, E> {
     persistence: P,
     watcher: W,
     sync: S,
@@ -629,23 +22,22 @@ pub(crate) struct WatchedFolderRemoval<P, W, S, E> {
 }
 
 impl<'a>
-    WatchedFolderRemoval<
+    WatchedFolders<
         SqliteFolderPersistence<'a>,
         NotifyFolderWatcher<'a>,
         CoordinatorSyncWork<'a>,
         TauriFolderEffects<'a>,
     >
 {
-    pub(crate) fn for_tauri(
-        app: &'a tauri::AppHandle,
-        pool: &'a sqlx::SqlitePool,
-        watcher: &'a tokio::sync::Mutex<crate::watcher::WatcherState>,
-        sync_coordinator: &'a crate::sync::SyncCoordinator,
-    ) -> Self {
+    pub(crate) fn for_tauri(app: &'a tauri::AppHandle, pool: &'a sqlx::SqlitePool) -> Self {
+        let watcher = app.state::<tokio::sync::Mutex<crate::watcher::WatcherState>>();
+        let sync_coordinator = app.state::<crate::sync::SyncCoordinator>();
         let running = app.state::<crate::sync::SyncState>().0.clone();
         Self::new(
             SqliteFolderPersistence { pool },
-            NotifyFolderWatcher { watcher },
+            NotifyFolderWatcher {
+                watcher: watcher.inner(),
+            },
             CoordinatorSyncWork {
                 pool,
                 running,
@@ -656,12 +48,12 @@ impl<'a>
     }
 }
 
-impl<P, W, S, E> WatchedFolderRemoval<P, W, S, E>
+impl<P, W, S, E> WatchedFolders<P, W, S, E>
 where
     P: FolderPersistence,
     W: FolderWatcher,
     S: FolderSyncWork,
-    E: RemovalEffects,
+    E: FolderEffects,
 {
     pub(crate) fn new(persistence: P, watcher: W, sync: S, effects: E) -> Self {
         Self {
@@ -672,200 +64,40 @@ where
         }
     }
 
+    pub(crate) async fn register(&self, input: RegisterFolderParams) -> Result<i64, String> {
+        registration::register_folder(&self.persistence, &self.watcher, &self.effects, input).await
+    }
+
+    pub(crate) async fn update_exclusion_patterns(
+        &self,
+        id: i64,
+        exclusion_patterns: Vec<String>,
+    ) -> Result<(), String> {
+        exclusions::update_folder_exclusion_patterns(
+            &self.persistence,
+            &self.sync,
+            &self.effects,
+            id,
+            exclusion_patterns,
+        )
+        .await
+    }
+
     pub(crate) async fn remove(
         &self,
         id: i64,
         confirm_cancellation: Option<bool>,
     ) -> Result<RemoveFolderResult, String> {
-        let folders = self.persistence.list_folders().await?;
-        let folder = folders.into_iter().find(|folder| folder.id == id);
-
-        // Unconfirmed calls never mutate state, refresh tray, or emit audit events—even if the ID is absent.
-        if removal_requires_confirmation(confirm_cancellation) {
-            let requires_sync_cancellation = match folder {
-                Some(ref folder) => self.sync.has_work_in_folder(&folder.path).await?,
-                None => false,
-            };
-            return Ok(RemoveFolderResult {
-                requires_sync_cancellation,
-            });
-        }
-
-        if let Some(folder) = folder {
-            if let Err(error) = self.watcher.unwatch(&folder.path).await {
-                self.effects.log_unwatch_failed(&folder.path, &error);
-                return Err(format!("Failed to unwatch '{}': {}", folder.path, error));
-            }
-
-            // The watcher is gone before cancellation so no new work can be produced for this root.
-            // The queue cleanup is path-component based and leaves sibling roots untouched.
-            self.sync.cancel_work_in_folder(&folder.path);
-            let discarded_and_deleted = match self.sync.discard_folder_queue(&folder.path).await {
-                Ok(()) => self.persistence.remove_folder(id).await,
-                Err(error) => Err(error),
-            };
-            if let Err(error) = discarded_and_deleted {
-                self.restore_watcher_after_failure(&folder.path).await;
-                return Err(error);
-            }
-        } else {
-            self.persistence.remove_folder(id).await?;
-        }
-
-        match self.persistence.list_folders().await {
-            Ok(folders) => self.effects.set_sync_enabled(!folders.is_empty()),
-            Err(error) => self.effects.log_tray_refresh_after_remove_failed(&error),
-        }
-
-        self.effects.record_audit(AuditEvent::new(
-            AuditEvent::operation_id(),
-            "folder.removed",
-            Outcome::Success,
-            Severity::Info,
-            None,
-            "command",
-            "Watched folder removed",
-            json!({ "folder_id": id }),
-        ));
-
-        Ok(RemoveFolderResult {
-            requires_sync_cancellation: false,
-        })
-    }
-
-    async fn restore_watcher_after_failure(&self, path: &str) {
-        let path_for_check = PathBuf::from(path);
-        let is_available = tokio::task::spawn_blocking(move || path_for_check.is_dir())
-            .await
-            .unwrap_or(false);
-        if is_available {
-            if let Err(rewatch_error) = self.watcher.watch_available(path).await {
-                self.effects
-                    .log_watcher_restore_failed(path, &rewatch_error);
-            }
-        }
-    }
-}
-
-pub(crate) struct WatchedFolderExclusionUpdate<P, E> {
-    persistence: P,
-    effects: E,
-}
-
-impl<'a> WatchedFolderExclusionUpdate<SqliteFolderPersistence<'a>, TauriFolderEffects<'a>> {
-    pub(crate) fn for_tauri(app: &'a tauri::AppHandle, pool: &'a sqlx::SqlitePool) -> Self {
-        Self::new(
-            SqliteFolderPersistence { pool },
-            TauriFolderEffects { app, pool },
+        removal::remove_folder(
+            &self.persistence,
+            &self.watcher,
+            &self.sync,
+            &self.effects,
+            id,
+            confirm_cancellation,
         )
+        .await
     }
-}
-
-impl<P, E> WatchedFolderExclusionUpdate<P, E>
-where
-    P: FolderPersistence,
-    E: ExclusionUpdateEffects,
-{
-    pub(crate) fn new(persistence: P, effects: E) -> Self {
-        Self {
-            persistence,
-            effects,
-        }
-    }
-
-    pub(crate) async fn update(
-        &self,
-        id: i64,
-        exclusion_patterns: Vec<String>,
-    ) -> Result<(), String> {
-        let exclusion_patterns = crate::media::admission::normalize_patterns(exclusion_patterns)?;
-        if !self
-            .persistence
-            .update_exclusion_patterns(id, &exclusion_patterns)
-            .await?
-        {
-            return Err("Watched folder was not found.".to_string());
-        }
-        let folder = self
-            .persistence
-            .list_folders()
-            .await?
-            .into_iter()
-            .find(|folder| folder.id == id)
-            .ok_or_else(|| "Watched folder was not found.".to_string())?;
-        let scan_result = crate::sync::scan_watched_folders_for_media(vec![folder]).await?;
-        self.effects
-            .admit_rescan(
-                scan_result,
-                crate::sync::SyncSource::ExclusionPatternsChanged,
-            )
-            .await;
-        Ok(())
-    }
-}
-
-fn detect_removable_binding_for_path(
-    active_volumes: &ActiveRemovableVolumes,
-    path: &Path,
-) -> Option<RemovableVolumeBinding> {
-    let normalized_path = normalize_path_lexical(path);
-    let volumes = active_volumes.list();
-    let mut matching_volumes: Vec<(VolumeInfo, String)> = volumes
-        .into_iter()
-        .filter_map(|vol| {
-            let relative_path =
-                relative_path_within_mount(Path::new(&vol.mount_path), &normalized_path)?;
-            Some((vol, relative_path))
-        })
-        .collect();
-
-    matching_volumes.sort_by_key(|(vol, _)| std::cmp::Reverse(vol.mount_path.len()));
-
-    matching_volumes
-        .into_iter()
-        .next()
-        .map(|(best_volume, relative_path)| {
-            RemovableVolumeBinding::new(best_volume.volume_id, relative_path)
-        })
-}
-
-fn relative_path_within_mount(mount_path: &Path, normalized_folder: &Path) -> Option<String> {
-    let normalized_mount = normalize_path_lexical(mount_path);
-    if !path_is_within_lexical(normalized_folder, &normalized_mount) {
-        return None;
-    }
-
-    let mount_count = normalized_mount.components().count();
-    let folder_components: Vec<_> = normalized_folder.components().collect();
-
-    if folder_components.len() <= mount_count {
-        return Some(String::new());
-    }
-
-    let parts = folder_components[mount_count..]
-        .iter()
-        .map(|component| component.as_os_str().to_string_lossy().to_string())
-        .collect::<Vec<_>>();
-    Some(parts.join("/"))
-}
-
-fn validate_removable_volume_containment(
-    volume: Option<&VolumeInfo>,
-    volume_id: &str,
-    path: &Path,
-) -> Result<String, String> {
-    let volume =
-        volume.ok_or_else(|| format!("Removable volume '{}' is not connected.", volume_id))?;
-
-    let normalized_path = normalize_path_lexical(path);
-    relative_path_within_mount(Path::new(&volume.mount_path), &normalized_path).ok_or_else(|| {
-        format!(
-            "Path '{}' does not reside within removable volume '{}' (mounted at '{}').",
-            path.display(),
-            volume_id,
-            volume.mount_path
-        )
-    })
 }
 
 #[cfg(test)]

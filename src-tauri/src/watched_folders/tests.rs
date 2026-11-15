@@ -1,12 +1,8 @@
-use super::internal::{
-    AuditEffects, CoordinatorSyncWork, ExclusionUpdateEffects, FolderPersistence, FolderSyncWork,
-    FolderWatcher, NotifyFolderWatcher, RegistrationEffects, RemovalEffects,
-    SqliteFolderPersistence,
+use super::seams::{
+    CoordinatorSyncWork, ExclusionPatterns, FolderEffects, FolderPersistence, FolderSyncWork,
+    FolderWatcher, NotifyFolderWatcher, SqliteFolderPersistence,
 };
-use super::{
-    RegisterFolderParams, RemovableVolumeBinding, RemoveFolderResult, WatchedFolderExclusionUpdate,
-    WatchedFolderRegistration, WatchedFolderRemoval,
-};
+use super::{RegisterFolderParams, RemovableVolumeBinding, RemoveFolderResult, WatchedFolders};
 use crate::audit::AuditEvent;
 use crate::db::{RemovableFolderBinding, WatchedFolder};
 use crate::immich::AlbumId;
@@ -73,11 +69,26 @@ impl Drop for TempDir {
 
 #[derive(Default, Clone)]
 struct RecordedEffects {
-    sync_enabled: Arc<Mutex<bool>>,
+    tray_sync_enabled: Arc<Mutex<Vec<bool>>>,
     triggered_syncs: Arc<Mutex<Vec<crate::db::WatchedFolder>>>,
+    admitted_scans: Arc<Mutex<Vec<(crate::sync::ScanResult, crate::sync::SyncSource)>>>,
     deferred_warnings: Arc<Mutex<Vec<String>>>,
     undo_errors: Arc<Mutex<Vec<(String, String)>>>,
+    unwatch_errors: Arc<Mutex<Vec<(String, String)>>>,
+    restore_errors: Arc<Mutex<Vec<(String, String)>>>,
+    tray_refresh_errors: Arc<Mutex<Vec<String>>>,
     audit_events: Arc<Mutex<Vec<AuditEvent>>>,
+}
+
+impl RecordedEffects {
+    fn last_sync_enabled(&self) -> bool {
+        self.tray_sync_enabled
+            .lock()
+            .unwrap()
+            .last()
+            .copied()
+            .unwrap_or(false)
+    }
 }
 
 #[derive(Clone, Default)]
@@ -124,11 +135,11 @@ impl FolderPersistence for ConfiguredFolderPersistence {
     async fn update_exclusion_patterns(
         &self,
         folder_id: i64,
-        exclusion_patterns: &[String],
+        exclusion_patterns: &ExclusionPatterns,
     ) -> Result<bool, String> {
         let mut guard = self.folder.lock().unwrap();
         if let Some(folder) = guard.as_mut().filter(|folder| folder.id == folder_id) {
-            folder.exclusion_patterns = exclusion_patterns.to_vec();
+            folder.exclusion_patterns = exclusion_patterns.as_slice().to_vec();
             Ok(true)
         } else {
             Ok(false)
@@ -141,13 +152,28 @@ impl FolderPersistence for ConfiguredFolderPersistence {
     }
 }
 
-impl RegistrationEffects for &RecordedEffects {
-    fn enable_sync(&self) {
-        *self.sync_enabled.lock().unwrap() = true;
+impl FolderEffects for &RecordedEffects {
+    fn record_audit(&self, event: AuditEvent) {
+        self.audit_events.lock().unwrap().push(event);
+    }
+
+    fn set_sync_enabled(&self, enabled: bool) {
+        self.tray_sync_enabled.lock().unwrap().push(enabled);
     }
 
     fn trigger_folder_added_sync(&self, folder: crate::db::WatchedFolder) {
         self.triggered_syncs.lock().unwrap().push(folder);
+    }
+
+    async fn admit_rescan(
+        &self,
+        scan_result: crate::sync::ScanResult,
+        source: crate::sync::SyncSource,
+    ) {
+        self.admitted_scans
+            .lock()
+            .unwrap()
+            .push((scan_result, source));
     }
 
     fn log_watcher_deferred(&self, path: &str) {
@@ -163,11 +189,34 @@ impl RegistrationEffects for &RecordedEffects {
             .unwrap()
             .push((path.to_string(), error.to_string()));
     }
+
+    fn log_unwatch_failed(&self, path: &str, error: &str) {
+        self.unwatch_errors
+            .lock()
+            .unwrap()
+            .push((path.to_string(), error.to_string()));
+    }
+
+    fn log_watcher_restore_failed(&self, path: &str, error: &str) {
+        self.restore_errors
+            .lock()
+            .unwrap()
+            .push((path.to_string(), error.to_string()));
+    }
+
+    fn log_tray_refresh_after_remove_failed(&self, error: &str) {
+        self.tray_refresh_errors
+            .lock()
+            .unwrap()
+            .push(error.to_string());
+    }
 }
 
-impl AuditEffects for &RecordedEffects {
-    fn record_audit(&self, event: AuditEvent) {
-        self.audit_events.lock().unwrap().push(event);
+fn test_sync_work(pool: &SqlitePool) -> CoordinatorSyncWork<'_> {
+    CoordinatorSyncWork {
+        pool,
+        running: Arc::new(AtomicBool::new(false)),
+        coordinator: Arc::new(crate::sync::SyncCoordinatorInner::new(false)),
     }
 }
 
@@ -179,13 +228,14 @@ async fn registers_available_watched_folder_with_sanitized_target_album_and_trig
     let temp = TempDir::new("available");
     let raw_path = format!("{}/", temp.path().to_string_lossy());
 
-    let registration = WatchedFolderRegistration::new(
+    let folders = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
+        test_sync_work(&pool),
         &effects,
     );
 
-    let folder_id = registration
+    let folder_id = folders
         .register(RegisterFolderParams::new(
             &raw_path,
             Some("  album-uuid-1  ".to_string()),
@@ -211,7 +261,7 @@ async fn registers_available_watched_folder_with_sanitized_target_album_and_trig
         WatchRegistration::AlreadyWatched
     );
 
-    assert!(*effects.sync_enabled.lock().unwrap());
+    assert!(effects.last_sync_enabled());
     let triggered_syncs = effects.triggered_syncs.lock().unwrap();
     assert_eq!(triggered_syncs.len(), 1);
     assert_eq!(triggered_syncs[0].path, expected_path);
@@ -236,16 +286,18 @@ async fn registers_available_watched_folder_with_sanitized_target_album_and_trig
 
 #[tokio::test]
 async fn initial_folder_sync_receives_persisted_exclusion_patterns() {
+    let pool = test_pool().await;
     let watcher = test_watcher();
     let effects = RecordedEffects::default();
     let temp = TempDir::new("persisted-exclusions");
-    let registration = WatchedFolderRegistration::new(
+    let folders = WatchedFolders::new(
         ConfiguredFolderPersistence::default(),
         NotifyFolderWatcher { watcher: &watcher },
+        test_sync_work(&pool),
         &effects,
     );
 
-    registration
+    folders
         .register(RegisterFolderParams::new(
             temp.path().to_string_lossy().to_string(),
             None,
@@ -272,9 +324,10 @@ async fn rejects_duplicate_overlapping_and_non_directory_paths_while_admitting_s
     std::fs::create_dir_all(&sibling).unwrap();
     std::fs::write(&regular_file, b"image").unwrap();
 
-    let registration = WatchedFolderRegistration::new(
+    let registration = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
+        test_sync_work(&pool),
         &effects,
     );
 
@@ -342,9 +395,10 @@ async fn unavailable_watched_folder_remains_configured_defers_watching_and_skips
         uuid::Uuid::new_v4()
     ));
 
-    let registration = WatchedFolderRegistration::new(
+    let registration = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
+        test_sync_work(&pool),
         &effects,
     );
 
@@ -369,7 +423,7 @@ async fn unavailable_watched_folder_remains_configured_defers_watching_and_skips
         Some("album-offline")
     );
 
-    assert!(*effects.sync_enabled.lock().unwrap());
+    assert!(effects.last_sync_enabled());
     assert_eq!(
         *effects.deferred_warnings.lock().unwrap(),
         vec![expected_path]
@@ -402,9 +456,10 @@ async fn registers_removable_watched_folder_and_persists_volume_binding() {
     )
     .unwrap();
 
-    let registration = WatchedFolderRegistration::new(
+    let registration = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
+        test_sync_work(&pool),
         &effects,
     );
     let folder_id = registration.register(input).await.unwrap();
@@ -454,9 +509,10 @@ async fn persistence_failure_undoes_watcher_registration_and_logs_if_undo_fails(
         .to_string_lossy()
         .to_string();
 
-    let registration = WatchedFolderRegistration::new(
+    let registration = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
+        test_sync_work(&pool),
         &effects,
     );
 
@@ -477,16 +533,17 @@ async fn persistence_failure_undoes_watcher_registration_and_logs_if_undo_fails(
     watcher.lock().await.unwatch_path(&expected_path).unwrap();
 
     assert!(crate::db::get_folders(&pool).await.unwrap().is_empty());
-    assert!(!*effects.sync_enabled.lock().unwrap());
+    assert!(!effects.last_sync_enabled());
     assert!(effects.triggered_syncs.lock().unwrap().is_empty());
     assert!(effects.audit_events.lock().unwrap().is_empty());
     assert!(effects.undo_errors.lock().unwrap().is_empty());
 
-    let failing_unwatch_registration = WatchedFolderRegistration::new(
+    let failing_unwatch_registration = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         FailingUnwatchWatcher {
             inner: NotifyFolderWatcher { watcher: &watcher },
         },
+        test_sync_work(&pool),
         &effects,
     );
     let _ = failing_unwatch_registration
@@ -520,9 +577,10 @@ async fn removable_binding_failure_undoes_persisted_folder_and_watcher_registrat
         .to_string_lossy()
         .to_string();
 
-    let registration = WatchedFolderRegistration::new(
+    let registration = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
+        test_sync_work(&pool),
         &effects,
     );
 
@@ -535,7 +593,7 @@ async fn removable_binding_failure_undoes_persisted_folder_and_watcher_registrat
         .unwrap_err();
     assert!(err.contains("simulated binding failure"));
 
-    assert!(!*effects.sync_enabled.lock().unwrap());
+    assert!(!effects.last_sync_enabled());
     assert!(effects.triggered_syncs.lock().unwrap().is_empty());
     assert!(effects.audit_events.lock().unwrap().is_empty());
 
@@ -630,9 +688,10 @@ async fn removable_acceptance_validates_presence_bounds_and_containment() {
     assert_eq!(root_params.removable_binding().unwrap().relative_path(), "");
 
     // 5. Already bound volume is rejected during registration
-    let registration = WatchedFolderRegistration::new(
+    let registration = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
+        test_sync_work(&pool),
         &effects,
     );
     registration.register(root_params).await.unwrap();
@@ -686,60 +745,19 @@ fn detect_removable_binding_for_path_resolves_mounted_volumes() {
     assert!(fixed_params.removable_binding().is_none());
 }
 
-#[derive(Default, Clone)]
-struct RecordedRemovalEffects {
-    unwatch_errors: Arc<Mutex<Vec<(String, String)>>>,
-    restore_errors: Arc<Mutex<Vec<(String, String)>>>,
-    tray_sync_enabled: Arc<Mutex<Vec<bool>>>,
-    tray_refresh_errors: Arc<Mutex<Vec<String>>>,
-    audit_events: Arc<Mutex<Vec<AuditEvent>>>,
-}
-
-impl RemovalEffects for &RecordedRemovalEffects {
-    fn log_unwatch_failed(&self, path: &str, error: &str) {
-        self.unwatch_errors
-            .lock()
-            .unwrap()
-            .push((path.to_string(), error.to_string()));
-    }
-
-    fn log_watcher_restore_failed(&self, path: &str, error: &str) {
-        self.restore_errors
-            .lock()
-            .unwrap()
-            .push((path.to_string(), error.to_string()));
-    }
-
-    fn set_sync_enabled(&self, enabled: bool) {
-        self.tray_sync_enabled.lock().unwrap().push(enabled);
-    }
-
-    fn log_tray_refresh_after_remove_failed(&self, error: &str) {
-        self.tray_refresh_errors
-            .lock()
-            .unwrap()
-            .push(error.to_string());
-    }
-}
-
-impl AuditEffects for &RecordedRemovalEffects {
-    fn record_audit(&self, event: AuditEvent) {
-        self.audit_events.lock().unwrap().push(event);
-    }
-}
-
 async fn register_test_folder(
     pool: &SqlitePool,
     watcher: &tokio::sync::Mutex<WatcherState>,
     path: &Path,
 ) -> (i64, String) {
     let reg_effects = RecordedEffects::default();
-    let registration = WatchedFolderRegistration::new(
+    let folders = WatchedFolders::new(
         SqliteFolderPersistence { pool },
         NotifyFolderWatcher { watcher },
+        test_sync_work(pool),
         &reg_effects,
     );
-    let folder_id = registration
+    let folder_id = folders
         .register(RegisterFolderParams::new(path.to_string_lossy(), None))
         .await
         .unwrap();
@@ -792,8 +810,8 @@ async fn unconfirmed_removal_changes_nothing_and_reports_whether_sync_work_would
 
     let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-    let removal_effects = RecordedRemovalEffects::default();
-    let removal = WatchedFolderRemoval::new(
+    let removal_effects = RecordedEffects::default();
+    let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
         CoordinatorSyncWork {
@@ -896,6 +914,10 @@ impl FolderSyncWork for OrderedSync<'_> {
         self.events.lock().unwrap().push("discard");
         self.inner.discard_folder_queue(path).await
     }
+
+    async fn scan_folder(&self, folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
+        self.inner.scan_folder(folder).await
+    }
 }
 
 #[tokio::test]
@@ -916,8 +938,8 @@ async fn confirmed_removal_stops_watcher_before_cancelling_and_discarding_then_d
     enqueue_test_files(&pool, &[PathBuf::from(&expected_path).join("queued.jpg")]).await;
 
     let events = Arc::new(Mutex::new(Vec::new()));
-    let removal_effects = RecordedRemovalEffects::default();
-    let removal = WatchedFolderRemoval::new(
+    let removal_effects = RecordedEffects::default();
+    let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         OrderedWatcher {
             inner: NotifyFolderWatcher { watcher: &watcher },
@@ -989,8 +1011,8 @@ async fn unwatch_failure_aborts_removal_before_cancelling_or_deleting() {
         .active_work
         .acquire(std::slice::from_ref(&active_unit));
 
-    let removal_effects = RecordedRemovalEffects::default();
-    let removal = WatchedFolderRemoval::new(
+    let removal_effects = RecordedEffects::default();
+    let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         FailingUnwatchWatcher {
             inner: NotifyFolderWatcher { watcher: &watcher },
@@ -1033,6 +1055,10 @@ impl FolderSyncWork for FailingDiscardSync<'_> {
     async fn discard_folder_queue(&self, _path: &str) -> Result<(), String> {
         Err("simulated queue discard failure".to_string())
     }
+
+    async fn scan_folder(&self, folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
+        self.inner.scan_folder(folder).await
+    }
 }
 
 #[tokio::test]
@@ -1044,8 +1070,8 @@ async fn queue_discard_failure_restores_watcher_and_keeps_folder_configured() {
 
     let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-    let removal_effects = RecordedRemovalEffects::default();
-    let removal = WatchedFolderRemoval::new(
+    let removal_effects = RecordedEffects::default();
+    let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
         FailingDiscardSync {
@@ -1104,8 +1130,8 @@ async fn delete_failure_restores_watcher_keeps_folder_and_logs_if_restore_fails(
 
     let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-    let removal_effects = RecordedRemovalEffects::default();
-    let removal = WatchedFolderRemoval::new(
+    let removal_effects = RecordedEffects::default();
+    let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
         CoordinatorSyncWork {
@@ -1132,7 +1158,7 @@ async fn delete_failure_restores_watcher_keeps_folder_and_logs_if_restore_fails(
     assert!(removal_effects.audit_events.lock().unwrap().is_empty());
 
     // If restoring the watcher also fails, the failure is logged without masking the delete error
-    let failing_restore_removal = WatchedFolderRemoval::new(
+    let failing_restore_removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         FailingRewatchWatcher {
             inner: NotifyFolderWatcher { watcher: &watcher },
@@ -1186,8 +1212,8 @@ async fn removing_one_folder_leaves_sibling_folder_queue_active_work_and_watcher
     )
     .await;
 
-    let removal_effects = RecordedRemovalEffects::default();
-    let removal = WatchedFolderRemoval::new(
+    let removal_effects = RecordedEffects::default();
+    let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
         CoordinatorSyncWork {
@@ -1238,8 +1264,8 @@ async fn removing_missing_folder_requires_confirmation_before_auditing_or_refres
     let watcher = test_watcher();
     let running = Arc::new(AtomicBool::new(false));
     let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-    let removal_effects = RecordedRemovalEffects::default();
-    let removal = WatchedFolderRemoval::new(
+    let removal_effects = RecordedEffects::default();
+    let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
         CoordinatorSyncWork {
@@ -1272,21 +1298,27 @@ async fn removing_missing_folder_requires_confirmation_before_auditing_or_refres
     assert_eq!(removal_effects.audit_events.lock().unwrap().len(), 1);
 }
 
-#[derive(Default, Clone)]
-struct RecordedExclusionEffects {
-    admitted_scans: Arc<Mutex<Vec<(crate::sync::ScanResult, crate::sync::SyncSource)>>>,
+struct CountingScanSync<'a> {
+    inner: CoordinatorSyncWork<'a>,
+    scanned_folders: Arc<Mutex<Vec<i64>>>,
 }
 
-impl ExclusionUpdateEffects for &RecordedExclusionEffects {
-    async fn admit_rescan(
-        &self,
-        scan_result: crate::sync::ScanResult,
-        source: crate::sync::SyncSource,
-    ) {
-        self.admitted_scans
-            .lock()
-            .unwrap()
-            .push((scan_result, source));
+impl FolderSyncWork for CountingScanSync<'_> {
+    async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
+        self.inner.has_work_in_folder(path).await
+    }
+
+    fn cancel_work_in_folder(&self, path: &str) {
+        self.inner.cancel_work_in_folder(path);
+    }
+
+    async fn discard_folder_queue(&self, path: &str) -> Result<(), String> {
+        self.inner.discard_folder_queue(path).await
+    }
+
+    async fn scan_folder(&self, folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
+        self.scanned_folders.lock().unwrap().push(folder.id);
+        self.inner.scan_folder(folder).await
     }
 }
 
@@ -1301,10 +1333,16 @@ async fn invalid_exclusion_patterns_are_rejected_before_anything_is_persisted_or
         .await
         .unwrap();
 
-    let exclusion_effects = RecordedExclusionEffects::default();
-    let updater = WatchedFolderExclusionUpdate::new(
+    let effects = RecordedEffects::default();
+    let scanned_folders = Arc::new(Mutex::new(Vec::new()));
+    let folders = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
-        &exclusion_effects,
+        NotifyFolderWatcher { watcher: &watcher },
+        CountingScanSync {
+            inner: test_sync_work(&pool),
+            scanned_folders: scanned_folders.clone(),
+        },
+        &effects,
     );
 
     for invalid in [
@@ -1314,8 +1352,8 @@ async fn invalid_exclusion_patterns_are_rejected_before_anything_is_persisted_or
         "!keep.jpg",
         "*.{jpg,png}",
     ] {
-        let err = updater
-            .update(folder_id, vec![invalid.to_string()])
+        let err = folders
+            .update_exclusion_patterns(folder_id, vec![invalid.to_string()])
             .await
             .unwrap_err();
         assert!(
@@ -1324,9 +1362,10 @@ async fn invalid_exclusion_patterns_are_rejected_before_anything_is_persisted_or
         );
     }
 
-    let folders = crate::db::get_folders(&pool).await.unwrap();
-    assert_eq!(folders[0].exclusion_patterns, initial_patterns);
-    assert!(exclusion_effects.admitted_scans.lock().unwrap().is_empty());
+    let persisted = crate::db::get_folders(&pool).await.unwrap();
+    assert_eq!(persisted[0].exclusion_patterns, initial_patterns);
+    assert!(scanned_folders.lock().unwrap().is_empty());
+    assert!(effects.admitted_scans.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -1337,21 +1376,28 @@ async fn unknown_folder_reports_not_found_and_triggers_no_scan() {
     std::fs::write(temp.path().join("photo.jpg"), b"img").unwrap();
     let (_folder_id, _expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
 
-    let exclusion_effects = RecordedExclusionEffects::default();
-    let updater = WatchedFolderExclusionUpdate::new(
+    let effects = RecordedEffects::default();
+    let scanned_folders = Arc::new(Mutex::new(Vec::new()));
+    let folders = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
-        &exclusion_effects,
+        NotifyFolderWatcher { watcher: &watcher },
+        CountingScanSync {
+            inner: test_sync_work(&pool),
+            scanned_folders: scanned_folders.clone(),
+        },
+        &effects,
     );
 
-    let err = updater
-        .update(999, vec!["*.mov".to_string()])
+    let err = folders
+        .update_exclusion_patterns(999, vec!["*.mov".to_string()])
         .await
         .unwrap_err();
     assert!(
         err.to_ascii_lowercase().contains("not found"),
         "expected 'not found' error, got: {err}"
     );
-    assert!(exclusion_effects.admitted_scans.lock().unwrap().is_empty());
+    assert!(scanned_folders.lock().unwrap().is_empty());
+    assert!(effects.admitted_scans.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -1370,14 +1416,20 @@ async fn successful_exclusion_update_normalizes_persists_and_rescans_only_target
     let (target_id, target_path) = register_test_folder(&pool, &watcher, &target).await;
     let (sibling_id, _) = register_test_folder(&pool, &watcher, &sibling).await;
 
-    let exclusion_effects = RecordedExclusionEffects::default();
-    let updater = WatchedFolderExclusionUpdate::new(
+    let effects = RecordedEffects::default();
+    let scanned_folders = Arc::new(Mutex::new(Vec::new()));
+    let folders = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
-        &exclusion_effects,
+        NotifyFolderWatcher { watcher: &watcher },
+        CountingScanSync {
+            inner: test_sync_work(&pool),
+            scanned_folders: scanned_folders.clone(),
+        },
+        &effects,
     );
 
-    updater
-        .update(
+    folders
+        .update_exclusion_patterns(
             target_id,
             vec![
                 " Screenshots/** ".to_string(),
@@ -1388,13 +1440,15 @@ async fn successful_exclusion_update_normalizes_persists_and_rescans_only_target
         .await
         .unwrap();
 
-    let folders = crate::db::get_folders(&pool).await.unwrap();
-    let updated_target = folders.iter().find(|f| f.id == target_id).unwrap();
-    let untouched_sibling = folders.iter().find(|f| f.id == sibling_id).unwrap();
+    let persisted = crate::db::get_folders(&pool).await.unwrap();
+    let updated_target = persisted.iter().find(|f| f.id == target_id).unwrap();
+    let untouched_sibling = persisted.iter().find(|f| f.id == sibling_id).unwrap();
     assert_eq!(updated_target.exclusion_patterns, vec!["Screenshots/**"]);
     assert!(untouched_sibling.exclusion_patterns.is_empty());
 
-    let admitted = exclusion_effects.admitted_scans.lock().unwrap();
+    assert_eq!(*scanned_folders.lock().unwrap(), vec![target_id]);
+
+    let admitted = effects.admitted_scans.lock().unwrap();
     assert_eq!(admitted.len(), 1);
     assert_eq!(
         admitted[0].1,

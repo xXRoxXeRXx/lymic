@@ -1,7 +1,4 @@
-use crate::watched_folders::{
-    RegisterFolderParams, RemoveFolderResult, WatchedFolderExclusionUpdate,
-    WatchedFolderRegistration, WatchedFolderRemoval,
-};
+use crate::watched_folders::{RegisterFolderParams, RemoveFolderResult, WatchedFolders};
 use crate::{db, sync::SyncCoordinator, watcher};
 
 // tokio::sync::Mutex avoids blocking the async executor while waiting
@@ -15,11 +12,12 @@ pub(crate) async fn add_folder(
     target_album_id: Option<String>,
 ) -> Result<i64, String> {
     use tauri::Manager;
+    let _ = watcher;
     let active_volumes = app.try_state::<crate::removable::ActiveRemovableVolumes>();
     let input =
         RegisterFolderParams::from_local_path(path, target_album_id, active_volumes.as_deref());
 
-    WatchedFolderRegistration::for_tauri(&app, pool.inner(), watcher.inner())
+    WatchedFolders::for_tauri(&app, pool.inner())
         .register(input)
         .await
 }
@@ -34,6 +32,7 @@ pub(crate) async fn accept_removable_media_folder(
     path: String,
     target_album_id: Option<String>,
 ) -> Result<i64, String> {
+    let _ = watcher;
     let input = RegisterFolderParams::from_removable_acceptance(
         active_volumes.inner(),
         volume_id,
@@ -41,7 +40,7 @@ pub(crate) async fn accept_removable_media_folder(
         target_album_id,
     )?;
 
-    WatchedFolderRegistration::for_tauri(&app, pool.inner(), watcher.inner())
+    WatchedFolders::for_tauri(&app, pool.inner())
         .register(input)
         .await
 }
@@ -62,8 +61,8 @@ pub(crate) async fn update_folder_exclusion_patterns(
     id: i64,
     exclusion_patterns: Vec<String>,
 ) -> Result<(), String> {
-    WatchedFolderExclusionUpdate::for_tauri(&app, pool.inner())
-        .update(id, exclusion_patterns)
+    WatchedFolders::for_tauri(&app, pool.inner())
+        .update_exclusion_patterns(id, exclusion_patterns)
         .await
 }
 
@@ -76,12 +75,8 @@ pub(crate) async fn remove_folder(
     id: i64,
     confirm_cancellation: Option<bool>,
 ) -> Result<RemoveFolderResult, String> {
-    WatchedFolderRemoval::for_tauri(
-        &app,
-        pool.inner(),
-        watcher.inner(),
-        sync_coordinator.inner(),
-    )
-    .remove(id, confirm_cancellation)
-    .await
+    let _ = (watcher, sync_coordinator);
+    WatchedFolders::for_tauri(&app, pool.inner())
+        .remove(id, confirm_cancellation)
+        .await
 }
