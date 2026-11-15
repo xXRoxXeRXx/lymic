@@ -56,6 +56,34 @@ impl AuthConfig {
     }
 }
 
+/// Shared fixtures so tests build credentials and check redaction in one way.
+#[cfg(test)]
+impl AuthConfig {
+    pub(crate) fn test_fixture(server_url: &str) -> Self {
+        Self {
+            server_url: server_url.to_string(),
+            api_key: "secret-api-key-123".to_string(),
+            allow_local_http: true,
+            cloudflare_client_id: Some("cf-client-id-456".to_string()),
+            cloudflare_client_secret: Some("cf-client-secret-789".to_string()),
+        }
+    }
+
+    pub(crate) fn assert_credential_free(&self, error: &str) {
+        for secret in [
+            Some(self.server_url.as_str()),
+            Some(self.api_key.as_str()),
+            self.cloudflare_client_id.as_deref(),
+            self.cloudflare_client_secret.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            assert!(!error.contains(secret), "{error}");
+        }
+    }
+}
+
 impl fmt::Debug for AuthConfig {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter

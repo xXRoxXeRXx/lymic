@@ -149,27 +149,6 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
-    fn credentials(server_url: String) -> AuthConfig {
-        AuthConfig {
-            server_url,
-            api_key: "secret-api-key-123".to_string(),
-            allow_local_http: true,
-            cloudflare_client_id: Some("cf-client-id-456".to_string()),
-            cloudflare_client_secret: Some("cf-client-secret-789".to_string()),
-        }
-    }
-
-    fn assert_credential_free(error: &str, config: &AuthConfig) {
-        for secret in [
-            &config.server_url,
-            &config.api_key,
-            config.cloudflare_client_id.as_ref().unwrap(),
-            config.cloudflare_client_secret.as_ref().unwrap(),
-        ] {
-            assert!(!error.contains(secret.as_str()), "{error}");
-        }
-    }
-
     fn temporary_destination() -> PathBuf {
         std::env::temp_dir().join(format!("lymic-archive-{}.zip", uuid::Uuid::new_v4()))
     }
@@ -193,7 +172,7 @@ mod tests {
 
     #[tokio::test]
     async fn offers_the_filename_immich_suggests_and_saves_the_archive_there() {
-        let config = credentials(serve_archive(7, b"archive").await);
+        let config = AuthConfig::test_fixture(&serve_archive(7, b"archive").await);
         let session = ImmichSession::from_credentials(config).unwrap();
         let destination = temporary_destination();
         let offered = RefCell::new(None);
@@ -212,7 +191,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_cancelled_destination_chooser_ends_download_without_saving() {
-        let config = credentials(serve_archive(7, b"archive").await);
+        let config = AuthConfig::test_fixture(&serve_archive(7, b"archive").await);
         let session = ImmichSession::from_credentials(config).unwrap();
 
         let result =
@@ -222,8 +201,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_destination_chooser_error_is_returned_without_saving() {
-        let config = credentials(serve_archive(7, b"archive").await);
+    async fn a_destination_chooser_error_is_returned_unchanged() {
+        let config = AuthConfig::test_fixture(&serve_archive(7, b"archive").await);
         let session = ImmichSession::from_credentials(config).unwrap();
 
         let error = download_archive_with(&session, vec!["asset-1".to_string()], |_| {
@@ -240,7 +219,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         drop(listener);
-        let config = credentials(format!("http://{address}"));
+        let config = AuthConfig::test_fixture(&format!("http://{address}"));
         let session = ImmichSession::from_credentials(config.clone()).unwrap();
         let asked = RefCell::new(false);
 
@@ -252,13 +231,13 @@ mod tests {
         .unwrap_err();
 
         assert!(error.starts_with("Failed to download archive"), "{error}");
-        assert_credential_free(&error, &config);
+        config.assert_credential_free(&error);
         assert!(!*asked.borrow());
     }
 
     #[tokio::test]
     async fn a_save_failure_is_credential_free_and_leaves_no_file() {
-        let config = credentials(serve_archive(100, b"short").await);
+        let config = AuthConfig::test_fixture(&serve_archive(100, b"short").await);
         let session = ImmichSession::from_credentials(config.clone()).unwrap();
         let destination = temporary_destination();
 
@@ -269,7 +248,7 @@ mod tests {
         .unwrap_err();
 
         assert!(error.starts_with("Failed to download archive"), "{error}");
-        assert_credential_free(&error, &config);
+        config.assert_credential_free(&error);
         assert!(!destination.exists());
     }
 }

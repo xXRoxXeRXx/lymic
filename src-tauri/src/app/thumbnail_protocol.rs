@@ -374,39 +374,51 @@ mod tests {
         path
     }
 
-    fn credentials(server_url: &str, api_key: &str) -> crate::auth::AuthConfig {
+    fn account_id(server_url: &str, api_key: &str) -> String {
         crate::auth::AuthConfig {
-            server_url: server_url.to_string(),
             api_key: api_key.to_string(),
-            allow_local_http: false,
-            cloudflare_client_id: None,
-            cloudflare_client_secret: None,
+            ..crate::auth::AuthConfig::test_fixture(server_url)
         }
+        .account_id()
     }
 
     #[test]
     fn thumbnail_cache_directory_is_stable_for_one_account() {
         let root = Path::new("cache");
-        let account = credentials("https://immich.example.test", "key-a").account_id();
+        // Separately built credentials for the same account, as two protocol requests would.
+        let first = account_id("https://immich.example.test", "key-a");
+        let second = account_id("https://immich.example.test", "key-a");
 
         assert_eq!(
-            account_cache_dir(root, &account),
-            account_cache_dir(root, &account)
+            account_cache_dir(root, &first),
+            account_cache_dir(root, &second)
         );
     }
 
     #[test]
-    fn thumbnail_cache_directory_differs_between_accounts_and_after_a_credential_change() {
+    fn thumbnail_cache_directory_differs_between_users_on_one_server() {
         let root = Path::new("cache");
-        let account = credentials("https://immich.example.test", "key-a").account_id();
-        let other_user = credentials("https://immich.example.test", "key-b").account_id();
-        let other_server = credentials("https://other.example.test", "key-a").account_id();
+        let first = account_id("https://immich.example.test", "key-a");
+        let second = account_id("https://immich.example.test", "key-b");
 
-        let directory = account_cache_dir(root, &account);
-
-        assert_ne!(directory, account_cache_dir(root, &other_user));
-        assert_ne!(directory, account_cache_dir(root, &other_server));
+        assert_ne!(
+            account_cache_dir(root, &first),
+            account_cache_dir(root, &second)
+        );
     }
+
+    #[test]
+    fn thumbnail_cache_directory_differs_between_servers() {
+        let root = Path::new("cache");
+        let first = account_id("https://immich.example.test", "key-a");
+        let second = account_id("https://other.example.test", "key-a");
+
+        assert_ne!(
+            account_cache_dir(root, &first),
+            account_cache_dir(root, &second)
+        );
+    }
+
     #[test]
     fn cache_key_does_not_expose_asset_id_and_reuses_bytes() {
         let dir = temp_dir();

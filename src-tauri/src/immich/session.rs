@@ -121,16 +121,6 @@ mod tests {
     use tokio::net::TcpListener;
     use uuid::Uuid;
 
-    fn credentials(server_url: String) -> AuthConfig {
-        AuthConfig {
-            server_url,
-            api_key: "secret-api-key-123".to_string(),
-            allow_local_http: true,
-            cloudflare_client_id: Some("cf-client-id-456".to_string()),
-            cloudflare_client_secret: Some("cf-client-secret-789".to_string()),
-        }
-    }
-
     #[test]
     fn reports_not_authenticated_when_no_credentials_are_stored() {
         let error = ImmichSession::open(None).err().unwrap();
@@ -142,7 +132,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server_url = format!("http://{address}");
-        let config = credentials(server_url.clone());
+        let config = AuthConfig::test_fixture(&server_url);
         let body = format!(
             "denied for {} key=secret-api-key-123 id=cf-client-id-456 secret=cf-client-secret-789",
             server_url
@@ -165,12 +155,12 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_credential_free(&error, &config);
+        config.assert_credential_free(&error);
     }
 
     #[tokio::test]
     async fn redacts_credentials_an_operation_echoes_into_its_error() {
-        let config = credentials("http://127.0.0.1:1".to_string());
+        let config = AuthConfig::test_fixture("http://127.0.0.1:1");
         let session = ImmichSession::open(Some(config.clone())).unwrap();
         let echoed = format!(
             "boom {} {} {} {}",
@@ -186,12 +176,12 @@ mod tests {
             .unwrap_err();
 
         assert!(error.contains("[redacted]"), "{error}");
-        assert_credential_free(&error, &config);
+        config.assert_credential_free(&error);
     }
 
     #[test]
     fn opens_a_session_from_a_credentials_source() {
-        let config = credentials("http://127.0.0.1:1".to_string());
+        let config = AuthConfig::test_fixture("http://127.0.0.1:1");
 
         let session = ImmichSession::from_credentials_source(|| Ok(Some(config))).unwrap();
         assert!(!session.account_id().is_empty());
@@ -205,7 +195,7 @@ mod tests {
 
     #[test]
     fn account_identity_is_stable_per_account_and_differs_between_accounts() {
-        let config = credentials("http://127.0.0.1:1".to_string());
+        let config = AuthConfig::test_fixture("http://127.0.0.1:1");
         let first = ImmichSession::open(Some(config.clone())).unwrap();
         let second = ImmichSession::open(Some(config.clone())).unwrap();
         let mut other_config = config;
@@ -221,7 +211,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         drop(listener);
-        let config = credentials(format!("http://{address}"));
+        let config = AuthConfig::test_fixture(&format!("http://{address}"));
         let session = ImmichSession::open(Some(config.clone())).unwrap();
 
         let raw = ImmichClient::new(
@@ -248,7 +238,7 @@ mod tests {
             .err()
             .unwrap();
 
-        assert_credential_free(&error, &config);
+        config.assert_credential_free(&error);
     }
 
     #[tokio::test]
@@ -266,7 +256,7 @@ mod tests {
                 .await
                 .unwrap();
         });
-        let config = credentials(format!("http://{address}"));
+        let config = AuthConfig::test_fixture(&format!("http://{address}"));
         let destination =
             std::env::temp_dir().join(format!("lymic-session-{}.zip", Uuid::new_v4()));
         let session = ImmichSession::open(Some(config.clone())).unwrap();
@@ -284,19 +274,8 @@ mod tests {
             .unwrap();
 
         assert!(error.starts_with("Failed to download archive"), "{error}");
-        assert_credential_free(&error, &config);
+        config.assert_credential_free(&error);
         assert!(!destination.exists());
-    }
-
-    fn assert_credential_free(error: &str, config: &AuthConfig) {
-        for secret in [
-            &config.server_url,
-            &config.api_key,
-            config.cloudflare_client_id.as_ref().unwrap(),
-            config.cloudflare_client_secret.as_ref().unwrap(),
-        ] {
-            assert!(!error.contains(secret.as_str()), "{error}");
-        }
     }
 
     #[tokio::test]
@@ -304,7 +283,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         drop(listener);
-        let config = credentials(format!("HTTP://LocalHost:{port} "));
+        let config = AuthConfig::test_fixture(&format!("HTTP://LocalHost:{port} "));
         let session = ImmichSession::open(Some(config)).unwrap();
 
         let error = session
@@ -321,7 +300,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         drop(listener);
-        let config = credentials(format!("http://{address}"));
+        let config = AuthConfig::test_fixture(&format!("http://{address}"));
 
         let session = ImmichSession::open(Some(config.clone())).unwrap();
         let error = session
@@ -329,12 +308,12 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_credential_free(&error, &config);
+        config.assert_credential_free(&error);
     }
 
     #[test]
     fn invalid_stored_credentials_fail_without_leaking_them() {
-        let mut config = credentials("http://127.0.0.1:1".to_string());
+        let mut config = AuthConfig::test_fixture("http://127.0.0.1:1");
         config.cloudflare_client_secret = None;
         let error = ImmichSession::open(Some(config.clone())).err().unwrap();
         assert!(!error.contains(&config.api_key));
