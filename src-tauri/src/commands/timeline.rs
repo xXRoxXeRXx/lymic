@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tauri_plugin_dialog::DialogExt;
 
@@ -39,21 +39,37 @@ pub(crate) async fn download_archive(
     asset_ids: Vec<String>,
 ) -> Result<(), String> {
     let session = ImmichSession::from_stored_credentials()?;
+    download_archive_with(&session, asset_ids, |suggested_file_name| {
+        let Some(destination) = app
+            .dialog()
+            .file()
+            .set_file_name(suggested_file_name)
+            .blocking_save_file()
+        else {
+            return Ok(None);
+        };
+        destination
+            .as_path()
+            .map(|path| Some(path.to_path_buf()))
+            .ok_or_else(|| "Selected download destination is not a local path".to_string())
+    })
+    .await
+}
+
+/// Prepares Immich's archive, offers its suggested filename to `choose_destination`
+/// (which returns `None` when the user cancels), and saves it there.
+async fn download_archive_with(
+    session: &ImmichSession,
+    asset_ids: Vec<String>,
+    choose_destination: impl FnOnce(&str) -> Result<Option<PathBuf>, String>,
+) -> Result<(), String> {
     let archive = session
         .run(|client| async move { client.prepare_archive_download(&asset_ids).await })
         .await?;
-    let Some(destination_path) = app
-        .dialog()
-        .file()
-        .set_file_name(archive.suggested_file_name())
-        .blocking_save_file()
-    else {
+    let Some(destination_path) = choose_destination(archive.suggested_file_name())? else {
         return Ok(());
     };
-    let destination_path = destination_path
-        .as_path()
-        .ok_or_else(|| "Selected download destination is not a local path".to_string())?;
-    session.save_archive(archive, destination_path).await
+    session.save_archive(archive, &destination_path).await
 }
 
 #[tauri::command]
@@ -123,4 +139,137 @@ pub(crate) async fn get_person_timeline_bucket_assets(
             .await
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::AuthConfig;
+    use std::cell::RefCell;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    fn credentials(server_url: String) -> AuthConfig {
+        AuthConfig {
+            server_url,
+            api_key: "secret-api-key-123".to_string(),
+            allow_local_http: true,
+            cloudflare_client_id: Some("cf-client-id-456".to_string()),
+            cloudflare_client_secret: Some("cf-client-secret-789".to_string()),
+        }
+    }
+
+    fn assert_credential_free(error: &str, config: &AuthConfig) {
+        for secret in [
+            &config.server_url,
+            &config.api_key,
+            config.cloudflare_client_id.as_ref().unwrap(),
+            config.cloudflare_client_secret.as_ref().unwrap(),
+        ] {
+            assert!(!error.contains(secret.as_str()), "{error}");
+        }
+    }
+
+    fn temporary_destination() -> PathBuf {
+        std::env::temp_dir().join(format!("lymic-archive-{}.zip", uuid::Uuid::new_v4()))
+    }
+
+    /// Serves one archive response: `declared_length` bytes promised, `body` actually sent.
+    async fn serve_archive(declared_length: usize, body: &'static [u8]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buffer = [0; 4096];
+            let _ = stream.read(&mut buffer).await.unwrap();
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Disposition: attachment; filename=\"photos.zip\"\r\nContent-Length: {declared_length}\r\nConnection: close\r\n\r\n"
+            );
+            stream.write_all(head.as_bytes()).await.unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        format!("http://{address}")
+    }
+
+    #[tokio::test]
+    async fn offers_the_filename_immich_suggests_and_saves_the_archive_there() {
+        let config = credentials(serve_archive(7, b"archive").await);
+        let session = ImmichSession::from_credentials(config).unwrap();
+        let destination = temporary_destination();
+        let offered = RefCell::new(None);
+
+        download_archive_with(&session, vec!["asset-1".to_string()], |name| {
+            *offered.borrow_mut() = Some(name.to_string());
+            Ok(Some(destination.clone()))
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(offered.borrow().as_deref(), Some("photos.zip"));
+        assert_eq!(std::fs::read(&destination).unwrap(), b"archive");
+        std::fs::remove_file(&destination).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_destination_chooser_ends_download_without_saving() {
+        let config = credentials(serve_archive(7, b"archive").await);
+        let session = ImmichSession::from_credentials(config).unwrap();
+
+        let result =
+            download_archive_with(&session, vec!["asset-1".to_string()], |_| Ok(None)).await;
+
+        assert_eq!(result, Ok(()));
+    }
+
+    #[tokio::test]
+    async fn a_destination_chooser_error_is_returned_without_saving() {
+        let config = credentials(serve_archive(7, b"archive").await);
+        let session = ImmichSession::from_credentials(config).unwrap();
+
+        let error = download_archive_with(&session, vec!["asset-1".to_string()], |_| {
+            Err("Selected download destination is not a local path".to_string())
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(error, "Selected download destination is not a local path");
+    }
+
+    #[tokio::test]
+    async fn a_prepare_failure_is_credential_free_and_never_asks_for_a_destination() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let config = credentials(format!("http://{address}"));
+        let session = ImmichSession::from_credentials(config.clone()).unwrap();
+        let asked = RefCell::new(false);
+
+        let error = download_archive_with(&session, vec!["asset-1".to_string()], |_| {
+            *asked.borrow_mut() = true;
+            Ok(None)
+        })
+        .await
+        .unwrap_err();
+
+        assert!(error.starts_with("Failed to download archive"), "{error}");
+        assert_credential_free(&error, &config);
+        assert!(!*asked.borrow());
+    }
+
+    #[tokio::test]
+    async fn a_save_failure_is_credential_free_and_leaves_no_file() {
+        let config = credentials(serve_archive(100, b"short").await);
+        let session = ImmichSession::from_credentials(config.clone()).unwrap();
+        let destination = temporary_destination();
+
+        let error = download_archive_with(&session, vec!["asset-1".to_string()], |_| {
+            Ok(Some(destination.clone()))
+        })
+        .await
+        .unwrap_err();
+
+        assert!(error.starts_with("Failed to download archive"), "{error}");
+        assert_credential_free(&error, &config);
+        assert!(!destination.exists());
+    }
 }

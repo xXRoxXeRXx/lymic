@@ -373,6 +373,40 @@ mod tests {
         fs::create_dir_all(&path).unwrap();
         path
     }
+
+    fn credentials(server_url: &str, api_key: &str) -> crate::auth::AuthConfig {
+        crate::auth::AuthConfig {
+            server_url: server_url.to_string(),
+            api_key: api_key.to_string(),
+            allow_local_http: false,
+            cloudflare_client_id: None,
+            cloudflare_client_secret: None,
+        }
+    }
+
+    #[test]
+    fn thumbnail_cache_directory_is_stable_for_one_account() {
+        let root = Path::new("cache");
+        let account = credentials("https://immich.example.test", "key-a").account_id();
+
+        assert_eq!(
+            account_cache_dir(root, &account),
+            account_cache_dir(root, &account)
+        );
+    }
+
+    #[test]
+    fn thumbnail_cache_directory_differs_between_accounts_and_after_a_credential_change() {
+        let root = Path::new("cache");
+        let account = credentials("https://immich.example.test", "key-a").account_id();
+        let other_user = credentials("https://immich.example.test", "key-b").account_id();
+        let other_server = credentials("https://other.example.test", "key-a").account_id();
+
+        let directory = account_cache_dir(root, &account);
+
+        assert_ne!(directory, account_cache_dir(root, &other_user));
+        assert_ne!(directory, account_cache_dir(root, &other_server));
+    }
     #[test]
     fn cache_key_does_not_expose_asset_id_and_reuses_bytes() {
         let dir = temp_dir();
