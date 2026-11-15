@@ -141,3 +141,25 @@ _Avoid_: favorites album, favorites folder
 **Map View**:
 The geographic presentation of Remote Assets with a recorded location in the Immich Library, including both images and videos.
 _Avoid_: photo map, upload map, location gallery
+
+## Explore
+
+**Explore Overview**:
+The entry view that gathers curated sections of the Immich Library (Recognized People, Places, and Memories) and leads into the view that presents each one in full. It owns no data of its own.
+_Avoid_: dashboard, discover, home
+
+**Place**:
+A city in which the authenticated user has Remote Assets, represented in the Explore Overview by one Remote Asset's Asset Thumbnail and the city name.
+_Avoid_: location, destination, map pin
+
+**Place Timeline**:
+The chronological presentation of the Remote Assets recorded in one Place, grouped into time buckets like the Photo Timeline.
+_Avoid_: city gallery, location feed
+
+**Memory**:
+An Immich-generated, dated selection of Remote Assets, such as photos from a previous year on the same day or a Recognized Person's birthday, shown in the Explore Overview.
+_Avoid_: story, highlight, flashback
+
+**Memory Timeline**:
+The chronological presentation of the Remote Assets belonging to one Memory, grouped into time buckets like the Photo Timeline.
+_Avoid_: memory slideshow, memory player
