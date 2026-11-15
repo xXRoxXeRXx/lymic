@@ -35,7 +35,7 @@ Rust application services
 
 | Area | Start here | Responsibility |
 | --- | --- | --- |
-| UI composition | `src/routes/+page.svelte` | Creates controllers, hydrates them, and selects login, photo timeline, explore, favorites, map, albums, people, dashboard, logs, settings, or info views. The Explore Overview (`ExploreView.svelte`, `explore-controller.svelte.ts`) gathers independent sections (`ExploreSection.svelte`: own loading, error with retry, offline and empty state); the People section reuses the People controller data. |
+| UI composition | `src/routes/+page.svelte` | Creates controllers, hydrates them, and selects login, photo timeline, explore, favorites, map, albums, people, dashboard, logs, settings, or info views. The Explore Overview (`ExploreView.svelte`, `explore-controller.svelte.ts`) gathers independent sections (`ExploreSection.svelte`: own loading, error with retry, offline and empty state); the People section reuses the People controller data and the Places section is backed by `places-controller.svelte.ts` (`get_places`, `GET /api/search/cities`, `immich/places.rs`); "All Places" (`PlacesView.svelte`) has no navigation entry and is opened from the Explore Overview. |
 | UI state and IPC callers | `src/lib/controllers/` | One controller per concern: auth, timeline, favorites timeline, sync, watched folders, preferences, update, and feedback. |
 | UI components and translations | `src/lib/components/`, `src/lib/i18n/` | Present controller state; locale files are the UI strings. `remote-asset-actions.svelte.ts` is the single owner of Remote Asset detail caching, stale-request handling, favorite overrides on details, and Download (single file or archive) for the Lightbox, timeline selection, and Map View. |
 | Frontend IPC contracts and adapters | `src/lib/contracts.ts`, `src/lib/tauri/desktop-adapter.ts` | Shared frontend DTOs/state types and domain-split Tauri command adapters. |
@@ -86,7 +86,7 @@ The backend emits `sync-progress`, `sync-progress-percent`, `sync-started`, `syn
 
 ### Immich
 
-The core API calls are `GET /api/users/me`, `POST /api/assets/bulk-upload-check`, `POST /api/assets`, `GET /api/timeline/buckets`, `GET /api/timeline/bucket`, `GET /api/assets/{id}`, `PUT /api/assets/{id}` (favorite status), `GET /api/assets/{id}/thumbnail`, `GET /api/assets/{id}/original`, `POST /api/download/archive` (ZIP downloads), and `PUT /api/albums/{id}/assets` (album assignment); album behaviour is in `immich/album.rs` and timeline behaviour is in `immich/timeline.rs`. Requests use `x-api-key`; bulk checks and uploads use the SHA-1/Base64 checksum contract. Changes to endpoints or payloads require checking the supported Immich API contract rather than guessing.
+The core API calls are `GET /api/users/me`, `POST /api/assets/bulk-upload-check`, `POST /api/assets`, `GET /api/timeline/buckets`, `GET /api/timeline/bucket`, `GET /api/assets/{id}`, `PUT /api/assets/{id}` (favorite status), `GET /api/search/cities` (Places, `asset.read`), `GET /api/assets/{id}/thumbnail`, `GET /api/assets/{id}/original`, `POST /api/download/archive` (ZIP downloads), and `PUT /api/albums/{id}/assets` (album assignment); album behaviour is in `immich/album.rs` and timeline behaviour is in `immich/timeline.rs`. Requests use `x-api-key`; bulk checks and uploads use the SHA-1/Base64 checksum contract. Changes to endpoints or payloads require checking the supported Immich API contract rather than guessing.
 
 ### Persistence
 

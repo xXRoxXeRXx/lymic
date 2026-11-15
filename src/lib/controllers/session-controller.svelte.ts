@@ -5,6 +5,7 @@ import { createFavoritesTimelineController } from "./favorites-timeline-controll
 import { createFeedbackController } from "./feedback-controller.svelte";
 import { createMapController } from "./map-controller.svelte";
 import { createPeopleController } from "./people-controller.svelte";
+import { createPlacesController } from "./places-controller.svelte";
 import { createRemovableVolumeController } from "./removable-volume-controller.svelte";
 import { createSyncController } from "./sync-controller.svelte";
 import { createTargetAlbumCatalogue } from "./target-album-catalogue.svelte";
@@ -17,6 +18,7 @@ import type {
   FavoritesTimelineDesktopAdapter,
   MapDesktopAdapter,
   PeopleDesktopAdapter,
+  PlacesDesktopAdapter,
   RemovableVolumeDesktopAdapter,
   SyncDesktopAdapter,
   TimelineDesktopAdapter,
@@ -33,6 +35,7 @@ export type SessionDesktopAdapter =
   FavoritesTimelineDesktopAdapter &
   MapDesktopAdapter &
   PeopleDesktopAdapter &
+  PlacesDesktopAdapter &
   RemovableVolumeDesktopAdapter;
 
 export function createSessionController(options: {
@@ -73,7 +76,8 @@ export function createSessionController(options: {
   const timeline = createTimelineController(adapter);
   const favorites = createFavoritesTimelineController(adapter);
   const people = createPeopleController(adapter);
-  const explore = createExploreController({ people, isActive: () => options.isExploreActive?.() ?? false });
+  const places = createPlacesController(adapter);
+  const explore = createExploreController({ people, places, isActive: () => options.isExploreActive?.() ?? false });
   const map = createMapController(adapter);
   const albumCatalogue = createAlbumCatalogueController(adapter);
 
@@ -86,6 +90,7 @@ export function createSessionController(options: {
     timeline,
     favorites,
     people,
+    places,
     map,
     albumCatalogue,
   ];
@@ -153,6 +158,7 @@ export function createSessionController(options: {
     timeline,
     favorites,
     people,
+    places,
     explore,
     map,
     albumCatalogue,
