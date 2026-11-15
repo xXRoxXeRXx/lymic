@@ -149,17 +149,17 @@ The entry view that gathers curated sections of the Immich Library (Recognized P
 _Avoid_: dashboard, discover, home
 
 **Place**:
-A city in which the authenticated user has Remote Assets, represented in the Explore Overview by one Remote Asset's Asset Thumbnail and the city name.
+A city in which the authenticated user has Remote Assets, represented in the Explore Overview by one Remote Asset's Asset Thumbnail and the city name. A Place is identified by its city name alone, so same-named cities in different countries are one Place (ADR-0007).
 _Avoid_: location, destination, map pin
 
 **Place Timeline**:
-The chronological presentation of the Remote Assets recorded in one Place, grouped into time buckets like the Photo Timeline.
+The chronological presentation of the Remote Assets recorded in one Place, grouped into time buckets like the Photo Timeline. Assets without a usable capture time are omitted.
 _Avoid_: city gallery, location feed
 
 **Memory**:
-An Immich-generated, dated selection of Remote Assets, such as photos from a previous year on the same day or a Recognized Person's birthday, shown in the Explore Overview.
+An Immich-generated, dated selection of Remote Assets, such as photos from a previous year on the same day or a Recognized Person's birthday, shown in the Explore Overview. Lymic only reads Memories; it never creates, edits or deletes them.
 _Avoid_: story, highlight, flashback
 
 **Memory Timeline**:
-The chronological presentation of the Remote Assets belonging to one Memory, grouped into time buckets like the Photo Timeline.
+The chronological presentation of the Remote Assets belonging to one Memory, grouped into time buckets like the Photo Timeline. Assets without a usable capture time are omitted.
 _Avoid_: memory slideshow, memory player

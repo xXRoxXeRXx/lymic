@@ -29,10 +29,10 @@ struct CityExif {
 impl CityAssetResponse {
     fn into_place(self) -> Option<Place> {
         let city = self.exif?.city?;
-        let city = city.trim();
         let id = self.id.filter(|id| !id.is_empty())?;
-        (!city.is_empty()).then(|| Place {
-            city: city.to_string(),
+        // Immich's city filter matches exactly, so the name is kept as returned.
+        (!city.trim().is_empty()).then_some(Place {
+            city,
             thumbnail_asset_id: id,
         })
     }
@@ -128,14 +128,15 @@ mod tests {
 
     #[tokio::test]
     async fn omits_entries_without_a_city_or_asset_id_and_ignores_missing_optional_fields() {
-        let body = r#"[{"id":"a","exifInfo":{"city":"Oslo"}},{"id":"b"},{"id":"c","exifInfo":{}},{"id":"d","exifInfo":{"city":null}},{"id":"e","exifInfo":{"city":"  "}},{"exifInfo":{"city":"Rome"}},{"id":"f","exifInfo":{"city":"Lima"},"unknown":1}]"#;
+        let body = r#"[{"id":"a","exifInfo":{"city":"Oslo"}},{"id":"b"},{"id":"c","exifInfo":{}},{"id":"d","exifInfo":{"city":null}},{"id":"e","exifInfo":{"city":"  "}},{"exifInfo":{"city":"Rome"}},{"id":"f","exifInfo":{"city":"Lima"},"unknown":1},{"id":"g","exifInfo":{"city":" Rio "}}]"#;
         let (places, _) = request_with_response("200 OK", body).await;
         let cities: Vec<_> = places
             .unwrap()
             .into_iter()
             .map(|place| place.city)
             .collect();
-        assert_eq!(cities, vec!["Oslo", "Lima"]);
+        // The name is kept exactly as Immich returned it: its city filter matches exactly.
+        assert_eq!(cities, vec!["Oslo", "Lima", " Rio "]);
     }
 
     #[tokio::test]
