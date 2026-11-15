@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Archive view**:
+  - Adds an Archive entry after Favorites that shows your archived photos and videos in the shared timeline with scrubber, lightbox, thumbnail cache, favorite, download and add-to-album actions.
+  - Read-only: Lymic never archives or unarchives assets. Needs the `asset.read` API key permission.
+  - Includes loading, empty, error and offline states in all supported languages.
+
 ## [0.25.0] - 2026-11-13
 
 ### Added
