@@ -303,4 +303,9 @@
   ,"memory_birthday": "عيد ميلاد {name}"
   ,"memory_untitled": "ذكرى"
   ,"memories_timeline_empty": "لا تحتوي هذه الذكرى على صور أو مقاطع فيديو يمكن عرضها."
+  ,"memories_all_title": "كل الذكريات"
+  ,"memories_all_empty": "لا توجد ذكريات بعد."
+  ,"memories_loading_more": "جارٍ تحميل المزيد من الذكريات…"
+  ,"memories_more_error": "تعذّر تحميل المزيد من الذكريات."
+  ,"memories_all_return": "العودة إلى كل الذكريات"
 }

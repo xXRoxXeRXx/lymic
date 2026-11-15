@@ -3,6 +3,7 @@ import { createAuthController } from "./auth-controller.svelte";
 import { createExploreController } from "./explore-controller.svelte";
 import { createFavoritesTimelineController } from "./favorites-timeline-controller.svelte";
 import { createFeedbackController } from "./feedback-controller.svelte";
+import { createAllMemoriesController } from "./all-memories-controller.svelte";
 import { createMemoriesController } from "./memories-controller.svelte";
 import { createMapController } from "./map-controller.svelte";
 import { createPeopleController } from "./people-controller.svelte";
@@ -14,6 +15,7 @@ import { createTimelineController } from "./timeline-controller.svelte";
 import { createWatchedFoldersController } from "./watched-folders-controller.svelte";
 import type {
   AlbumCatalogueDesktopAdapter,
+  AllMemoriesDesktopAdapter,
   AlbumsDesktopAdapter,
   AuthDesktopAdapter,
   FavoritesTimelineDesktopAdapter,
@@ -39,6 +41,7 @@ export type SessionDesktopAdapter =
   PeopleDesktopAdapter &
   PlacesDesktopAdapter &
   MemoriesDesktopAdapter &
+  AllMemoriesDesktopAdapter &
   RemovableVolumeDesktopAdapter;
 
 export function createSessionController(options: {
@@ -81,6 +84,7 @@ export function createSessionController(options: {
   const people = createPeopleController(adapter);
   const places = createPlacesController(adapter);
   const memories = createMemoriesController(adapter);
+  const allMemories = createAllMemoriesController(adapter);
   const explore = createExploreController({ people, places, memories, isActive: () => options.isExploreActive?.() ?? false });
   const map = createMapController(adapter);
   const albumCatalogue = createAlbumCatalogueController(adapter);
@@ -96,6 +100,7 @@ export function createSessionController(options: {
     people,
     places,
     memories,
+    allMemories,
     map,
     albumCatalogue,
   ];
@@ -165,6 +170,7 @@ export function createSessionController(options: {
     people,
     places,
     memories,
+    allMemories,
     explore,
     map,
     albumCatalogue,

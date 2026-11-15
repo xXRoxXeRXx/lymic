@@ -303,4 +303,9 @@
   ,"memory_birthday": "{name}-এর জন্মদিন"
   ,"memory_untitled": "স্মৃতি"
   ,"memories_timeline_empty": "এই স্মৃতিতে দেখানোর মতো কোনো ছবি বা ভিডিও নেই।"
+  ,"memories_all_title": "সব স্মৃতি"
+  ,"memories_all_empty": "এখনও কোনো স্মৃতি নেই।"
+  ,"memories_loading_more": "আরও স্মৃতি লোড হচ্ছে…"
+  ,"memories_more_error": "আরও স্মৃতি লোড করা যায়নি।"
+  ,"memories_all_return": "সব স্মৃতিতে ফিরে যান"
 }

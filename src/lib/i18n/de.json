@@ -303,4 +303,9 @@
   ,"memory_birthday": "Geburtstag von {name}"
   ,"memory_untitled": "Erinnerung"
   ,"memories_timeline_empty": "Diese Erinnerung enthält keine Fotos oder Videos, die angezeigt werden können."
+  ,"memories_all_title": "Alle Erinnerungen"
+  ,"memories_all_empty": "Noch keine Erinnerungen."
+  ,"memories_loading_more": "Weitere Erinnerungen werden geladen…"
+  ,"memories_more_error": "Weitere Erinnerungen konnten nicht geladen werden."
+  ,"memories_all_return": "Zurück zu Alle Erinnerungen"
 }

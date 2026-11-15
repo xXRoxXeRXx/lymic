@@ -20,7 +20,6 @@
     onSelectPerson: (person: RecognizedPerson) => void;
     onViewAllPlaces: () => void;
     onSelectPlace?: (place: Place) => void;
-    /** Inert until the All Memories view exists. */
     onViewAllMemories?: () => void;
     onSelectMemory: (memory: Memory) => void;
   } = $props();

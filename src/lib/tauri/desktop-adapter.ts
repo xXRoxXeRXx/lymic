@@ -27,6 +27,7 @@ import type {
   WatchedFolder,
   TimelineBucket,
   TimelineAsset,
+  MemoriesPage,
   Memory,
   PeoplePage,
   Place,
@@ -103,6 +104,10 @@ export interface MemoriesDesktopAdapter {
   /** The newest Memories, at most `size`, each with its assets grouped for the Memory Timeline. */
   getMemories(size: number): Promise<Memory[]>;
 }
+export interface AllMemoriesDesktopAdapter {
+  /** One page (1-based) of the newest Memories, without the overview cap. */
+  getMemoriesPage(page: number, size: number): Promise<MemoriesPage>;
+}
 export interface PeopleDesktopAdapter {
   getPeople(page: number, size: number): Promise<PeoplePage>;
   getPersonTimelineBuckets(personId: string): Promise<TimelineBucket[]>;
@@ -164,6 +169,7 @@ export interface DesktopAdapter
     PeopleDesktopAdapter,
     PlacesDesktopAdapter,
     MemoriesDesktopAdapter,
+    AllMemoriesDesktopAdapter,
     PreferencesDesktopAdapter,
     UpdateDesktopAdapter,
     RemovableVolumeDesktopAdapter {}
@@ -217,6 +223,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   downloadArchive: (assetIds) => invoke<void>("download_archive", { assetIds }),
   getAlbumTimeline: (albumId) => invoke<AlbumTimeline>("get_album_timeline", { albumId }),
   getMemories: (size) => invoke<Memory[]>("get_memories", { size }),
+  getMemoriesPage: (page, size) => invoke<MemoriesPage>("get_memories_page", { page, size }),
   getPeople: (page, size) => invoke<PeoplePage>("get_people", { page, size }),
   getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),
   getPersonTimelineBucketAssets: (personId, timeBucket) => invoke<TimelineAsset[]>("get_person_timeline_bucket_assets", { personId, timeBucket }),

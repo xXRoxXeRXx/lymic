@@ -303,4 +303,9 @@
   ,"memory_birthday": "{name} का जन्मदिन"
   ,"memory_untitled": "याद"
   ,"memories_timeline_empty": "इस याद में दिखाने योग्य कोई फ़ोटो या वीडियो नहीं है।"
+  ,"memories_all_title": "सभी यादें"
+  ,"memories_all_empty": "अभी तक कोई याद नहीं है।"
+  ,"memories_loading_more": "और यादें लोड हो रही हैं…"
+  ,"memories_more_error": "और यादें लोड नहीं हो सकीं।"
+  ,"memories_all_return": "सभी यादों पर वापस जाएँ"
 }

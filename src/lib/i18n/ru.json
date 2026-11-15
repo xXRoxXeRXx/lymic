@@ -303,4 +303,9 @@
   ,"memory_birthday": "День рождения: {name}"
   ,"memory_untitled": "Воспоминание"
   ,"memories_timeline_empty": "В этом воспоминании нет фото или видео, которые можно показать."
+  ,"memories_all_title": "Все воспоминания"
+  ,"memories_all_empty": "Пока нет воспоминаний."
+  ,"memories_loading_more": "Загрузка других воспоминаний…"
+  ,"memories_more_error": "Не удалось загрузить другие воспоминания."
+  ,"memories_all_return": "Назад ко всем воспоминаниям"
 }
