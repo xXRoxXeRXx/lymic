@@ -20,7 +20,7 @@ pub(crate) use ids::{AlbumId, RemoteAssetId};
 pub(crate) use people::PeoplePage;
 pub(crate) use places::Place;
 pub(crate) use search::{
-    ContextSearchPage, SearchFeatures, SearchQuery, SearchSupport, SearchTimeline,
+    ContextSearchPage, SearchFeatures, SearchRequest, SearchResults, SearchSupport,
 };
 pub(crate) use session::ImmichSession;
 pub(crate) use timeline::{AlbumTimeline, PlaceTimeline, TimelineAsset, TimelineBucket};

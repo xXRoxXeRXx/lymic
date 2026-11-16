@@ -35,9 +35,9 @@ import type {
   Place,
   ContextSearchPage,
   SearchFeatures,
-  SearchQuery,
+  SearchRequest,
   SearchSupport,
-  SearchTimeline,
+  SearchResults,
 } from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
 
@@ -145,9 +145,9 @@ export interface SearchDesktopAdapter {
   getSearchSupport(): Promise<SearchSupport>;
   /** Reads which optional Search Modes (Context, OCR) the server has switched on. */
   getSearchFeatures(): Promise<SearchFeatures>;
-  searchAssets(query: SearchQuery): Promise<SearchTimeline>;
+  searchAssets(request: SearchRequest): Promise<SearchResults>;
   /** One page of a Context Search (Immich smart search), in the order of relevance. */
-  searchContextPage(query: SearchQuery, page: number): Promise<ContextSearchPage>;
+  searchContextPage(request: SearchRequest, page: number): Promise<ContextSearchPage>;
 }
 
 export interface PreferencesDesktopAdapter {
@@ -272,8 +272,8 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getPlaces: () => invoke<Place[]>("get_places"),
   getSearchSupport: () => invoke<SearchSupport>("get_search_support"),
   getSearchFeatures: () => invoke<SearchFeatures>("get_search_features"),
-  searchAssets: (query) => invoke<SearchTimeline>("search_assets", { query }),
-  searchContextPage: (query, page) => invoke<ContextSearchPage>("search_context_page", { query, page }),
+  searchAssets: (request) => invoke<SearchResults>("search_assets", { request }),
+  searchContextPage: (request, page) => invoke<ContextSearchPage>("search_context_page", { request, page }),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),

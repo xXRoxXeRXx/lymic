@@ -10,12 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Search by file name**:
   - A search bar at the top of every page searches your whole Immich library by file name ("contains"; `%` and `_` are searched literally). The results open chronologically in the shared timeline with scrubber, lightbox, thumbnail cache, favorite, download and add-to-album actions.
-  - At most the 5,000 newest matches are loaded; a notice says when a search was cut. Back returns to the page you searched from at its scroll position, and the clear control resets the search. The text is kept in memory for the session only.
+  - At most the 5,000 newest results are loaded; a notice says when a search was cut. Back returns to the page you searched from at its scroll position, and the clear control resets the search. The text is kept in memory for the session only.
   - Read-only; needs the `asset.read` API key permission and Immich 3.2 or later (older servers show an "unsupported" message and every other view keeps working). The search sends only Immich's structured `filter`. Case sensitivity of the file name match was not verified against a live server.
   - Includes unsupported, unauthorized, permission, unavailable, offline and empty states in all supported languages.
 - **Search Mode**:
   - An options button beside the search field opens a panel with one exclusive Search Mode choice: Filename, Description, Folder Path or OCR (recognized text). The choice is kept for the session and reset on sign-out.
   - Description and Folder Path use "contains" matching with `%` and `_` searched literally. OCR is disabled with an explanation when the Immich Server has OCR switched off; the server features are read once and held in memory, and a failure to read them never blocks a Search. Case sensitivity of the Description and Folder Path match was not verified against a live server.
+- **Context Search**:
+  - Context (what a photo shows, via Immich's smart search) is the default Search Mode. A Context text shows the Search Results in order of relevance as a flat grid without Timeline Buckets or Scrubber, 100 per page, loading further pages while you scroll; a failed further page keeps the pages already shown and offers Retry. A Search without text but with filters runs as the chronological filters-only Search even while Context is selected.
+  - Context is disabled with an explanation, and Filename becomes the default, when the Immich Server has Smart Search switched off. A 400 from the server despite the feature being reported on shows a "Context unavailable" state without changing the Search Mode. Whether a smart search applies Search Filters before or after ranking, and the paging parameters of smart search on Immich 3.2 or later, were not verified against a live server.
 - **Archive view**:
   - Adds an Archive entry after Favorites that shows your archived photos and videos in the shared timeline with scrubber, lightbox, thumbnail cache, favorite, download and add-to-album actions.
   - Read-only: Lymic never archives or unarchives assets. Needs the `asset.read` API key permission.

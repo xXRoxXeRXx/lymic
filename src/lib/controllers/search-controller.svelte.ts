@@ -1,7 +1,7 @@
-import type { ContextSearchPage, SearchFeatures, SearchFilters, SearchMode, SearchQuery, SearchTimeline } from "../contracts";
+import type { ContextSearchPage, SearchFeatures, SearchFilters, SearchMode, SearchRequest, SearchResults } from "../contracts";
 import type { SearchDesktopAdapter } from "../tauri/desktop-adapter";
 import { createContextResultsController, type ContextResults } from "./context-results-controller.svelte";
-import { classifyRequestFailure } from "./request-failure";
+import { classifyRequestFailure, failureMessage } from "./request-failure";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
 
 /** Why the latest Search could not be answered. */
@@ -10,7 +10,7 @@ export type SearchFailure = "authentication_required" | "permission_denied" | "u
 /** How the Search Results are shown (ADR-0009): chronologically in Timeline Buckets, or flat in the order of relevance. */
 export type SearchPresentation = "chronological" | "relevance";
 
-/** The most matches a chronological Search shows (ADR-0009); mirrors the backend constant. */
+/** The most results a chronological Search shows (ADR-0009); mirrors the backend constant. */
 export const SEARCH_RESULT_LIMIT = 5_000;
 
 /** The Search Mode a session starts with and returns to when the Search is cleared. */
@@ -47,7 +47,7 @@ export interface SearchController extends TimelineController {
   readonly submittedText: string;
   /** The number of Remote Assets in the results. */
   readonly resultCount: number;
-  /** True when the Search was cut at the result limit and only the newest matches are shown. */
+  /** True when the Search was cut at the result limit and only the newest results are shown. */
   readonly truncated: boolean;
   /** Set while the server is older than the Search requires; every other view is unaffected. */
   readonly unsupported: { version: string; requiredVersion: string } | null;
@@ -63,11 +63,13 @@ export interface SearchController extends TimelineController {
   submit(): Promise<boolean>;
 }
 
-const NO_RESULTS: SearchTimeline = { buckets: [], assetsByBucket: {}, truncated: false };
+const NO_RESULTS: SearchResults = { buckets: [], assetsByBucket: {}, truncated: false };
 const NO_CONTEXT_PAGE: ContextSearchPage = { assets: [], nextPage: null };
 
 function classifyFailure(reason: unknown): SearchFailure {
-  const message = typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "";
+  // Unlike the other sections, a rejected API key is its own failure here: the view asks to sign in again
+  // instead of saying the server is unavailable (which `classifyRequestFailure` maps it to).
+  const message = failureMessage(reason);
   if (message.startsWith("search_authentication_required")) return "authentication_required";
   if (message.startsWith("search_context_unavailable")) return "context_unavailable";
   return classifyRequestFailure(reason, "search");
@@ -87,9 +89,9 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   let failure = $state<SearchFailure | null>(null);
   let revision = $state(0);
   // The Search the shared timeline loads: the latest submitted one, which Retry repeats.
-  let pending: SearchQuery | null = null;
+  let pending: SearchRequest | null = null;
   // The Context Search whose results are shown; further pages belong to it, not to a newer Search that failed.
-  let shownContextQuery: SearchQuery | null = null;
+  let shownContextRequest: SearchRequest | null = null;
   // Only a server that answered "supported" is remembered; an unsupported one is asked again.
   let supported = false;
   // Bumped by every load and by clear(), so a load that finishes late cannot touch newer state.
@@ -126,12 +128,12 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     return candidate === "ocr" ? read.ocr : candidate === "context" ? read.smartSearch : true;
   }
 
-  function currentQuery(): SearchQuery {
+  function currentRequest(): SearchRequest {
     return { text: text.trim(), mode, filters: $state.snapshot(filters) };
   }
 
-  function hasCriteria(query: SearchQuery) {
-    return query.text !== "" || Object.values(query.filters).some((value) => value !== undefined);
+  function hasCriteria(request: SearchRequest) {
+    return request.text !== "" || Object.values(request.filters).some((value) => value !== undefined);
   }
 
   /** Reads the server's support once; false (with `unsupported` set) when the server is older than a Search requires. */
@@ -150,7 +152,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     return true;
   }
 
-  async function load(): Promise<SearchTimeline> {
+  async function load(): Promise<SearchResults> {
     const queued = pending;
     if (!queued) return NO_RESULTS;
     const thisLoad = ++latestLoad;
@@ -159,13 +161,13 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
       await loadFeatures();
       if (thisLoad !== latestLoad) return NO_RESULTS;
       // The features may have turned the mode of the queued Search unavailable.
-      const query = isAvailable(queued.mode, features) ? queued : { ...queued, mode: FALLBACK_SEARCH_MODE };
-      const results = await adapter.searchAssets(query);
+      const request = isAvailable(queued.mode, features) ? queued : { ...queued, mode: FALLBACK_SEARCH_MODE };
+      const results = await adapter.searchAssets(request);
       if (thisLoad === latestLoad) {
         unsupported = null;
         failure = null;
         truncated = results.truncated;
-        submittedText = query.text;
+        submittedText = request.text;
         revision += 1;
       }
       return results;
@@ -180,18 +182,18 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   /** Loads one page of the Context Search: the pending Search for the first page, the shown one for further pages. */
   async function loadContextPage(page: number): Promise<ContextSearchPage> {
     const first = page === 1;
-    const query = first ? pending : shownContextQuery;
-    if (!query) return NO_CONTEXT_PAGE;
+    const request = first ? pending : shownContextRequest;
+    if (!request) return NO_CONTEXT_PAGE;
     const thisLoad = first ? ++latestLoad : latestLoad;
     try {
       if (!(await ensureSupported()) || thisLoad !== latestLoad) return NO_CONTEXT_PAGE;
-      const result = await adapter.searchContextPage(query, page);
+      const result = await adapter.searchContextPage(request, page);
       if (thisLoad === latestLoad && first) {
         unsupported = null;
         failure = null;
         truncated = false;
-        shownContextQuery = query;
-        submittedText = query.text;
+        shownContextRequest = request;
+        submittedText = request.text;
         revision += 1;
       }
       return result;
@@ -207,7 +209,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   function clear() {
     latestLoad += 1;
     pending = null;
-    shownContextQuery = null;
+    shownContextRequest = null;
     supported = false;
     text = "";
     mode = DEFAULT_SEARCH_MODE;
@@ -227,18 +229,18 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   }
 
   async function submit() {
-    let query = currentQuery();
-    if (!hasCriteria(query)) return false;
-    if (query.mode === "context" && features === null) {
+    let request = currentRequest();
+    if (!hasCriteria(request)) return false;
+    if (request.mode === "context" && features === null) {
       // Whether Smart Search is on decides how a Context text is searched, so it is known before the Search.
       const generation = featuresGeneration;
       await loadFeatures();
       if (generation !== featuresGeneration) return false;
-      query = currentQuery();
+      request = currentRequest();
     }
-    if (!isAvailable(query.mode, features)) query = { ...query, mode: FALLBACK_SEARCH_MODE };
-    pending = query;
-    const next: SearchPresentation = query.mode === "context" && query.text !== "" ? "relevance" : "chronological";
+    if (!isAvailable(request.mode, features)) request = { ...request, mode: FALLBACK_SEARCH_MODE };
+    pending = request;
+    const next: SearchPresentation = request.mode === "context" && request.text !== "" ? "relevance" : "chronological";
     if (next !== presentation) {
       // The results of the other kind of Search no longer belong to the Search being shown.
       (next === "relevance" ? timeline : context).clear();
@@ -259,7 +261,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     get smartSearchAvailable() { return smartSearchAvailable; },
     get featuresFailed() { return featuresFailed; },
     get filters() { return filters; },
-    get canSubmit() { return hasCriteria(currentQuery()); },
+    get canSubmit() { return hasCriteria(currentRequest()); },
     get presentation() { return presentation; },
     context,
     get submittedText() { return submittedText; },

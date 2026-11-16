@@ -41,6 +41,7 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
     getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: true }),
     getSearchSupport: vi.fn().mockResolvedValue({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
     searchAssets: vi.fn().mockResolvedValue({ buckets: [{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }], assetsByBucket: {}, truncated: false }),
+    searchContextPage: vi.fn().mockResolvedValue({ assets: [], nextPage: null }),
     getPersonTimelineBuckets: vi.fn().mockResolvedValue([]),
     getPersonTimelineBucketAssets: vi.fn().mockResolvedValue([]),
     subscribeToRemovableVolumeDetected: vi.fn().mockResolvedValue(() => {}),
@@ -74,7 +75,7 @@ describe("authenticated session", () => {
     await session.logout();
 
     expect(session.search.text).toBe("");
-    expect(session.search.mode).toBe("filename");
+    expect(session.search.mode).toBe("context");
     expect(session.search.submittedText).toBe("");
     expect(session.search.buckets).toEqual([]);
   });

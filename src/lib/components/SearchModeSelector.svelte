@@ -4,20 +4,20 @@
   import type { SearchController } from "../controllers/search-controller.svelte";
 
   /**
-   * The Search Mode choice of the search panel: exactly one of Filename, Description, Folder Path and OCR.
-   * OCR is disabled, with an explanation, while the server has it switched off. Native radio buttons give
+   * The Search Mode choice of the search panel: exactly one of Context, Filename, Description, Folder Path
+   * and OCR. Context and OCR are disabled, with an explanation, while the server has Smart Search or OCR switched off. Native radio buttons give
    * the arrow-key navigation and the screen reader announcements of an exclusive choice.
    */
   let { search }: { search: SearchController } = $props();
 
-  const modes: SearchMode[] = ["filename", "description", "folderPath", "ocr"];
+  const modes: SearchMode[] = ["context", "filename", "description", "folderPath", "ocr"];
   const name = "search-mode";
 
   // The features are read when the panel opens, so a disabled OCR is explained before the first Search.
   $effect(() => { void search.loadFeatures(); });
 
   function isDisabled(mode: SearchMode) {
-    return mode === "ocr" && !search.ocrAvailable;
+    return (mode === "ocr" && !search.ocrAvailable) || (mode === "context" && !search.smartSearchAvailable);
   }
 </script>
 
@@ -35,13 +35,16 @@
           value={mode}
           checked={search.mode === mode}
           disabled={isDisabled(mode)}
-          aria-describedby={isDisabled(mode) ? "search-mode-ocr-unavailable" : undefined}
+          aria-describedby={isDisabled(mode) ? `search-mode-${mode}-unavailable` : undefined}
           onchange={() => { search.mode = mode; }}
         />
         {$t(`search_mode_${mode}`)}
       </label>
     {/each}
   </div>
+  {#if !search.smartSearchAvailable}
+    <p id="search-mode-context-unavailable" class="mt-1.5 text-xs text-slate-500 dark:text-zinc-400">{$t("search_mode_context_unavailable")}</p>
+  {/if}
   {#if !search.ocrAvailable}
     <p id="search-mode-ocr-unavailable" class="mt-1.5 text-xs text-slate-500 dark:text-zinc-400">{$t("search_mode_ocr_unavailable")}</p>
   {:else if search.featuresFailed}

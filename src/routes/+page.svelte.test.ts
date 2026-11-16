@@ -97,6 +97,9 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve([]);
       case "get_memories":
         return Promise.resolve([]);
+      // By default Smart Search is off, so a Search starts in Filename mode (Context is tested explicitly).
+      case "get_search_features":
+        return Promise.resolve({ smartSearch: false, ocr: true });
       case "update_locale":
         return Promise.resolve();
       case "get_release_channel":
@@ -3317,7 +3320,7 @@ describe("Search", () => {
       get_album_catalogue: async () => [holiday],
       get_album_timeline: async () => results("album-asset"),
       get_search_support: async () => supported,
-      search_assets: async () => results("hit-1", "hit-2"),
+      search_assets: async () => results("found-1", "found-2"),
       get_asset_details: async () => ({ originalFileName: "IMG_0001.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024 }),
     });
     await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
@@ -3328,8 +3331,8 @@ describe("Search", () => {
 
     await search("IMG_");
 
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG_", mode: "filename", filters: {} } }));
     expect(tauri.invoke).toHaveBeenCalledWith("get_search_support");
-    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG_", mode: "filename", filters: {} } });
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
@@ -3356,7 +3359,7 @@ describe("Search", () => {
     renderAuthenticatedPage({
       get_album_catalogue: async () => [holiday],
       get_search_support: async () => supported,
-      search_assets: async () => results("hit-1"),
+      search_assets: async () => results("found-1"),
     });
     await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
     const album = await screen.findByRole("button", { name: /Holiday/ });
@@ -3377,7 +3380,7 @@ describe("Search", () => {
       get_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
       get_timeline_bucket_assets: async () => [found("photo-1")],
       get_search_support: async () => supported,
-      search_assets: async () => results("hit-1"),
+      search_assets: async () => results("found-1"),
     });
     const viewportOf = async () => (await screen.findByRole("button", { name: "Open photo" })).closest(".overflow-y-auto") as HTMLElement;
     const viewport = await viewportOf();
@@ -3404,7 +3407,7 @@ describe("Search", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
       get_search_support: async () => supported,
-      search_assets: async () => results("hit-1"),
+      search_assets: async () => results("found-1"),
     });
     await search("IMG");
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
@@ -3431,7 +3434,7 @@ describe("Search", () => {
     stubImmediateIntersectionObserver();
     const searchAssets = vi.fn()
       .mockRejectedValueOnce("search_permission_denied:asset.read")
-      .mockResolvedValueOnce(results("hit-1"));
+      .mockResolvedValueOnce(results("found-1"));
     renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: searchAssets });
 
     await search("IMG");
@@ -3451,6 +3454,25 @@ describe("Search", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Immich did not accept the API key. Sign in again to search.");
   });
 
+  it("says the response was unreadable, not that the server is unavailable or offline", async () => {
+    stubImmediateIntersectionObserver();
+    const searchAssets = vi.fn().mockRejectedValueOnce("search_invalid_response");
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: searchAssets });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Immich sent a response Lymic could not read.");
+    expect(screen.getByRole("button", { name: "Retry timeline connection" })).toBeInTheDocument();
+
+    // Over earlier results it is still an error, not the offline status.
+    searchAssets.mockResolvedValueOnce(results("asset-1")).mockRejectedValueOnce("search_invalid_response");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry timeline connection" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    await search("second");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Immich sent a response Lymic could not read.");
+    expect(screen.queryByText("You are offline. The previous results stay visible until you retry.")).not.toBeInTheDocument();
+  });
+
   it("shows an unavailable server with Retry on a first Search", async () => {
     renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: () => Promise.reject("search_unavailable") });
 
@@ -3464,7 +3486,7 @@ describe("Search", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
       get_search_support: async () => supported,
-      search_assets: vi.fn().mockResolvedValueOnce(results("hit-1")).mockRejectedValueOnce("search_unavailable"),
+      search_assets: vi.fn().mockResolvedValueOnce(results("found-1")).mockRejectedValueOnce("search_unavailable"),
     });
     await search("first");
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
@@ -3492,12 +3514,12 @@ describe("Search", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
       get_search_support: async () => supported,
-      search_assets: async () => ({ ...results("hit-1"), truncated: true }),
+      search_assets: async () => ({ ...results("found-1"), truncated: true }),
     });
 
     await search("IMG");
 
-    expect(await screen.findByText("Showing only the newest 5,000 matches. Narrow your search to see the rest.")).toBeInTheDocument();
+    expect(await screen.findByText("Showing only the newest 5,000 results. Narrow your search to see the rest.")).toBeInTheDocument();
   });
 
   describe("Search Mode", () => {
@@ -3506,17 +3528,18 @@ describe("Search", () => {
       return screen.findByRole("group", { name: "Search mode" });
     };
 
-    it("offers Filename, Description, Folder Path and OCR as one exclusive choice that starts on Filename", async () => {
+    it("offers Context, Filename, Description, Folder Path and OCR as one exclusive choice that starts on Context", async () => {
       renderAuthenticatedPage({ get_search_features: async () => ({ smartSearch: true, ocr: true }) });
 
       const group = await openOptions();
 
       const radios = within(group).getAllByRole("radio");
-      expect(radios.map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(["Filename", "Description", "Folder Path", "OCR"]);
-      expect(within(group).getByRole("radio", { name: "Filename" })).toBeChecked();
+      expect(radios.map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(["Context", "Filename", "Description", "Folder Path", "OCR"]);
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeChecked();
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeEnabled();
       await fireEvent.click(within(group).getByRole("radio", { name: "Folder Path" }));
       expect(within(group).getByRole("radio", { name: "Folder Path" })).toBeChecked();
-      expect(within(group).getByRole("radio", { name: "Filename" })).not.toBeChecked();
+      expect(within(group).getByRole("radio", { name: "Context" })).not.toBeChecked();
       expect(within(group).getByRole("radio", { name: "OCR" })).toBeEnabled();
     });
 
@@ -3531,7 +3554,7 @@ describe("Search", () => {
       await fireEvent.click(within(group).getByRole("radio", { name: "Description" }));
       await search("sunset");
 
-      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "sunset", mode: "description", filters: {} } });
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "sunset", mode: "description", filters: {} } });
       const calls = tauri.invoke.mock.calls.map(([command]) => command);
       expect(calls.filter((command) => command === "get_search_features")).toHaveLength(1);
       expect(calls.indexOf("get_search_features")).toBeLessThan(calls.indexOf("search_assets"));
@@ -3545,12 +3568,13 @@ describe("Search", () => {
         search_assets: async () => results("hit-1"),
       });
       const group = await openOptions();
+      await fireEvent.click(within(group).getByRole("radio", { name: "Filename" }));
 
       const ocr = await within(group).findByRole("radio", { name: "OCR" });
       await waitFor(() => expect(ocr).toBeDisabled());
       expect(ocr).toHaveAccessibleDescription("OCR is switched off on this Immich server, so text inside photos cannot be searched.");
       await search("IMG");
-      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG", mode: "filename", filters: {} } });
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG", mode: "filename", filters: {} } });
     });
 
     it("keeps Filename working when the server features cannot be read", async () => {
@@ -3562,9 +3586,107 @@ describe("Search", () => {
       const group = await openOptions();
 
       expect(await within(group).findByText("The server's features could not be read. OCR may not be available.")).toBeInTheDocument();
+      await fireEvent.click(within(group).getByRole("radio", { name: "Filename" }));
       await search("IMG");
-      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG", mode: "filename", filters: {} } });
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG", mode: "filename", filters: {} } });
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Context Search", () => {
+    const openOptions = async () => {
+      await fireEvent.click(await screen.findByRole("button", { name: "Search options" }));
+      return screen.findByRole("group", { name: "Search mode" });
+    };
+    const smartOn = async () => ({ smartSearch: true, ocr: true });
+    const page = (ids: string[], nextPage: number | null) => ({ assets: ids.map(found), nextPage });
+    const contextRequest = (text: string) => ({ text, mode: "context", filters: {} });
+    const requestedPages = () =>
+      tauri.invoke.mock.calls.filter(([command]) => command === "search_context_page").map(([, args]) => (args as { page: number }).page);
+
+    it("shows a Context text as a flat relevance-ordered grid that loads further pages while scrolling, with Lightbox actions", async () => {
+      stubImmediateIntersectionObserver();
+      const searchContextPage = vi.fn()
+        .mockResolvedValueOnce(page(["best", "second"], 2))
+        .mockResolvedValueOnce(page(["third"], null));
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: searchContextPage,
+        get_asset_details: async () => ({ originalFileName: "IMG_0001.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024 }),
+      });
+
+      await search("dog on a beach");
+
+      await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3));
+      expect(tauri.invoke).toHaveBeenCalledWith("search_context_page", { request: contextRequest("dog on a beach"), page: 1 });
+      expect(tauri.invoke).toHaveBeenCalledWith("search_context_page", { request: contextRequest("dog on a beach"), page: 2 });
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+      // A flat list: no Timeline Bucket heading and no Scrubber.
+      expect(screen.queryByText("March 2025")).not.toBeInTheDocument();
+      expect(screen.queryByRole("navigation", { name: "Timeline scrubber" })).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
+
+      await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[2]);
+      const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+      expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+      expect(within(lightbox).getByRole("button", { name: "Add to album" })).toBeInTheDocument();
+      expect(within(lightbox).getByRole("button", { name: "Add to favorites" })).toBeInTheDocument();
+    });
+
+    it("keeps the pages already shown when a further page fails and loads it on Retry", async () => {
+      stubImmediateIntersectionObserver();
+      const searchContextPage = vi.fn()
+        .mockResolvedValueOnce(page(["best", "second"], 2))
+        .mockRejectedValueOnce("search_unavailable")
+        .mockResolvedValueOnce(page(["third"], null));
+      renderAuthenticatedPage({ get_search_features: smartOn, get_search_support: async () => supported, search_context_page: searchContextPage });
+
+      await search("dog");
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("More results could not be loaded. The results shown so far are kept.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+      await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+
+      await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(requestedPages()).toEqual([1, 2, 2]);
+    });
+
+    it("shows Context unavailable when the server rejects the search, without changing the Search Mode", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: () => Promise.reject("search_context_unavailable"),
+      });
+      const group = await openOptions();
+
+      await search("dog");
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Context is unavailable");
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeChecked();
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    });
+
+    it("disables Context with an explanation and searches by Filename when Smart Search is switched off", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: async () => ({ smartSearch: false, ocr: true }),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      const context = await within(group).findByRole("radio", { name: "Context" });
+      await waitFor(() => expect(context).toBeDisabled());
+      expect(context).toHaveAccessibleDescription(/Smart Search is switched off on this Immich server/);
+      expect(within(group).getByRole("radio", { name: "Filename" })).toBeChecked();
+      await search("IMG");
+
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG", mode: "filename", filters: {} } });
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_context_page", expect.anything());
     });
   });
 });

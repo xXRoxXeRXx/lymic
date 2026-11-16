@@ -55,7 +55,9 @@ const timelines: Array<[string, () => TimelineController]> = [
       getSearchSupport: async () => ({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
       getSearchFeatures: async () => ({ smartSearch: true, ocr: true }),
       searchAssets: async () => ({ buckets, assetsByBucket, truncated: false }),
+      searchContextPage: async () => ({ assets: [], nextPage: null }),
     });
+    search.mode = "filename";
     search.text = "IMG";
     // Loading the results means submitting the Search, which is what the first refresh does for the other kinds.
     return Object.create(search, { refresh: { value: async () => { await search.submit(); } } });

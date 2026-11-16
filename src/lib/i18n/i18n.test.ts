@@ -257,6 +257,7 @@ describe('i18n catalogs', () => {
       search_authentication_required: [],
       search_permission_denied: [],
       search_unavailable: [],
+      search_invalid_response: [],
       search_offline: [],
     };
     for (const [localeCode, translations] of Object.entries(catalog)) {
@@ -270,6 +271,20 @@ describe('i18n catalogs', () => {
     }
     expect(en.search_title).toBe('Search');
     expect(de.search_title).toBe('Suche');
+  });
+
+  it('translates the Context Search strings in every locale', () => {
+    const keys = [
+      'search_mode_context', 'search_placeholder_context', 'search_mode_context_unavailable',
+      'search_context_unavailable', 'search_more_error', 'search_loading_more',
+    ];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect((translations as Record<string, string>)[key], `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+      }
+    }
+    expect(en.search_mode_context).toBe('Context');
+    expect(de.search_mode_context).toBe('Kontext');
   });
 
   it('translates the Search Mode strings in every locale', () => {

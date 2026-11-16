@@ -1,5 +1,5 @@
 use crate::immich::{
-    ContextSearchPage, ImmichSession, SearchFeatures, SearchQuery, SearchSupport, SearchTimeline,
+    ContextSearchPage, ImmichSession, SearchFeatures, SearchRequest, SearchResults, SearchSupport,
 };
 
 /// Whether the connected Immich Server is new enough (3.2) to answer a Search.
@@ -13,9 +13,9 @@ pub(crate) async fn get_search_support() -> Result<SearchSupport, String> {
 
 /// A chronological Search over the whole Immich Library. Read-only.
 #[tauri::command]
-pub(crate) async fn search_assets(query: SearchQuery) -> Result<SearchTimeline, String> {
+pub(crate) async fn search_assets(request: SearchRequest) -> Result<SearchResults, String> {
     ImmichSession::with_stored_credentials(
-        |client| async move { client.search_assets(&query).await },
+        |client| async move { client.search_assets(&request).await },
     )
     .await
 }
@@ -32,11 +32,11 @@ pub(crate) async fn get_search_features() -> Result<SearchFeatures, String> {
 /// One page of a Context Search: the Search Results in order of relevance. Read-only.
 #[tauri::command]
 pub(crate) async fn search_context_page(
-    query: SearchQuery,
+    request: SearchRequest,
     page: u64,
 ) -> Result<ContextSearchPage, String> {
     ImmichSession::with_stored_credentials(|client| async move {
-        client.search_context_page(&query, page).await
+        client.search_context_page(&request, page).await
     })
     .await
 }

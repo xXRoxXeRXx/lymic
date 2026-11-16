@@ -210,7 +210,7 @@ describe("tauriDesktopAdapter", () => {
     ]);
   });
 
-  it("invokes the Search commands with the query as one argument", async () => {
+  it("invokes the Search commands with the request as one argument", async () => {
     const searchAdapter: SearchDesktopAdapter = tauriDesktopAdapter;
     invoke.mockClear();
 
@@ -223,9 +223,9 @@ describe("tauriDesktopAdapter", () => {
     expect(invoke.mock.calls).toEqual([
       ["get_search_support"],
       ["get_search_features"],
-      ["search_assets", { query: { text: "IMG", mode: "filename", filters: {} } }],
-      ["search_assets", { query: { text: "scan", mode: "folderPath", filters: {} } }],
-      ["search_context_page", { query: { text: "dog", mode: "context", filters: {} }, page: 2 }],
+      ["search_assets", { request: { text: "IMG", mode: "filename", filters: {} } }],
+      ["search_assets", { request: { text: "scan", mode: "folderPath", filters: {} } }],
+      ["search_context_page", { request: { text: "dog", mode: "context", filters: {} }, page: 2 }],
     ]);
   });
 });
