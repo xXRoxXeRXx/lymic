@@ -357,4 +357,10 @@
   ,"search_placeholder_description": "Pesquisar por descrição"
   ,"search_placeholder_folderPath": "Pesquisar por caminho da pasta"
   ,"search_placeholder_ocr": "Pesquisar por texto nas fotos"
+  ,"search_mode_context": "Contexto"
+  ,"search_placeholder_context": "Descreva o que a foto mostra"
+  ,"search_mode_context_unavailable": "A pesquisa inteligente está desativada neste servidor Immich, por isso não é possível usar Contexto. É usado Nome do ficheiro em seu lugar."
+  ,"search_context_unavailable": "Contexto não está disponível: o servidor Immich rejeitou a pesquisa apesar de a pesquisa inteligente estar ativada. Escolha outro modo de pesquisa ou tente novamente."
+  ,"search_more_error": "Não foi possível carregar mais resultados. Os resultados mostrados até agora são mantidos."
+  ,"search_loading_more": "A carregar mais resultados…"
 }

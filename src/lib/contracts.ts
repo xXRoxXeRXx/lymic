@@ -209,7 +209,7 @@ export interface MapMarker { id: string; lat: number; lon: number; }
 // Search (ADR-0008, ADR-0009). Mirrors `src-tauri/src/immich/search.rs`.
 
 /** How Immich interprets the text of a Search. Each Search Mode adds a member. */
-export type SearchMode = "filename" | "description" | "folderPath" | "ocr";
+export type SearchMode = "context" | "filename" | "description" | "folderPath" | "ocr";
 
 /** The Search Filters of a Search. Each Search Filter adds one optional field. */
 export interface SearchFilters {}
@@ -223,6 +223,12 @@ export interface SearchQuery {
 /** Chronological Search Results: an Album Timeline plus whether the Search was cut at the limit. */
 export interface SearchTimeline extends AlbumTimeline {
   truncated: boolean;
+}
+
+/** One page of Context Search Results in the order of relevance; `nextPage` is null on the last page. */
+export interface ContextSearchPage {
+  assets: TimelineAsset[];
+  nextPage: number | null;
 }
 
 /** Which optional Search Modes the connected Immich Server has switched on. */

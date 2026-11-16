@@ -357,4 +357,10 @@
   ,"search_placeholder_description": "البحث حسب الوصف"
   ,"search_placeholder_folderPath": "البحث حسب مسار المجلد"
   ,"search_placeholder_ocr": "البحث حسب النص في الصور"
+  ,"search_mode_context": "السياق"
+  ,"search_placeholder_context": "صف ما تُظهره الصورة"
+  ,"search_mode_context_unavailable": "البحث الذكي متوقف على خادم Immich هذا، لذا لا يمكن استخدام السياق. سيُستخدم اسم الملف بدلاً منه."
+  ,"search_context_unavailable": "السياق غير متاح: رفض خادم Immich البحث رغم أن البحث الذكي قيد التشغيل. اختر وضع بحث آخر أو حاول مرة أخرى."
+  ,"search_more_error": "تعذّر تحميل المزيد من النتائج. ستبقى النتائج المعروضة حتى الآن."
+  ,"search_loading_more": "جارٍ تحميل المزيد من النتائج…"
 }

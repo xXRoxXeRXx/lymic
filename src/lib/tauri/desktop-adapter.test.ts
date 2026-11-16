@@ -218,12 +218,14 @@ describe("tauriDesktopAdapter", () => {
     await searchAdapter.getSearchFeatures();
     await searchAdapter.searchAssets({ text: "IMG", mode: "filename", filters: {} });
     await searchAdapter.searchAssets({ text: "scan", mode: "folderPath", filters: {} });
+    await searchAdapter.searchContextPage({ text: "dog", mode: "context", filters: {} }, 2);
 
     expect(invoke.mock.calls).toEqual([
       ["get_search_support"],
       ["get_search_features"],
       ["search_assets", { query: { text: "IMG", mode: "filename", filters: {} } }],
       ["search_assets", { query: { text: "scan", mode: "folderPath", filters: {} } }],
+      ["search_context_page", { query: { text: "dog", mode: "context", filters: {} }, page: 2 }],
     ]);
   });
 });

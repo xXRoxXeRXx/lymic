@@ -357,4 +357,10 @@
   ,"search_placeholder_description": "বিবরণ দিয়ে অনুসন্ধান"
   ,"search_placeholder_folderPath": "ফোল্ডারের পাথ দিয়ে অনুসন্ধান"
   ,"search_placeholder_ocr": "ছবির লেখা দিয়ে অনুসন্ধান"
+  ,"search_mode_context": "প্রসঙ্গ"
+  ,"search_placeholder_context": "ছবিতে কী দেখা যাচ্ছে তা লিখুন"
+  ,"search_mode_context_unavailable": "এই Immich সার্ভারে স্মার্ট সার্চ বন্ধ আছে, তাই প্রসঙ্গ ব্যবহার করা যাবে না। এর বদলে ফাইলের নাম ব্যবহার করা হবে।"
+  ,"search_context_unavailable": "প্রসঙ্গ পাওয়া যাচ্ছে না: স্মার্ট সার্চ চালু থাকা সত্ত্বেও Immich সার্ভার অনুসন্ধানটি প্রত্যাখ্যান করেছে। অন্য একটি অনুসন্ধান মোড বেছে নিন বা আবার চেষ্টা করুন।"
+  ,"search_more_error": "আরও ফলাফল লোড করা যায়নি। এ পর্যন্ত দেখানো ফলাফল থাকবে।"
+  ,"search_loading_more": "আরও ফলাফল লোড হচ্ছে…"
 }

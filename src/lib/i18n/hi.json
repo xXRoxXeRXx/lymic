@@ -357,4 +357,10 @@
   ,"search_placeholder_description": "विवरण से खोजें"
   ,"search_placeholder_folderPath": "फ़ोल्डर पथ से खोजें"
   ,"search_placeholder_ocr": "फ़ोटो में टेक्स्ट से खोजें"
+  ,"search_mode_context": "संदर्भ"
+  ,"search_placeholder_context": "बताएँ कि फ़ोटो में क्या दिख रहा है"
+  ,"search_mode_context_unavailable": "इस Immich सर्वर पर स्मार्ट सर्च बंद है, इसलिए संदर्भ का उपयोग नहीं किया जा सकता। इसके बजाय फ़ाइल नाम का उपयोग होगा।"
+  ,"search_context_unavailable": "संदर्भ उपलब्ध नहीं है: स्मार्ट सर्च चालू होने के बावजूद Immich सर्वर ने खोज अस्वीकार कर दी। कोई दूसरा खोज मोड चुनें या फिर से प्रयास करें।"
+  ,"search_more_error": "और परिणाम लोड नहीं हो सके। अब तक दिखाए गए परिणाम बने रहेंगे।"
+  ,"search_loading_more": "और परिणाम लोड हो रहे हैं…"
 }

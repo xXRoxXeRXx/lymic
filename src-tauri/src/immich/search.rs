@@ -8,16 +8,19 @@
 use super::client::ImmichClient;
 use super::response::{read_response_body_limited, request_failure_code};
 use super::timeline::{
-    group_album_timeline_assets, timeline_asset_from_response, AlbumTimeline, TimelineAssetResponse,
+    deserialize_next_page, group_album_timeline_assets, timeline_asset_from_response,
+    AlbumTimeline, TimelineAssetResponse,
 };
-use super::TimelineBucket;
-use reqwest::Method;
+use super::{TimelineAsset, TimelineBucket};
+use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, HashSet};
 
 /// The most matches a chronological Search loads (ADR-0009). A constant, not a setting.
 pub(crate) const SEARCH_RESULT_LIMIT: usize = 5_000;
+/// Context Search Results per page (ADR-0009); a constant, not a setting.
+const CONTEXT_PAGE_SIZE: usize = 100;
 /// Immich's largest metadata search page.
 const SEARCH_PAGE_SIZE: usize = 1_000;
 /// A page of 1 000 Remote Assets with EXIF data is larger than the default response limit.
@@ -58,6 +61,10 @@ pub(crate) enum SearchMode {
     FolderPath,
     /// Text recognized within the media; available only while the server's OCR feature is on.
     Ocr,
+    /// What a photo shows, matched by Immich's smart search and ordered by relevance (ADR-0009). Needs a
+    /// text: without one the Search runs as a chronological filters-only Search. Available only while the
+    /// server's Smart Search feature is on.
+    Context,
 }
 
 /// The Search Filters of a Search. Every filter is one optional field here and one line in
@@ -92,6 +99,15 @@ pub(crate) struct SearchTimeline {
     pub truncated: bool,
 }
 
+/// One page of Context Search Results in the order of relevance Immich returned them.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ContextSearchPage {
+    pub assets: Vec<TimelineAsset>,
+    /// The page to request next, or none when this was the last page.
+    pub next_page: Option<u64>,
+}
+
 /// Whether the connected Immich Server can answer a Search.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -123,6 +139,23 @@ struct SearchAssets {
     next_cursor: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct ContextSearchResponse {
+    assets: ContextSearchAssets,
+}
+
+#[derive(Deserialize)]
+struct ContextSearchAssets {
+    #[serde(default)]
+    items: Vec<TimelineAssetResponse>,
+    #[serde(
+        rename = "nextPage",
+        default,
+        deserialize_with = "deserialize_next_page"
+    )]
+    next_page: Option<u64>,
+}
+
 /// Escapes `\`, `%` and `_` so Immich's `like` matches them literally.
 fn escape_like(text: &str) -> String {
     let mut escaped = String::with_capacity(text.len());
@@ -135,24 +168,28 @@ fn escape_like(text: &str) -> String {
     escaped
 }
 
-/// The filter key and condition the text of a Search adds in `mode`.
-fn text_condition(mode: SearchMode, text: &str) -> (&'static str, Value) {
+/// The filter key and condition the text of a Search adds in `mode`. Context has none: its text is
+/// the `query` of a smart search, not a condition of the structured filter.
+fn text_condition(mode: SearchMode, text: &str) -> Option<(&'static str, Value)> {
     let contains = || json!({ "like": format!("%{}%", escape_like(text)) });
-    match mode {
+    Some(match mode {
         SearchMode::Filename => ("originalFileName", contains()),
         SearchMode::Description => ("description", contains()),
         SearchMode::FolderPath => ("originalPath", contains()),
         // Recognized text is matched by similarity, which has no wildcards to escape.
         SearchMode::Ocr => ("ocr", json!({ "matches": text })),
-    }
+        SearchMode::Context => return None,
+    })
 }
 
 /// Builds Immich's structured `filter` for a Search. No text means a filters-only Search.
 fn build_filter(query: &SearchQuery) -> Value {
     let mut filter = Map::new();
     let text = query.text.trim();
-    if !text.is_empty() {
-        let (key, condition) = text_condition(query.mode, text);
+    if let Some((key, condition)) = (!text.is_empty())
+        .then(|| text_condition(query.mode, text))
+        .flatten()
+    {
         filter.insert(key.to_string(), condition);
     }
     query.filters.apply(&mut filter);
@@ -161,6 +198,11 @@ fn build_filter(query: &SearchQuery) -> Value {
 
 fn invalid_response() -> String {
     "search_invalid_response".to_string()
+}
+
+/// A Search the frontend should never have sent (a Context text sent to the wrong endpoint).
+fn invalid_request() -> String {
+    "search_invalid_request".to_string()
 }
 
 impl ImmichClient {
@@ -220,6 +262,10 @@ impl ImmichClient {
     /// Runs a chronological Search: every page up to [`SEARCH_RESULT_LIMIT`] newest matches,
     /// grouped by local capture month. Any failed page fails the whole load.
     pub async fn search_assets(&self, query: &SearchQuery) -> Result<SearchTimeline, String> {
+        // A Context text is answered by `search_context_page`, never by the chronological Search.
+        if query.mode == SearchMode::Context && !query.text.trim().is_empty() {
+            return Err(invalid_request());
+        }
         let filter = build_filter(query);
         let mut cursor: Option<String> = None;
         let mut seen_cursors = HashSet::new();
@@ -289,10 +335,64 @@ impl ImmichClient {
     }
 }
 
+impl ImmichClient {
+    /// Runs one page of a Context Search: Immich's smart search with the text and the structured
+    /// filter, in the order of relevance. The caller pages with the `next_page` it is given.
+    pub async fn search_context_page(
+        &self,
+        query: &SearchQuery,
+        page: u64,
+    ) -> Result<ContextSearchPage, String> {
+        let text = query.text.trim();
+        if query.mode != SearchMode::Context || text.is_empty() {
+            return Err(invalid_request());
+        }
+        let body = json!({
+            "query": text,
+            "filter": build_filter(query),
+            "page": page,
+            "size": CONTEXT_PAGE_SIZE,
+            "withExif": true,
+        });
+        let response = self
+            .request(Method::POST, "search/smart")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| "search_unavailable".to_string())?;
+        let status = response.status();
+        if status == StatusCode::BAD_REQUEST {
+            // The server rejects smart search although its features reported it on.
+            return Err("search_context_unavailable".to_string());
+        }
+        if !status.is_success() {
+            return Err(request_failure_code("search", status, SEARCH_PERMISSION));
+        }
+        let body = read_response_body_limited(response, MAX_SEARCH_RESPONSE_BYTES)
+            .await
+            .map_err(|_| invalid_response())?;
+        let payload: ContextSearchResponse =
+            serde_json::from_slice(&body).map_err(|_| invalid_response())?;
+        if payload.assets.next_page.is_some_and(|next| next <= page) {
+            return Err(invalid_response());
+        }
+        Ok(ContextSearchPage {
+            assets: payload
+                .assets
+                .items
+                .into_iter()
+                .map(|asset| timeline_asset_from_response(asset, false))
+                .collect(),
+            next_page: payload.assets.next_page,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        SearchFeatures, SearchFilters, SearchMode, SearchQuery, SearchSupport, SearchTimeline,
+        ContextSearchPage, SearchFeatures, SearchFilters, SearchMode, SearchQuery, SearchSupport,
+        SearchTimeline,
     };
     use crate::immich::test_support::{serve_once, serve_pages, test_client};
     use serde_json::{json, Value};
@@ -477,6 +577,7 @@ mod tests {
             ("description", SearchMode::Description),
             ("folderPath", SearchMode::FolderPath),
             ("ocr", SearchMode::Ocr),
+            ("context", SearchMode::Context),
         ] {
             let query: SearchQuery =
                 serde_json::from_str(&format!(r#"{{"text":"x","mode":"{name}"}}"#)).unwrap();
@@ -788,5 +889,199 @@ mod tests {
         let query: SearchQuery =
             serde_json::from_str(r#"{"text":"IMG","mode":"filename","filters":{}}"#).unwrap();
         assert_eq!(query, filename_query("IMG"));
+    }
+
+    #[tokio::test]
+    async fn a_context_search_without_text_runs_as_a_chronological_filters_only_search() {
+        let (result, requests) = search(
+            vec![(
+                "200 OK",
+                page(vec![asset("a", "2025-03-01T10:00:00.000Z")], None),
+            )],
+            mode_query(SearchMode::Context, "  "),
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let request = &requests[0];
+        assert!(request.starts_with("POST /api/search/metadata HTTP/1.1"));
+        assert_eq!(json_body(request)["filter"], json!({}));
+        assert!(json_body(request).get("query").is_none());
+    }
+
+    #[tokio::test]
+    async fn a_context_text_is_never_sent_to_the_chronological_search() {
+        let (result, requests) = search(Vec::new(), mode_query(SearchMode::Context, "dog")).await;
+
+        assert_eq!(result.unwrap_err(), "search_invalid_request");
+        assert!(requests.is_empty());
+    }
+
+    fn smart_page(items: Vec<Value>, next_page: Option<&str>) -> String {
+        json!({ "assets": { "items": items, "nextPage": next_page } }).to_string()
+    }
+
+    /// Runs one smart search page against the given canned response.
+    async fn context_page(
+        status: &'static str,
+        body: String,
+        query: SearchQuery,
+        page: u64,
+    ) -> (Result<ContextSearchPage, String>, Vec<String>) {
+        let (url, server) = serve_pages(vec![(status, body)]).await;
+        let result = tokio::time::timeout(
+            Duration::from_secs(30),
+            test_client(url, "test-key").search_context_page(&query, page),
+        )
+        .await
+        .expect("a Context Search page is one request");
+        (result, server.await.unwrap())
+    }
+
+    #[tokio::test]
+    async fn a_context_search_posts_the_text_and_the_structured_filter_to_smart_search() {
+        let body = smart_page(
+            vec![
+                asset("best", "2025-01-01T10:00:00.000Z"),
+                asset("second", "2025-03-01T10:00:00.000Z"),
+                json!({ "id": "undated", "type": "VIDEO", "exifInfo": {} }),
+            ],
+            Some("2"),
+        );
+        let (result, requests) = context_page(
+            "200 OK",
+            body,
+            mode_query(SearchMode::Context, " dog on a beach "),
+            1,
+        )
+        .await;
+
+        let request = &requests[0];
+        assert!(request.starts_with("POST /api/search/smart HTTP/1.1"));
+        assert!(request.contains("x-api-key: test-key"));
+        assert_eq!(
+            json_body(request),
+            json!({
+                "query": "dog on a beach",
+                "filter": {},
+                "page": 1,
+                "size": 100,
+                "withExif": true,
+            })
+        );
+        let page = result.unwrap();
+        // The server's relevance order is kept and nothing needs a capture time.
+        let ids: Vec<_> = page.assets.iter().map(|asset| asset.id.as_str()).collect();
+        assert_eq!(ids, vec!["best", "second", "undated"]);
+        assert_eq!(page.next_page, Some(2));
+    }
+
+    #[tokio::test]
+    async fn a_later_context_page_asks_for_the_page_the_server_announced() {
+        let (result, requests) = context_page(
+            "200 OK",
+            smart_page(vec![asset("c", "2025-03-01T10:00:00.000Z")], None),
+            mode_query(SearchMode::Context, "dog"),
+            3,
+        )
+        .await;
+
+        assert_eq!(json_body(&requests[0])["page"], json!(3));
+        assert_eq!(result.unwrap().next_page, None);
+    }
+
+    #[tokio::test]
+    async fn a_context_search_needs_a_text() {
+        let (result, requests) = context_page(
+            "200 OK",
+            smart_page(vec![], None),
+            mode_query(SearchMode::Context, "  "),
+            1,
+        )
+        .await;
+
+        assert_eq!(result.unwrap_err(), "search_invalid_request");
+        assert!(requests.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_next_page_that_does_not_advance_is_rejected_by_a_context_search() {
+        let (result, _) = context_page(
+            "200 OK",
+            smart_page(vec![asset("a", "2025-03-01T10:00:00.000Z")], Some("2")),
+            mode_query(SearchMode::Context, "dog"),
+            2,
+        )
+        .await;
+
+        assert_eq!(result.unwrap_err(), "search_invalid_response");
+    }
+
+    #[tokio::test]
+    async fn context_search_failures_become_credential_free_codes_without_the_response_body() {
+        let cases = [
+            ("401 Unauthorized", "search_authentication_required"),
+            ("403 Forbidden", "search_permission_denied:asset.read"),
+            ("500 Internal Server Error", "search_unavailable"),
+            // The server rejects smart search although the feature was reported on.
+            ("400 Bad Request", "search_context_unavailable"),
+        ];
+        for (status, expected) in cases {
+            let (result, _) = context_page(
+                status,
+                "secret-key".into(),
+                mode_query(SearchMode::Context, "dog"),
+                1,
+            )
+            .await;
+            assert_eq!(result.unwrap_err(), expected, "{status}");
+        }
+        let (result, _) = context_page(
+            "200 OK",
+            "{secret".into(),
+            mode_query(SearchMode::Context, "dog"),
+            1,
+        )
+        .await;
+        assert_eq!(result.unwrap_err(), "search_invalid_response");
+    }
+
+    #[tokio::test]
+    async fn an_unreachable_server_is_unavailable_for_a_context_search() {
+        let (url, server) = serve_pages(Vec::<(String, String)>::new()).await;
+        server.await.unwrap();
+        let result = test_client(url, "test-key")
+            .search_context_page(&mode_query(SearchMode::Context, "dog"), 1)
+            .await;
+
+        assert_eq!(result.unwrap_err(), "search_unavailable");
+    }
+
+    #[tokio::test]
+    async fn a_context_page_larger_than_the_default_response_limit_is_accepted() {
+        let padding = "x".repeat(2 * 1024 * 1024);
+        let mut big = asset("a", "2025-03-01T10:00:00.000Z");
+        big["originalFileName"] = json!(padding);
+        let (result, _) = context_page(
+            "200 OK",
+            smart_page(vec![big], None),
+            mode_query(SearchMode::Context, "dog"),
+            1,
+        )
+        .await;
+
+        assert_eq!(result.unwrap().assets.len(), 1);
+    }
+
+    #[test]
+    fn a_context_page_serializes_in_camel_case() {
+        let page = ContextSearchPage {
+            assets: vec![],
+            next_page: Some(2),
+        };
+        assert_eq!(
+            serde_json::to_string(&page).unwrap(),
+            r#"{"assets":[],"nextPage":2}"#
+        );
     }
 }

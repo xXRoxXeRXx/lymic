@@ -357,4 +357,10 @@
   ,"search_placeholder_description": "按描述搜索"
   ,"search_placeholder_folderPath": "按文件夹路径搜索"
   ,"search_placeholder_ocr": "按照片中的文字搜索"
+  ,"search_mode_context": "上下文"
+  ,"search_placeholder_context": "描述照片中的内容"
+  ,"search_mode_context_unavailable": "此 Immich 服务器已关闭智能搜索，因此无法使用“上下文”。将改用“文件名”。"
+  ,"search_context_unavailable": "“上下文”不可用：虽然智能搜索已开启，Immich 服务器仍拒绝了该搜索。请选择其他搜索模式或重试。"
+  ,"search_more_error": "无法加载更多结果。已显示的结果会保留。"
+  ,"search_loading_more": "正在加载更多结果…"
 }
