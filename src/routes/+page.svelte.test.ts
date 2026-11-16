@@ -3499,4 +3499,72 @@ describe("Search", () => {
 
     expect(await screen.findByText("Showing only the newest 5,000 matches. Narrow your search to see the rest.")).toBeInTheDocument();
   });
+
+  describe("Search Mode", () => {
+    const openOptions = async () => {
+      await fireEvent.click(await screen.findByRole("button", { name: "Search options" }));
+      return screen.findByRole("group", { name: "Search mode" });
+    };
+
+    it("offers Filename, Description, Folder Path and OCR as one exclusive choice that starts on Filename", async () => {
+      renderAuthenticatedPage({ get_search_features: async () => ({ smartSearch: true, ocr: true }) });
+
+      const group = await openOptions();
+
+      const radios = within(group).getAllByRole("radio");
+      expect(radios.map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(["Filename", "Description", "Folder Path", "OCR"]);
+      expect(within(group).getByRole("radio", { name: "Filename" })).toBeChecked();
+      await fireEvent.click(within(group).getByRole("radio", { name: "Folder Path" }));
+      expect(within(group).getByRole("radio", { name: "Folder Path" })).toBeChecked();
+      expect(within(group).getByRole("radio", { name: "Filename" })).not.toBeChecked();
+      expect(within(group).getByRole("radio", { name: "OCR" })).toBeEnabled();
+    });
+
+    it("searches in the chosen mode, with the features read before the first Search", async () => {
+      renderAuthenticatedPage({
+        get_search_features: async () => ({ smartSearch: true, ocr: true }),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      await fireEvent.click(within(group).getByRole("radio", { name: "Description" }));
+      await search("sunset");
+
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "sunset", mode: "description", filters: {} } });
+      const calls = tauri.invoke.mock.calls.map(([command]) => command);
+      expect(calls.filter((command) => command === "get_search_features")).toHaveLength(1);
+      expect(calls.indexOf("get_search_features")).toBeLessThan(calls.indexOf("search_assets"));
+      expect(screen.getByRole("searchbox", { name: "Search your Immich library" })).toHaveAttribute("placeholder", "Search by description");
+    });
+
+    it("disables OCR with an explanation when the server has OCR switched off, and Filename keeps working", async () => {
+      renderAuthenticatedPage({
+        get_search_features: async () => ({ smartSearch: true, ocr: false }),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      const ocr = await within(group).findByRole("radio", { name: "OCR" });
+      await waitFor(() => expect(ocr).toBeDisabled());
+      expect(ocr).toHaveAccessibleDescription("OCR is switched off on this Immich server, so text inside photos cannot be searched.");
+      await search("IMG");
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG", mode: "filename", filters: {} } });
+    });
+
+    it("keeps Filename working when the server features cannot be read", async () => {
+      renderAuthenticatedPage({
+        get_search_features: () => Promise.reject("search_unavailable"),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      expect(await within(group).findByText("The server's features could not be read. OCR may not be available.")).toBeInTheDocument();
+      await search("IMG");
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG", mode: "filename", filters: {} } });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
 });
