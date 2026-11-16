@@ -478,6 +478,34 @@ impl ImmichClient {
         )
         .await
     }
+
+    /// Timeline buckets of the user's Trashed Assets (filter `isTrashed=true`). The parameter is
+    /// not verified against a live Immich server.
+    pub async fn get_trash_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
+        self.fetch_timeline_buckets_with_query(
+            &[("size", "MONTH"), ("isTrashed", "true")],
+            "trash timeline buckets",
+            None,
+        )
+        .await
+    }
+
+    pub async fn get_trash_timeline_bucket_assets(
+        &self,
+        time_bucket: &str,
+    ) -> Result<Vec<TimelineAsset>, String> {
+        self.fetch_timeline_bucket_assets_with_query(
+            &[
+                ("size", "MONTH"),
+                ("timeBucket", time_bucket),
+                ("isTrashed", "true"),
+            ],
+            "trash timeline bucket",
+            false,
+            None,
+        )
+        .await
+    }
 }
 
 fn parse_timeline_bucket_assets(
@@ -1471,5 +1499,126 @@ mod tests {
         server.await.unwrap();
         assert!(error.starts_with("Invalid timeline bucket response:"));
         assert!(!error.contains("arch-secret-key"));
+    }
+
+    #[tokio::test]
+    async fn fetches_trash_timeline_buckets_and_assets_with_the_trashed_filter() {
+        let (url, server) = serve_pages(vec![
+            (
+                "200 OK",
+                r#"[{"timeBucket":"2025-02-01T00:00:00.000Z","count":1},{"timeBucket":"2025-03-01T00:00:00.000Z","count":2}]"#,
+            ),
+            (
+                "200 OK",
+                r#"{"id":["trash-photo","trash-video"],"isImage":[true,false],"isFavorite":[null,true],"ratio":[1.5,1.7778],"duration":[null,"0:00:42.000"],"fileCreatedAt":["2025-03-10T10:00:00.000Z","2025-03-05T10:00:00.000Z"]}"#,
+            ),
+            (
+                "200 OK",
+                r#"[{"id":"legacy-trash","type":"IMAGE","fileCreatedAt":"2025-02-14T10:00:00.000Z"}]"#,
+            ),
+        ])
+        .await;
+        let client = test_client(url, "test-key");
+
+        let buckets = client.get_trash_timeline_buckets().await.unwrap();
+        assert_eq!(
+            buckets,
+            vec![
+                super::TimelineBucket {
+                    time_bucket: "2025-03-01T00:00:00.000Z".to_string(),
+                    count: 2,
+                },
+                super::TimelineBucket {
+                    time_bucket: "2025-02-01T00:00:00.000Z".to_string(),
+                    count: 1,
+                },
+            ]
+        );
+        let march = client
+            .get_trash_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap();
+        assert_eq!(march.len(), 2);
+        assert_eq!(march[0].id, "trash-photo");
+        assert_eq!(march[0].r#type, "IMAGE");
+        assert!(!march[0].is_favorite);
+        assert_eq!(march[1].id, "trash-video");
+        assert_eq!(march[1].r#type, "VIDEO");
+        assert_eq!(march[1].duration, Some(42));
+        assert!(march[1].is_favorite);
+        let february = client
+            .get_trash_timeline_bucket_assets("2025-02-01T00:00:00.000Z")
+            .await
+            .unwrap();
+        assert_eq!(february.len(), 1);
+        assert_eq!(february[0].id, "legacy-trash");
+        assert!(!february[0].is_favorite);
+
+        let requests = server.await.unwrap();
+        assert!(
+            requests[0].starts_with("GET /api/timeline/buckets?size=MONTH&isTrashed=true HTTP/1.1")
+        );
+        assert!(requests[1].starts_with(
+            "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&isTrashed=true HTTP/1.1"
+        ));
+        assert!(requests[2].starts_with(
+            "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-02-01T00%3A00%3A00.000Z&isTrashed=true HTTP/1.1"
+        ));
+        for request in &requests {
+            assert!(request.contains("x-api-key: test-key"));
+            assert!(!request.contains("isFavorite"));
+            assert!(!request.contains("visibility"));
+            assert!(!request.contains("isArchived"));
+            assert!(!request.contains("withPartners"));
+        }
+    }
+
+    #[tokio::test]
+    async fn classifies_trash_timeline_failures_without_leaking_body_or_api_key() {
+        for status in [
+            "401 Unauthorized",
+            "403 Forbidden",
+            "500 Internal Server Error",
+        ] {
+            let (url, server) = serve_pages(vec![(status, "internal secret stacktrace")]).await;
+            let error = test_client(url, "trash-secret-key")
+                .get_trash_timeline_buckets()
+                .await
+                .unwrap_err();
+            server.await.unwrap();
+            assert!(error.starts_with("Failed to fetch trash timeline buckets:"));
+            assert!(error.contains(&status[..3]), "{error}");
+            assert!(!error.contains("internal secret stacktrace"));
+            assert!(!error.contains("trash-secret-key"));
+
+            let (url, server) = serve_pages(vec![(status, "internal secret stacktrace")]).await;
+            let error = test_client(url, "trash-secret-key")
+                .get_trash_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+                .await
+                .unwrap_err();
+            server.await.unwrap();
+            assert!(error.starts_with("Failed to fetch trash timeline bucket:"));
+            assert!(error.contains(&status[..3]), "{error}");
+            assert!(!error.contains("internal secret stacktrace"));
+            assert!(!error.contains("trash-secret-key"));
+        }
+
+        let (url, server) = serve_pages(vec![("200 OK", "{not-json")]).await;
+        let error = test_client(url, "trash-secret-key")
+            .get_trash_timeline_buckets()
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+        assert!(error.starts_with("Invalid trash timeline buckets response:"));
+        assert!(!error.contains("trash-secret-key"));
+
+        let (url, server) = serve_pages(vec![("200 OK", "{not-json")]).await;
+        let error = test_client(url, "trash-secret-key")
+            .get_trash_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+        assert!(error.starts_with("Invalid timeline bucket response:"));
+        assert!(!error.contains("trash-secret-key"));
     }
 }

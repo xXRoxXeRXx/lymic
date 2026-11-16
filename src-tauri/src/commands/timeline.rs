@@ -149,6 +149,24 @@ pub(crate) async fn get_archive_timeline_bucket_assets(
 }
 
 #[tauri::command]
+pub(crate) async fn get_trash_timeline_buckets() -> Result<Vec<TimelineBucket>, String> {
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.get_trash_timeline_buckets().await
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_trash_timeline_bucket_assets(
+    time_bucket: String,
+) -> Result<Vec<TimelineAsset>, String> {
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.get_trash_timeline_bucket_assets(&time_bucket).await
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn get_person_timeline_buckets(
     person_id: String,
 ) -> Result<Vec<TimelineBucket>, String> {

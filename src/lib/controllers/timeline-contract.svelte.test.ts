@@ -3,6 +3,7 @@ import type { TimelineAsset, TimelineBucket } from "../contracts";
 import { createAlbumTimelineController } from "./album-timeline-controller.svelte";
 import { createPlaceTimelineController } from "./place-timeline-controller.svelte";
 import { createArchiveTimelineController } from "./archive-timeline-controller.svelte";
+import { createTrashTimelineController } from "./trash-timeline-controller.svelte";
 import { createFavoritesTimelineController } from "./favorites-timeline-controller.svelte";
 import { createPersonTimelineController } from "./person-timeline-controller.svelte";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
@@ -37,6 +38,10 @@ const timelines: Array<[string, () => TimelineController]> = [
   ["Archive Timeline", () => createArchiveTimelineController({
     getArchiveTimelineBuckets: bucketSource.getBuckets,
     getArchiveTimelineBucketAssets: bucketSource.getBucketAssets,
+  })],
+  ["Trash Timeline", () => createTrashTimelineController({
+    getTrashTimelineBuckets: bucketSource.getBuckets,
+    getTrashTimelineBucketAssets: bucketSource.getBucketAssets,
   })],
   ["Album Timeline", () => createAlbumTimelineController({
     getAlbumTimeline: async () => ({ buckets, assetsByBucket }),

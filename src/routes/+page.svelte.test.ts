@@ -87,6 +87,10 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve([]);
       case "get_archive_timeline_bucket_assets":
         return Promise.resolve([]);
+      case "get_trash_timeline_buckets":
+        return Promise.resolve([]);
+      case "get_trash_timeline_bucket_assets":
+        return Promise.resolve([]);
       case "get_album_timeline":
         return Promise.resolve({ buckets: [], assetsByBucket: {} });
       case "get_places":
@@ -2887,6 +2891,198 @@ describe("Archive Timeline", () => {
 
     await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Loading archive…");
+    expect(screen.queryByText("March 2025")).not.toBeInTheDocument();
+  });
+});
+
+
+describe("Trash Timeline", () => {
+  function stubImmediateIntersectionObserver() {
+    vi.stubGlobal("ResizeObserver", class {
+      observe() {}
+      disconnect() {}
+    });
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+      disconnect() {}
+    });
+  }
+
+  const march = "2025-03-01T00:00:00.000Z";
+  const december = "2024-12-01T00:00:00.000Z";
+  const trashedAsset = (id: string, type: "IMAGE" | "VIDEO" = "IMAGE") => ({
+    id, width: 1600, height: 1200, type, takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: type === "VIDEO" ? 65 : null, isFavorite: false,
+  });
+  const assetDetails = {
+    originalFileName: "trashed.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  };
+  const retentionHint = "Immich permanently removes items from the trash after the retention period configured on the server.";
+
+  it("lists Trash directly after Archive in the navigation with an accessible name and no count badge", async () => {
+    renderAuthenticatedPage();
+
+    const archive = await screen.findByRole("button", { name: "Archive" });
+    const trash = screen.getByRole("button", { name: "Trash" });
+    expect(archive.nextElementSibling).toBe(trash);
+    expect(trash).toHaveTextContent("Trash");
+    expect(trash).not.toHaveTextContent(/\d/);
+  });
+
+  it("opens the Trash Timeline with buckets, scrubber, thumbnails and the retention hint, and offers no deletion action", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_trash_timeline_buckets: async () => [{ timeBucket: march, count: 2 }, { timeBucket: december, count: 1 }],
+      get_trash_timeline_bucket_assets: async (args) => {
+        const { timeBucket } = args as { timeBucket: string };
+        return timeBucket === march ? [trashedAsset("trash-photo"), trashedAsset("trash-video", "VIDEO")] : [trashedAsset("trash-photo-2")];
+      },
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+
+    expect(await screen.findByRole("heading", { name: "Trash" })).toBeInTheDocument();
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByText("December 2024")).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_trash_timeline_buckets");
+    expect(tauri.invoke).toHaveBeenCalledWith("get_trash_timeline_bucket_assets", { timeBucket: march });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_trash_timeline_bucket_assets", { timeBucket: december });
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_archive_timeline_buckets");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_favorites_timeline_buckets");
+    expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
+    expect(screen.getByText(retentionHint)).toBeInTheDocument();
+    expect(screen.getByText(retentionHint).textContent).not.toMatch(/\d/);
+    expect(screen.queryByRole("button", { name: /delete|empty trash|move to trash|restore/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Explore" })).not.toBeInTheDocument();
+  });
+
+  it("offers only Download from the Lightbox and from multi-selection, without Favorite or Add to album", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_trash_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
+      get_trash_timeline_bucket_assets: async () => [trashedAsset("trash-1"), trashedAsset("trash-2")],
+      get_albums: async () => [{ id: "album-1", albumName: "Holiday" }],
+      get_asset_details: async () => assetDetails,
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+    await fireEvent.click((await screen.findAllByRole("button", { name: "Open photo" }))[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+
+    expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+    expect(within(lightbox).queryByRole("button", { name: /add to favorites|remove from favorites/i })).not.toBeInTheDocument();
+    expect(within(lightbox).queryByRole("button", { name: "Add to album" })).not.toBeInTheDocument();
+    expect(within(lightbox).queryByRole("button", { name: /delete|trash/i })).not.toBeInTheDocument();
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+
+    await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
+    expect(await screen.findByText("1 selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add to favorites|remove from favorites/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add to album" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /delete|move to trash|empty trash/i })).not.toBeInTheDocument();
+  });
+
+  it("refreshes on every entry from another view and does nothing when already open", async () => {
+    const getTrashBuckets = vi.fn()
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }, { timeBucket: december, count: 1 }])
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
+    renderAuthenticatedPage({ get_trash_timeline_buckets: getTrashBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+    expect(await screen.findByText("December 2024")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Trash" }));
+    expect(getTrashBuckets).toHaveBeenCalledTimes(1);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Trash" }));
+    await waitFor(() => {
+      expect(getTrashBuckets).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText("December 2024")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows loading, then the empty state when the trash is empty", async () => {
+    let resolveBuckets!: (value: unknown) => void;
+    renderAuthenticatedPage({ get_trash_timeline_buckets: () => new Promise((resolve) => { resolveBuckets = resolve; }) });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading trash…");
+    expect(screen.queryByText("Your trash is empty.")).not.toBeInTheDocument();
+
+    resolveBuckets([]);
+    expect(await screen.findByText("Your trash is empty.")).toHaveAttribute("role", "status");
+    expect(screen.queryByText("Loading trash…")).not.toBeInTheDocument();
+  });
+
+  it("shows an error with a retry that reloads the trash, including when Immich rejects the trashed filter", async () => {
+    const getTrashBuckets = vi.fn()
+      .mockRejectedValueOnce("Failed to fetch trash timeline buckets: 400 Bad Request")
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
+    renderAuthenticatedPage({ get_trash_timeline_buckets: getTrashBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The trash could not be loaded.");
+    expect(screen.queryByText("Your trash is empty.")).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Retry timeline connection" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(getTrashBuckets).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps already shown Trashed Assets visible and announces offline when a refresh fails", async () => {
+    const getTrashBuckets = vi.fn()
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
+      .mockRejectedValueOnce(new Error("offline"));
+    renderAuthenticatedPage({ get_trash_timeline_buckets: getTrashBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Refresh timeline" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Trash is offline. Showing cached trash.");
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
+  });
+
+  it("resets the Trash Timeline when leaving the view so a stale list is never shown on return", async () => {
+    const getTrashBuckets = vi.fn()
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
+      .mockImplementationOnce(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_trash_timeline_buckets: getTrashBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Trash" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading trash…");
+    expect(screen.queryByText("March 2025")).not.toBeInTheDocument();
+  });
+
+  it("clears the Trash Timeline on logout so the next session does not inherit it", async () => {
+    const getTrashBuckets = vi.fn()
+      .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
+      .mockImplementationOnce(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_trash_timeline_buckets: getTrashBuckets });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+    expect(await screen.findByRole("heading", { name: "Login" })).toBeInTheDocument();
+    await fireEvent.input(screen.getByLabelText("Server URL"), { target: { value: "https://immich.example" } });
+    await fireEvent.input(screen.getByLabelText("API Key"), { target: { value: "secret-key" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Login" }));
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading trash…");
     expect(screen.queryByText("March 2025")).not.toBeInTheDocument();
   });
 });

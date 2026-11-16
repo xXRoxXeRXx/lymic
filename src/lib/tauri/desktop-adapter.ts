@@ -95,6 +95,11 @@ export interface ArchiveTimelineDesktopAdapter {
   getArchiveTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
 }
 
+export interface TrashTimelineDesktopAdapter {
+  getTrashTimelineBuckets(): Promise<TimelineBucket[]>;
+  getTrashTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
+}
+
 export interface AssetDesktopAdapter {
   getAssetDetails(assetId: string): Promise<AssetDetails>;
   setAssetFavorite(assetId: string, isFavorite: boolean): Promise<void>;
@@ -174,6 +179,7 @@ export interface DesktopAdapter
     TimelineDesktopAdapter,
     FavoritesTimelineDesktopAdapter,
     ArchiveTimelineDesktopAdapter,
+    TrashTimelineDesktopAdapter,
     MapDesktopAdapter,
     AssetDesktopAdapter,
     AlbumTimelineDesktopAdapter,
@@ -230,6 +236,8 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getFavoritesTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_favorites_timeline_bucket_assets", { timeBucket }),
   getArchiveTimelineBuckets: () => invoke<TimelineBucket[]>("get_archive_timeline_buckets"),
   getArchiveTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_archive_timeline_bucket_assets", { timeBucket }),
+  getTrashTimelineBuckets: () => invoke<TimelineBucket[]>("get_trash_timeline_buckets"),
+  getTrashTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_trash_timeline_bucket_assets", { timeBucket }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),
   setAssetFavorite: (assetId, isFavorite) => invoke<void>("set_asset_favorite", { assetId, isFavorite }),
   chooseDownloadDestination: (originalFileName) => save({ defaultPath: originalFileName }),

@@ -35,6 +35,10 @@
     /** Shows a failed load as an error alert with Retry, even over cached assets, instead of the offline status. */
     failureIsError?: boolean;
     ariaLabel?: string;
+    /** Fixed explanatory text shown above the assets. */
+    hintMessage?: string;
+    /** Offers only viewing and Download: no Favorite and no Add to Album in the Lightbox or multi-selection. */
+    downloadOnly?: boolean;
   }
 
   let {
@@ -57,7 +61,10 @@
     offlineMessage = "",
     failureIsError = false,
     ariaLabel = "",
+    hintMessage = "",
+    downloadOnly = false,
   }: Props = $props();
+  const targetAlbumCatalogue = $derived(downloadOnly ? undefined : albumCatalogue);
   const showLoadError = $derived(!timeline.isLoading && (timeline.hasInitialLoadError || (failureIsError && timeline.isOffline)));
   const numberLocale = $derived(toBcp47Locale($locale));
   const scrubberIndex = $derived(buildTimelineScrubberIndex(timeline.buckets));
@@ -339,7 +346,7 @@
   }
 
   function openAddSelectionToAlbum() {
-    if (selectionCount === 0 || !albumCatalogue || isSelectionActionBusy) return;
+    if (selectionCount === 0 || !targetAlbumCatalogue || isSelectionActionBusy) return;
     selectionResult = null;
     addToAlbumError = "";
     isAddToAlbumOpen = true;
@@ -433,13 +440,13 @@
       <span class="min-w-0 truncate font-medium sm:mr-auto">{$t("timeline_selection_count", { values: { count: selectionCount.toLocaleString(numberLocale) } })}</span>
       <div class="col-span-2 flex flex-wrap justify-end gap-1 border-t border-blue-200 pt-2 dark:border-blue-900/70 sm:contents sm:border-0 sm:pt-0">
         <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_download")} aria-label={$t("timeline_selection_download")} disabled={isSelectionActionBusy} onclick={() => void downloadSelection()}><Download class="h-4 w-4 {isDownloadingSelection ? 'animate-spin' : ''}" /></button>
-        {#if hasNonFavoriteSelection}
+        {#if !downloadOnly && hasNonFavoriteSelection}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_favorite")} aria-label={$t("timeline_add_favorite")} disabled={isSelectionActionBusy} onclick={() => void applyFavoriteToSelection(true)}><Heart class="h-4 w-4" /></button>
         {/if}
-        {#if hasFavoriteSelection}
+        {#if !downloadOnly && hasFavoriteSelection}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_remove_favorite")} aria-label={$t("timeline_remove_favorite")} disabled={isSelectionActionBusy} onclick={() => void applyFavoriteToSelection(false)}><HeartOff class="h-4 w-4" /></button>
         {/if}
-        {#if albumCatalogue}
+        {#if targetAlbumCatalogue}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isSelectionActionBusy} onclick={openAddSelectionToAlbum}><Album class="h-4 w-4" /></button>
         {/if}
         <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_finish")} aria-label={$t("timeline_selection_finish")} disabled={isSelectionActionBusy} onclick={clearSelection}><X class="h-4 w-4" /></button>
@@ -466,6 +473,9 @@
     <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {selectionResult.succeeded === 0 ? 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'}" role={selectionResult.succeeded === 0 ? "alert" : "status"}>
       {$t(resultKey, { values: { count: selectionResult.total.toLocaleString(numberLocale), succeeded: selectionResult.succeeded.toLocaleString(numberLocale) } })}
     </p>
+  {/if}
+  {#if hintMessage}
+    <p class="mb-3 mr-16 shrink-0 text-sm text-slate-500 dark:text-zinc-400">{hintMessage}</p>
   {/if}
   <div bind:this={viewport} use:measureViewport class="min-h-0 flex-1 overflow-y-auto pr-16 scrollbar-none" aria-label={ariaLabel || $t("timeline_title")} onscroll={syncActiveBucket}>
     {#if timeline.isLoading && loadingMessage}
@@ -555,12 +565,12 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} setAssetFavorite={favorites.updateOne} {albumCatalogue} {addAssetsToAlbum} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} {addAssetsToAlbum} allowFavorite={!downloadOnly} />
 {/if}
-{#if albumCatalogue}
+{#if targetAlbumCatalogue}
   <AddToAlbumModal
     isOpen={isAddToAlbumOpen}
-    catalogue={albumCatalogue}
+    catalogue={targetAlbumCatalogue}
     isAssigning={isAddingToAlbum}
     assignmentError={addToAlbumError}
     onConfirm={(albumId) => void assignSelectedAssetToAlbum(albumId)}
