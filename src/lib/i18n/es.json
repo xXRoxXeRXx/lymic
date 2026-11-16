@@ -308,6 +308,7 @@
   ,"trash_restore_success": "{count} restaurados en tu biblioteca de Immich."
   ,"trash_restore_partial": "No se pudieron restaurar {failed} de {count}. Siguen seleccionados para que puedas reintentarlo."
   ,"trash_restore_failed": "No se pudo restaurar. Inténtalo de nuevo."
+  ,"trash_restore_none": "No se pudieron restaurar {failed} de {count}. Inténtalo de nuevo."
   ,"trash_restore_permission": "Se rechazó la restauración. Concede a la clave de API el permiso asset.delete."
   ,"explore_title": "Explorar"
   ,"explore_view_all": "Ver todo"

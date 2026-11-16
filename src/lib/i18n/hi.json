@@ -308,6 +308,7 @@
   ,"trash_restore_success": "{count} आइटम आपकी Immich लाइब्रेरी में पुनर्स्थापित किए गए।"
   ,"trash_restore_partial": "{count} में से {failed} आइटम पुनर्स्थापित नहीं हो सके। वे चयनित रहेंगे ताकि आप दोबारा प्रयास कर सकें।"
   ,"trash_restore_failed": "पुनर्स्थापित नहीं किया जा सका। कृपया फिर से प्रयास करें।"
+  ,"trash_restore_none": "{count} में से {failed} आइटम पुनर्स्थापित नहीं हो सके। कृपया फिर से प्रयास करें।"
   ,"trash_restore_permission": "पुनर्स्थापना अस्वीकार कर दी गई। API कुंजी को asset.delete अनुमति दें।"
   ,"explore_title": "एक्सप्लोर"
   ,"explore_view_all": "सभी देखें"

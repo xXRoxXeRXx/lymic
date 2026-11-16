@@ -574,7 +574,7 @@
           <TimelineView
             timeline={trash}
             {...sharedTimelineProps}
-            downloadOnly={true}
+            allowFavoriteAndAlbum={false}
             restoreTrashedAssets={desktop.restoreTrashedAssets}
             ariaLabel={$t("trash_title")}
             loadingMessage={$t("trash_loading")}

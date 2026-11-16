@@ -215,6 +215,7 @@ describe('i18n catalogs', () => {
       trash_restore_success: ['{count}'],
       trash_restore_partial: ['{failed}', '{count}'],
       trash_restore_failed: [],
+      trash_restore_none: ['{failed}', '{count}'],
       trash_restore_permission: [],
     };
     for (const [localeCode, translations] of Object.entries(catalog)) {
