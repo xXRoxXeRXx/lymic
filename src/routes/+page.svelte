@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon, Compass, Archive } from "lucide-svelte";
+  import { onMount, untrack } from "svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon, Compass, Archive, Trash2 } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
@@ -96,6 +96,7 @@
       case "explore": return $t("explore_title");
       case "favorites": return $t("favorites_title");
       case "archive": return $t("archive_title");
+      case "trash": return $t("trash_title");
       case "map": return $t("map_title");
       case "people": return $t("people_title");
       case "places": return $t("places_all_title");
@@ -136,6 +137,24 @@
     selectedAlbum = null;
   }
 
+  // Favorites, Archive and Trash reload every time they open. The Photo Timeline keeps its cache, so a Restore
+  // marks it stale and the next visit to Photos refreshes it once.
+  let photosStale = false;
+
+  function openPhotos() {
+    if (currentView === "photos") return;
+    currentView = "photos";
+    if (!photosStale) return;
+    photosStale = false;
+    void timeline.refresh();
+  }
+
+  async function restoreTrashedAssets(assetIds: string[]) {
+    const result = await desktop.restoreTrashedAssets(assetIds);
+    if (result.restoredAssetIds.length > 0) photosStale = true;
+    return result;
+  }
+
   function openFavorites() {
     if (currentView === "favorites") return;
     currentView = "favorites";
@@ -146,6 +165,12 @@
     if (currentView === "archive") return;
     currentView = "archive";
     void archive.refresh();
+  }
+
+  function openTrash() {
+    if (currentView === "trash") return;
+    currentView = "trash";
+    void trash.refresh();
   }
 
   function openMap() {
@@ -252,6 +277,7 @@
     timeline,
     favorites,
     archive,
+    trash,
     people,
     places,
     memories,
@@ -269,6 +295,14 @@
   });
   const updater = createUpdateController(() => sync.isActive, desktop);
   const targetAlbumDialog = $derived(watchedFolders.targetAlbumDialog);
+
+  // Leaving the Trash Timeline drops its assets and selection; returning shows a fresh load.
+  let trashWasOpen = false;
+  $effect(() => {
+    const trashIsOpen = currentView === "trash";
+    if (trashWasOpen && !trashIsOpen) untrack(() => trash.clear());
+    trashWasOpen = trashIsOpen;
+  });
 
   let profileImageLoadFailed = $state(false);
 
@@ -368,7 +402,7 @@
           <button
             type="button"
             class="nav-item {currentView === 'photos' ? 'active' : ''}"
-            onclick={() => currentView = "photos"}
+            onclick={openPhotos}
             aria-label={$t('timeline_title')}
           >
             <Images class="w-4 h-4 shrink-0 {currentView === 'photos' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
@@ -400,6 +434,15 @@
           >
             <Archive class="w-4 h-4 shrink-0 {currentView === 'archive' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('archive_title')}</span>
+          </button>
+          <button
+            type="button"
+            class="nav-item {currentView === 'trash' ? 'active' : ''}"
+            onclick={openTrash}
+            aria-label={$t('trash_title')}
+          >
+            <Trash2 class="w-4 h-4 shrink-0 {currentView === 'trash' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('trash_title')}</span>
           </button>
           <button type="button" class="nav-item {currentView === 'map' ? 'active' : ''}" onclick={openMap} aria-label={$t('map_title')}>
             <MapIcon class="w-4 h-4 shrink-0 {currentView === 'map' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
@@ -493,7 +536,7 @@
         </div>
       </header>
 
-      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'favorites' || currentView === 'archive' || currentView === 'person-timeline' || currentView === 'album-timeline' || currentView === 'place-timeline' || currentView === 'memory-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'favorites' || currentView === 'archive' || currentView === 'trash' || currentView === 'person-timeline' || currentView === 'album-timeline' || currentView === 'place-timeline' || currentView === 'memory-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
@@ -544,6 +587,19 @@
             loadErrorMessage={archive.permissionDenied ? $t("archive_permission_error") : $t("archive_error")}
             offlineMessage={$t("archive_offline")}
             failureIsError={archive.permissionDenied}
+          />
+        {:else if currentView === "trash"}
+          <TimelineView
+            timeline={trash}
+            {...sharedTimelineProps}
+            allowFavoriteAndAlbum={false}
+            {restoreTrashedAssets}
+            ariaLabel={$t("trash_title")}
+            loadingMessage={$t("trash_loading")}
+            emptyMessage={$t("trash_empty")}
+            loadErrorMessage={$t("trash_error")}
+            offlineMessage={$t("trash_offline")}
+            hintMessage={$t("trash_hint")}
           />
         {:else if currentView === "explore"}
           <ExploreView {explore} {people} {places} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} onViewAllMemories={openAllMemories} onSelectMemory={selectMemory} />

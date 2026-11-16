@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Adds an Archive entry after Favorites that shows your archived photos and videos in the shared timeline with scrubber, lightbox, thumbnail cache, favorite, download and add-to-album actions.
   - Read-only: Lymic never archives or unarchives assets. Needs the `asset.read` API key permission.
   - Includes loading, empty, error and offline states in all supported languages.
+- **Trash view and Restore**:
+  - Adds a Trash entry after Archive that shows the photos and videos in your Immich trash in the shared timeline with scrubber, lightbox and thumbnail cache, plus download.
+  - Restore trashed items from the lightbox or with multi-selection, without a confirmation; restored items leave the view and return to your Immich library, and show up in Photos the next time you open it. Items that fail to restore stay selected so you can retry.
+  - Lymic never moves assets to the trash, deletes them permanently or empties the trash.
+  - Browsing needs the `asset.read` API key permission; Restore needs `asset.delete`. The trashed filter, the permission and the Restore call were verified against Immich v3.4.1 only; no minimum Immich version is claimed.
+  - If one selected item can no longer be restored (for example because Immich already removed it permanently), the others are restored one by one and the failed item stays selected.
+  - Known limitation, to be tracked separately: Synchronization treats a local file whose Remote Asset is in the Immich trash as already synced, so it is not uploaded again and stays in the trash.
+  - Includes loading, empty, error, offline and Restore messages and a retention hint in all supported languages.
 
 ## [0.25.0] - 2026-11-13
 

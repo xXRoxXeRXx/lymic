@@ -194,6 +194,43 @@ describe('i18n catalogs', () => {
     }
   });
 
+  it('translates the Trash Timeline strings in every locale', () => {
+    const keys = ['trash_title', 'trash_loading', 'trash_empty', 'trash_error', 'trash_offline', 'trash_hint'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+      // The retention hint is fixed text: the server's retention period is not known to Lymic.
+      expect((translations as Record<string, string>).trash_hint, `${localeCode}.trash_hint has no number`).not.toMatch(/\d/);
+    }
+    expect(en.trash_title).toBe('Trash');
+    expect(en.trash_empty).toBe('Your trash is empty.');
+    expect(de.trash_title).toBe('Papierkorb');
+  });
+
+  it('translates the Trash Timeline Restore strings in every locale with their placeholders', () => {
+    const placeholders: Record<string, string[]> = {
+      trash_restore: [],
+      trash_restore_success: ['{count}'],
+      trash_restore_partial: ['{failed}', '{count}'],
+      trash_restore_failed: [],
+      trash_restore_none: ['{failed}', '{count}'],
+      trash_restore_permission: [],
+    };
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const [key, expected] of Object.entries(placeholders)) {
+        const value = (translations as Record<string, string>)[key];
+        expect(value, `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+        for (const placeholder of expected) expect(value, `${localeCode}.${key}`).toContain(placeholder);
+      }
+      // A refused Restore names the permission to grant, never a credential.
+      expect((translations as Record<string, string>).trash_restore_permission, localeCode).toContain('asset.delete');
+    }
+    expect(en.trash_restore).toBe('Restore');
+    expect(de.trash_restore).toBe('Wiederherstellen');
+  });
+
   it('uses consistent timeline and video terminology in favorites strings', () => {
     expect(de.favorites_offline).toContain('Zeitachse');
     expect(de.favorites_offline).not.toContain('Timeline');

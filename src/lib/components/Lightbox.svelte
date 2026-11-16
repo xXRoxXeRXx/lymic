@@ -1,12 +1,13 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
   import { flushSync, onDestroy, untrack } from "svelte";
-  import { Album, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, X } from "lucide-svelte";
+  import { Album, ArchiveRestore, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { AlbumAssignmentResult, AssetDetails, TimelineAsset } from "../contracts";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { RemoteAssetActions } from "./remote-asset-actions.svelte";
+  import { restoreFeedbackFor, restoreFeedbackMessage, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   interface Props {
     asset: TimelineAsset;
@@ -20,8 +21,12 @@
     setAssetFavorite(assetId: string, favorite: boolean): Promise<void>;
     albumCatalogue?: TargetAlbumCatalogue;
     addAssetsToAlbum(assetIds: string[], albumId: string): Promise<AlbumAssignmentResult>;
+    /** False hides the Favorite toggle, for views whose assets are read-only. */
+    allowFavorite?: boolean;
+    /** Offers Restore for a Trashed Asset; reports what happened and never rejects. */
+    onRestore?(assetId: string): Promise<RemoteAssetRestoreOutcome>;
   }
-  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum }: Props = $props();
+  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   let selectedAsset = $state<TimelineAsset | null>(untrack(() => asset));
   let assetDetails = $state<AssetDetails | null>(null);
@@ -36,6 +41,8 @@
   let isAddingToAlbum = $state(false);
   let addToAlbumMessage = $state("");
   let addToAlbumError = $state("");
+  let isRestoring = $state(false);
+  let restoreError = $state("");
   let addToAlbumMessageTimeout: ReturnType<typeof setTimeout> | null = null;
   const exifDetails = $derived.by(() => {
     if (!assetDetails) return [];
@@ -145,6 +152,20 @@
     }
   }
 
+  async function restoreAsset() {
+    if (!selectedAsset || !onRestore || isRestoring) return;
+    const assetId = selectedAsset.id;
+    restoreError = "";
+    isRestoring = true;
+    try {
+      const outcome = await onRestore(assetId);
+      if (isDestroyed || selectedAsset?.id !== assetId || outcome.restoredAssetIds.includes(assetId)) return;
+      restoreError = restoreFeedbackMessage(restoreFeedbackFor(outcome, 1), $t, numberLocale);
+    } finally {
+      if (!isDestroyed) isRestoring = false;
+    }
+  }
+
   function openAddToAlbum() {
     if (!selectedAsset || !albumCatalogue) return;
     clearAddToAlbumMessage();
@@ -194,7 +215,7 @@
   }
 
   function closeLightbox() {
-    if (downloadingAssetId || isAddingToAlbum) return;
+    if (downloadingAssetId || isAddingToAlbum || isRestoring) return;
     onClose();
   }
   function closeFromLightboxBackdrop() {
@@ -202,7 +223,7 @@
   }
   let navigationGeneration = 0;
   async function navigate(delta: number) {
-    if (!selectedAsset || !navigateAsset || downloadingAssetId || isAddingToAlbum) return;
+    if (!selectedAsset || !navigateAsset || downloadingAssetId || isAddingToAlbum || isRestoring) return;
     const current = selectedAsset;
     const generation = ++navigationGeneration;
     const nextAsset = await navigateAsset(delta, current);
@@ -214,6 +235,7 @@
       isAssetDetailsLoading = true;
       downloadMessage = "";
       downloadError = "";
+      restoreError = "";
       isAddToAlbumOpen = false;
       clearAddToAlbumMessage();
       addToAlbumError = "";
@@ -251,16 +273,21 @@
         {/if}
         <div class="absolute right-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-wrap justify-end gap-2">
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:cursor-not-allowed" title={$t("timeline_download_original")} aria-label={$t("timeline_download_original")} aria-busy={downloadingAssetId === selectedAsset.id} disabled={!assetDetails?.originalFileName || downloadingAssetId !== null} onclick={() => void downloadOriginal()}><Download class="h-5 w-5 {downloadingAssetId === selectedAsset.id ? 'animate-spin' : ''}" /></button>
+          {#if onRestore}
+            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={isRestoring} disabled={isRestoring} onclick={() => void restoreAsset()}><ArchiveRestore class="h-5 w-5 {isRestoring ? 'animate-pulse' : ''}" /></button>
+          {/if}
           {#if albumCatalogue}
             <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isAddingToAlbum} onclick={openAddToAlbum}><Album class="h-5 w-5" /></button>
           {/if}
+          {#if allowFavorite}
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-label={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={isFavorite(selectedAsset)} disabled={Boolean(updatingFavoriteAssetIds[selectedAsset.id])} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {isFavorite(selectedAsset) ? 'fill-current' : ''}" /></button>
+          {/if}
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80" title={$t("timeline_info")} aria-label={$t("timeline_info")} aria-pressed={isInfoOpen} onclick={() => isInfoOpen = !isInfoOpen}><Info class="h-5 w-5" /></button>
-          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_close_lightbox")} aria-label={$t("timeline_close_lightbox")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={closeLightbox}><X class="h-5 w-5" /></button>
+          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_close_lightbox")} aria-label={$t("timeline_close_lightbox")} disabled={downloadingAssetId !== null || isAddingToAlbum || isRestoring} onclick={closeLightbox}><X class="h-5 w-5" /></button>
         </div>
         {#if navigateAsset}
-          <button type="button" class="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
-          <button type="button" class="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
+          <button type="button" class="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum || isRestoring} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
+          <button type="button" class="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum || isRestoring} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
         {/if}
         {#if selectedAsset.type === "VIDEO"}
           <video class="relative z-20 h-full w-full max-h-full max-w-full object-contain" controls autoplay aria-label={$t("timeline_video_preview")} src={protocolSrc("lymic-asset", "video", selectedAsset.id)}>
@@ -307,6 +334,7 @@
           {#if favoriteError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{favoriteError}</p>{/if}
           {#if downloadMessage}<p class="rounded bg-emerald-950/90 px-3 py-2 text-emerald-200" role="status">{downloadMessage}</p>{/if}
           {#if downloadError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{downloadError}</p>{/if}
+          {#if restoreError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{restoreError}</p>{/if}
           {#if addToAlbumMessage}<p class="rounded bg-emerald-950/90 px-3 py-2 text-emerald-200" role="status">{addToAlbumMessage}</p>{/if}
         </div>
       </div>

@@ -1,6 +1,6 @@
 import type { RecognizedPerson } from "../contracts";
 import type { PeopleDesktopAdapter } from "../tauri/desktop-adapter";
-import { classifyExploreError, type ExploreError } from "./explore-error";
+import { classifyRequestFailure, type RequestFailure } from "./request-failure";
 
 export interface PeopleViewState {
   readonly people: RecognizedPerson[];
@@ -8,7 +8,7 @@ export interface PeopleViewState {
   readonly isRefreshing: boolean;
   readonly isOffline: boolean;
   readonly hasNextPage: boolean;
-  readonly error: ExploreError | null;
+  readonly error: RequestFailure | null;
   refresh(): Promise<void>;
   loadMore(): Promise<void>;
   clear(): void;
@@ -21,7 +21,7 @@ export function createPeopleController(adapter: PeopleDesktopAdapter): PeopleVie
   let isRefreshing = $state(false);
   let isOffline = $state(false);
   let hasNextPage = $state(false);
-  let error = $state<ExploreError | null>(null);
+  let error = $state<RequestFailure | null>(null);
   let page = 0;
   let generation = 0;
   let pending: Promise<void> | null = null;
@@ -43,7 +43,7 @@ export function createPeopleController(adapter: PeopleDesktopAdapter): PeopleVie
       })
       .catch((reason: unknown) => {
         if (requestGeneration !== generation) return;
-        error = people.length === 0 ? classifyExploreError(reason, "recognized_people") : null;
+        error = people.length === 0 ? classifyRequestFailure(reason, "recognized_people") : null;
         isOffline = people.length > 0;
       })
       .finally(() => {

@@ -1,5 +1,5 @@
 use super::client::ImmichClient;
-use super::response::{explore_status_error, read_response_body_limited};
+use super::response::{read_response_body_limited, request_failure_code};
 use super::timeline::{
     group_album_timeline_assets, timeline_asset_from_response, AlbumTimeline, TimelineAsset,
     TimelineAssetResponse,
@@ -112,7 +112,7 @@ impl ImmichClient {
             .await
             .map_err(|_| "memories_unavailable".to_string())?;
         if !response.status().is_success() {
-            return Err(explore_status_error(
+            return Err(request_failure_code(
                 "memories",
                 response.status(),
                 "configure an API key with the memory.read permission",

@@ -1,5 +1,5 @@
 import type { ArchiveTimelineDesktopAdapter } from "../tauri/desktop-adapter";
-import { classifyExploreError } from "./explore-error";
+import { classifyRequestFailure } from "./request-failure";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
 
 /** The Archive Timeline, which also reports whether the latest failed load was a missing API key permission. */
@@ -28,7 +28,7 @@ export function createArchiveTimelineController(
       return result;
     } catch (error) {
       if (requestGeneration === generation) {
-        permissionDenied = classifyExploreError(error, "archive") === "permission_denied";
+        permissionDenied = classifyRequestFailure(error, "archive") === "permission_denied";
       }
       throw error;
     }

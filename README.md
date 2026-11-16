@@ -37,7 +37,8 @@
 - **Media timeline** — Responsive photo and video timeline with masonry layout, date scrubber, thumbnail caching, and full lightbox preview.
 - **People discovery** — Browse recognized persons with cached avatars and filter the timeline by person.
 - **Explore** — An overview after Photos with recognized people, places (cities) and memories; open a place or memory as a timeline. Read-only, and it needs the `asset.read`, `person.read` and `memory.read` API key permissions (see [Required Permissions](#required-permissions-scopes)).
-- **Archive** — A read-only view of your archived photos and videos, directly after Favorites in the navigation, shown in the same timeline as Photos. Lymic never archives or unarchives anything; do that in Immich. It needs the `asset.read` API key permission (see [Required Permissions](#required-permissions-scopes)). Lymic requests only assets with archive visibility. Keeping Immich-trashed and locked-folder assets out relies on Immich's archive visibility filter and has not yet been verified against a live server.
+- **Archive** — A read-only view of your archived photos and videos, directly after Favorites in the navigation, shown in the same timeline as Photos. Lymic never archives or unarchives anything; do that in Immich. It needs the `asset.read` API key permission (see [Required Permissions](#required-permissions-scopes)). Lymic requests only assets with archive visibility. Keeping Immich-trashed assets out relies on Immich's archive visibility filter, which was confirmed against Immich v3.4.1; keeping locked-folder assets out has not been verified. The Photos view currently also shows archived items; this is existing behaviour, to be tracked separately.
+- **Trash** — A view of the photos and videos in your Immich trash, directly after Archive in the navigation, shown in the same timeline as Photos. You can look at them, download them, and **Restore** them one at a time from the preview or several at once with multi-selection; restored items return to your Immich library without a confirmation. Lymic never moves anything to the trash and never deletes anything permanently or empties the trash; do that in Immich, which removes trashed items permanently after the retention period set on the server. Browsing needs the `asset.read` API key permission; Restore needs `asset.delete` (see [Required Permissions](#required-permissions-scopes)). The filter Lymic uses to list trashed items and the Restore call were checked against Immich v3.4.1 only; no minimum Immich version is claimed. If one selected item can no longer be restored (for instance because Immich already deleted it permanently), Lymic restores the others one by one and keeps the failed one selected. A local file whose copy is in the Immich trash is currently treated as already synced and is not uploaded again; it stays in the trash until you restore it (to be tracked separately).
 - **Album browsing** — Browse accessible Immich albums with cover thumbnails and asset counts, and explore album media in a dedicated timeline view.
 
 ---
@@ -166,17 +167,18 @@ If Immich is protected by Cloudflare Access, open **Advanced login options** and
 | Scope | Purpose |
 |---|---|
 | `asset.upload` | Transmit new media files to the server |
-| `asset.read` | Verify whether a file already exists before uploading; Archive: browse archived photos and videos |
+| `asset.read` | Verify whether a file already exists before uploading; Archive: browse archived photos and videos; Trash: browse trashed photos and videos |
 | `album.read` | List available target albums |
 | `album.create` | Create a target album from the app |
 | `albumAsset.create` | Add synchronized media to a target album |
 | `user.read` | Retrieve the signed-in user during login |
 | `person.read` | Explore: show recognized people |
 | `memory.read` | Explore: show memories |
+| `asset.delete` | Trash: Restore trashed photos and videos (confirmed on Immich v3.4.1) |
 
-Explore also uses `asset.read` (listed above) for places and place timelines. Each Explore section depends on its own permission: a key that lacks `person.read` or `memory.read` disables only the People or Memories section, and a key that lacks `asset.read` disables only Places, while the rest of Explore keeps working. The section explains the missing permission where it can. Memories additionally need a recent Immich server release; Lymic documents no minimum version. The Archive view needs only `asset.read`. Viewing thumbnails and photos in the timelines also needs `asset.view`.
+Explore also uses `asset.read` (listed above) for places and place timelines. Each Explore section depends on its own permission: a key that lacks `person.read` or `memory.read` disables only the People or Memories section, and a key that lacks `asset.read` disables only Places, while the rest of Explore keeps working. The section explains the missing permission where it can. Memories additionally need a recent Immich server release; Lymic documents no minimum version. The Archive view needs only `asset.read`. Browsing the Trash view needs `asset.read`; Restore needs `asset.delete` in addition (confirmed on Immich v3.4.1). Without it you can still browse and download, and Restore shows a message naming the permission. Viewing thumbnails and photos in the timelines also needs `asset.view`.
 
-Lymic normally does not require `asset.delete` or `album.update` permissions.
+Lymic does not require `asset.delete` or `album.update` for synchronization, and it never deletes anything; `asset.delete` is needed only to Restore items from the Immich trash.
 
 ---
 
