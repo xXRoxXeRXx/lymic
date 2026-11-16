@@ -221,6 +221,8 @@ export interface SearchDateRange { from?: string; to?: string; }
 export interface SearchFilters {
   date?: SearchDateRange;
   mediaType?: SearchMediaType;
+  /** Recognized People who must all appear in a Remote Asset; unset or empty means no restriction. */
+  personIds?: string[];
 }
 
 /** The Search Filters as the backend receives them: the same fields, with date bounds as ISO 8601 instants. */

@@ -367,4 +367,7 @@
   ,"search_placeholder_description": "Pesquisar por descrição"
   ,"search_placeholder_folderPath": "Pesquisar por caminho da pasta"
   ,"search_placeholder_ocr": "Pesquisar por texto nas fotos"
+  ,"search_filter_person": "Pessoa"
+  ,"search_filter_person_hint": "Mostra as fotos e os vídeos em que aparecem todas as pessoas escolhidas."
+  ,"search_filter_person_permission_denied": "O filtro de pessoas não está disponível. Configure uma chave de API com a permissão person.read. O restante da pesquisa continua a funcionar."
 }

@@ -367,4 +367,7 @@
   ,"search_placeholder_description": "Поиск по описанию"
   ,"search_placeholder_folderPath": "Поиск по пути к папке"
   ,"search_placeholder_ocr": "Поиск по тексту на фото"
+  ,"search_filter_person": "Человек"
+  ,"search_filter_person_hint": "Показывает фото и видео, на которых есть все выбранные люди."
+  ,"search_filter_person_permission_denied": "Фильтр «Человек» недоступен. Настройте ключ API с разрешением person.read. Остальной поиск продолжает работать."
 }

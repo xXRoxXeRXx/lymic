@@ -589,7 +589,7 @@
       </header>
 
       <div class="shrink-0 px-8 pb-2">
-        <SearchBar {search} onSubmit={submitSearch} onClear={clearSearch} />
+        <SearchBar {search} {people} onSubmit={submitSearch} onClear={clearSearch} />
       </div>
 
       <main bind:this={content} class="flex-1 {currentView === 'map' || timelineScrollViews.has(currentView) ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">

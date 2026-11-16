@@ -367,4 +367,7 @@
   ,"search_placeholder_description": "Search by description"
   ,"search_placeholder_folderPath": "Search by folder path"
   ,"search_placeholder_ocr": "Search by text in photos"
+  ,"search_filter_person": "Person"
+  ,"search_filter_person_hint": "Shows photos and videos in which all chosen people appear."
+  ,"search_filter_person_permission_denied": "The Person filter is unavailable. Configure an API key with the person.read permission. The rest of Search keeps working."
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Search, SlidersHorizontal, X } from "lucide-svelte";
   import { t } from "svelte-i18n";
+  import type { PeopleViewState } from "../controllers/people-controller.svelte";
   import type { SearchController } from "../controllers/search-controller.svelte";
   import SearchPanel from "./SearchPanel.svelte";
 
@@ -10,8 +11,9 @@
    * Search Filters live in the panel that the options button opens below the field; a Search can consist of
    * filters alone.
    */
-  let { search, onSubmit, onClear }: {
+  let { search, people, onSubmit, onClear }: {
     search: SearchController;
+    people: PeopleViewState;
     onSubmit: () => void;
     onClear: () => void;
   } = $props();
@@ -87,7 +89,7 @@
   >{$t("search_submit")}</button>
   </div>
   {#if panelOpen}
-    <SearchPanel {search} id={panelId} />
+    <SearchPanel {search} {people} id={panelId} />
   {/if}
 </form>
 </div>

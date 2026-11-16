@@ -49,3 +49,12 @@ impl MediaType {
         filter.insert("type".to_string(), json!({ "eq": immich_type }));
     }
 }
+
+/// Restricts a Search to Remote Assets in which every one of the Recognized People appears
+/// (`all`, not `any`). No chosen person adds no condition. Whether `all` means every person
+/// on the same Remote Asset is unverified against a live server.
+pub(super) fn apply_person_ids(person_ids: &[String], filter: &mut Map<String, Value>) {
+    if !person_ids.is_empty() {
+        filter.insert("personIds".to_string(), json!({ "all": person_ids }));
+    }
+}
