@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { SearchController } from "../controllers/search-controller.svelte";
+  import SearchFilterCamera from "./SearchFilterCamera.svelte";
   import SearchFilterDate from "./SearchFilterDate.svelte";
   import SearchFilterMediaType from "./SearchFilterMediaType.svelte";
   import SearchModeSelector from "./SearchModeSelector.svelte";
@@ -15,4 +16,5 @@
   <SearchModeSelector {search} />
   <SearchFilterDate {search} />
   <SearchFilterMediaType {search} />
+  <SearchFilterCamera {search} />
 </div>
