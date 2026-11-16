@@ -274,7 +274,6 @@ describe('i18n catalogs', () => {
 
   it('translates the Search filter panel strings in every locale', () => {
     const keys = [
-      'search_filters',
       'search_filter_date',
       'search_filter_date_from',
       'search_filter_date_to',
@@ -292,5 +291,20 @@ describe('i18n catalogs', () => {
     }
     expect(en.search_filter_media_video).toBe('Videos');
     expect(de.search_filter_media_type).toBe('Medientyp');
+  });
+
+  it('translates the Search Mode strings in every locale', () => {
+    const keys = [
+      'search_options', 'search_mode_label', 'search_mode_filename', 'search_mode_description', 'search_mode_folderPath', 'search_mode_ocr',
+      'search_mode_ocr_unavailable', 'search_features_unavailable', 'search_placeholder_description', 'search_placeholder_folderPath', 'search_placeholder_ocr',
+    ];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect((translations as Record<string, string>)[key], `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+      }
+    }
+    expect(en.search_mode_folderPath).toBe('Folder Path');
+    expect(de.search_mode_filename).toBe('Dateiname');
+    expect(de.search_mode_folderPath).toBe('Ordnerpfad');
   });
 });

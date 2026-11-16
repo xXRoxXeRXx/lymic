@@ -3499,6 +3499,74 @@ describe("Search", () => {
 
     expect(await screen.findByText("Showing only the newest 5,000 matches. Narrow your search to see the rest.")).toBeInTheDocument();
   });
+
+  describe("Search Mode", () => {
+    const openOptions = async () => {
+      await fireEvent.click(await screen.findByRole("button", { name: "Search options" }));
+      return screen.findByRole("group", { name: "Search mode" });
+    };
+
+    it("offers Filename, Description, Folder Path and OCR as one exclusive choice that starts on Filename", async () => {
+      renderAuthenticatedPage({ get_search_features: async () => ({ smartSearch: true, ocr: true }) });
+
+      const group = await openOptions();
+
+      const radios = within(group).getAllByRole("radio");
+      expect(radios.map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(["Filename", "Description", "Folder Path", "OCR"]);
+      expect(within(group).getByRole("radio", { name: "Filename" })).toBeChecked();
+      await fireEvent.click(within(group).getByRole("radio", { name: "Folder Path" }));
+      expect(within(group).getByRole("radio", { name: "Folder Path" })).toBeChecked();
+      expect(within(group).getByRole("radio", { name: "Filename" })).not.toBeChecked();
+      expect(within(group).getByRole("radio", { name: "OCR" })).toBeEnabled();
+    });
+
+    it("searches in the chosen mode, with the features read before the first Search", async () => {
+      renderAuthenticatedPage({
+        get_search_features: async () => ({ smartSearch: true, ocr: true }),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      await fireEvent.click(within(group).getByRole("radio", { name: "Description" }));
+      await search("sunset");
+
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "sunset", mode: "description", filters: {} } });
+      const calls = tauri.invoke.mock.calls.map(([command]) => command);
+      expect(calls.filter((command) => command === "get_search_features")).toHaveLength(1);
+      expect(calls.indexOf("get_search_features")).toBeLessThan(calls.indexOf("search_assets"));
+      expect(screen.getByRole("searchbox", { name: "Search your Immich library" })).toHaveAttribute("placeholder", "Search by description");
+    });
+
+    it("disables OCR with an explanation when the server has OCR switched off, and Filename keeps working", async () => {
+      renderAuthenticatedPage({
+        get_search_features: async () => ({ smartSearch: true, ocr: false }),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      const ocr = await within(group).findByRole("radio", { name: "OCR" });
+      await waitFor(() => expect(ocr).toBeDisabled());
+      expect(ocr).toHaveAccessibleDescription("OCR is switched off on this Immich server, so text inside photos cannot be searched.");
+      await search("IMG");
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG", mode: "filename", filters: {} } });
+    });
+
+    it("keeps Filename working when the server features cannot be read", async () => {
+      renderAuthenticatedPage({
+        get_search_features: () => Promise.reject("search_unavailable"),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      expect(await within(group).findByText("The server's features could not be read. OCR may not be available.")).toBeInTheDocument();
+      await search("IMG");
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG", mode: "filename", filters: {} } });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
 });
 
 describe("Search filter panel", () => {
@@ -3508,8 +3576,9 @@ describe("Search filter panel", () => {
   });
   const results = (...ids: string[]) => ({ buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(found) }, truncated: false });
   const supported = { supported: true, version: "3.4.1", requiredVersion: "3.2" };
+  const features = { smartSearch: true, ocr: true };
   const searchBox = () => screen.findByRole("searchbox", { name: "Search your Immich library" });
-  const filtersButton = () => screen.findByRole("button", { name: "Filters" });
+  const filtersButton = () => screen.findByRole("button", { name: "Search options" });
   const submit = () => fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
   async function openPanel() {
@@ -3520,7 +3589,7 @@ describe("Search filter panel", () => {
 
   it("opens the panel from the bar and runs a Search with filters and no text, shown chronologically", async () => {
     stubImmediateIntersectionObserver();
-    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: async () => results("video-1") });
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("video-1") });
     expect(await filtersButton()).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("group", { name: "Date" })).not.toBeInTheDocument();
 
@@ -3546,7 +3615,7 @@ describe("Search filter panel", () => {
   });
 
   it("offers All, Images and Videos with All selected by default", async () => {
-    renderAuthenticatedPage();
+    renderAuthenticatedPage({ get_search_features: async () => features });
     await openPanel();
 
     const group = screen.getByRole("radiogroup", { name: "Media type" });
@@ -3560,7 +3629,7 @@ describe("Search filter panel", () => {
   });
 
   it("rejects a start date after the end date with a message and does not search", async () => {
-    renderAuthenticatedPage({ get_search_support: async () => supported });
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features });
     await openPanel();
 
     await setDate("From", "2025-03-31");
@@ -3580,7 +3649,7 @@ describe("Search filter panel", () => {
 
   it("clears the date range on its own and keeps the other filters", async () => {
     stubImmediateIntersectionObserver();
-    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: async () => results("video-1") });
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("video-1") });
     await openPanel();
     await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
     await setDate("From", "2025-03-01");
@@ -3596,7 +3665,7 @@ describe("Search filter panel", () => {
 
   it("keeps the filters while the Search is left and entered again, and resets text and filters on clear", async () => {
     stubImmediateIntersectionObserver();
-    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: async () => results("video-1") });
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("video-1") });
     await openPanel();
     await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
     await setDate("To", "2025-03-31");
@@ -3618,7 +3687,7 @@ describe("Search filter panel", () => {
   });
 
   it("offers the clear control as soon as a filter is set, without any text", async () => {
-    renderAuthenticatedPage();
+    renderAuthenticatedPage({ get_search_features: async () => features });
     await openPanel();
     expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
 
@@ -3628,7 +3697,7 @@ describe("Search filter panel", () => {
   });
 
   it("closes the panel with Escape and returns focus to its button", async () => {
-    renderAuthenticatedPage();
+    renderAuthenticatedPage({ get_search_features: async () => features });
     await openPanel();
 
     await fireEvent.keyDown(screen.getByRole("radiogroup", { name: "Media type" }), { key: "Escape" });

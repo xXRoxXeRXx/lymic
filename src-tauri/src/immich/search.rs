@@ -25,6 +25,25 @@ const SEARCH_PAGE_SIZE: usize = 1_000;
 const MAX_SEARCH_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
 /// The oldest Immich version that understands the structured `filter` (ADR-0008).
 const MINIMUM_VERSION: (u64, u64) = (3, 2);
+/// Which optional Search Modes the connected Immich Server can serve, read from
+/// `GET /api/server/features`. A flag the server does not report counts as switched off.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SearchFeatures {
+    /// Smart Search (needed by the Context Search Mode).
+    pub smart_search: bool,
+    /// Recognized text (needed by the OCR Search Mode).
+    pub ocr: bool,
+}
+
+#[derive(Deserialize)]
+struct ServerFeaturesResponse {
+    #[serde(rename = "smartSearch", default)]
+    smart_search: bool,
+    #[serde(default)]
+    ocr: bool,
+}
+
 /// What the frontend shows as the required version.
 const MINIMUM_VERSION_LABEL: &str = "3.2";
 /// The API key permission a Search needs, named in the permission-denied error.
@@ -36,6 +55,10 @@ const SEARCH_PERMISSION: &str = "asset.read";
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SearchMode {
     Filename,
+    Description,
+    FolderPath,
+    /// Text recognized within the media; available only while the server's OCR feature is on.
+    Ocr,
 }
 
 /// The Search Filters of a Search. Every filter is one optional field here and one line in
@@ -125,11 +148,13 @@ fn escape_like(text: &str) -> String {
 
 /// The filter key and condition the text of a Search adds in `mode`.
 fn text_condition(mode: SearchMode, text: &str) -> (&'static str, Value) {
+    let contains = || json!({ "like": format!("%{}%", escape_like(text)) });
     match mode {
-        SearchMode::Filename => (
-            "originalFileName",
-            json!({ "like": format!("%{}%", escape_like(text)) }),
-        ),
+        SearchMode::Filename => ("originalFileName", contains()),
+        SearchMode::Description => ("description", contains()),
+        SearchMode::FolderPath => ("originalPath", contains()),
+        // Recognized text is matched by similarity, which has no wildcards to escape.
+        SearchMode::Ocr => ("ocr", json!({ "matches": text })),
     }
 }
 
@@ -174,6 +199,32 @@ impl ImmichClient {
             supported: (version.major, version.minor) >= MINIMUM_VERSION,
             version: format!("{}.{}.{}", version.major, version.minor, version.patch),
             required_version: MINIMUM_VERSION_LABEL.to_string(),
+        })
+    }
+
+    /// Reads which optional Search Modes the server can serve. Errors carry a stable
+    /// `search_*` code and never the response body.
+    pub async fn get_search_features(&self) -> Result<SearchFeatures, String> {
+        let response = self
+            .request(Method::GET, "server/features")
+            .send()
+            .await
+            .map_err(|_| "search_unavailable".to_string())?;
+        if !response.status().is_success() {
+            return Err(request_failure_code(
+                "search",
+                response.status(),
+                SEARCH_PERMISSION,
+            ));
+        }
+        let body = read_response_body_limited(response, 64 * 1024)
+            .await
+            .map_err(|_| invalid_response())?;
+        let features: ServerFeaturesResponse =
+            serde_json::from_slice(&body).map_err(|_| invalid_response())?;
+        Ok(SearchFeatures {
+            smart_search: features.smart_search,
+            ocr: features.ocr,
         })
     }
 
@@ -251,7 +302,9 @@ impl ImmichClient {
 
 #[cfg(test)]
 mod tests {
-    use super::{SearchFilters, SearchMode, SearchQuery, SearchSupport, SearchTimeline};
+    use super::{
+        SearchFeatures, SearchFilters, SearchMode, SearchQuery, SearchSupport, SearchTimeline,
+    };
     use crate::immich::search_filters::{DateRange, MediaType};
     use crate::immich::test_support::{serve_once, serve_pages, test_client};
     use serde_json::{json, Value};
@@ -345,6 +398,102 @@ mod tests {
             json_body(&requests[0])["filter"]["originalFileName"]["like"],
             json!(r"%100\%\_a\\b%")
         );
+    }
+
+    fn mode_query(mode: SearchMode, text: &str) -> SearchQuery {
+        SearchQuery {
+            text: text.to_string(),
+            mode,
+            filters: SearchFilters::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn each_search_mode_sends_its_own_text_condition_in_the_structured_filter() {
+        let cases = [
+            (
+                SearchMode::Filename,
+                json!({ "originalFileName": { "like": "%holiday%" } }),
+            ),
+            (
+                SearchMode::Description,
+                json!({ "description": { "like": "%holiday%" } }),
+            ),
+            (
+                SearchMode::FolderPath,
+                json!({ "originalPath": { "like": "%holiday%" } }),
+            ),
+            // Recognized text is matched by similarity, not by `like`.
+            (SearchMode::Ocr, json!({ "ocr": { "matches": "holiday" } })),
+        ];
+        for (mode, expected) in cases {
+            let (result, requests) = search(
+                vec![("200 OK", page(vec![], None))],
+                mode_query(mode, "holiday"),
+            )
+            .await;
+
+            assert!(result.is_ok(), "{mode:?}");
+            let request = &requests[0];
+            assert!(request.starts_with("POST /api/search/metadata HTTP/1.1"));
+            assert_eq!(json_body(request)["filter"], expected, "{mode:?}");
+            assert!(json_body(request).get("query").is_none(), "{mode:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn description_and_folder_path_escape_like_wildcards_but_ocr_text_is_sent_as_typed() {
+        for (mode, key) in [
+            (SearchMode::Description, "description"),
+            (SearchMode::FolderPath, "originalPath"),
+        ] {
+            let (_, requests) = search(
+                vec![("200 OK", page(vec![], None))],
+                mode_query(mode, r"100%_a\b"),
+            )
+            .await;
+            assert_eq!(
+                json_body(&requests[0])["filter"][key]["like"],
+                json!(r"%100\%\_a\\b%"),
+                "{mode:?}"
+            );
+        }
+        let (_, requests) = search(
+            vec![("200 OK", page(vec![], None))],
+            mode_query(SearchMode::Ocr, "100%_a"),
+        )
+        .await;
+        assert_eq!(
+            json_body(&requests[0])["filter"],
+            json!({ "ocr": { "matches": "100%_a" } })
+        );
+    }
+
+    #[tokio::test]
+    async fn a_filters_only_search_sends_no_text_condition_in_any_mode() {
+        for mode in [
+            SearchMode::Description,
+            SearchMode::FolderPath,
+            SearchMode::Ocr,
+        ] {
+            let (_, requests) =
+                search(vec![("200 OK", page(vec![], None))], mode_query(mode, " ")).await;
+            assert_eq!(json_body(&requests[0])["filter"], json!({}), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn search_modes_deserialize_from_the_frontend_names() {
+        for (name, mode) in [
+            ("filename", SearchMode::Filename),
+            ("description", SearchMode::Description),
+            ("folderPath", SearchMode::FolderPath),
+            ("ocr", SearchMode::Ocr),
+        ] {
+            let query: SearchQuery =
+                serde_json::from_str(&format!(r#"{{"text":"x","mode":"{name}"}}"#)).unwrap();
+            assert_eq!(query.mode, mode);
+        }
     }
 
     #[tokio::test]
@@ -560,6 +709,74 @@ mod tests {
                 .unwrap_err();
             assert_eq!(error, expected);
         }
+    }
+
+    #[tokio::test]
+    async fn the_server_features_say_whether_smart_search_and_ocr_are_switched_on() {
+        for (body, smart_search, ocr) in [
+            (r#"{"smartSearch":true,"ocr":true,"map":true}"#, true, true),
+            (r#"{"smartSearch":true,"ocr":false}"#, true, false),
+            (r#"{"smartSearch":false,"ocr":true}"#, false, true),
+        ] {
+            let (url, request) = serve_once("200 OK", body).await;
+            let features = test_client(url, "test-key")
+                .get_search_features()
+                .await
+                .unwrap();
+            let request = request.await.unwrap();
+
+            assert!(request.starts_with("GET /api/server/features HTTP/1.1"));
+            assert!(request.contains("x-api-key: test-key"));
+            assert_eq!(features, SearchFeatures { smart_search, ocr });
+        }
+    }
+
+    #[tokio::test]
+    async fn a_missing_feature_flag_counts_as_switched_off() {
+        let (url, _server) = serve_once("200 OK", r#"{"map":true}"#).await;
+        let features = test_client(url, "test-key")
+            .get_search_features()
+            .await
+            .unwrap();
+        assert_eq!(
+            features,
+            SearchFeatures {
+                smart_search: false,
+                ocr: false
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn feature_failures_are_credential_free_codes() {
+        for (status, body, expected) in [
+            (
+                "401 Unauthorized",
+                "secret",
+                "search_authentication_required",
+            ),
+            ("503 Service Unavailable", "secret", "search_unavailable"),
+            ("200 OK", "{secret", "search_invalid_response"),
+        ] {
+            let (url, _server) = serve_once(status, body).await;
+            let error = test_client(url, "test-key")
+                .get_search_features()
+                .await
+                .unwrap_err();
+            assert_eq!(error, expected);
+        }
+    }
+
+    #[test]
+    fn search_features_serialize_in_camel_case() {
+        let features = SearchFeatures {
+            smart_search: true,
+            ocr: false,
+        };
+        assert_eq!(
+            serde_json::to_string(&features).unwrap(),
+            r#"{"smartSearch":true,"ocr":false}"#
+        );
     }
 
     #[test]

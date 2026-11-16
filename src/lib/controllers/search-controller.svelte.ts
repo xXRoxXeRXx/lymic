@@ -1,4 +1,4 @@
-import type { SearchFilters, SearchMode, SearchQuery, SearchTimeline } from "../contracts";
+import type { SearchFeatures, SearchFilters, SearchMode, SearchQuery, SearchTimeline } from "../contracts";
 import { buildRequestFilters, filterErrors as validateFilters } from "../search-filters";
 import type { SearchDesktopAdapter } from "../tauri/desktop-adapter";
 import { classifyRequestFailure } from "./request-failure";
@@ -27,6 +27,10 @@ export interface SearchController extends TimelineController {
   readonly filters: SearchFilters;
   /** The locale key of why a set Search Filter cannot be searched, per filter; such a Search does not run. */
   readonly filterErrors: Partial<Record<keyof SearchFilters, string>>;
+  /** False while the server is known to have OCR switched off; unknown features count as available. */
+  readonly ocrAvailable: boolean;
+  /** True when the server's features could not be read (they are read again with the next Search). */
+  readonly featuresFailed: boolean;
   /** The text of the Search whose results are shown (empty before the first successful Search). */
   readonly submittedText: string;
   /** The number of Remote Assets in the results. */
@@ -41,6 +45,8 @@ export interface SearchController extends TimelineController {
   readonly revision: number;
   /** Whether there is a Search to run: a text or a set Search Filter, and every set filter can be searched. */
   readonly canSubmit: boolean;
+  /** Reads the server's features once and holds them in memory; a failure leaves them unknown and never throws. */
+  loadFeatures(): Promise<void>;
   /** Runs a Search with the current text, mode and filters. Resolves to false, doing nothing, without anything to search for or with a filter that cannot be searched. */
   submit(): Promise<boolean>;
 }
@@ -57,6 +63,9 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   let text = $state("");
   let mode = $state<SearchMode>(DEFAULT_SEARCH_MODE);
   let filters = $state<SearchFilters>({});
+  let features = $state<SearchFeatures | null>(null);
+  let featuresFailed = $state(false);
+  let featuresRead: Promise<void> | null = null;
   let submittedText = $state("");
   let truncated = $state(false);
   let unsupported = $state<{ version: string; requiredVersion: string } | null>(null);
@@ -68,6 +77,31 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   let supported = false;
   // Bumped by every load and by clear(), so a load that finishes late cannot touch newer state.
   let latestLoad = 0;
+  // Bumped by clear(), so features that arrive late are not kept for the next session.
+  let featuresGeneration = 0;
+
+  const ocrAvailable = $derived(features === null || features.ocr);
+
+  function loadFeatures(): Promise<void> {
+    if (features) return Promise.resolve();
+    featuresRead ??= (async () => {
+      const generation = featuresGeneration;
+      try {
+        const read = await adapter.getSearchFeatures();
+        if (generation !== featuresGeneration) return;
+        features = read;
+        featuresFailed = false;
+        // OCR can no longer be answered, so a Search must not keep asking for it.
+        if (!read.ocr && mode === "ocr") mode = DEFAULT_SEARCH_MODE;
+      } catch {
+        // Features only gate optional modes; a failed read must not block a Search.
+        if (generation === featuresGeneration) featuresFailed = true;
+      } finally {
+        if (generation === featuresGeneration) featuresRead = null;
+      }
+    })();
+    return featuresRead;
+  }
 
   function currentQuery(): SearchQuery {
     return { text: text.trim(), mode, filters: buildRequestFilters($state.snapshot(filters)) };
@@ -82,8 +116,8 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   }
 
   async function load(): Promise<SearchTimeline> {
-    const query = pending;
-    if (!query) return NO_RESULTS;
+    const queued = pending;
+    if (!queued) return NO_RESULTS;
     const thisLoad = ++latestLoad;
     try {
       if (!supported) {
@@ -97,6 +131,10 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
         }
         supported = true;
       }
+      await loadFeatures();
+      if (thisLoad !== latestLoad) return NO_RESULTS;
+      // The features may have turned the mode of the queued Search unavailable.
+      const query = queued.mode === "ocr" && !ocrAvailable ? { ...queued, mode: DEFAULT_SEARCH_MODE } : queued;
       const results = await adapter.searchAssets(query);
       if (thisLoad === latestLoad) {
         unsupported = null;
@@ -121,6 +159,10 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     text = "";
     mode = DEFAULT_SEARCH_MODE;
     filters = {};
+    featuresGeneration += 1;
+    features = null;
+    featuresFailed = false;
+    featuresRead = null;
     submittedText = "";
     truncated = false;
     unsupported = null;
@@ -141,7 +183,9 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     get text() { return text; },
     set text(value: string) { text = value; },
     get mode() { return mode; },
-    set mode(value: SearchMode) { mode = value; },
+    set mode(value: SearchMode) { if (value !== "ocr" || ocrAvailable) mode = value; },
+    get ocrAvailable() { return ocrAvailable; },
+    get featuresFailed() { return featuresFailed; },
     get filters() { return filters; },
     get filterErrors() { return validateFilters(filters); },
     get canSubmit() { return isSearchable(currentQuery()); },
@@ -163,6 +207,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     removeAsset: timeline.removeAsset,
     locateAsset: timeline.locateAsset,
     stepAsset: timeline.stepAsset,
+    loadFeatures,
     submit,
     clear,
   };
