@@ -39,6 +39,7 @@ import {
   type TrashTimelineDesktopAdapter,
   type FavoritesTimelineDesktopAdapter,
   type PreferencesDesktopAdapter,
+  type SearchDesktopAdapter,
   type RemovableVolumeDesktopAdapter,
   type SyncDesktopAdapter,
   type TimelineDesktopAdapter,
@@ -206,6 +207,19 @@ describe("tauriDesktopAdapter", () => {
       ["removable-volume-detected", expect.any(Function)],
       ["removable-volume-removed", expect.any(Function)],
       ["removable-volume-remounted", expect.any(Function)],
+    ]);
+  });
+
+  it("invokes the Search commands with the query as one argument", async () => {
+    const searchAdapter: SearchDesktopAdapter = tauriDesktopAdapter;
+    invoke.mockClear();
+
+    await searchAdapter.getSearchSupport();
+    await searchAdapter.searchAssets({ text: "IMG", mode: "filename", filters: {} });
+
+    expect(invoke.mock.calls).toEqual([
+      ["get_search_support"],
+      ["search_assets", { query: { text: "IMG", mode: "filename", filters: {} } }],
     ]);
   });
 });

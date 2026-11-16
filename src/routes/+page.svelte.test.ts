@@ -3295,3 +3295,208 @@ describe("Trash Timeline Restore", () => {
     expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
   });
 });
+
+describe("Search", () => {
+  const march = "2025-03-01T00:00:00.000Z";
+  const found = (id: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false,
+  });
+  const results = (...ids: string[]) => ({ buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(found) }, truncated: false });
+  const supported = { supported: true, version: "3.4.1", requiredVersion: "3.2" };
+  const holiday = { id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null };
+  const searchBox = () => screen.findByRole("searchbox", { name: "Search your Immich library" });
+
+  async function search(text: string) {
+    await fireEvent.input(await searchBox(), { target: { value: text } });
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+  }
+
+  it("searches from an open Album Timeline, opens a result in the Lightbox and Back returns to that album", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_album_catalogue: async () => [holiday],
+      get_album_timeline: async () => results("album-asset"),
+      get_search_support: async () => supported,
+      search_assets: async () => results("hit-1", "hit-2"),
+      get_asset_details: async () => ({ originalFileName: "IMG_0001.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024 }),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
+    await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+    expect(await screen.findByRole("heading", { name: "Holiday" })).toBeInTheDocument();
+    // The bar is part of the content area of every page, also while a sub-view is open.
+    expect(await searchBox()).toBeInTheDocument();
+
+    await search("IMG_");
+
+    expect(tauri.invoke).toHaveBeenCalledWith("get_search_support");
+    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG_", mode: "filename", filters: {} } });
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
+    expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    expect(await searchBox()).toHaveValue("IMG_");
+
+    await fireEvent.click((await screen.findAllByRole("button", { name: "Open photo" }))[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Add to album" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Add to favorites" })).toBeInTheDocument();
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Holiday" }));
+
+    expect(await screen.findByRole("heading", { name: "Holiday", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Back to Albums" })).toBeInTheDocument();
+    expect(tauri.invoke.mock.calls.filter(([command]) => command === "get_album_timeline")).toHaveLength(1);
+    // The text stays in the bar for the session.
+    expect(await searchBox()).toHaveValue("IMG_");
+  });
+
+  it("returns to the page it searched from at the same scroll position", async () => {
+    renderAuthenticatedPage({
+      get_album_catalogue: async () => [holiday],
+      get_search_support: async () => supported,
+      search_assets: async () => results("hit-1"),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
+    const album = await screen.findByRole("button", { name: /Holiday/ });
+    const main = album.closest("main")!;
+    main.scrollTop = 240;
+
+    await search("IMG");
+    main.scrollTop = 0;
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Albums" }));
+
+    expect(await screen.findByRole("heading", { name: "Albums", level: 1 })).toBeInTheDocument();
+    await waitFor(() => expect(main.scrollTop).toBe(240));
+  });
+
+  it("returns to the Photo Timeline at its scroll position", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+      get_timeline_bucket_assets: async () => [found("photo-1")],
+      get_search_support: async () => supported,
+      search_assets: async () => results("hit-1"),
+    });
+    const viewportOf = async () => (await screen.findByRole("button", { name: "Open photo" })).closest(".overflow-y-auto") as HTMLElement;
+    const viewport = await viewportOf();
+    viewport.scrollTop = 300;
+    await fireEvent.scroll(viewport);
+
+    await search("IMG");
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Photos" }));
+
+    await waitFor(async () => expect((await viewportOf()).scrollTop).toBe(300));
+  });
+
+  it("does nothing for an empty text", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => supported });
+
+    await search("   ");
+
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_search_support");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    expect(screen.getByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+  });
+
+  it("clears the Search, empties the bar and leaves the results", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_search_support: async () => supported,
+      search_assets: async () => results("hit-1"),
+    });
+    await search("IMG");
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+    expect(await searchBox()).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+  });
+
+  it("shows an unsupported state naming the required version and leaves other views working", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => ({ supported: false, version: "3.1.0", requiredVersion: "3.2" }) });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Search needs Immich 3.2 or later, but this server runs 3.1.0.");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    await fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
+    expect(await screen.findByRole("heading", { name: "Favorites", level: 1 })).toBeInTheDocument();
+  });
+
+  it("names the missing asset.read permission and retries the same Search", async () => {
+    stubImmediateIntersectionObserver();
+    const searchAssets = vi.fn()
+      .mockRejectedValueOnce("search_permission_denied:asset.read")
+      .mockResolvedValueOnce(results("hit-1"));
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: searchAssets });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Give the API key the asset.read permission in Immich.");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry timeline connection" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(searchAssets).toHaveBeenCalledTimes(2);
+    expect(searchAssets.mock.calls[1]).toEqual(searchAssets.mock.calls[0]);
+  });
+
+  it("asks to sign in again when the API key is rejected", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: () => Promise.reject("search_authentication_required") });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Immich did not accept the API key. Sign in again to search.");
+  });
+
+  it("shows an unavailable server with Retry on a first Search", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: () => Promise.reject("search_unavailable") });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The search could not be completed because the Immich Server is unavailable.");
+    expect(screen.getByRole("button", { name: "Retry timeline connection" })).toBeInTheDocument();
+  });
+
+  it("keeps the previous text and results visible with Retry when a later Search goes offline", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_search_support: async () => supported,
+      search_assets: vi.fn().mockResolvedValueOnce(results("hit-1")).mockRejectedValueOnce("search_unavailable"),
+    });
+    await search("first");
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+
+    await search("second");
+
+    expect(await screen.findByText("You are offline. The previous results stay visible until you retry.")).toBeInTheDocument();
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry timeline connection" })).toBeInTheDocument();
+    expect(await searchBox()).toHaveValue("second");
+  });
+
+  it("says nothing matched when the Search finds nothing", async () => {
+    renderAuthenticatedPage({
+      get_search_support: async () => supported,
+      search_assets: async () => ({ buckets: [], assetsByBucket: {}, truncated: false }),
+    });
+
+    await search("zzz");
+
+    expect(await screen.findByText("Nothing matched your search. Try a different text or fewer filters.")).toBeInTheDocument();
+  });
+
+  it("shows a notice when the Search was cut at the result limit", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_search_support: async () => supported,
+      search_assets: async () => ({ ...results("hit-1"), truncated: true }),
+    });
+
+    await search("IMG");
+
+    expect(await screen.findByText("Showing only the newest 5,000 matches. Narrow your search to see the rest.")).toBeInTheDocument();
+  });
+});

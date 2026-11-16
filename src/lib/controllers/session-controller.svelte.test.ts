@@ -38,6 +38,8 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
     getMemoriesPage: vi.fn().mockResolvedValue({ memories: [], hasNextPage: false }),
     getPeople: vi.fn().mockResolvedValue({ people: [], hasNextPage: false }),
     getPlaces: vi.fn().mockResolvedValue([]),
+    getSearchSupport: vi.fn().mockResolvedValue({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
+    searchAssets: vi.fn().mockResolvedValue({ buckets: [{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }], assetsByBucket: {}, truncated: false }),
     getPersonTimelineBuckets: vi.fn().mockResolvedValue([]),
     getPersonTimelineBucketAssets: vi.fn().mockResolvedValue([]),
     subscribeToRemovableVolumeDetected: vi.fn().mockResolvedValue(() => {}),
@@ -60,6 +62,19 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
 }
 
 describe("authenticated session", () => {
+  it("keeps the Search in memory for the session and resets it on logout", async () => {
+    const { session } = setup();
+    session.search.text = "IMG";
+    await session.search.submit();
+    expect(session.search.resultCount).toBe(1);
+
+    await session.logout();
+
+    expect(session.search.text).toBe("");
+    expect(session.search.submittedText).toBe("");
+    expect(session.search.buckets).toEqual([]);
+  });
+
   it("initializes and clears session-owned controllers across login, account switch, and logout", async () => {
     const { session, resetView } = setup({
       getTimelineBuckets: vi.fn()

@@ -240,4 +240,35 @@ describe('i18n catalogs', () => {
     expect(ar.favorites_offline).toContain('الخط الزمني');
     expect(ru.favorites_offline).toContain('Хронология');
   });
+
+  it('translates the Search strings in every locale with their placeholders and permission names', () => {
+    const placeholders: Record<string, string[]> = {
+      search_title: [],
+      search_label: [],
+      search_placeholder: [],
+      search_submit: [],
+      search_clear: [],
+      search_return: ['{view}'],
+      search_loading: [],
+      search_empty: [],
+      search_results_count: ['{count}'],
+      search_truncated: ['{count}'],
+      search_unsupported: ['{required}', '{version}'],
+      search_authentication_required: [],
+      search_permission_denied: [],
+      search_unavailable: [],
+      search_offline: [],
+    };
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const [key, expected] of Object.entries(placeholders)) {
+        const value = (translations as Record<string, string>)[key];
+        expect(value, `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+        for (const placeholder of expected) expect(value, `${localeCode}.${key}`).toContain(placeholder);
+      }
+      // A refused Search names the permission to grant, never a credential.
+      expect((translations as Record<string, string>).search_permission_denied, localeCode).toContain('asset.read');
+    }
+    expect(en.search_title).toBe('Search');
+    expect(de.search_title).toBe('Suche');
+  });
 });

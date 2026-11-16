@@ -1,6 +1,6 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import { Album, ArchiveRestore, Check, Download, Heart, HeartOff, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
@@ -42,6 +42,10 @@
     allowFavoriteAndAlbum?: boolean;
     /** Offers Restore in the Lightbox and in multi-selection: Trashed Assets only. */
     restoreTrashedAssets?(assetIds: string[]): Promise<TrashRestoreResult>;
+    /** Where to scroll to once the first buckets are shown, for a view that is reopened where the user left it. */
+    initialScrollTop?: number;
+    /** Reports the scroll position when the view opens and whenever the user scrolls. */
+    onScrollPosition?(scrollTop: number): void;
   }
 
   let {
@@ -67,6 +71,8 @@
     hintMessage = "",
     allowFavoriteAndAlbum = true,
     restoreTrashedAssets,
+    initialScrollTop = 0,
+    onScrollPosition,
   }: Props = $props();
   const targetAlbumCatalogue = $derived(allowFavoriteAndAlbum ? albumCatalogue : undefined);
   const showLoadError = $derived(!timeline.isLoading && (timeline.hasInitialLoadError || (failureIsError && timeline.isOffline)));
@@ -211,7 +217,26 @@
     activeTimeBucket = visibleBucket;
   }
 
+  let scrollRestored = false;
+  $effect(() => {
+    const hasBuckets = timeline.buckets.length > 0;
+    if (scrollRestored || !viewport) return;
+    if (initialScrollTop <= 0) {
+      scrollRestored = true;
+      untrack(() => onScrollPosition?.(0));
+      return;
+    }
+    // The month sections reserve their height, so the position exists as soon as the buckets do.
+    if (!hasBuckets) return;
+    scrollRestored = true;
+    void tick().then(() => {
+      viewport.scrollTop = initialScrollTop;
+      onScrollPosition?.(viewport.scrollTop);
+    });
+  });
+
   function syncActiveBucket() {
+    onScrollPosition?.(viewport.scrollTop);
     if (scrollRaf !== null) return;
     updateActiveBucket();
     if (typeof requestAnimationFrame === "function") {

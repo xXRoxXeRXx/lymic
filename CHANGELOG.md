@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Search by file name**:
+  - A search bar at the top of every page searches your whole Immich library by file name ("contains"; `%` and `_` are searched literally). The results open chronologically in the shared timeline with scrubber, lightbox, thumbnail cache, favorite, download and add-to-album actions.
+  - At most the 5,000 newest matches are loaded; a notice says when a search was cut. Back returns to the page you searched from at its scroll position, and the clear control resets the search. The text is kept in memory for the session only.
+  - Read-only; needs the `asset.read` API key permission and Immich 3.2 or later (older servers show an "unsupported" message and every other view keeps working). The search sends only Immich's structured `filter`. Case sensitivity of the file name match was not verified against a live server.
+  - Includes unsupported, unauthorized, permission, unavailable, offline and empty states in all supported languages.
 - **Archive view**:
   - Adds an Archive entry after Favorites that shows your archived photos and videos in the shared timeline with scrubber, lightbox, thumbnail cache, favorite, download and add-to-album actions.
   - Read-only: Lymic never archives or unarchives assets. Needs the `asset.read` API key permission.
