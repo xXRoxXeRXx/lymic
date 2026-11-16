@@ -1,4 +1,4 @@
-import type { SearchFeatures, SearchFilters, SearchMode, SearchRequest, SearchResults } from "../contracts";
+import type { SearchFeatures, SearchFilters, SearchMode, SearchRating, SearchRequest, SearchResults } from "../contracts";
 import { buildRequestFilters, filterErrors as validateFilters } from "../search-filters";
 import type { SearchDesktopAdapter } from "../tauri/desktop-adapter";
 import { classifyRequestFailure, failureMessage } from "./request-failure";
@@ -25,6 +25,8 @@ export interface SearchController extends TimelineController {
   mode: SearchMode;
   /** The Search Filters; each Search Filter is one optional field, edited in place. */
   readonly filters: SearchFilters;
+  /** Selects a Rating level; selecting the level that is already selected clears the Rating. */
+  toggleRating(level: SearchRating): void;
   /** The locale key of why a set Search Filter cannot be searched, per filter; such a Search does not run. */
   readonly filterErrors: Partial<Record<keyof SearchFilters, string>>;
   /** False while the server is known to have OCR switched off; unknown features count as available. */
@@ -208,6 +210,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     removeAsset: timeline.removeAsset,
     locateAsset: timeline.locateAsset,
     stepAsset: timeline.stepAsset,
+    toggleRating(level) { filters.rating = filters.rating === level ? undefined : level; },
     loadFeatures,
     submit,
     clear,

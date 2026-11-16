@@ -367,4 +367,13 @@
   ,"search_placeholder_description": "Rechercher par description"
   ,"search_placeholder_folderPath": "Rechercher par chemin de dossier"
   ,"search_placeholder_ocr": "Rechercher par texte dans les photos"
+  ,"search_filter_display": "Affichage"
+  ,"search_filter_favorite": "Favoris"
+  ,"search_filter_archived": "Archivés"
+  ,"search_filter_archived_hint": "Seuls les éléments archivés sont affichés. Sans cette option, ils sont exclus."
+  ,"search_filter_unfiled": "Sans album"
+  ,"search_filter_open_archive": "Ouvrir les archives"
+  ,"search_filter_rating": "Note"
+  ,"search_filter_rating_one": "1 étoile"
+  ,"search_filter_rating_other": "{count} étoiles"
 }

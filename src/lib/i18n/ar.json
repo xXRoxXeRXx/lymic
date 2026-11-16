@@ -367,4 +367,13 @@
   ,"search_placeholder_description": "البحث حسب الوصف"
   ,"search_placeholder_folderPath": "البحث حسب مسار المجلد"
   ,"search_placeholder_ocr": "البحث حسب النص في الصور"
+  ,"search_filter_display": "العرض"
+  ,"search_filter_favorite": "المفضلة"
+  ,"search_filter_archived": "المؤرشف"
+  ,"search_filter_archived_hint": "تُعرض العناصر المؤرشفة فقط. بدون هذا الخيار يتم استبعادها."
+  ,"search_filter_unfiled": "بدون ألبوم"
+  ,"search_filter_open_archive": "فتح الأرشيف"
+  ,"search_filter_rating": "التقييم"
+  ,"search_filter_rating_one": "نجمة واحدة"
+  ,"search_filter_rating_other": "{count} نجوم"
 }

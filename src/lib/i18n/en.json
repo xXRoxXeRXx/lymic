@@ -367,4 +367,13 @@
   ,"search_placeholder_description": "Search by description"
   ,"search_placeholder_folderPath": "Search by folder path"
   ,"search_placeholder_ocr": "Search by text in photos"
+  ,"search_filter_display": "Display"
+  ,"search_filter_favorite": "Favorites"
+  ,"search_filter_archived": "Archived"
+  ,"search_filter_archived_hint": "Only archived items are shown. Without this option they are left out."
+  ,"search_filter_unfiled": "Unfiled"
+  ,"search_filter_open_archive": "Open Archive"
+  ,"search_filter_rating": "Rating"
+  ,"search_filter_rating_one": "1 star"
+  ,"search_filter_rating_other": "{count} stars"
 }

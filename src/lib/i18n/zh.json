@@ -367,4 +367,13 @@
   ,"search_placeholder_description": "按描述搜索"
   ,"search_placeholder_folderPath": "按文件夹路径搜索"
   ,"search_placeholder_ocr": "按照片中的文字搜索"
+  ,"search_filter_display": "显示"
+  ,"search_filter_favorite": "收藏"
+  ,"search_filter_archived": "已归档"
+  ,"search_filter_archived_hint": "仅显示已归档的项目。未选此项时，已归档的项目不会出现。"
+  ,"search_filter_unfiled": "未归入相册"
+  ,"search_filter_open_archive": "打开归档"
+  ,"search_filter_rating": "评分"
+  ,"search_filter_rating_one": "1 星"
+  ,"search_filter_rating_other": "{count} 星"
 }
