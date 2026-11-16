@@ -575,6 +575,7 @@
             timeline={trash}
             {...sharedTimelineProps}
             downloadOnly={true}
+            restoreTrashedAssets={desktop.restoreTrashedAssets}
             ariaLabel={$t("trash_title")}
             loadingMessage={$t("trash_loading")}
             emptyMessage={$t("trash_empty")}

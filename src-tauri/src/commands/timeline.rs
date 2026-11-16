@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::immich::{
-    AlbumTimeline, AssetDetails, ImmichSession, PlaceTimeline, TimelineAsset, TimelineBucket,
+    AlbumTimeline, AssetDetails, ImmichSession, PlaceTimeline, RemoteAssetId, TimelineAsset,
+    TimelineBucket, TrashRestoreResult,
 };
 
 #[tauri::command]
@@ -72,6 +73,31 @@ async fn download_archive_with(
         return Ok(());
     };
     session.save_archive(archive, &destination_path).await
+}
+
+/// Restores Trashed Assets to the Immich Library. Lymic offers no other write to the Immich trash.
+#[tauri::command]
+pub(crate) async fn restore_trashed_assets(
+    asset_ids: Vec<String>,
+) -> Result<TrashRestoreResult, String> {
+    if asset_ids.is_empty() {
+        return Err("At least one asset ID is required".to_string());
+    }
+    let asset_ids = asset_ids
+        .iter()
+        .map(|asset_id| {
+            let asset_id = asset_id.trim();
+            if asset_id.is_empty() {
+                Err("Asset ID cannot be empty".to_string())
+            } else {
+                Ok(RemoteAssetId::new(asset_id))
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.restore_trashed_assets(&asset_ids).await
+    })
+    .await
 }
 
 #[tauri::command]

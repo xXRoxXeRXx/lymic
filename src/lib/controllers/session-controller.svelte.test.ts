@@ -32,6 +32,7 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
     getArchiveTimelineBucketAssets: vi.fn().mockResolvedValue([]),
     getTrashTimelineBuckets: vi.fn().mockResolvedValue([]),
     getTrashTimelineBucketAssets: vi.fn().mockResolvedValue([]),
+    restoreTrashedAssets: vi.fn().mockResolvedValue({ restoredAssetIds: [], failedAssetIds: [] }),
     getMapMarkers: vi.fn().mockResolvedValue([]),
     getMemories: vi.fn().mockResolvedValue([]),
     getMemoriesPage: vi.fn().mockResolvedValue({ memories: [], hasNextPage: false }),

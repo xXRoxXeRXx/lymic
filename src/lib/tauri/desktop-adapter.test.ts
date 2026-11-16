@@ -106,6 +106,7 @@ describe("tauriDesktopAdapter", () => {
     await archiveTimelineAdapter.getArchiveTimelineBucketAssets("2025-03-01T00:00:00.000Z");
     await trashTimelineAdapter.getTrashTimelineBuckets();
     await trashTimelineAdapter.getTrashTimelineBucketAssets("2025-03-01T00:00:00.000Z");
+    await trashTimelineAdapter.restoreTrashedAssets(["trash-1", "trash-2"]);
     await tauriDesktopAdapter.getAssetDetails("asset-1");
     await tauriDesktopAdapter.setAssetFavorite("asset-1", true);
     await tauriDesktopAdapter.chooseDownloadDestination("IMG_0001.CR3");
@@ -173,6 +174,7 @@ describe("tauriDesktopAdapter", () => {
       ["get_archive_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
       ["get_trash_timeline_buckets"],
       ["get_trash_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
+      ["restore_trashed_assets", { assetIds: ["trash-1", "trash-2"] }],
       ["get_asset_details", { assetId: "asset-1" }],
       ["set_asset_favorite", { assetId: "asset-1", isFavorite: true }],
       ["download_asset", { assetId: "asset-1", destinationPath: "C:/Downloads/IMG_0001.CR3" }],
