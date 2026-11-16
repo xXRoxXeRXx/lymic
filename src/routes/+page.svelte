@@ -54,7 +54,7 @@
   let albumsScrollTop = 0;
   let content = $state<HTMLElement>();
   /** The view a Search was started from and where it was scrolled to, so Back returns there (even to a sub-view). */
-  let searchOrigin = $state<{ view: string; scrollTop: number } | null>(null);
+  let searchOrigin = $state<{ view: string; top: number } | null>(null);
   /** The scroll position the open shared timeline view last reported; its scrolling area is inside the view, not `main`. */
   let timelineScrollTop = 0;
   /** Where the timeline view of `view` opens, set only while returning from a Search. */
@@ -264,7 +264,7 @@
     if (currentView !== "search") {
       searchOrigin = {
         view: currentView,
-        scrollTop: timelineScrollViews.has(currentView) ? timelineScrollTop : (content?.scrollTop ?? 0),
+        top: timelineScrollViews.has(currentView) ? timelineScrollTop : (content?.scrollTop ?? 0),
       };
       currentView = "search";
     }
@@ -272,10 +272,10 @@
   }
 
   function returnFromSearch() {
-    const origin = searchOrigin ?? { view: "photos", scrollTop: 0 };
+    const origin = searchOrigin ?? { view: "photos", top: 0 };
     currentView = origin.view;
-    if (timelineScrollViews.has(origin.view)) scrollRestore = { view: origin.view, top: origin.scrollTop };
-    else queueMicrotask(() => { if (content) content.scrollTop = origin.scrollTop; });
+    if (timelineScrollViews.has(origin.view)) scrollRestore = { view: origin.view, top: origin.top };
+    else queueMicrotask(() => { if (content) content.scrollTop = origin.top; });
     // The Trash Timeline is dropped when it is left, and Explore may have gone stale.
     if (origin.view === "trash") void trash.refresh();
     if (origin.view === "explore") void explore.refreshIfStale();
@@ -592,7 +592,7 @@
         <SearchBar {search} onSubmit={submitSearch} onClear={clearSearch} />
       </div>
 
-      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'favorites' || currentView === 'archive' || currentView === 'trash' || currentView === 'person-timeline' || currentView === 'album-timeline' || currentView === 'place-timeline' || currentView === 'memory-timeline' || currentView === 'search' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} class="flex-1 {currentView === 'map' || timelineScrollViews.has(currentView) ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />

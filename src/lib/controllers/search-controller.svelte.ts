@@ -1,13 +1,13 @@
-import type { SearchFeatures, SearchFilters, SearchMode, SearchQuery, SearchTimeline } from "../contracts";
+import type { SearchFeatures, SearchFilters, SearchMode, SearchRequest, SearchResults } from "../contracts";
 import { buildRequestFilters, filterErrors as validateFilters } from "../search-filters";
 import type { SearchDesktopAdapter } from "../tauri/desktop-adapter";
-import { classifyRequestFailure } from "./request-failure";
+import { classifyRequestFailure, failureMessage } from "./request-failure";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
 
 /** Why the latest Search could not be answered. */
 export type SearchFailure = "authentication_required" | "permission_denied" | "unavailable" | "error";
 
-/** The most matches a chronological Search shows (ADR-0009); mirrors the backend constant. */
+/** The most results a chronological Search shows (ADR-0009); mirrors the backend constant. */
 export const SEARCH_RESULT_LIMIT = 5_000;
 
 /** The Search Mode a session starts with and returns to when the Search is cleared. */
@@ -35,7 +35,7 @@ export interface SearchController extends TimelineController {
   readonly submittedText: string;
   /** The number of Remote Assets in the results. */
   readonly resultCount: number;
-  /** True when the Search was cut at the result limit and only the newest matches are shown. */
+  /** True when the Search was cut at the result limit and only the newest results are shown. */
   readonly truncated: boolean;
   /** Set while the server is older than the Search requires; every other view is unaffected. */
   readonly unsupported: { version: string; requiredVersion: string } | null;
@@ -51,11 +51,12 @@ export interface SearchController extends TimelineController {
   submit(): Promise<boolean>;
 }
 
-const NO_RESULTS: SearchTimeline = { buckets: [], assetsByBucket: {}, truncated: false };
+const NO_RESULTS: SearchResults = { buckets: [], assetsByBucket: {}, truncated: false };
 
 function classifyFailure(reason: unknown): SearchFailure {
-  const message = typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "";
-  if (message.startsWith("search_authentication_required")) return "authentication_required";
+  // Unlike the other sections, a rejected API key is its own failure here: the view asks to sign in again
+  // instead of saying the server is unavailable (which `classifyRequestFailure` maps it to).
+  if (failureMessage(reason).startsWith("search_authentication_required")) return "authentication_required";
   return classifyRequestFailure(reason, "search");
 }
 
@@ -72,7 +73,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   let failure = $state<SearchFailure | null>(null);
   let revision = $state(0);
   // The Search the shared timeline loads: the latest submitted one, which Retry repeats.
-  let pending: SearchQuery | null = null;
+  let pending: SearchRequest | null = null;
   // Only a server that answered "supported" is remembered; an unsupported one is asked again.
   let supported = false;
   // Bumped by every load and by clear(), so a load that finishes late cannot touch newer state.
@@ -103,19 +104,19 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     return featuresRead;
   }
 
-  function currentQuery(): SearchQuery {
+  function currentRequest(): SearchRequest {
     return { text: text.trim(), mode, filters: buildRequestFilters($state.snapshot(filters)) };
   }
 
-  function hasCriteria(query: SearchQuery) {
-    return query.text !== "" || Object.keys(query.filters).length > 0;
+  function hasCriteria(request: SearchRequest) {
+    return request.text !== "" || Object.keys(request.filters).length > 0;
   }
 
-  function isSearchable(query: SearchQuery) {
-    return hasCriteria(query) && Object.keys(validateFilters($state.snapshot(filters))).length === 0;
+  function isSearchable(request: SearchRequest) {
+    return hasCriteria(request) && Object.keys(validateFilters($state.snapshot(filters))).length === 0;
   }
 
-  async function load(): Promise<SearchTimeline> {
+  async function load(): Promise<SearchResults> {
     const queued = pending;
     if (!queued) return NO_RESULTS;
     const thisLoad = ++latestLoad;
@@ -134,13 +135,13 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
       await loadFeatures();
       if (thisLoad !== latestLoad) return NO_RESULTS;
       // The features may have turned the mode of the queued Search unavailable.
-      const query = queued.mode === "ocr" && !ocrAvailable ? { ...queued, mode: DEFAULT_SEARCH_MODE } : queued;
-      const results = await adapter.searchAssets(query);
+      const request = queued.mode === "ocr" && !ocrAvailable ? { ...queued, mode: DEFAULT_SEARCH_MODE } : queued;
+      const results = await adapter.searchAssets(request);
       if (thisLoad === latestLoad) {
         unsupported = null;
         failure = null;
         truncated = results.truncated;
-        submittedText = query.text;
+        submittedText = request.text;
         revision += 1;
       }
       return results;
@@ -172,9 +173,9 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   }
 
   async function submit() {
-    const query = currentQuery();
-    if (!isSearchable(query)) return false;
-    pending = query;
+    const request = currentRequest();
+    if (!isSearchable(request)) return false;
+    pending = request;
     await timeline.refresh();
     return true;
   }
@@ -188,7 +189,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     get featuresFailed() { return featuresFailed; },
     get filters() { return filters; },
     get filterErrors() { return validateFilters(filters); },
-    get canSubmit() { return isSearchable(currentQuery()); },
+    get canSubmit() { return isSearchable(currentRequest()); },
     get submittedText() { return submittedText; },
     get resultCount() { return timeline.buckets.reduce((total, bucket) => total + bucket.count, 0); },
     get truncated() { return truncated; },

@@ -214,7 +214,7 @@ export type SearchMode = "filename" | "description" | "folderPath" | "ocr";
 /** Images or videos; unset means all. */
 export type SearchMediaType = "image" | "video";
 
-/** A date range. In `SearchFilters` the bounds are the chosen local days (`YYYY-MM-DD`); in a `SearchQuery` they are instants. */
+/** A date range. In `SearchFilters` the bounds are the chosen local days (`YYYY-MM-DD`); in a `SearchRequest` they are instants. */
 export interface SearchDateRange { from?: string; to?: string; }
 
 /** The Search Filters the user has set (held in memory for the session). Each Search Filter adds one optional field. */
@@ -226,14 +226,14 @@ export interface SearchFilters {
 /** The Search Filters as the backend receives them: the same fields, with date bounds as ISO 8601 instants. */
 export type SearchRequestFilters = SearchFilters;
 
-export interface SearchQuery {
+export interface SearchRequest {
   text: string;
   mode: SearchMode;
   filters: SearchRequestFilters;
 }
 
 /** Chronological Search Results: an Album Timeline plus whether the Search was cut at the limit. */
-export interface SearchTimeline extends AlbumTimeline {
+export interface SearchResults extends AlbumTimeline {
   truncated: boolean;
 }
 

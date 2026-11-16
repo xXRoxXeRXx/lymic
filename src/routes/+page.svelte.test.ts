@@ -3317,7 +3317,7 @@ describe("Search", () => {
       get_album_catalogue: async () => [holiday],
       get_album_timeline: async () => results("album-asset"),
       get_search_support: async () => supported,
-      search_assets: async () => results("hit-1", "hit-2"),
+      search_assets: async () => results("found-1", "found-2"),
       get_asset_details: async () => ({ originalFileName: "IMG_0001.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024 }),
     });
     await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
@@ -3329,7 +3329,7 @@ describe("Search", () => {
     await search("IMG_");
 
     expect(tauri.invoke).toHaveBeenCalledWith("get_search_support");
-    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG_", mode: "filename", filters: {} } });
+    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG_", mode: "filename", filters: {} } });
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
@@ -3356,7 +3356,7 @@ describe("Search", () => {
     renderAuthenticatedPage({
       get_album_catalogue: async () => [holiday],
       get_search_support: async () => supported,
-      search_assets: async () => results("hit-1"),
+      search_assets: async () => results("found-1"),
     });
     await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
     const album = await screen.findByRole("button", { name: /Holiday/ });
@@ -3377,7 +3377,7 @@ describe("Search", () => {
       get_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
       get_timeline_bucket_assets: async () => [found("photo-1")],
       get_search_support: async () => supported,
-      search_assets: async () => results("hit-1"),
+      search_assets: async () => results("found-1"),
     });
     const viewportOf = async () => (await screen.findByRole("button", { name: "Open photo" })).closest(".overflow-y-auto") as HTMLElement;
     const viewport = await viewportOf();
@@ -3404,7 +3404,7 @@ describe("Search", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
       get_search_support: async () => supported,
-      search_assets: async () => results("hit-1"),
+      search_assets: async () => results("found-1"),
     });
     await search("IMG");
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
@@ -3431,7 +3431,7 @@ describe("Search", () => {
     stubImmediateIntersectionObserver();
     const searchAssets = vi.fn()
       .mockRejectedValueOnce("search_permission_denied:asset.read")
-      .mockResolvedValueOnce(results("hit-1"));
+      .mockResolvedValueOnce(results("found-1"));
     renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: searchAssets });
 
     await search("IMG");
@@ -3451,6 +3451,25 @@ describe("Search", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Immich did not accept the API key. Sign in again to search.");
   });
 
+  it("says the response was unreadable, not that the server is unavailable or offline", async () => {
+    stubImmediateIntersectionObserver();
+    const searchAssets = vi.fn().mockRejectedValueOnce("search_invalid_response");
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: searchAssets });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Immich sent a response Lymic could not read.");
+    expect(screen.getByRole("button", { name: "Retry timeline connection" })).toBeInTheDocument();
+
+    // Over earlier results it is still an error, not the offline status.
+    searchAssets.mockResolvedValueOnce(results("asset-1")).mockRejectedValueOnce("search_invalid_response");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry timeline connection" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    await search("second");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Immich sent a response Lymic could not read.");
+    expect(screen.queryByText("You are offline. The previous results stay visible until you retry.")).not.toBeInTheDocument();
+  });
+
   it("shows an unavailable server with Retry on a first Search", async () => {
     renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: () => Promise.reject("search_unavailable") });
 
@@ -3464,7 +3483,7 @@ describe("Search", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
       get_search_support: async () => supported,
-      search_assets: vi.fn().mockResolvedValueOnce(results("hit-1")).mockRejectedValueOnce("search_unavailable"),
+      search_assets: vi.fn().mockResolvedValueOnce(results("found-1")).mockRejectedValueOnce("search_unavailable"),
     });
     await search("first");
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
@@ -3492,12 +3511,12 @@ describe("Search", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
       get_search_support: async () => supported,
-      search_assets: async () => ({ ...results("hit-1"), truncated: true }),
+      search_assets: async () => ({ ...results("found-1"), truncated: true }),
     });
 
     await search("IMG");
 
-    expect(await screen.findByText("Showing only the newest 5,000 matches. Narrow your search to see the rest.")).toBeInTheDocument();
+    expect(await screen.findByText("Showing only the newest 5,000 results. Narrow your search to see the rest.")).toBeInTheDocument();
   });
 
   describe("Search Mode", () => {
@@ -3531,7 +3550,7 @@ describe("Search", () => {
       await fireEvent.click(within(group).getByRole("radio", { name: "Description" }));
       await search("sunset");
 
-      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "sunset", mode: "description", filters: {} } });
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "sunset", mode: "description", filters: {} } });
       const calls = tauri.invoke.mock.calls.map(([command]) => command);
       expect(calls.filter((command) => command === "get_search_features")).toHaveLength(1);
       expect(calls.indexOf("get_search_features")).toBeLessThan(calls.indexOf("search_assets"));
@@ -3550,7 +3569,7 @@ describe("Search", () => {
       await waitFor(() => expect(ocr).toBeDisabled());
       expect(ocr).toHaveAccessibleDescription("OCR is switched off on this Immich server, so text inside photos cannot be searched.");
       await search("IMG");
-      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG", mode: "filename", filters: {} } });
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG", mode: "filename", filters: {} } });
     });
 
     it("keeps Filename working when the server features cannot be read", async () => {
@@ -3563,7 +3582,7 @@ describe("Search", () => {
 
       expect(await within(group).findByText("The server's features could not be read. OCR may not be available.")).toBeInTheDocument();
       await search("IMG");
-      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "IMG", mode: "filename", filters: {} } });
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG", mode: "filename", filters: {} } });
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
   });
@@ -3602,7 +3621,7 @@ describe("Search filter panel", () => {
 
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
     expect(tauri.invoke).toHaveBeenCalledWith("search_assets", {
-      query: {
+      request: {
         text: "",
         mode: "filename",
         filters: {
@@ -3660,7 +3679,7 @@ describe("Search filter panel", () => {
     expect(screen.queryByRole("button", { name: "Clear date range" })).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Videos" })).toBeChecked();
     await submit();
-    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "", mode: "filename", filters: { mediaType: "video" } } }));
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "filename", filters: { mediaType: "video" } } }));
   });
 
   it("keeps the filters while the Search is left and entered again, and resets text and filters on clear", async () => {

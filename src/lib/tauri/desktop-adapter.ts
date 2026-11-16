@@ -34,9 +34,9 @@ import type {
   PeoplePage,
   Place,
   SearchFeatures,
-  SearchQuery,
+  SearchRequest,
   SearchSupport,
-  SearchTimeline,
+  SearchResults,
 } from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
 
@@ -144,7 +144,7 @@ export interface SearchDesktopAdapter {
   getSearchSupport(): Promise<SearchSupport>;
   /** Reads which optional Search Modes (Context, OCR) the server has switched on. */
   getSearchFeatures(): Promise<SearchFeatures>;
-  searchAssets(query: SearchQuery): Promise<SearchTimeline>;
+  searchAssets(request: SearchRequest): Promise<SearchResults>;
 }
 
 export interface PreferencesDesktopAdapter {
@@ -269,7 +269,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getPlaces: () => invoke<Place[]>("get_places"),
   getSearchSupport: () => invoke<SearchSupport>("get_search_support"),
   getSearchFeatures: () => invoke<SearchFeatures>("get_search_features"),
-  searchAssets: (query) => invoke<SearchTimeline>("search_assets", { query }),
+  searchAssets: (request) => invoke<SearchResults>("search_assets", { request }),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),
