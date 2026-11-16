@@ -340,10 +340,11 @@
   ,"search_loading": "جارٍ البحث…"
   ,"search_empty": "لم يتطابق أي شيء مع بحثك. جرّب نصًا مختلفًا أو عوامل تصفية أقل."
   ,"search_results_count": "النتائج: {count}"
-  ,"search_truncated": "يتم عرض أحدث {count} من النتائج المطابقة فقط. ضيّق البحث لرؤية البقية."
+  ,"search_truncated": "يتم عرض أحدث {count} من النتائج فقط. ضيّق البحث لرؤية البقية."
   ,"search_unsupported": "يتطلب البحث الإصدار {required} من Immich أو أحدث، لكن هذا الخادم يعمل بالإصدار {version}. تستمر بقية ميزات Lymic في العمل."
   ,"search_authentication_required": "لم يقبل Immich مفتاح API. سجّل الدخول مرة أخرى للبحث."
   ,"search_permission_denied": "البحث غير مسموح. امنح مفتاح API صلاحية asset.read في Immich."
   ,"search_unavailable": "تعذّر إكمال البحث لأن خادم Immich غير متاح."
+  ,"search_invalid_response": "أرسل Immich ردًا لم يتمكن Lymic من قراءته."
   ,"search_offline": "أنت غير متصل. تبقى النتائج السابقة ظاهرة حتى تعيد المحاولة."
 }

@@ -33,9 +33,9 @@ import type {
   Memory,
   PeoplePage,
   Place,
-  SearchQuery,
+  SearchRequest,
   SearchSupport,
-  SearchTimeline,
+  SearchResults,
 } from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
 
@@ -141,7 +141,7 @@ export interface PlacesDesktopAdapter {
 export interface SearchDesktopAdapter {
   /** Reads the server version once to decide whether a Search can be answered (Immich 3.2 or later). */
   getSearchSupport(): Promise<SearchSupport>;
-  searchAssets(query: SearchQuery): Promise<SearchTimeline>;
+  searchAssets(request: SearchRequest): Promise<SearchResults>;
 }
 
 export interface PreferencesDesktopAdapter {
@@ -265,7 +265,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getPersonTimelineBucketAssets: (personId, timeBucket) => invoke<TimelineAsset[]>("get_person_timeline_bucket_assets", { personId, timeBucket }),
   getPlaces: () => invoke<Place[]>("get_places"),
   getSearchSupport: () => invoke<SearchSupport>("get_search_support"),
-  searchAssets: (query) => invoke<SearchTimeline>("search_assets", { query }),
+  searchAssets: (request) => invoke<SearchResults>("search_assets", { request }),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),

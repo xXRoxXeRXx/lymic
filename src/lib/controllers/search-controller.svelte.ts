@@ -1,12 +1,12 @@
-import type { SearchFilters, SearchMode, SearchQuery, SearchTimeline } from "../contracts";
+import type { SearchFilters, SearchMode, SearchRequest, SearchResults } from "../contracts";
 import type { SearchDesktopAdapter } from "../tauri/desktop-adapter";
-import { classifyRequestFailure } from "./request-failure";
+import { classifyRequestFailure, failureMessage } from "./request-failure";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
 
 /** Why the latest Search could not be answered. */
 export type SearchFailure = "authentication_required" | "permission_denied" | "unavailable" | "error";
 
-/** The most matches a chronological Search shows (ADR-0009); mirrors the backend constant. */
+/** The most results a chronological Search shows (ADR-0009); mirrors the backend constant. */
 export const SEARCH_RESULT_LIMIT = 5_000;
 
 /** The Search Mode a session starts with and returns to when the Search is cleared. */
@@ -28,7 +28,7 @@ export interface SearchController extends TimelineController {
   readonly submittedText: string;
   /** The number of Remote Assets in the results. */
   readonly resultCount: number;
-  /** True when the Search was cut at the result limit and only the newest matches are shown. */
+  /** True when the Search was cut at the result limit and only the newest results are shown. */
   readonly truncated: boolean;
   /** Set while the server is older than the Search requires; every other view is unaffected. */
   readonly unsupported: { version: string; requiredVersion: string } | null;
@@ -42,11 +42,12 @@ export interface SearchController extends TimelineController {
   submit(): Promise<boolean>;
 }
 
-const NO_RESULTS: SearchTimeline = { buckets: [], assetsByBucket: {}, truncated: false };
+const NO_RESULTS: SearchResults = { buckets: [], assetsByBucket: {}, truncated: false };
 
 function classifyFailure(reason: unknown): SearchFailure {
-  const message = typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "";
-  if (message.startsWith("search_authentication_required")) return "authentication_required";
+  // Unlike the other sections, a rejected API key is its own failure here: the view asks to sign in again
+  // instead of saying the server is unavailable (which `classifyRequestFailure` maps it to).
+  if (failureMessage(reason).startsWith("search_authentication_required")) return "authentication_required";
   return classifyRequestFailure(reason, "search");
 }
 
@@ -60,23 +61,23 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   let failure = $state<SearchFailure | null>(null);
   let revision = $state(0);
   // The Search the shared timeline loads: the latest submitted one, which Retry repeats.
-  let pending: SearchQuery | null = null;
+  let pending: SearchRequest | null = null;
   // Only a server that answered "supported" is remembered; an unsupported one is asked again.
   let supported = false;
   // Bumped by every load and by clear(), so a load that finishes late cannot touch newer state.
   let latestLoad = 0;
 
-  function currentQuery(): SearchQuery {
+  function currentRequest(): SearchRequest {
     return { text: text.trim(), mode, filters: $state.snapshot(filters) };
   }
 
-  function hasCriteria(query: SearchQuery) {
-    return query.text !== "" || Object.values(query.filters).some((value) => value !== undefined);
+  function hasCriteria(request: SearchRequest) {
+    return request.text !== "" || Object.values(request.filters).some((value) => value !== undefined);
   }
 
-  async function load(): Promise<SearchTimeline> {
-    const query = pending;
-    if (!query) return NO_RESULTS;
+  async function load(): Promise<SearchResults> {
+    const request = pending;
+    if (!request) return NO_RESULTS;
     const thisLoad = ++latestLoad;
     try {
       if (!supported) {
@@ -90,12 +91,12 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
         }
         supported = true;
       }
-      const results = await adapter.searchAssets(query);
+      const results = await adapter.searchAssets(request);
       if (thisLoad === latestLoad) {
         unsupported = null;
         failure = null;
         truncated = results.truncated;
-        submittedText = query.text;
+        submittedText = request.text;
         revision += 1;
       }
       return results;
@@ -123,9 +124,9 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   }
 
   async function submit() {
-    const query = currentQuery();
-    if (!hasCriteria(query)) return false;
-    pending = query;
+    const request = currentRequest();
+    if (!hasCriteria(request)) return false;
+    pending = request;
     await timeline.refresh();
     return true;
   }
@@ -136,7 +137,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     get mode() { return mode; },
     set mode(value: SearchMode) { mode = value; },
     get filters() { return filters; },
-    get canSubmit() { return hasCriteria(currentQuery()); },
+    get canSubmit() { return hasCriteria(currentRequest()); },
     get submittedText() { return submittedText; },
     get resultCount() { return timeline.buckets.reduce((total, bucket) => total + bucket.count, 0); },
     get truncated() { return truncated; },

@@ -257,6 +257,7 @@ describe('i18n catalogs', () => {
       search_authentication_required: [],
       search_permission_denied: [],
       search_unavailable: [],
+      search_invalid_response: [],
       search_offline: [],
     };
     for (const [localeCode, translations] of Object.entries(catalog)) {

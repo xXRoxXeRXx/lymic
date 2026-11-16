@@ -214,14 +214,14 @@ export type SearchMode = "filename";
 /** The Search Filters of a Search. Each Search Filter adds one optional field. */
 export interface SearchFilters {}
 
-export interface SearchQuery {
+export interface SearchRequest {
   text: string;
   mode: SearchMode;
   filters: SearchFilters;
 }
 
 /** Chronological Search Results: an Album Timeline plus whether the Search was cut at the limit. */
-export interface SearchTimeline extends AlbumTimeline {
+export interface SearchResults extends AlbumTimeline {
   truncated: boolean;
 }
 

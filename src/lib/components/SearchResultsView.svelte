@@ -21,16 +21,18 @@
   } = $props();
 
   const numberLocale = $derived(toBcp47Locale($locale));
-  // An unusable API key or a missing permission is an error over cached results too; an unreachable server
-  // keeps the previous results with an offline status.
-  const failureIsError = $derived(search.failure === "permission_denied" || search.failure === "authentication_required");
-  const loadErrorMessage = $derived(
-    search.failure === "permission_denied"
-      ? $t("search_permission_denied")
-      : search.failure === "authentication_required"
-        ? $t("search_authentication_required")
-        : $t("search_unavailable"),
-  );
+  // An unusable API key, a missing permission or an unreadable response is an error over cached results too;
+  // an unreachable server keeps the previous results with an offline status.
+  const failureError = $derived.by(() => {
+    switch (search.failure) {
+      case "permission_denied": return $t("search_permission_denied");
+      case "authentication_required": return $t("search_authentication_required");
+      case "error": return $t("search_invalid_response");
+      default: return null;
+    }
+  });
+  const failureIsError = $derived(failureError !== null);
+  const loadErrorMessage = $derived(failureError ?? $t("search_unavailable"));
   const hintMessage = $derived(
     search.truncated ? $t("search_truncated", { values: { count: SEARCH_RESULT_LIMIT.toLocaleString(numberLocale) } }) : "",
   );

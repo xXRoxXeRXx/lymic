@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SearchSupport, SearchTimeline } from "../contracts";
+import type { SearchSupport, SearchResults } from "../contracts";
 import { createSearchController } from "./search-controller.svelte";
 
 const march = "2025-03-01T00:00:00.000Z";
@@ -10,7 +10,7 @@ function asset(id: string) {
   return { id, width: 640, height: 480, type: "IMAGE" as const, takenAt: "2025-03-02T00:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false };
 }
 
-function results(ids: string[], truncated = false): SearchTimeline {
+function results(ids: string[], truncated = false): SearchResults {
   return { buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(asset) }, truncated };
 }
 
@@ -167,7 +167,7 @@ describe("Search controller", () => {
   });
 
   it("ignores a Search that resolves after clear so the next account does not inherit it", async () => {
-    const inFlight = deferred<SearchTimeline>();
+    const inFlight = deferred<SearchResults>();
     const { search } = setup({ searchAssets: vi.fn().mockReturnValue(inFlight.promise) });
     search.text = "IMG";
 
@@ -183,7 +183,7 @@ describe("Search controller", () => {
   });
 
   it("ignores a failure that rejects after clear", async () => {
-    const inFlight = deferred<SearchTimeline>();
+    const inFlight = deferred<SearchResults>();
     const { search } = setup({ searchAssets: vi.fn().mockReturnValue(inFlight.promise) });
     search.text = "IMG";
 
