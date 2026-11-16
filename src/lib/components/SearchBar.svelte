@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { Search, X } from "lucide-svelte";
+  import { Search, SlidersHorizontal, X } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import type { SearchController } from "../controllers/search-controller.svelte";
+  import SearchPanel from "./SearchPanel.svelte";
 
   /**
    * The search bar at the top of the content area of every page. Enter (or the Search button) runs the
-   * Search; the clear control resets it. The Search Mode choice and the Search Filters belong in the panel
-   * that later changes add beside the field.
+   * Search; the clear control resets it. The Search Mode choice and the Search Filters live in the panel
+   * that the options button opens below the field.
    */
   let { search, onSubmit, onClear }: {
     search: SearchController;
@@ -15,21 +16,24 @@
   } = $props();
 
   const canClear = $derived(search.text !== "" || search.submittedText !== "");
+  const panelId = "search-panel";
+  let panelOpen = $state(false);
+  const placeholder = $derived(search.mode === "filename" ? $t("search_placeholder") : $t(`search_placeholder_${search.mode}`));
 </script>
 
 <form
   role="search"
   aria-label={$t("search_label")}
-  class="flex items-center gap-2"
   onsubmit={(event) => { event.preventDefault(); onSubmit(); }}
 >
+  <div class="flex items-center gap-2">
   <div class="relative min-w-0 flex-1">
     <Search class="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-zinc-500" aria-hidden="true" />
     <input
       type="search"
       class="glass-input !py-2 !pl-9 !pr-9 text-sm [&::-webkit-search-cancel-button]:hidden"
       aria-label={$t("search_label")}
-      placeholder={$t("search_placeholder")}
+      {placeholder}
       autocomplete="off"
       spellcheck="false"
       bind:value={search.text}
@@ -47,7 +51,22 @@
     {/if}
   </div>
   <button
+    type="button"
+    class="shrink-0 rounded-lg border border-slate-200/80 p-2.5 text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+    aria-label={$t("search_options")}
+    title={$t("search_options")}
+    aria-expanded={panelOpen}
+    aria-controls={panelId}
+    onclick={() => { panelOpen = !panelOpen; }}
+  >
+    <SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
+  </button>
+  <button
     type="submit"
     class="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-sky-600 dark:hover:bg-sky-500"
   >{$t("search_submit")}</button>
+  </div>
+  {#if panelOpen}
+    <SearchPanel {search} id={panelId} />
+  {/if}
 </form>
