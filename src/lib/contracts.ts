@@ -221,7 +221,11 @@ export interface SearchDateRange { from?: string; to?: string; }
 export interface SearchFilters {
   date?: SearchDateRange;
   mediaType?: SearchMediaType;
+  camera?: SearchCamera;
 }
+
+/** The camera Search Filter: each part is a value Immich suggested (Immich compares them exactly). */
+export interface SearchCamera { make?: string; model?: string; lensModel?: string; }
 
 /** The Search Filters as the backend receives them: the same fields, with date bounds as ISO 8601 instants. */
 export type SearchRequestFilters = SearchFilters;
@@ -241,6 +245,17 @@ export interface SearchResults extends AlbumTimeline {
 export interface SearchFeatures {
   smartSearch: boolean;
   ocr: boolean;
+}
+
+/** What Immich suggests values for. Each Search Filter chosen from suggestions adds a member. */
+export type SearchSuggestionType = "country" | "state" | "cameraMake" | "cameraModel" | "cameraLensModel";
+
+/** One suggestions request: the type, plus optional narrowing (the models of one make, the states of one country). Mirrors `src-tauri/src/immich/search_suggestions.rs`. */
+export interface SearchSuggestionsRequest {
+  type: SearchSuggestionType;
+  make?: string;
+  country?: string;
+  state?: string;
 }
 
 /** Whether the connected Immich Server is new enough to answer a Search. */
