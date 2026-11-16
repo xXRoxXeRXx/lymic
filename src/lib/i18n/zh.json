@@ -308,6 +308,7 @@
   ,"trash_restore_success": "已将 {count} 项恢复到你的 Immich 图库。"
   ,"trash_restore_partial": "{count} 项中有 {failed} 项无法恢复。它们仍处于选中状态，方便你重试。"
   ,"trash_restore_failed": "无法恢复，请重试。"
+  ,"trash_restore_none": "{count} 项中有 {failed} 项无法恢复，请重试。"
   ,"trash_restore_permission": "恢复被拒绝。请为 API 密钥授予 asset.delete 权限。"
   ,"explore_title": "探索"
   ,"explore_view_all": "查看全部"

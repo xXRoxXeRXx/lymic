@@ -160,7 +160,11 @@
     try {
       const outcome = await onRestore(assetId);
       if (isDestroyed || selectedAsset?.id !== assetId || outcome.restoredAssetIds.includes(assetId)) return;
-      restoreError = outcome.failure === "permission" ? $t("trash_restore_permission") : $t("trash_restore_failed");
+      restoreError = outcome.failure === "permission"
+        ? $t("trash_restore_permission")
+        : outcome.failure === null
+          ? $t("trash_restore_none", { values: { failed: outcome.failedAssetIds.length.toLocaleString(numberLocale), count: (1).toLocaleString(numberLocale) } })
+          : $t("trash_restore_failed");
     } finally {
       if (!isDestroyed) isRestoring = false;
     }

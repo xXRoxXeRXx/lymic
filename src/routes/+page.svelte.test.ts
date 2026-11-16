@@ -3199,6 +3199,30 @@ describe("Trash Timeline Restore", () => {
     expect(screen.queryAllByRole("button", { name: "Open photo" })).toHaveLength(0);
   });
 
+  it("names how many Trashed Assets failed when a Restore restores none of them and keeps them selected", async () => {
+    renderTrash(vi.fn(async (args?: unknown) => ({ restoredAssetIds: [], failedAssetIds: (args as { assetIds: string[] }).assetIds })));
+    await openTrash();
+
+    await select(2);
+    await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("2 of 2 could not be restored. Please try again.");
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+  });
+
+  it("names the failed count in the Lightbox when a Restore from it restores nothing", async () => {
+    renderTrash(vi.fn(async (args?: unknown) => ({ restoredAssetIds: [], failedAssetIds: (args as { assetIds: string[] }).assetIds })));
+    await openTrash();
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Restore" }));
+
+    expect(await within(lightbox).findByRole("alert")).toHaveTextContent("1 of 1 could not be restored. Please try again.");
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+  });
+
   it("names the missing permission on a refused multi-selection Restore and keeps the view usable", async () => {
     renderTrash(vi.fn(async () => { throw "trash_restore_permission_denied:asset.delete"; }));
     await openTrash();

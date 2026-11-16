@@ -47,5 +47,3 @@ export function createRemoteAssetRestore(options: RemoteAssetRestoreOptions) {
 
   return { restore };
 }
-
-export type RemoteAssetRestore = ReturnType<typeof createRemoteAssetRestore>;

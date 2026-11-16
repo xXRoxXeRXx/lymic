@@ -308,6 +308,7 @@
   ,"trash_restore_success": "Восстановлено в библиотеку Immich: {count}."
   ,"trash_restore_partial": "Не удалось восстановить {failed} из {count}. Они остаются выбранными, чтобы вы могли повторить попытку."
   ,"trash_restore_failed": "Не удалось восстановить. Повторите попытку."
+  ,"trash_restore_none": "Не удалось восстановить {failed} из {count}. Повторите попытку."
   ,"trash_restore_permission": "Восстановление отклонено. Предоставьте ключу API разрешение asset.delete."
   ,"explore_title": "Обзор"
   ,"explore_view_all": "Показать все"

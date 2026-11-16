@@ -148,6 +148,10 @@ _Avoid_: deleted asset, recycle bin item, bin item
 The chronological presentation of the authenticated user's Trashed Assets, grouped into time buckets like the Photo Timeline. Restoring a Trashed Asset returns it to the Immich Library; it does not touch local files, Watched Folders or Synchronization state.
 _Avoid_: recycle bin, trash folder, deleted gallery
 
+**Restore**:
+Returning a Trashed Asset to the authenticated user's Immich Library, from the Trash Timeline Lightbox or a multi-selection. It is the only Immich write the Trash Timeline performs; Lymic never moves a Remote Asset into the trash and never deletes one permanently. Trashed Assets that could not be restored stay visible and selected in the Trash Timeline so the user can retry.
+_Avoid_: undelete, recover, untrash
+
 ## Map
 
 **Map View**:

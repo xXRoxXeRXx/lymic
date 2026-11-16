@@ -308,6 +308,7 @@
   ,"trash_restore_success": "{count} in deine Immich-Bibliothek wiederhergestellt."
   ,"trash_restore_partial": "{failed} von {count} konnten nicht wiederhergestellt werden. Sie bleiben ausgewählt, damit du es erneut versuchen kannst."
   ,"trash_restore_failed": "Wiederherstellen fehlgeschlagen. Bitte versuche es erneut."
+  ,"trash_restore_none": "{failed} von {count} konnten nicht wiederhergestellt werden. Bitte versuche es erneut."
   ,"trash_restore_permission": "Das Wiederherstellen wurde abgelehnt. Erteile dem API-Schlüssel die Berechtigung asset.delete."
   ,"explore_title": "Erkunden"
   ,"explore_view_all": "Alle anzeigen"
