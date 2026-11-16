@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ContextSearchPage, SearchFeatures, SearchSupport, SearchResults } from "../contracts";
 import { createSearchController } from "./search-controller.svelte";
 
@@ -208,6 +208,165 @@ describe("Search controller", () => {
     await running;
 
     expect(search.failure).toBeNull();
+  });
+});
+
+describe("Search controller: Search Filters", () => {
+  // "Local day" depends on the time zone, so the boundaries are checked in a fixed one: Berlin is UTC+1 in
+  // March and UTC+2 after the clock change on 30 March 2025.
+  let originalZone: string | undefined;
+  beforeAll(() => {
+    originalZone = process.env.TZ;
+    process.env.TZ = "Europe/Berlin";
+  });
+  afterAll(() => {
+    if (originalZone === undefined) delete process.env.TZ;
+    else process.env.TZ = originalZone;
+  });
+
+  it("runs a Search with filters and no text", async () => {
+    const { adapter, search } = setup();
+    search.filters.mediaType = "video";
+
+    expect(search.canSubmit).toBe(true);
+    expect(await search.submit()).toBe(true);
+
+    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "context", filters: { mediaType: "video" } });
+    expect(search.resultCount).toBe(2);
+  });
+
+  it("turns the chosen local days into the start of the first day and the end of the last day, inclusive", async () => {
+    const { adapter, search } = setup();
+    search.filters.date = { from: "2025-03-01", to: "2025-03-31" };
+
+    await search.submit();
+
+    expect(adapter.searchAssets).toHaveBeenCalledWith({
+      text: "",
+      mode: "context",
+      filters: { date: { from: "2025-02-28T23:00:00.000Z", to: "2025-03-31T21:59:59.999Z" } },
+    });
+  });
+
+  it("includes the whole last day when only a single day is chosen", async () => {
+    const { adapter, search } = setup();
+    search.filters.date = { from: "2025-06-15", to: "2025-06-15" };
+
+    await search.submit();
+
+    expect(vi.mocked(adapter.searchAssets).mock.calls[0][0].filters.date).toEqual({
+      from: "2025-06-14T22:00:00.000Z",
+      to: "2025-06-15T21:59:59.999Z",
+    });
+  });
+
+  it("accepts either date bound alone", async () => {
+    const { adapter, search } = setup();
+    search.filters.date = { from: "2025-03-01" };
+    await search.submit();
+    expect(vi.mocked(adapter.searchAssets).mock.calls[0][0].filters).toEqual({ date: { from: "2025-02-28T23:00:00.000Z" } });
+
+    search.filters.date = { to: "2025-03-01" };
+    await search.submit();
+    expect(vi.mocked(adapter.searchAssets).mock.calls[1][0].filters).toEqual({ date: { to: "2025-03-01T22:59:59.999Z" } });
+  });
+
+  it("rejects a range whose start is after its end with a message, without searching or swapping", async () => {
+    const { adapter, search } = setup();
+    search.filters.date = { from: "2025-03-31", to: "2025-03-01" };
+
+    expect(search.filterErrors.date).toBe("search_filter_date_invalid_range");
+    expect(search.canSubmit).toBe(false);
+    expect(await search.submit()).toBe(false);
+
+    expect(adapter.getSearchSupport).not.toHaveBeenCalled();
+    expect(adapter.searchAssets).not.toHaveBeenCalled();
+    expect(search.filters.date).toEqual({ from: "2025-03-31", to: "2025-03-01" });
+
+    search.filters.date = { from: "2025-03-01", to: "2025-03-01" };
+    expect(search.filterErrors.date).toBeUndefined();
+    expect(await search.submit()).toBe(true);
+  });
+
+  it("does not search with an invalid range even when there is a text", async () => {
+    const { adapter, search } = setup();
+    search.text = "IMG";
+    search.filters.date = { from: "2025-03-31", to: "2025-03-01" };
+
+    expect(await search.submit()).toBe(false);
+    expect(adapter.searchAssets).not.toHaveBeenCalled();
+  });
+
+  it("treats a cleared date field, an unset media type and an empty range as no filter", async () => {
+    const { adapter, search } = setup();
+    search.filters.date = { from: "", to: "" };
+    search.filters.mediaType = undefined;
+
+    expect(search.canSubmit).toBe(false);
+    expect(await search.submit()).toBe(false);
+    expect(adapter.searchAssets).not.toHaveBeenCalled();
+  });
+
+  it("changes and clears each filter on its own", async () => {
+    const { adapter, search } = setup();
+    search.filters.mediaType = "image";
+    search.filters.date = { from: "2025-03-01" };
+    await search.submit();
+
+    search.filters.mediaType = "video";
+    await search.submit();
+    expect(vi.mocked(adapter.searchAssets).mock.calls[1][0].filters).toEqual({ mediaType: "video", date: { from: "2025-02-28T23:00:00.000Z" } });
+
+    search.filters.date = undefined;
+    await search.submit();
+    expect(vi.mocked(adapter.searchAssets).mock.calls[2][0].filters).toEqual({ mediaType: "video" });
+
+    search.filters.mediaType = undefined;
+    expect(search.canSubmit).toBe(false);
+  });
+
+  it("combines the text with every set filter", async () => {
+    const { adapter, search } = setupFilename();
+    search.text = "IMG";
+    search.filters.mediaType = "image";
+    search.filters.date = { to: "2025-03-01" };
+
+    await search.submit();
+
+    expect(adapter.searchAssets).toHaveBeenCalledWith({
+      text: "IMG",
+      mode: "filename",
+      filters: { mediaType: "image", date: { to: "2025-03-01T22:59:59.999Z" } },
+    });
+  });
+
+  it("keeps filters for the session and repeats them on Retry", async () => {
+    const searchAssets = vi.fn().mockRejectedValueOnce("search_unavailable").mockResolvedValue(results(["a"]));
+    const { search } = setup({ searchAssets });
+    search.filters.mediaType = "video";
+    await search.submit();
+
+    await search.refresh();
+
+    expect(searchAssets.mock.calls[1]).toEqual(searchAssets.mock.calls[0]);
+    expect(search.filters.mediaType).toBe("video");
+  });
+
+  it("resets the filters, and what the Search shows, on clear", async () => {
+    const { search } = setup();
+    search.text = "IMG";
+    search.mode = "filename";
+    search.filters.mediaType = "video";
+    search.filters.date = { from: "2025-03-01" };
+    await search.submit();
+
+    search.clear();
+
+    expect(search.text).toBe("");
+    expect(search.mode).toBe("context");
+    expect(search.filters).toEqual({});
+    expect(search.canSubmit).toBe(false);
+    expect(search.filterErrors).toEqual({});
   });
 });
 
@@ -423,15 +582,14 @@ describe("Context Search", () => {
 
   it("runs a Context Search without text as the chronological filters-only Search", async () => {
     const { adapter, search } = setup();
-    // The first Search Filters arrive with the filter panel; any set filter is a criterion.
-    (search.filters as Record<string, unknown>).example = "set";
+    search.filters.mediaType = "video";
 
     expect(await search.submit()).toBe(true);
 
     expect(search.mode).toBe("context");
     expect(search.presentation).toBe("chronological");
     expect(adapter.searchContextPage).not.toHaveBeenCalled();
-    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "context", filters: { example: "set" } });
+    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "context", filters: { mediaType: "video" } });
   });
 
   it("loads further pages the server announces, keeping the order and skipping duplicates", async () => {

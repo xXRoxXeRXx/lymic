@@ -1,4 +1,5 @@
 import type { ContextSearchPage, SearchFeatures, SearchFilters, SearchMode, SearchRequest, SearchResults } from "../contracts";
+import { buildRequestFilters, filterErrors as validateFilters } from "../search-filters";
 import type { SearchDesktopAdapter } from "../tauri/desktop-adapter";
 import { createContextResultsController, type ContextResults } from "./context-results-controller.svelte";
 import { classifyRequestFailure, failureMessage } from "./request-failure";
@@ -28,8 +29,10 @@ export interface SearchController extends TimelineController {
   /** The text in the search bar, bound to its field. */
   text: string;
   mode: SearchMode;
-  /** The Search Filters; each Search Filter is one optional field. */
+  /** The Search Filters; each Search Filter is one optional field, edited in place. */
   readonly filters: SearchFilters;
+  /** The locale key of why a set Search Filter cannot be searched, per filter; such a Search does not run. */
+  readonly filterErrors: Partial<Record<keyof SearchFilters, string>>;
   /** False while the server is known to have OCR switched off; unknown features count as available. */
   readonly ocrAvailable: boolean;
   /** False while the server is known to have Smart Search switched off; unknown features count as available. */
@@ -55,11 +58,11 @@ export interface SearchController extends TimelineController {
   readonly failure: SearchFailure | null;
   /** Increases whenever a Search finishes loading, so a view can start at the top of new results. */
   readonly revision: number;
-  /** Whether there is anything to search for: a text, or a Search Filter. */
+  /** Whether there is a Search to run: a text or a set Search Filter, and every set filter can be searched. */
   readonly canSubmit: boolean;
   /** Reads the server's features once and holds them in memory; a failure leaves them unknown and never throws. */
   loadFeatures(): Promise<void>;
-  /** Runs a Search with the current text, mode and filters. Resolves to false, doing nothing, without anything to search for. */
+  /** Runs a Search with the current text, mode and filters. Resolves to false, doing nothing, without anything to search for or with a filter that cannot be searched. */
   submit(): Promise<boolean>;
 }
 
@@ -129,11 +132,15 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   }
 
   function currentRequest(): SearchRequest {
-    return { text: text.trim(), mode, filters: $state.snapshot(filters) };
+    return { text: text.trim(), mode, filters: buildRequestFilters($state.snapshot(filters)) };
   }
 
   function hasCriteria(request: SearchRequest) {
-    return request.text !== "" || Object.values(request.filters).some((value) => value !== undefined);
+    return request.text !== "" || Object.keys(request.filters).length > 0;
+  }
+
+  function isSearchable(request: SearchRequest) {
+    return hasCriteria(request) && Object.keys(validateFilters($state.snapshot(filters))).length === 0;
   }
 
   /** Reads the server's support once; false (with `unsupported` set) when the server is older than a Search requires. */
@@ -230,7 +237,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
 
   async function submit() {
     let request = currentRequest();
-    if (!hasCriteria(request)) return false;
+    if (!isSearchable(request)) return false;
     if (request.mode === "context" && features === null) {
       // Whether Smart Search is on decides how a Context text is searched, so it is known before the Search.
       const generation = featuresGeneration;
@@ -261,7 +268,8 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     get smartSearchAvailable() { return smartSearchAvailable; },
     get featuresFailed() { return featuresFailed; },
     get filters() { return filters; },
-    get canSubmit() { return hasCriteria(currentRequest()); },
+    get filterErrors() { return validateFilters(filters); },
+    get canSubmit() { return isSearchable(currentRequest()); },
     get presentation() { return presentation; },
     context,
     get submittedText() { return submittedText; },

@@ -6,8 +6,9 @@
 
   /**
    * The search bar at the top of the content area of every page. Enter (or the Search button) runs the
-   * Search; the clear control resets it. The Search Mode choice and the Search Filters live in the panel
-   * that the options button opens below the field.
+   * Search; the clear control resets text, Search Mode and Search Filters. The Search Mode choice and the
+   * Search Filters live in the panel that the options button opens below the field; a Search can consist of
+   * filters alone.
    */
   let { search, onSubmit, onClear }: {
     search: SearchController;
@@ -15,16 +16,33 @@
     onClear: () => void;
   } = $props();
 
-  const canClear = $derived(search.text !== "" || search.submittedText !== "");
+  const hasFilters = $derived(Object.values(search.filters).some((value) => value !== undefined));
+  const canClear = $derived(search.text !== "" || hasFilters || search.revision > 0);
   const panelId = "search-panel";
   let panelOpen = $state(false);
+  let optionsButton = $state<HTMLButtonElement | null>(null);
   const placeholder = $derived(search.mode === "filename" ? $t("search_placeholder") : $t(`search_placeholder_${search.mode}`));
+
+  function submit() {
+    // A filter that cannot be searched keeps the panel open, where its message is.
+    if (Object.keys(search.filterErrors).length === 0) panelOpen = false;
+    onSubmit();
+  }
+
+  function closeOnEscape(event: KeyboardEvent) {
+    if (event.key !== "Escape" || !panelOpen) return;
+    event.stopPropagation();
+    panelOpen = false;
+    optionsButton?.focus();
+  }
 </script>
 
+<!-- The wrapper only listens for Escape bubbling up from the controls inside the panel. -->
+<div role="presentation" onkeydown={closeOnEscape}>
 <form
   role="search"
   aria-label={$t("search_label")}
-  onsubmit={(event) => { event.preventDefault(); onSubmit(); }}
+  onsubmit={(event) => { event.preventDefault(); submit(); }}
 >
   <div class="flex items-center gap-2">
   <div class="relative min-w-0 flex-1">
@@ -52,7 +70,8 @@
   </div>
   <button
     type="button"
-    class="shrink-0 rounded-lg border border-slate-200/80 p-2.5 text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+    bind:this={optionsButton}
+    class="relative shrink-0 rounded-lg border border-slate-200/80 p-2.5 text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
     aria-label={$t("search_options")}
     title={$t("search_options")}
     aria-expanded={panelOpen}
@@ -60,6 +79,7 @@
     onclick={() => { panelOpen = !panelOpen; }}
   >
     <SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
+    {#if hasFilters}<span class="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-600 dark:bg-sky-400" aria-hidden="true"></span>{/if}
   </button>
   <button
     type="submit"
@@ -70,3 +90,4 @@
     <SearchPanel {search} id={panelId} />
   {/if}
 </form>
+</div>

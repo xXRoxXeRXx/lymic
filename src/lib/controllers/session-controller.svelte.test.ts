@@ -80,6 +80,18 @@ describe("authenticated session", () => {
     expect(session.search.buckets).toEqual([]);
   });
 
+  it("keeps the Search Filters for the session and resets them on logout", async () => {
+    const { session } = setup();
+    session.search.filters.mediaType = "video";
+    session.search.filters.date = { from: "2025-03-01" };
+    expect(session.search.filters).toEqual({ mediaType: "video", date: { from: "2025-03-01" } });
+
+    await session.logout();
+
+    expect(session.search.filters).toEqual({});
+    expect(session.search.canSubmit).toBe(false);
+  });
+
   it("initializes and clears session-owned controllers across login, account switch, and logout", async () => {
     const { session, resetView } = setup({
       getTimelineBuckets: vi.fn()
