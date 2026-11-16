@@ -12,7 +12,7 @@
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
   import { createRemoteAssetFavorites } from "./remote-asset-favorites.svelte";
-  import { createRemoteAssetRestore, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
+  import { createRemoteAssetRestore, restoreFeedbackFor, restoreFeedbackMessage, type RestoreFeedback } from "./remote-asset-restore";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
   interface Props {
@@ -93,7 +93,7 @@
   let isDownloadingSelection = $state(false);
   let selectionResult = $state<{ action: "favorite" | "album" | "download"; succeeded: number; total: number } | null>(null);
   let isRestoring = $state(false);
-  let restoreFeedback = $state<{ kind: "success"; count: number } | { kind: "partial"; failed: number; total: number } | { kind: "none"; failed: number; total: number } | { kind: "failed" } | { kind: "permission" } | null>(null);
+  let restoreFeedback = $state<RestoreFeedback | null>(null);
   let actionGeneration = 0;
   const assetActions = createRemoteAssetActions({
     get getAssetDetails() { return getAssetDetails; },
@@ -358,14 +358,6 @@
     }
   }
 
-  function feedbackFor(outcome: RemoteAssetRestoreOutcome, total: number): NonNullable<typeof restoreFeedback> {
-    if (outcome.failure === "permission") return { kind: "permission" };
-    if (outcome.failure === "error") return { kind: "failed" };
-    if (outcome.failedAssetIds.length === 0) return { kind: "success", count: outcome.restoredAssetIds.length };
-    if (outcome.restoredAssetIds.length === 0) return { kind: "none", failed: outcome.failedAssetIds.length, total };
-    return { kind: "partial", failed: outcome.failedAssetIds.length, total };
-  }
-
   /** Restores the selection; Trashed Assets that were not restored stay visible and selected so the user can retry. */
   async function restoreSelection() {
     const assetIds = [...selectedAssetIds];
@@ -379,7 +371,7 @@
     if (generation !== actionGeneration) return;
     isRestoring = false;
     selectedAssetIds = new Set(outcome.failedAssetIds);
-    restoreFeedback = feedbackFor(outcome, assetIds.length);
+    restoreFeedback = restoreFeedbackFor(outcome, assetIds.length);
   }
 
   /** Restores the Lightbox's asset; on success the Lightbox closes because the asset left the Trash Timeline. */
@@ -388,7 +380,7 @@
     restoreFeedback = null;
     const outcome = await restore.restore([assetId]);
     if (generation === actionGeneration && outcome.restoredAssetIds.includes(assetId)) {
-      restoreFeedback = feedbackFor(outcome, 1);
+      restoreFeedback = restoreFeedbackFor(outcome, 1);
       favorites.close();
       selectedAsset = null;
       opener = null;
@@ -531,17 +523,7 @@
   {#if restoreFeedback}
     {@const isSuccess = restoreFeedback.kind === "success"}
     <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {isSuccess ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200' : 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200'}" role={isSuccess ? "status" : "alert"}>
-      {#if restoreFeedback.kind === "success"}
-        {$t("trash_restore_success", { values: { count: restoreFeedback.count.toLocaleString(numberLocale) } })}
-      {:else if restoreFeedback.kind === "partial"}
-        {$t("trash_restore_partial", { values: { failed: restoreFeedback.failed.toLocaleString(numberLocale), count: restoreFeedback.total.toLocaleString(numberLocale) } })}
-      {:else if restoreFeedback.kind === "none"}
-        {$t("trash_restore_none", { values: { failed: restoreFeedback.failed.toLocaleString(numberLocale), count: restoreFeedback.total.toLocaleString(numberLocale) } })}
-      {:else if restoreFeedback.kind === "permission"}
-        {$t("trash_restore_permission")}
-      {:else}
-        {$t("trash_restore_failed")}
-      {/if}
+      {restoreFeedbackMessage(restoreFeedback, $t, numberLocale)}
     </p>
   {/if}
   {#if hintMessage}

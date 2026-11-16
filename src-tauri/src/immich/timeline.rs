@@ -1,6 +1,6 @@
 use super::client::ImmichClient;
 use super::response::{
-    explore_status_error, read_response_body_limited, response_status_error, send_checked,
+    read_response_body_limited, request_failure_code, response_status_error, send_checked,
     MAX_SUCCESS_RESPONSE_BYTES,
 };
 use chrono::DateTime;
@@ -75,7 +75,7 @@ async fn send_timeline_request(
     // The status line is all that leaves this function; the body is discarded unread.
     let detail = response_status_error(response).await?;
     if status == StatusCode::FORBIDDEN {
-        return Err(explore_status_error(
+        return Err(request_failure_code(
             permission.prefix,
             status,
             permission.hint,

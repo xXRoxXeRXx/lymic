@@ -1,7 +1,7 @@
 import type { MemoriesViewState } from "./memories-controller.svelte";
 import type { PeopleViewState } from "./people-controller.svelte";
 import type { PlacesViewState } from "./places-controller.svelte";
-import type { ExploreError } from "./explore-error";
+import type { RequestFailure } from "./request-failure";
 
 /**
  * The state every Explore Overview section exposes. Each section owns its own
@@ -15,7 +15,7 @@ export interface ExploreSectionState {
   /** True when a refresh failed but previously loaded data stays visible. */
   readonly isOffline: boolean;
   /** Failure of a load that has no cached data to fall back on. */
-  readonly error: ExploreError | null;
+  readonly error: RequestFailure | null;
   /** Number of items the section would show; 0 means empty. */
   readonly itemCount: number;
   /** Reloads this section only; also serves as the retry action. */

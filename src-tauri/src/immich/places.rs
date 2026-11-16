@@ -1,6 +1,6 @@
 use super::client::ImmichClient;
 use super::response::{
-    explore_status_error, read_response_body_limited, MAX_SUCCESS_RESPONSE_BYTES,
+    read_response_body_limited, request_failure_code, MAX_SUCCESS_RESPONSE_BYTES,
 };
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
@@ -50,7 +50,7 @@ impl ImmichClient {
             .await
             .map_err(|_| "places_unavailable".to_string())?;
         if !response.status().is_success() {
-            return Err(explore_status_error(
+            return Err(request_failure_code(
                 "places",
                 response.status(),
                 "configure an API key with asset.read permission",

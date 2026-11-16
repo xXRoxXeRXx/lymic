@@ -3,9 +3,9 @@ use reqwest::{RequestBuilder, Response, StatusCode};
 pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 8 * 1024;
 pub(super) const MAX_SUCCESS_RESPONSE_BYTES: usize = 1024 * 1024;
 
-/// The credential-free error code of a failed Explore request: `{prefix}_authentication_required`
+/// The credential-free error code of a failed request of a section (Explore, Archive, Trash): `{prefix}_authentication_required`
 /// for 401, `{prefix}_permission_denied:{permission_hint}` for 403 and `{prefix}_unavailable` otherwise.
-pub(super) fn explore_status_error(
+pub(super) fn request_failure_code(
     prefix: &str,
     status: StatusCode,
     permission_hint: &str,

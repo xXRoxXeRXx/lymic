@@ -3,19 +3,18 @@
 use super::client::ImmichClient;
 use super::ids::RemoteAssetId;
 use super::response::{
-    explore_status_error, read_response_body_limited, MAX_SUCCESS_RESPONSE_BYTES,
+    read_response_body_limited, request_failure_code, MAX_SUCCESS_RESPONSE_BYTES,
 };
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
 
-/// Which requested Trashed Assets were restored and which are still in the Immich trash.
+/// The requested Trashed Assets Immich confirmed as restored; every other requested asset is still in the trash.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct TrashRestoreResult {
     pub restored_asset_ids: Vec<String>,
-    pub failed_asset_ids: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -48,7 +47,6 @@ impl ImmichClient {
         if asset_ids.is_empty() {
             return Ok(TrashRestoreResult {
                 restored_asset_ids: Vec::new(),
-                failed_asset_ids: Vec::new(),
             });
         }
         for asset_id in asset_ids {
@@ -67,7 +65,7 @@ impl ImmichClient {
             .map_err(|_| "trash_restore_unavailable".to_string())?;
         let status = response.status();
         if !status.is_success() {
-            return Err(explore_status_error(
+            return Err(request_failure_code(
                 "trash_restore",
                 status,
                 "asset.delete",
@@ -84,28 +82,21 @@ impl ImmichClient {
         if restored.count == asset_ids.len() {
             return Ok(TrashRestoreResult {
                 restored_asset_ids: all_ids().collect(),
-                failed_asset_ids: Vec::new(),
             });
         }
         if restored.count == 0 {
             return Ok(TrashRestoreResult {
                 restored_asset_ids: Vec::new(),
-                failed_asset_ids: all_ids().collect(),
             });
         }
 
-        let mut result = TrashRestoreResult {
-            restored_asset_ids: Vec::new(),
-            failed_asset_ids: Vec::new(),
-        };
+        let mut restored_asset_ids = Vec::new();
         for asset_id in all_ids() {
             if self.is_asset_out_of_trash(&asset_id).await {
-                result.restored_asset_ids.push(asset_id);
-            } else {
-                result.failed_asset_ids.push(asset_id);
+                restored_asset_ids.push(asset_id);
             }
         }
-        Ok(result)
+        Ok(TrashRestoreResult { restored_asset_ids })
     }
 
     /// True only when Immich confirms the asset is no longer trashed; any doubt counts as still trashed.
@@ -153,7 +144,6 @@ mod tests {
             result,
             TrashRestoreResult {
                 restored_asset_ids: vec!["trash-1".into(), "trash-2".into()],
-                failed_asset_ids: vec![],
             }
         );
         let requests = server.await.unwrap();
@@ -173,12 +163,11 @@ mod tests {
             .unwrap();
 
         assert!(result.restored_asset_ids.is_empty());
-        assert_eq!(result.failed_asset_ids, vec!["trash-1", "trash-2"]);
         assert_eq!(server.await.unwrap().len(), 1);
     }
 
     #[tokio::test]
-    async fn names_the_failed_assets_of_a_partial_count_by_reading_them_back() {
+    async fn confirms_only_read_back_assets_as_restored_after_a_partial_count() {
         let (url, server) = serve_pages(vec![
             ("200 OK", r#"{"count":1}"#),
             ("200 OK", r#"{"id":"trash-1","isTrashed":false}"#),
@@ -192,7 +181,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.restored_asset_ids, vec!["trash-1"]);
-        assert_eq!(result.failed_asset_ids, vec!["trash-2"]);
         let requests = server.await.unwrap();
         assert!(requests[1].starts_with("GET /api/assets/trash-1 HTTP/1.1"));
         assert!(requests[2].starts_with("GET /api/assets/trash-2 HTTP/1.1"));
@@ -213,7 +201,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.restored_asset_ids, vec!["trash-2"]);
-        assert_eq!(result.failed_asset_ids, vec!["trash-1"]);
     }
 
     #[tokio::test]
@@ -282,8 +269,7 @@ mod tests {
         assert_eq!(
             client.restore_trashed_assets(&[]).await.unwrap(),
             TrashRestoreResult {
-                restored_asset_ids: vec![],
-                failed_asset_ids: vec![]
+                restored_asset_ids: vec![]
             }
         );
     }

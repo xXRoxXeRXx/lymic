@@ -7,7 +7,7 @@
   import type { AlbumAssignmentResult, AssetDetails, TimelineAsset } from "../contracts";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { RemoteAssetActions } from "./remote-asset-actions.svelte";
-  import type { RemoteAssetRestoreOutcome } from "./remote-asset-restore";
+  import { restoreFeedbackFor, restoreFeedbackMessage, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   interface Props {
     asset: TimelineAsset;
@@ -160,11 +160,7 @@
     try {
       const outcome = await onRestore(assetId);
       if (isDestroyed || selectedAsset?.id !== assetId || outcome.restoredAssetIds.includes(assetId)) return;
-      restoreError = outcome.failure === "permission"
-        ? $t("trash_restore_permission")
-        : outcome.failure === null
-          ? $t("trash_restore_none", { values: { failed: outcome.failedAssetIds.length.toLocaleString(numberLocale), count: (1).toLocaleString(numberLocale) } })
-          : $t("trash_restore_failed");
+      restoreError = restoreFeedbackMessage(restoreFeedbackFor(outcome, 1), $t, numberLocale);
     } finally {
       if (!isDestroyed) isRestoring = false;
     }

@@ -41,10 +41,9 @@ export interface AlbumAssignmentResult {
   failed: number;
 }
 
-/** Which Trashed Assets a Restore returned to the Immich Library and which are still in the trash. */
+/** The requested Trashed Assets a Restore returned to the Immich Library; every other requested asset is still in the trash. */
 export interface TrashRestoreResult {
   restoredAssetIds: string[];
-  failedAssetIds: string[];
 }
 
 export interface AlbumCatalogueItem extends Album {
