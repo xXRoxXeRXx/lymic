@@ -9,6 +9,7 @@ mod session;
 #[cfg(test)]
 mod test_support;
 mod timeline;
+mod trash;
 mod upload;
 
 pub(crate) use album::{Album, AlbumAssignmentResult, AlbumCatalogueItem};
@@ -19,6 +20,7 @@ pub(crate) use people::PeoplePage;
 pub(crate) use places::Place;
 pub(crate) use session::ImmichSession;
 pub(crate) use timeline::{AlbumTimeline, PlaceTimeline, TimelineAsset, TimelineBucket};
+pub(crate) use trash::TrashRestoreResult;
 pub(crate) use upload::SidecarDirectoryCache;
 
 mod map;

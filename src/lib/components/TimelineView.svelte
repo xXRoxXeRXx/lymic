@@ -1,17 +1,18 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
   import { untrack } from "svelte";
-  import { Album, Check, Download, Heart, HeartOff, Play, RefreshCw, X } from "lucide-svelte";
+  import { Album, ArchiveRestore, Check, Download, Heart, HeartOff, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineController } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
-  import type { AlbumAssignmentResult, AssetDetails, TimelineAsset } from "../contracts";
+  import type { AlbumAssignmentResult, AssetDetails, TimelineAsset, TrashRestoreResult } from "../contracts";
   import { calculateMasonryLayout } from "./timeline-masonry";
   import Lightbox from "./Lightbox.svelte";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
   import { createRemoteAssetFavorites } from "./remote-asset-favorites.svelte";
+  import { createRemoteAssetRestore, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
   interface Props {
@@ -39,6 +40,8 @@
     hintMessage?: string;
     /** Offers only viewing and Download: no Favorite and no Add to Album in the Lightbox or multi-selection. */
     downloadOnly?: boolean;
+    /** Offers Restore in the Lightbox and in multi-selection: Trashed Assets only. */
+    restoreTrashedAssets?(assetIds: string[]): Promise<TrashRestoreResult>;
   }
 
   let {
@@ -63,6 +66,7 @@
     ariaLabel = "",
     hintMessage = "",
     downloadOnly = false,
+    restoreTrashedAssets,
   }: Props = $props();
   const targetAlbumCatalogue = $derived(downloadOnly ? undefined : albumCatalogue);
   const showLoadError = $derived(!timeline.isLoading && (timeline.hasInitialLoadError || (failureIsError && timeline.isOffline)));
@@ -88,6 +92,8 @@
   let isApplyingSelection = $state(false);
   let isDownloadingSelection = $state(false);
   let selectionResult = $state<{ action: "favorite" | "album" | "download"; succeeded: number; total: number } | null>(null);
+  let isRestoring = $state(false);
+  let restoreFeedback = $state<{ kind: "success"; count: number } | { kind: "partial"; failed: number; total: number } | { kind: "failed" } | { kind: "permission" } | null>(null);
   let actionGeneration = 0;
   const assetActions = createRemoteAssetActions({
     get getAssetDetails() { return getAssetDetails; },
@@ -104,21 +110,28 @@
     onReflect: reflectFavoriteState,
     onRemoved: cleanupRemovedAssetState,
   });
+  const restore = createRemoteAssetRestore({
+    get timeline() { return timeline; },
+    restoreTrashedAssets: (assetIds) => restoreTrashedAssets!(assetIds),
+    onRemoved: cleanupRemovedAssetState,
+  });
   const selectionCount = $derived(selectedAssetIds.size);
   const isSelectionMode = $derived(selectionCount > 0);
   const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selectedAssetIds.has(asset.id)));
   const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => favorites.isFavorite(asset)));
   const hasNonFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => !favorites.isFavorite(asset)));
-  const isSelectionActionBusy = $derived(isApplyingSelection || isAddingToAlbum || isDownloadingSelection);
+  const isSelectionActionBusy = $derived(isApplyingSelection || isAddingToAlbum || isDownloadingSelection || isRestoring);
 
   function resetSelectionAndModals() {
     actionGeneration += 1;
     isApplyingSelection = false;
     isDownloadingSelection = false;
     isAddingToAlbum = false;
+    isRestoring = false;
     isAddToAlbumOpen = false;
     addToAlbumError = "";
     selectionResult = null;
+    restoreFeedback = null;
     clearSelection();
   }
 
@@ -345,6 +358,43 @@
     }
   }
 
+  function feedbackFor(outcome: RemoteAssetRestoreOutcome, total: number): NonNullable<typeof restoreFeedback> {
+    if (outcome.failure === "permission") return { kind: "permission" };
+    if (outcome.failure === "error" || outcome.restoredAssetIds.length === 0) return { kind: "failed" };
+    if (outcome.failedAssetIds.length === 0) return { kind: "success", count: outcome.restoredAssetIds.length };
+    return { kind: "partial", failed: outcome.failedAssetIds.length, total };
+  }
+
+  /** Restores the selection; Trashed Assets that were not restored stay visible and selected so the user can retry. */
+  async function restoreSelection() {
+    const assetIds = [...selectedAssetIds];
+    if (assetIds.length === 0 || !restoreTrashedAssets || isSelectionActionBusy) return;
+
+    const generation = actionGeneration;
+    selectionResult = null;
+    restoreFeedback = null;
+    isRestoring = true;
+    const outcome = await restore.restore(assetIds);
+    if (generation !== actionGeneration) return;
+    isRestoring = false;
+    selectedAssetIds = new Set(outcome.failedAssetIds);
+    restoreFeedback = feedbackFor(outcome, assetIds.length);
+  }
+
+  /** Restores the Lightbox's asset; on success the Lightbox closes because the asset left the Trash Timeline. */
+  async function restoreFromLightbox(assetId: string) {
+    const generation = actionGeneration;
+    restoreFeedback = null;
+    const outcome = await restore.restore([assetId]);
+    if (generation === actionGeneration && outcome.restoredAssetIds.includes(assetId)) {
+      restoreFeedback = feedbackFor(outcome, 1);
+      favorites.close();
+      selectedAsset = null;
+      opener = null;
+    }
+    return outcome;
+  }
+
   function openAddSelectionToAlbum() {
     if (selectionCount === 0 || !targetAlbumCatalogue || isSelectionActionBusy) return;
     selectionResult = null;
@@ -440,6 +490,9 @@
       <span class="min-w-0 truncate font-medium sm:mr-auto">{$t("timeline_selection_count", { values: { count: selectionCount.toLocaleString(numberLocale) } })}</span>
       <div class="col-span-2 flex flex-wrap justify-end gap-1 border-t border-blue-200 pt-2 dark:border-blue-900/70 sm:contents sm:border-0 sm:pt-0">
         <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_download")} aria-label={$t("timeline_selection_download")} disabled={isSelectionActionBusy} onclick={() => void downloadSelection()}><Download class="h-4 w-4 {isDownloadingSelection ? 'animate-spin' : ''}" /></button>
+        {#if restoreTrashedAssets}
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={isRestoring} disabled={isSelectionActionBusy} onclick={() => void restoreSelection()}><ArchiveRestore class="h-4 w-4 {isRestoring ? 'animate-pulse' : ''}" /></button>
+        {/if}
         {#if !downloadOnly && hasNonFavoriteSelection}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_favorite")} aria-label={$t("timeline_add_favorite")} disabled={isSelectionActionBusy} onclick={() => void applyFavoriteToSelection(true)}><Heart class="h-4 w-4" /></button>
         {/if}
@@ -472,6 +525,20 @@
         : `timeline_selection_${selectionResult.action}_partial`}
     <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {selectionResult.succeeded === 0 ? 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'}" role={selectionResult.succeeded === 0 ? "alert" : "status"}>
       {$t(resultKey, { values: { count: selectionResult.total.toLocaleString(numberLocale), succeeded: selectionResult.succeeded.toLocaleString(numberLocale) } })}
+    </p>
+  {/if}
+  {#if restoreFeedback}
+    {@const isSuccess = restoreFeedback.kind === "success"}
+    <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {isSuccess ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200' : 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200'}" role={isSuccess ? "status" : "alert"}>
+      {#if restoreFeedback.kind === "success"}
+        {$t("trash_restore_success", { values: { count: restoreFeedback.count.toLocaleString(numberLocale) } })}
+      {:else if restoreFeedback.kind === "partial"}
+        {$t("trash_restore_partial", { values: { failed: restoreFeedback.failed.toLocaleString(numberLocale), count: restoreFeedback.total.toLocaleString(numberLocale) } })}
+      {:else if restoreFeedback.kind === "permission"}
+        {$t("trash_restore_permission")}
+      {:else}
+        {$t("trash_restore_failed")}
+      {/if}
     </p>
   {/if}
   {#if hintMessage}
@@ -565,7 +632,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} {addAssetsToAlbum} allowFavorite={!downloadOnly} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} {addAssetsToAlbum} allowFavorite={!downloadOnly} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} />
 {/if}
 {#if targetAlbumCatalogue}
   <AddToAlbumModal

@@ -11,6 +11,7 @@ import type {
   MapMarker,
   Album,
   AlbumAssignmentResult,
+  TrashRestoreResult,
   AlbumCatalogueItem,
   AlbumTimeline,
   PlaceTimeline,
@@ -98,6 +99,7 @@ export interface ArchiveTimelineDesktopAdapter {
 export interface TrashTimelineDesktopAdapter {
   getTrashTimelineBuckets(): Promise<TimelineBucket[]>;
   getTrashTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
+  restoreTrashedAssets(assetIds: string[]): Promise<TrashRestoreResult>;
 }
 
 export interface AssetDesktopAdapter {
@@ -238,6 +240,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getArchiveTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_archive_timeline_bucket_assets", { timeBucket }),
   getTrashTimelineBuckets: () => invoke<TimelineBucket[]>("get_trash_timeline_buckets"),
   getTrashTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_trash_timeline_bucket_assets", { timeBucket }),
+  restoreTrashedAssets: (assetIds) => invoke<TrashRestoreResult>("restore_trashed_assets", { assetIds }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),
   setAssetFavorite: (assetId, isFavorite) => invoke<void>("set_asset_favorite", { assetId, isFavorite }),
   chooseDownloadDestination: (originalFileName) => save({ defaultPath: originalFileName }),

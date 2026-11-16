@@ -2957,11 +2957,11 @@ describe("Trash Timeline", () => {
     expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
     expect(screen.getByText(retentionHint)).toBeInTheDocument();
     expect(screen.getByText(retentionHint).textContent).not.toMatch(/\d/);
-    expect(screen.queryByRole("button", { name: /delete|empty trash|move to trash|restore/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /delete|empty trash|move to trash|restore all/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Back to Explore" })).not.toBeInTheDocument();
   });
 
-  it("offers only Download from the Lightbox and from multi-selection, without Favorite or Add to album", async () => {
+  it("offers only Restore and Download from the Lightbox and from multi-selection, without Favorite, Add to album or any deletion", async () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
       get_trash_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
@@ -2975,17 +2975,19 @@ describe("Trash Timeline", () => {
     const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
 
     expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Restore" })).toBeInTheDocument();
     expect(within(lightbox).queryByRole("button", { name: /add to favorites|remove from favorites/i })).not.toBeInTheDocument();
     expect(within(lightbox).queryByRole("button", { name: "Add to album" })).not.toBeInTheDocument();
-    expect(within(lightbox).queryByRole("button", { name: /delete|trash/i })).not.toBeInTheDocument();
+    expect(within(lightbox).queryByRole("button", { name: /delete|move to trash|empty trash|restore all/i })).not.toBeInTheDocument();
     await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
 
     await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
     expect(await screen.findByText("1 selected")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Restore" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /add to favorites|remove from favorites/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add to album" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /delete|move to trash|empty trash/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /delete|move to trash|empty trash|restore all/i })).not.toBeInTheDocument();
   });
 
   it("refreshes on every entry from another view and does nothing when already open", async () => {
@@ -3084,5 +3086,167 @@ describe("Trash Timeline", () => {
     await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Loading trash…");
     expect(screen.queryByText("March 2025")).not.toBeInTheDocument();
+  });
+});
+
+describe("Trash Timeline Restore", () => {
+  beforeEach(() => {
+    vi.stubGlobal("ResizeObserver", class {
+      observe() {}
+      disconnect() {}
+    });
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+      disconnect() {}
+    });
+  });
+
+  const march = "2025-03-01T00:00:00.000Z";
+  const trashed = (id: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE" as const, takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false,
+  });
+  const details = {
+    originalFileName: "trashed.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  };
+  const restoreAll = async (args?: unknown) => ({ restoredAssetIds: (args as { assetIds: string[] }).assetIds, failedAssetIds: [] as string[] });
+
+  function renderTrash(restore: (args?: unknown) => Promise<unknown>, assetIds = ["trash-1", "trash-2", "trash-3"]) {
+    renderAuthenticatedPage({
+      get_trash_timeline_buckets: async () => [{ timeBucket: march, count: assetIds.length }],
+      get_trash_timeline_bucket_assets: async () => assetIds.map(trashed),
+      get_asset_details: async () => details,
+      restore_trashed_assets: restore,
+    });
+  }
+
+  async function openTrash() {
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+    await screen.findAllByRole("button", { name: "Open photo" });
+  }
+
+  async function select(count: number) {
+    const boxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    for (let index = 0; index < count; index += 1) await fireEvent.click(boxes[index]);
+    await screen.findByText(`${count} selected`);
+  }
+
+  it("restores a Trashed Asset from the Lightbox without a confirmation and removes it from the view", async () => {
+    const restore = vi.fn(restoreAll);
+    renderTrash(restore);
+    await openTrash();
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Restore" }));
+
+    await waitFor(() => expect(restore).toHaveBeenCalledWith({ assetIds: ["trash-1"] }));
+    expect(await screen.findByRole("status")).toHaveTextContent("1 restored to your Immich library.");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+  });
+
+  it("keeps the Lightbox open and names the missing permission when a Restore from it is refused", async () => {
+    renderTrash(vi.fn(async () => { throw "trash_restore_permission_denied:asset.delete"; }));
+    await openTrash();
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Restore" }));
+
+    expect(await within(lightbox).findByRole("alert")).toHaveTextContent("Restoring was refused. Give the API key the asset.delete permission.");
+    expect(within(lightbox).getByRole("button", { name: "Restore" })).toBeEnabled();
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+  });
+
+  it("restores a multi-selection, removes the restored assets and announces the result", async () => {
+    const restore = vi.fn(restoreAll);
+    renderTrash(restore);
+    await openTrash();
+
+    await select(2);
+    await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    await waitFor(() => expect(restore).toHaveBeenCalledWith({ assetIds: ["trash-1", "trash-2"] }));
+    expect(await screen.findByRole("status")).toHaveTextContent("2 restored to your Immich library.");
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+    expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("leaves failed Trashed Assets visible and selected on a partial failure and lets the user retry them", async () => {
+    const restore = vi.fn()
+      .mockResolvedValueOnce({ restoredAssetIds: ["trash-1"], failedAssetIds: ["trash-2", "trash-3"] })
+      .mockImplementationOnce(restoreAll);
+    renderTrash(restore);
+    await openTrash();
+
+    await select(3);
+    await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("2 of 3 could not be restored. They stay selected so you can retry.");
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    await waitFor(() => expect(restore).toHaveBeenLastCalledWith({ assetIds: ["trash-2", "trash-3"] }));
+    expect(await screen.findByText("2 restored to your Immich library.")).toHaveAttribute("role", "status");
+    expect(screen.getByText("Your trash is empty.")).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: "Open photo" })).toHaveLength(0);
+  });
+
+  it("names the missing permission on a refused multi-selection Restore and keeps the view usable", async () => {
+    renderTrash(vi.fn(async () => { throw "trash_restore_permission_denied:asset.delete"; }));
+    await openTrash();
+
+    await select(2);
+    await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Restoring was refused. Give the API key the asset.delete permission.");
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Restore" })).toBeEnabled();
+  });
+
+  it("shows a credential-free failure for other Restore errors and keeps the selection", async () => {
+    renderTrash(vi.fn(async () => { throw new Error("Failed with key secret-key at https://immich.example"); }));
+    await openTrash();
+
+    await select(1);
+    await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Could not restore. Please try again.");
+    expect(alert.textContent).not.toContain("secret-key");
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+  });
+
+  it("offers Restore as a native button so the keyboard can operate it", async () => {
+    renderTrash(vi.fn(restoreAll));
+    await openTrash();
+    await select(1);
+
+    const button = screen.getByRole("button", { name: "Restore" });
+    expect(button.tagName).toBe("BUTTON");
+    expect(button).toHaveAttribute("type", "button");
+    expect(button).not.toHaveAttribute("tabindex", "-1");
+  });
+
+  it("offers no Restore outside the Trash Timeline", async () => {
+    renderAuthenticatedPage({
+      get_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+      get_timeline_bucket_assets: async () => [trashed("photo-1")],
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Photos" }));
+    await screen.findAllByRole("button", { name: "Open photo" });
+    await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
+    expect(await screen.findByText("1 selected")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
   });
 });
