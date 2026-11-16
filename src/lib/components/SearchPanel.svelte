@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PeopleViewState } from "../controllers/people-controller.svelte";
   import type { SearchController } from "../controllers/search-controller.svelte";
+  import SearchFilterCamera from "./SearchFilterCamera.svelte";
   import SearchFilterDate from "./SearchFilterDate.svelte";
   import SearchFilterMediaType from "./SearchFilterMediaType.svelte";
   import SearchFilterPerson from "./SearchFilterPerson.svelte";
@@ -18,4 +19,5 @@
   <SearchFilterPerson {search} {people} />
   <SearchFilterDate {search} />
   <SearchFilterMediaType {search} />
+  <SearchFilterCamera {search} />
 </div>

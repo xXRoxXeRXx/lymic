@@ -58,3 +58,28 @@ pub(super) fn apply_person_ids(person_ids: &[String], filter: &mut Map<String, V
         filter.insert("personIds".to_string(), json!({ "all": person_ids }));
     }
 }
+
+/// Camera make, model and lens model, each optional. The frontend only sends values Immich
+/// suggested, because Immich compares them exactly.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub(crate) struct CameraFilter {
+    pub make: Option<String>,
+    pub model: Option<String>,
+    pub lens_model: Option<String>,
+}
+
+impl CameraFilter {
+    pub(super) fn apply(&self, filter: &mut Map<String, Value>) {
+        for (key, value) in [
+            ("make", &self.make),
+            ("model", &self.model),
+            ("lensModel", &self.lens_model),
+        ] {
+            // The value is kept as Immich suggested it; only a blank one is no condition.
+            if let Some(value) = value.as_deref().filter(|value| !value.trim().is_empty()) {
+                filter.insert(key.to_string(), json!({ "eq": value }));
+            }
+        }
+    }
+}
