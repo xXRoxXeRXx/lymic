@@ -2,7 +2,7 @@
 //!
 //! Search is read-only and sends only Immich's structured `filter` (Immich 3.2 or later).
 //! A chronological Search pages through `POST /api/search/metadata` with cursors, keeps at
-//! most the [`SEARCH_RESULT_LIMIT`] newest matches and groups them into Timeline Buckets
+//! most the [`SEARCH_RESULT_LIMIT`] newest results and groups them into Timeline Buckets
 //! like an Album Timeline.
 
 use super::client::ImmichClient;
@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, HashSet};
 
-/// The most matches a chronological Search loads (ADR-0009). A constant, not a setting.
+/// The most results a chronological Search loads (ADR-0009). A constant, not a setting.
 pub(crate) const SEARCH_RESULT_LIMIT: usize = 5_000;
 /// Immich's largest metadata search page.
 const SEARCH_PAGE_SIZE: usize = 1_000;
@@ -74,7 +74,7 @@ impl SearchFilters {
 /// One Search as the frontend describes it.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SearchQuery {
+pub(crate) struct SearchRequest {
     pub text: String,
     pub mode: SearchMode,
     #[serde(default)]
@@ -85,10 +85,10 @@ pub(crate) struct SearchQuery {
 /// cut at the result limit.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SearchTimeline {
+pub(crate) struct SearchResults {
     pub buckets: Vec<TimelineBucket>,
     pub assets_by_bucket: BTreeMap<String, Vec<super::TimelineAsset>>,
-    /// True when more matches exist than the limit allows, so only the newest are shown.
+    /// True when more results exist than the limit allows, so only the newest are shown.
     pub truncated: bool,
 }
 
@@ -148,14 +148,14 @@ fn text_condition(mode: SearchMode, text: &str) -> (&'static str, Value) {
 }
 
 /// Builds Immich's structured `filter` for a Search. No text means a filters-only Search.
-fn build_filter(query: &SearchQuery) -> Value {
+fn build_filter(request: &SearchRequest) -> Value {
     let mut filter = Map::new();
-    let text = query.text.trim();
+    let text = request.text.trim();
     if !text.is_empty() {
-        let (key, condition) = text_condition(query.mode, text);
+        let (key, condition) = text_condition(request.mode, text);
         filter.insert(key.to_string(), condition);
     }
-    query.filters.apply(&mut filter);
+    request.filters.apply(&mut filter);
     Value::Object(filter)
 }
 
@@ -163,27 +163,35 @@ fn invalid_response() -> String {
     "search_invalid_response".to_string()
 }
 
+/// Sends one Search request and parses its JSON response. Errors carry a stable `search_*`
+/// code and never the response body.
+async fn send_json<T: serde::de::DeserializeOwned>(
+    request: reqwest::RequestBuilder,
+    max_bytes: usize,
+) -> Result<T, String> {
+    let response = request
+        .send()
+        .await
+        .map_err(|_| "search_unavailable".to_string())?;
+    if !response.status().is_success() {
+        return Err(request_failure_code(
+            "search",
+            response.status(),
+            SEARCH_PERMISSION,
+        ));
+    }
+    let body = read_response_body_limited(response, max_bytes)
+        .await
+        .map_err(|_| invalid_response())?;
+    serde_json::from_slice(&body).map_err(|_| invalid_response())
+}
+
 impl ImmichClient {
     /// Reads the server's version and reports whether it can answer a Search (ADR-0008).
     /// Errors carry a stable `search_*` code and never the response body.
     pub async fn get_search_support(&self) -> Result<SearchSupport, String> {
-        let response = self
-            .request(Method::GET, "server/version")
-            .send()
-            .await
-            .map_err(|_| "search_unavailable".to_string())?;
-        if !response.status().is_success() {
-            return Err(request_failure_code(
-                "search",
-                response.status(),
-                SEARCH_PERMISSION,
-            ));
-        }
-        let body = read_response_body_limited(response, 64 * 1024)
-            .await
-            .map_err(|_| invalid_response())?;
         let version: ServerVersionResponse =
-            serde_json::from_slice(&body).map_err(|_| invalid_response())?;
+            send_json(self.request(Method::GET, "server/version"), 64 * 1024).await?;
         Ok(SearchSupport {
             supported: (version.major, version.minor) >= MINIMUM_VERSION,
             version: format!("{}.{}.{}", version.major, version.minor, version.patch),
@@ -194,33 +202,18 @@ impl ImmichClient {
     /// Reads which optional Search Modes the server can serve. Errors carry a stable
     /// `search_*` code and never the response body.
     pub async fn get_search_features(&self) -> Result<SearchFeatures, String> {
-        let response = self
-            .request(Method::GET, "server/features")
-            .send()
-            .await
-            .map_err(|_| "search_unavailable".to_string())?;
-        if !response.status().is_success() {
-            return Err(request_failure_code(
-                "search",
-                response.status(),
-                SEARCH_PERMISSION,
-            ));
-        }
-        let body = read_response_body_limited(response, 64 * 1024)
-            .await
-            .map_err(|_| invalid_response())?;
         let features: ServerFeaturesResponse =
-            serde_json::from_slice(&body).map_err(|_| invalid_response())?;
+            send_json(self.request(Method::GET, "server/features"), 64 * 1024).await?;
         Ok(SearchFeatures {
             smart_search: features.smart_search,
             ocr: features.ocr,
         })
     }
 
-    /// Runs a chronological Search: every page up to [`SEARCH_RESULT_LIMIT`] newest matches,
+    /// Runs a chronological Search: every page up to [`SEARCH_RESULT_LIMIT`] newest results,
     /// grouped by local capture month. Any failed page fails the whole load.
-    pub async fn search_assets(&self, query: &SearchQuery) -> Result<SearchTimeline, String> {
-        let filter = build_filter(query);
+    pub async fn search_assets(&self, request: &SearchRequest) -> Result<SearchResults, String> {
+        let filter = build_filter(request);
         let mut cursor: Option<String> = None;
         let mut seen_cursors = HashSet::new();
         let mut assets = Vec::new();
@@ -236,27 +229,22 @@ impl ImmichClient {
             if let Some(cursor) = &cursor {
                 body["cursor"] = cursor.clone().into();
             }
-            let response = self
-                .request(Method::POST, "search/metadata")
-                .json(&body)
-                .send()
-                .await
-                .map_err(|_| "search_unavailable".to_string())?;
-            if !response.status().is_success() {
-                return Err(request_failure_code(
-                    "search",
-                    response.status(),
-                    SEARCH_PERMISSION,
-                ));
-            }
-            let body = read_response_body_limited(response, MAX_SEARCH_RESPONSE_BYTES)
-                .await
-                .map_err(|_| invalid_response())?;
-            let page: SearchResponse =
-                serde_json::from_slice(&body).map_err(|_| invalid_response())?;
+            let page: SearchResponse = send_json(
+                self.request(Method::POST, "search/metadata").json(&body),
+                MAX_SEARCH_RESPONSE_BYTES,
+            )
+            .await?;
+            let page_is_empty = page.assets.items.is_empty();
             assets.extend(page.assets.items);
 
             let next_cursor = page.assets.next_cursor.filter(|cursor| !cursor.is_empty());
+            if let Some(next_cursor) = &next_cursor {
+                // A cursor that was already used, or a page without assets that promises more,
+                // would loop forever, also on the page that reaches the limit.
+                if page_is_empty || !seen_cursors.insert(next_cursor.clone()) {
+                    return Err(invalid_response());
+                }
+            }
             if assets.len() >= SEARCH_RESULT_LIMIT {
                 truncated = assets.len() > SEARCH_RESULT_LIMIT || next_cursor.is_some();
                 assets.truncate(SEARCH_RESULT_LIMIT);
@@ -265,10 +253,6 @@ impl ImmichClient {
             let Some(next_cursor) = next_cursor else {
                 break;
             };
-            // A cursor that was already used would loop forever.
-            if !seen_cursors.insert(next_cursor.clone()) {
-                return Err(invalid_response());
-            }
             cursor = Some(next_cursor);
         }
 
@@ -281,7 +265,7 @@ impl ImmichClient {
                 .map(|asset| timeline_asset_from_response(asset, false))
                 .collect(),
         );
-        Ok(SearchTimeline {
+        Ok(SearchResults {
             buckets,
             assets_by_bucket,
             truncated,
@@ -292,14 +276,14 @@ impl ImmichClient {
 #[cfg(test)]
 mod tests {
     use super::{
-        SearchFeatures, SearchFilters, SearchMode, SearchQuery, SearchSupport, SearchTimeline,
+        SearchFeatures, SearchFilters, SearchMode, SearchRequest, SearchResults, SearchSupport,
     };
     use crate::immich::test_support::{serve_once, serve_pages, test_client};
     use serde_json::{json, Value};
     use std::time::Duration;
 
-    fn filename_query(text: &str) -> SearchQuery {
-        SearchQuery {
+    fn filename_request(text: &str) -> SearchRequest {
+        SearchRequest {
             text: text.to_string(),
             mode: SearchMode::Filename,
             filters: SearchFilters::default(),
@@ -325,12 +309,12 @@ mod tests {
     /// Runs one Search against the given canned responses; returns the result and the requests.
     async fn search(
         responses: Vec<(&'static str, String)>,
-        query: SearchQuery,
-    ) -> (Result<SearchTimeline, String>, Vec<String>) {
+        request: SearchRequest,
+    ) -> (Result<SearchResults, String>, Vec<String>) {
         let (url, server) = serve_pages(responses).await;
         let result = tokio::time::timeout(
             Duration::from_secs(30),
-            test_client(url, "test-key").search_assets(&query),
+            test_client(url, "test-key").search_assets(&request),
         )
         .await
         .expect("the Search must not request more pages than the server has");
@@ -346,7 +330,7 @@ mod tests {
             ],
             None,
         );
-        let (result, requests) = search(vec![("200 OK", first)], filename_query("IMG")).await;
+        let (result, requests) = search(vec![("200 OK", first)], filename_request("IMG")).await;
 
         let request = &requests[0];
         assert!(request.starts_with("POST /api/search/metadata HTTP/1.1"));
@@ -380,7 +364,7 @@ mod tests {
     #[tokio::test]
     async fn percent_underscore_and_backslash_in_the_text_are_searched_literally() {
         let empty = page(vec![], None);
-        let (_, requests) = search(vec![("200 OK", empty)], filename_query(r"100%_a\b")).await;
+        let (_, requests) = search(vec![("200 OK", empty)], filename_request(r"100%_a\b")).await;
 
         assert_eq!(
             json_body(&requests[0])["filter"]["originalFileName"]["like"],
@@ -388,8 +372,8 @@ mod tests {
         );
     }
 
-    fn mode_query(mode: SearchMode, text: &str) -> SearchQuery {
-        SearchQuery {
+    fn mode_request(mode: SearchMode, text: &str) -> SearchRequest {
+        SearchRequest {
             text: text.to_string(),
             mode,
             filters: SearchFilters::default(),
@@ -417,7 +401,7 @@ mod tests {
         for (mode, expected) in cases {
             let (result, requests) = search(
                 vec![("200 OK", page(vec![], None))],
-                mode_query(mode, "holiday"),
+                mode_request(mode, "holiday"),
             )
             .await;
 
@@ -437,7 +421,7 @@ mod tests {
         ] {
             let (_, requests) = search(
                 vec![("200 OK", page(vec![], None))],
-                mode_query(mode, r"100%_a\b"),
+                mode_request(mode, r"100%_a\b"),
             )
             .await;
             assert_eq!(
@@ -448,7 +432,7 @@ mod tests {
         }
         let (_, requests) = search(
             vec![("200 OK", page(vec![], None))],
-            mode_query(SearchMode::Ocr, "100%_a"),
+            mode_request(SearchMode::Ocr, "100%_a"),
         )
         .await;
         assert_eq!(
@@ -464,8 +448,11 @@ mod tests {
             SearchMode::FolderPath,
             SearchMode::Ocr,
         ] {
-            let (_, requests) =
-                search(vec![("200 OK", page(vec![], None))], mode_query(mode, " ")).await;
+            let (_, requests) = search(
+                vec![("200 OK", page(vec![], None))],
+                mode_request(mode, " "),
+            )
+            .await;
             assert_eq!(json_body(&requests[0])["filter"], json!({}), "{mode:?}");
         }
     }
@@ -478,23 +465,23 @@ mod tests {
             ("folderPath", SearchMode::FolderPath),
             ("ocr", SearchMode::Ocr),
         ] {
-            let query: SearchQuery =
+            let request: SearchRequest =
                 serde_json::from_str(&format!(r#"{{"text":"x","mode":"{name}"}}"#)).unwrap();
-            assert_eq!(query.mode, mode);
+            assert_eq!(request.mode, mode);
         }
     }
 
     #[tokio::test]
     async fn the_text_is_trimmed_and_an_empty_text_sends_no_text_condition() {
         let empty = page(vec![], None);
-        let (_, requests) = search(vec![("200 OK", empty)], filename_query("  IMG ")).await;
+        let (_, requests) = search(vec![("200 OK", empty)], filename_request("  IMG ")).await;
         assert_eq!(
             json_body(&requests[0])["filter"]["originalFileName"]["like"],
             json!("%IMG%")
         );
 
         let (_, requests) =
-            search(vec![("200 OK", page(vec![], None))], filename_query("  ")).await;
+            search(vec![("200 OK", page(vec![], None))], filename_request("  ")).await;
         assert_eq!(json_body(&requests[0])["filter"], json!({}));
     }
 
@@ -507,7 +494,7 @@ mod tests {
         let second = page(vec![asset("b", "2025-02-01T10:00:00.000Z")], None);
         let (result, requests) = search(
             vec![("200 OK", first), ("200 OK", second)],
-            filename_query("x"),
+            filename_request("x"),
         )
         .await;
 
@@ -526,7 +513,7 @@ mod tests {
             ],
             None,
         );
-        let (result, _) = search(vec![("200 OK", body)], filename_query("x")).await;
+        let (result, _) = search(vec![("200 OK", body)], filename_request("x")).await;
 
         let timeline = result.unwrap();
         let ids: Vec<_> = timeline
@@ -546,7 +533,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_search_stops_at_the_5000_newest_matches_and_reports_that_it_was_cut() {
+    async fn a_search_stops_at_the_5000_newest_results_and_reports_that_it_was_cut() {
         let pages = (0..5)
             .map(|index| {
                 (
@@ -555,7 +542,7 @@ mod tests {
                 )
             })
             .collect();
-        let (result, requests) = search(pages, filename_query("x")).await;
+        let (result, requests) = search(pages, filename_request("x")).await;
 
         assert_eq!(requests.len(), 5);
         let timeline = result.unwrap();
@@ -574,7 +561,7 @@ mod tests {
             })
             .collect();
         pages.push(("200 OK", full_page("last", None)));
-        let (result, _) = search(pages, filename_query("x")).await;
+        let (result, _) = search(pages, filename_request("x")).await;
 
         let timeline = result.unwrap();
         assert!(!timeline.truncated);
@@ -592,7 +579,7 @@ mod tests {
                 ("200 OK", first),
                 ("500 Internal Server Error", "secret".into()),
             ],
-            filename_query("x"),
+            filename_request("x"),
         )
         .await;
 
@@ -611,7 +598,40 @@ mod tests {
         );
         let (result, requests) = search(
             vec![("200 OK", first), ("200 OK", repeat)],
-            filename_query("x"),
+            filename_request("x"),
+        )
+        .await;
+
+        assert_eq!(requests.len(), 2);
+        assert_eq!(result.unwrap_err(), "search_invalid_response");
+    }
+
+    #[tokio::test]
+    async fn a_repeated_cursor_on_the_page_that_reaches_the_limit_is_rejected() {
+        let mut pages: Vec<_> = (0..4)
+            .map(|index| {
+                (
+                    "200 OK",
+                    full_page(&format!("p{index}"), Some(&format!("c{index}"))),
+                )
+            })
+            .collect();
+        pages.push(("200 OK", full_page("last", Some("c0"))));
+        let (result, _) = search(pages, filename_request("x")).await;
+
+        assert_eq!(result.unwrap_err(), "search_invalid_response");
+    }
+
+    #[tokio::test]
+    async fn an_empty_page_that_promises_another_page_is_rejected() {
+        let first = page(
+            vec![asset("a", "2025-03-01T10:00:00.000Z")],
+            Some("cursor-1"),
+        );
+        let empty = page(vec![], Some("cursor-2"));
+        let (result, requests) = search(
+            vec![("200 OK", first), ("200 OK", empty)],
+            filename_request("x"),
         )
         .await;
 
@@ -629,10 +649,10 @@ mod tests {
         ];
         for (status, expected) in cases {
             let (result, _) =
-                search(vec![(status, "secret-key".into())], filename_query("x")).await;
+                search(vec![(status, "secret-key".into())], filename_request("x")).await;
             assert_eq!(result.unwrap_err(), expected, "{status}");
         }
-        let (result, _) = search(vec![("200 OK", "{secret".into())], filename_query("x")).await;
+        let (result, _) = search(vec![("200 OK", "{secret".into())], filename_request("x")).await;
         assert_eq!(result.unwrap_err(), "search_invalid_response");
     }
 
@@ -641,7 +661,7 @@ mod tests {
         let (url, server) = serve_pages(Vec::<(String, String)>::new()).await;
         server.await.unwrap();
         let result = test_client(url, "test-key")
-            .search_assets(&filename_query("x"))
+            .search_assets(&filename_request("x"))
             .await;
 
         assert_eq!(result.unwrap_err(), "search_unavailable");
@@ -768,8 +788,8 @@ mod tests {
     }
 
     #[test]
-    fn a_search_timeline_serializes_in_camel_case() {
-        let timeline = SearchTimeline {
+    fn search_results_serialize_in_camel_case() {
+        let timeline = SearchResults {
             buckets: vec![],
             assets_by_bucket: Default::default(),
             truncated: true,
@@ -781,12 +801,12 @@ mod tests {
     }
 
     #[test]
-    fn a_query_deserializes_from_the_frontend_shape_with_default_filters() {
-        let query: SearchQuery =
+    fn a_request_deserializes_from_the_frontend_shape_with_default_filters() {
+        let request: SearchRequest =
             serde_json::from_str(r#"{"text":"IMG","mode":"filename"}"#).unwrap();
-        assert_eq!(query, filename_query("IMG"));
-        let query: SearchQuery =
+        assert_eq!(request, filename_request("IMG"));
+        let request: SearchRequest =
             serde_json::from_str(r#"{"text":"IMG","mode":"filename","filters":{}}"#).unwrap();
-        assert_eq!(query, filename_query("IMG"));
+        assert_eq!(request, filename_request("IMG"));
     }
 }
