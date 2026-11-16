@@ -1,4 +1,5 @@
 import type { SearchFilters, SearchMode, SearchQuery, SearchTimeline } from "../contracts";
+import { buildRequestFilters, filterErrors as validateFilters } from "../search-filters";
 import type { SearchDesktopAdapter } from "../tauri/desktop-adapter";
 import { classifyRequestFailure } from "./request-failure";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
@@ -22,8 +23,10 @@ export interface SearchController extends TimelineController {
   /** The text in the search bar, bound to its field. */
   text: string;
   mode: SearchMode;
-  /** The Search Filters; each Search Filter is one optional field. */
+  /** The Search Filters; each Search Filter is one optional field, edited in place. */
   readonly filters: SearchFilters;
+  /** The locale key of why a set Search Filter cannot be searched, per filter; such a Search does not run. */
+  readonly filterErrors: Partial<Record<keyof SearchFilters, string>>;
   /** The text of the Search whose results are shown (empty before the first successful Search). */
   readonly submittedText: string;
   /** The number of Remote Assets in the results. */
@@ -36,9 +39,9 @@ export interface SearchController extends TimelineController {
   readonly failure: SearchFailure | null;
   /** Increases whenever a Search finishes loading, so a view can start at the top of new results. */
   readonly revision: number;
-  /** Whether there is anything to search for: a text, or a Search Filter. */
+  /** Whether there is a Search to run: a text or a set Search Filter, and every set filter can be searched. */
   readonly canSubmit: boolean;
-  /** Runs a Search with the current text, mode and filters. Resolves to false, doing nothing, without anything to search for. */
+  /** Runs a Search with the current text, mode and filters. Resolves to false, doing nothing, without anything to search for or with a filter that cannot be searched. */
   submit(): Promise<boolean>;
 }
 
@@ -67,11 +70,15 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   let latestLoad = 0;
 
   function currentQuery(): SearchQuery {
-    return { text: text.trim(), mode, filters: $state.snapshot(filters) };
+    return { text: text.trim(), mode, filters: buildRequestFilters($state.snapshot(filters)) };
   }
 
   function hasCriteria(query: SearchQuery) {
-    return query.text !== "" || Object.values(query.filters).some((value) => value !== undefined);
+    return query.text !== "" || Object.keys(query.filters).length > 0;
+  }
+
+  function isSearchable(query: SearchQuery) {
+    return hasCriteria(query) && Object.keys(validateFilters($state.snapshot(filters))).length === 0;
   }
 
   async function load(): Promise<SearchTimeline> {
@@ -124,7 +131,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
 
   async function submit() {
     const query = currentQuery();
-    if (!hasCriteria(query)) return false;
+    if (!isSearchable(query)) return false;
     pending = query;
     await timeline.refresh();
     return true;
@@ -136,7 +143,8 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     get mode() { return mode; },
     set mode(value: SearchMode) { mode = value; },
     get filters() { return filters; },
-    get canSubmit() { return hasCriteria(currentQuery()); },
+    get filterErrors() { return validateFilters(filters); },
+    get canSubmit() { return isSearchable(currentQuery()); },
     get submittedText() { return submittedText; },
     get resultCount() { return timeline.buckets.reduce((total, bucket) => total + bucket.count, 0); },
     get truncated() { return truncated; },

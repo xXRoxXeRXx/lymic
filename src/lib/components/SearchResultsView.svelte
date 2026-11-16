@@ -44,7 +44,7 @@
     </div>
   {:else}
     <div class="sr-only" aria-live="polite">
-      {#if search.submittedText && !search.isLoading}{$t("search_results_count", { values: { count: search.resultCount.toLocaleString(numberLocale) } })}{/if}
+      {#if search.revision > 0 && !search.isLoading}{$t("search_results_count", { values: { count: search.resultCount.toLocaleString(numberLocale) } })}{/if}
     </div>
     <!-- A new result set starts at the top; a failed Search keeps the previous results where they are. -->
     {#key search.revision}

@@ -3500,3 +3500,140 @@ describe("Search", () => {
     expect(await screen.findByText("Showing only the newest 5,000 matches. Narrow your search to see the rest.")).toBeInTheDocument();
   });
 });
+
+describe("Search filter panel", () => {
+  const march = "2025-03-01T00:00:00.000Z";
+  const found = (id: string) => ({
+    id, width: 1600, height: 1200, type: "VIDEO", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: "0:00:05.000000", isFavorite: false,
+  });
+  const results = (...ids: string[]) => ({ buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(found) }, truncated: false });
+  const supported = { supported: true, version: "3.4.1", requiredVersion: "3.2" };
+  const searchBox = () => screen.findByRole("searchbox", { name: "Search your Immich library" });
+  const filtersButton = () => screen.findByRole("button", { name: "Filters" });
+  const submit = () => fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+  async function openPanel() {
+    const button = await filtersButton();
+    if (button.getAttribute("aria-expanded") !== "true") await fireEvent.click(button);
+  }
+  const setDate = (label: "From" | "To", value: string) => fireEvent.input(screen.getByLabelText(label), { target: { value } });
+
+  it("opens the panel from the bar and runs a Search with filters and no text, shown chronologically", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: async () => results("video-1") });
+    expect(await filtersButton()).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("group", { name: "Date" })).not.toBeInTheDocument();
+
+    await openPanel();
+    expect(await filtersButton()).toHaveAttribute("aria-expanded", "true");
+    await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
+    await setDate("From", "2025-03-01");
+    await setDate("To", "2025-03-31");
+    await submit();
+
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", {
+      query: {
+        text: "",
+        mode: "filename",
+        filters: {
+          mediaType: "video",
+          date: { from: new Date(2025, 2, 1, 0, 0, 0, 0).toISOString(), to: new Date(2025, 2, 31, 23, 59, 59, 999).toISOString() },
+        },
+      },
+    });
+    expect(screen.getByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
+  });
+
+  it("offers All, Images and Videos with All selected by default", async () => {
+    renderAuthenticatedPage();
+    await openPanel();
+
+    const group = screen.getByRole("radiogroup", { name: "Media type" });
+    expect(within(group).getAllByRole("radio").map((radio) => (radio as HTMLInputElement).labels?.[0].textContent?.trim())).toEqual(["All", "Images", "Videos"]);
+    expect(screen.getByRole("radio", { name: "All" })).toBeChecked();
+
+    await fireEvent.click(screen.getByRole("radio", { name: "Images" }));
+    expect(screen.getByRole("radio", { name: "Images" })).toBeChecked();
+    await fireEvent.click(screen.getByRole("radio", { name: "All" }));
+    expect(screen.getByRole("radio", { name: "All" })).toBeChecked();
+  });
+
+  it("rejects a start date after the end date with a message and does not search", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => supported });
+    await openPanel();
+
+    await setDate("From", "2025-03-31");
+    await setDate("To", "2025-03-01");
+    await submit();
+
+    expect(await screen.findByText("The start date is after the end date. Choose a start date on or before the end date.")).toBeInTheDocument();
+    expect(screen.getByLabelText("From")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("From")).toHaveValue("2025-03-31");
+    expect(screen.getByLabelText("To")).toHaveValue("2025-03-01");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+
+    await setDate("From", "2025-03-01");
+    expect(screen.queryByText(/The start date is after the end date/)).not.toBeInTheDocument();
+  });
+
+  it("clears the date range on its own and keeps the other filters", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: async () => results("video-1") });
+    await openPanel();
+    await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
+    await setDate("From", "2025-03-01");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Clear date range" }));
+
+    expect(screen.getByLabelText("From")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Clear date range" })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Videos" })).toBeChecked();
+    await submit();
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { query: { text: "", mode: "filename", filters: { mediaType: "video" } } }));
+  });
+
+  it("keeps the filters while the Search is left and entered again, and resets text and filters on clear", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: async () => results("video-1") });
+    await openPanel();
+    await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
+    await setDate("To", "2025-03-31");
+    await fireEvent.input(await searchBox(), { target: { value: "IMG" } });
+    await submit();
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Photos" }));
+
+    expect(await searchBox()).toHaveValue("IMG");
+    await openPanel();
+    expect(screen.getByRole("radio", { name: "Videos" })).toBeChecked();
+    expect(screen.getByLabelText("To")).toHaveValue("2025-03-31");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(await searchBox()).toHaveValue("");
+    await openPanel();
+    expect(screen.getByRole("radio", { name: "All" })).toBeChecked();
+    expect(screen.getByLabelText("To")).toHaveValue("");
+  });
+
+  it("offers the clear control as soon as a filter is set, without any text", async () => {
+    renderAuthenticatedPage();
+    await openPanel();
+    expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("radio", { name: "Images" }));
+
+    expect(screen.getByRole("button", { name: "Clear search" })).toBeInTheDocument();
+  });
+
+  it("closes the panel with Escape and returns focus to its button", async () => {
+    renderAuthenticatedPage();
+    await openPanel();
+
+    await fireEvent.keyDown(screen.getByRole("radiogroup", { name: "Media type" }), { key: "Escape" });
+
+    expect(await filtersButton()).toHaveAttribute("aria-expanded", "false");
+    expect(await filtersButton()).toHaveFocus();
+  });
+});
