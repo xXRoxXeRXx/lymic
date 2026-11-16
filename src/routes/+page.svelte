@@ -137,6 +137,24 @@
     selectedAlbum = null;
   }
 
+  // Favorites, Archive and Trash reload every time they open. The Photo Timeline keeps its cache, so a Restore
+  // marks it stale and the next visit to Photos refreshes it once.
+  let photosStale = false;
+
+  function openPhotos() {
+    if (currentView === "photos") return;
+    currentView = "photos";
+    if (!photosStale) return;
+    photosStale = false;
+    void timeline.refresh();
+  }
+
+  async function restoreTrashedAssets(assetIds: string[]) {
+    const result = await desktop.restoreTrashedAssets(assetIds);
+    if (result.restoredAssetIds.length > 0) photosStale = true;
+    return result;
+  }
+
   function openFavorites() {
     if (currentView === "favorites") return;
     currentView = "favorites";
@@ -384,7 +402,7 @@
           <button
             type="button"
             class="nav-item {currentView === 'photos' ? 'active' : ''}"
-            onclick={() => currentView = "photos"}
+            onclick={openPhotos}
             aria-label={$t('timeline_title')}
           >
             <Images class="w-4 h-4 shrink-0 {currentView === 'photos' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
@@ -575,7 +593,7 @@
             timeline={trash}
             {...sharedTimelineProps}
             allowFavoriteAndAlbum={false}
-            restoreTrashedAssets={desktop.restoreTrashedAssets}
+            {restoreTrashedAssets}
             ariaLabel={$t("trash_title")}
             loadingMessage={$t("trash_loading")}
             emptyMessage={$t("trash_empty")}

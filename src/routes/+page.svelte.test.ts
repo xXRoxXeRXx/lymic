@@ -171,6 +171,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** Stubs the observers so a timeline lays out and activates every bucket as soon as it renders. */
+function stubImmediateIntersectionObserver() {
+  vi.stubGlobal("ResizeObserver", class {
+    observe() {}
+    disconnect() {}
+  });
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+    observe(target: Element) {
+      this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+    }
+    disconnect() {}
+  });
+}
+
 describe("app version", () => {
   it("displays the version provided by the Tauri runtime in the info view", async () => {
     tauri.getVersion.mockResolvedValue("1.2.3");
@@ -1460,20 +1475,6 @@ describe("watched folder setup flow with target album", () => {
 });
 
 describe("Favorites Timeline", () => {
-  function stubImmediateIntersectionObserver() {
-    vi.stubGlobal("ResizeObserver", class {
-      observe() {}
-      disconnect() {}
-    });
-    vi.stubGlobal("IntersectionObserver", class {
-      constructor(private readonly callback: IntersectionObserverCallback) {}
-      observe(target: Element) {
-        this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
-      }
-      disconnect() {}
-    });
-  }
-
   it("opens Favorites from navigation, loads month buckets and media with scrubber, hides refresh controls, and preserves timeline actions", async () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
@@ -2657,20 +2658,6 @@ describe("Explore Overview across sections", () => {
 });
 
 describe("Archive Timeline", () => {
-  function stubImmediateIntersectionObserver() {
-    vi.stubGlobal("ResizeObserver", class {
-      observe() {}
-      disconnect() {}
-    });
-    vi.stubGlobal("IntersectionObserver", class {
-      constructor(private readonly callback: IntersectionObserverCallback) {}
-      observe(target: Element) {
-        this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
-      }
-      disconnect() {}
-    });
-  }
-
   const march = "2025-03-01T00:00:00.000Z";
   const december = "2024-12-01T00:00:00.000Z";
   const archivedAsset = (id: string, type: "IMAGE" | "VIDEO" = "IMAGE", isFavorite = false) => ({
@@ -2897,20 +2884,6 @@ describe("Archive Timeline", () => {
 
 
 describe("Trash Timeline", () => {
-  function stubImmediateIntersectionObserver() {
-    vi.stubGlobal("ResizeObserver", class {
-      observe() {}
-      disconnect() {}
-    });
-    vi.stubGlobal("IntersectionObserver", class {
-      constructor(private readonly callback: IntersectionObserverCallback) {}
-      observe(target: Element) {
-        this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
-      }
-      disconnect() {}
-    });
-  }
-
   const march = "2025-03-01T00:00:00.000Z";
   const december = "2024-12-01T00:00:00.000Z";
   const trashedAsset = (id: string, type: "IMAGE" | "VIDEO" = "IMAGE") => ({
@@ -3090,19 +3063,7 @@ describe("Trash Timeline", () => {
 });
 
 describe("Trash Timeline Restore", () => {
-  beforeEach(() => {
-    vi.stubGlobal("ResizeObserver", class {
-      observe() {}
-      disconnect() {}
-    });
-    vi.stubGlobal("IntersectionObserver", class {
-      constructor(private readonly callback: IntersectionObserverCallback) {}
-      observe(target: Element) {
-        this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
-      }
-      disconnect() {}
-    });
-  });
+  beforeEach(stubImmediateIntersectionObserver);
 
   const march = "2025-03-01T00:00:00.000Z";
   const trashed = (id: string) => ({
@@ -3112,7 +3073,7 @@ describe("Trash Timeline Restore", () => {
     originalFileName: "trashed.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
     fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
   };
-  const restoreAll = async (args?: unknown) => ({ restoredAssetIds: (args as { assetIds: string[] }).assetIds, failedAssetIds: [] as string[] });
+  const restoreAll = async (args?: unknown) => ({ restoredAssetIds: (args as { assetIds: string[] }).assetIds });
 
   function renderTrash(restore: (args?: unknown) => Promise<unknown>, assetIds = ["trash-1", "trash-2", "trash-3"]) {
     renderAuthenticatedPage({
@@ -3180,7 +3141,7 @@ describe("Trash Timeline Restore", () => {
 
   it("leaves failed Trashed Assets visible and selected on a partial failure and lets the user retry them", async () => {
     const restore = vi.fn()
-      .mockResolvedValueOnce({ restoredAssetIds: ["trash-1"], failedAssetIds: ["trash-2", "trash-3"] })
+      .mockResolvedValueOnce({ restoredAssetIds: ["trash-1"] })
       .mockImplementationOnce(restoreAll);
     renderTrash(restore);
     await openTrash();
@@ -3200,7 +3161,7 @@ describe("Trash Timeline Restore", () => {
   });
 
   it("names how many Trashed Assets failed when a Restore restores none of them and keeps them selected", async () => {
-    renderTrash(vi.fn(async (args?: unknown) => ({ restoredAssetIds: [], failedAssetIds: (args as { assetIds: string[] }).assetIds })));
+    renderTrash(vi.fn(async (args?: unknown) => ({ restoredAssetIds: [] })));
     await openTrash();
 
     await select(2);
@@ -3212,7 +3173,7 @@ describe("Trash Timeline Restore", () => {
   });
 
   it("names the failed count in the Lightbox when a Restore from it restores nothing", async () => {
-    renderTrash(vi.fn(async (args?: unknown) => ({ restoredAssetIds: [], failedAssetIds: (args as { assetIds: string[] }).assetIds })));
+    renderTrash(vi.fn(async (args?: unknown) => ({ restoredAssetIds: [] })));
     await openTrash();
 
     await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
@@ -3260,6 +3221,66 @@ describe("Trash Timeline Restore", () => {
     expect(button.tagName).toBe("BUTTON");
     expect(button).toHaveAttribute("type", "button");
     expect(button).not.toHaveAttribute("tabindex", "-1");
+  });
+
+  describe("Photo Timeline after a Restore", () => {
+    function renderTrashAndPhotos(restore: (args?: unknown) => Promise<unknown>) {
+      const photosBuckets = vi.fn<() => Promise<unknown>>().mockResolvedValue([]);
+      renderAuthenticatedPage({
+        get_timeline_buckets: photosBuckets,
+        get_timeline_bucket_assets: async () => [trashed("trash-1")],
+        get_trash_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
+        get_trash_timeline_bucket_assets: async () => ["trash-1", "trash-2"].map(trashed),
+        get_asset_details: async () => details,
+        restore_trashed_assets: restore,
+      });
+      return photosBuckets;
+    }
+
+    async function restoreFirstFromTrash() {
+      await openTrash();
+      await select(1);
+      await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+      await screen.findByRole("status");
+    }
+
+    it("shows a restored Remote Asset in the Photo Timeline the next time it is opened", async () => {
+      const photosBuckets = renderTrashAndPhotos(vi.fn(restoreAll));
+      await waitFor(() => expect(photosBuckets).toHaveBeenCalledTimes(1));
+      photosBuckets.mockResolvedValue([{ timeBucket: march, count: 1 }]);
+
+      await restoreFirstFromTrash();
+      await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+
+      expect(await screen.findByText("March 2025")).toBeInTheDocument();
+      expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+    });
+
+    it("refreshes the Photo Timeline once after a partial Restore and not on later visits", async () => {
+      const photosBuckets = renderTrashAndPhotos(vi.fn(async () => ({ restoredAssetIds: ["trash-1"] })));
+      await waitFor(() => expect(photosBuckets).toHaveBeenCalledTimes(1));
+
+      await restoreFirstFromTrash();
+      await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+      await waitFor(() => expect(photosBuckets).toHaveBeenCalledTimes(2));
+
+      await fireEvent.click(screen.getByRole("button", { name: "Trash" }));
+      await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+      expect(photosBuckets).toHaveBeenCalledTimes(2);
+    });
+
+    it("leaves the Photo Timeline alone when nothing was restored or the Restore failed", async () => {
+      const photosBuckets = renderTrashAndPhotos(vi.fn(async () => ({ restoredAssetIds: [] })));
+      await waitFor(() => expect(photosBuckets).toHaveBeenCalledTimes(1));
+
+      await openTrash();
+      await select(1);
+      await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+      await screen.findByRole("alert");
+      await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+
+      expect(photosBuckets).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("offers no Restore outside the Trash Timeline", async () => {
