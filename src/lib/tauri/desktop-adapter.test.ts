@@ -215,11 +215,15 @@ describe("tauriDesktopAdapter", () => {
     invoke.mockClear();
 
     await searchAdapter.getSearchSupport();
+    await searchAdapter.getSearchFeatures();
     await searchAdapter.searchAssets({ text: "IMG", mode: "filename", filters: {} });
+    await searchAdapter.searchAssets({ text: "scan", mode: "folderPath", filters: {} });
 
     expect(invoke.mock.calls).toEqual([
       ["get_search_support"],
+      ["get_search_features"],
       ["search_assets", { request: { text: "IMG", mode: "filename", filters: {} } }],
+      ["search_assets", { request: { text: "scan", mode: "folderPath", filters: {} } }],
     ]);
   });
 });

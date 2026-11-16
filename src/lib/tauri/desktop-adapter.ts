@@ -33,6 +33,7 @@ import type {
   Memory,
   PeoplePage,
   Place,
+  SearchFeatures,
   SearchRequest,
   SearchSupport,
   SearchResults,
@@ -141,6 +142,8 @@ export interface PlacesDesktopAdapter {
 export interface SearchDesktopAdapter {
   /** Reads the server version once to decide whether a Search can be answered (Immich 3.2 or later). */
   getSearchSupport(): Promise<SearchSupport>;
+  /** Reads which optional Search Modes (Context, OCR) the server has switched on. */
+  getSearchFeatures(): Promise<SearchFeatures>;
   searchAssets(request: SearchRequest): Promise<SearchResults>;
 }
 
@@ -265,6 +268,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getPersonTimelineBucketAssets: (personId, timeBucket) => invoke<TimelineAsset[]>("get_person_timeline_bucket_assets", { personId, timeBucket }),
   getPlaces: () => invoke<Place[]>("get_places"),
   getSearchSupport: () => invoke<SearchSupport>("get_search_support"),
+  getSearchFeatures: () => invoke<SearchFeatures>("get_search_features"),
   searchAssets: (request) => invoke<SearchResults>("search_assets", { request }),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),

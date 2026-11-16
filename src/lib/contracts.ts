@@ -209,7 +209,7 @@ export interface MapMarker { id: string; lat: number; lon: number; }
 // Search (ADR-0008, ADR-0009). Mirrors `src-tauri/src/immich/search.rs`.
 
 /** How Immich interprets the text of a Search. Each Search Mode adds a member. */
-export type SearchMode = "filename";
+export type SearchMode = "filename" | "description" | "folderPath" | "ocr";
 
 /** The Search Filters of a Search. Each Search Filter adds one optional field. */
 export interface SearchFilters {}
@@ -223,6 +223,12 @@ export interface SearchRequest {
 /** Chronological Search Results: an Album Timeline plus whether the Search was cut at the limit. */
 export interface SearchResults extends AlbumTimeline {
   truncated: boolean;
+}
+
+/** Which optional Search Modes the connected Immich Server has switched on. */
+export interface SearchFeatures {
+  smartSearch: boolean;
+  ocr: boolean;
 }
 
 /** Whether the connected Immich Server is new enough to answer a Search. */
