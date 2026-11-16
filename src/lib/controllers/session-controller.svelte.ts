@@ -12,6 +12,7 @@ import { createPlacesController } from "./places-controller.svelte";
 import { createRemovableVolumeController } from "./removable-volume-controller.svelte";
 import { createSyncController } from "./sync-controller.svelte";
 import { createTargetAlbumCatalogue } from "./target-album-catalogue.svelte";
+import { createTrashTimelineController } from "./trash-timeline-controller.svelte";
 import { createTimelineController } from "./timeline-controller.svelte";
 import { createWatchedFoldersController } from "./watched-folders-controller.svelte";
 import type {
@@ -28,6 +29,7 @@ import type {
   RemovableVolumeDesktopAdapter,
   SyncDesktopAdapter,
   TimelineDesktopAdapter,
+  TrashTimelineDesktopAdapter,
   WatchedFoldersDesktopAdapter,
 } from "../tauri/desktop-adapter";
 
@@ -40,6 +42,7 @@ export type SessionDesktopAdapter =
   TimelineDesktopAdapter &
   FavoritesTimelineDesktopAdapter &
   ArchiveTimelineDesktopAdapter &
+  TrashTimelineDesktopAdapter &
   MapDesktopAdapter &
   PeopleDesktopAdapter &
   PlacesDesktopAdapter &
@@ -85,6 +88,7 @@ export function createSessionController(options: {
   const timeline = createTimelineController(adapter);
   const favorites = createFavoritesTimelineController(adapter);
   const archive = createArchiveTimelineController(adapter);
+  const trash = createTrashTimelineController(adapter);
   const people = createPeopleController(adapter);
   const places = createPlacesController(adapter);
   const memories = createMemoriesController(adapter);
@@ -102,6 +106,7 @@ export function createSessionController(options: {
     timeline,
     favorites,
     archive,
+    trash,
     people,
     places,
     memories,
@@ -173,6 +178,7 @@ export function createSessionController(options: {
     timeline,
     favorites,
     archive,
+    trash,
     people,
     places,
     memories,

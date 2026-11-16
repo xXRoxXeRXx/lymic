@@ -194,6 +194,21 @@ describe('i18n catalogs', () => {
     }
   });
 
+  it('translates the Trash Timeline strings in every locale', () => {
+    const keys = ['trash_title', 'trash_loading', 'trash_empty', 'trash_error', 'trash_offline', 'trash_hint'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+      // The retention hint is fixed text: the server's retention period is not known to Lymic.
+      expect((translations as Record<string, string>).trash_hint, `${localeCode}.trash_hint has no number`).not.toMatch(/\d/);
+    }
+    expect(en.trash_title).toBe('Trash');
+    expect(en.trash_empty).toBe('Your trash is empty.');
+    expect(de.trash_title).toBe('Papierkorb');
+  });
+
   it('uses consistent timeline and video terminology in favorites strings', () => {
     expect(de.favorites_offline).toContain('Zeitachse');
     expect(de.favorites_offline).not.toContain('Timeline');
