@@ -479,8 +479,8 @@ impl ImmichClient {
         .await
     }
 
-    /// Timeline buckets of the user's Trashed Assets (filter `isTrashed=true`). The parameter is
-    /// not verified against a live Immich server.
+    /// Timeline buckets of the user's Trashed Assets (filter `isTrashed=true`). Observed on
+    /// Immich v3.4.1 (one server version only): the parameter is accepted and `asset.read` suffices.
     pub async fn get_trash_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
         self.fetch_timeline_buckets_with_query(
             &[("size", "MONTH"), ("isTrashed", "true")],
