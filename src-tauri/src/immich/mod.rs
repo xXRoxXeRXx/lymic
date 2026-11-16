@@ -6,6 +6,7 @@ mod people;
 mod places;
 mod response;
 mod search;
+mod search_filters;
 mod session;
 #[cfg(test)]
 mod test_support;

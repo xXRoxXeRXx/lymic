@@ -273,6 +273,27 @@ describe('i18n catalogs', () => {
     expect(de.search_title).toBe('Suche');
   });
 
+  it('translates the Search filter panel strings in every locale', () => {
+    const keys = [
+      'search_filter_date',
+      'search_filter_date_from',
+      'search_filter_date_to',
+      'search_filter_date_clear',
+      'search_filter_date_invalid_range',
+      'search_filter_media_type',
+      'search_filter_media_all',
+      'search_filter_media_image',
+      'search_filter_media_video',
+    ];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect((translations as Record<string, string>)[key], `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+      }
+    }
+    expect(en.search_filter_media_video).toBe('Videos');
+    expect(de.search_filter_media_type).toBe('Medientyp');
+  });
+
   it('translates the Search Mode strings in every locale', () => {
     const keys = [
       'search_options', 'search_mode_label', 'search_mode_filename', 'search_mode_description', 'search_mode_folderPath', 'search_mode_ocr',

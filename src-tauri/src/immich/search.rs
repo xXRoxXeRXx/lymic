@@ -7,6 +7,7 @@
 
 use super::client::ImmichClient;
 use super::response::{read_response_body_limited, request_failure_code};
+use super::search_filters::{DateRange, MediaType};
 use super::timeline::{
     group_album_timeline_assets, timeline_asset_from_response, AlbumTimeline, TimelineAssetResponse,
 };
@@ -64,11 +65,21 @@ pub(crate) enum SearchMode {
 /// [`SearchFilters::apply`]; all set filters combine with AND.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
-pub(crate) struct SearchFilters {}
+pub(crate) struct SearchFilters {
+    pub date: Option<DateRange>,
+    pub media_type: Option<MediaType>,
+}
 
 impl SearchFilters {
     /// Adds the condition of every set filter to the structured `filter` object.
-    fn apply(&self, _filter: &mut Map<String, Value>) {}
+    fn apply(&self, filter: &mut Map<String, Value>) {
+        if let Some(date) = &self.date {
+            date.apply(filter);
+        }
+        if let Some(media_type) = self.media_type {
+            media_type.apply(filter);
+        }
+    }
 }
 
 /// One Search as the frontend describes it.
@@ -278,6 +289,7 @@ mod tests {
     use super::{
         SearchFeatures, SearchFilters, SearchMode, SearchRequest, SearchResults, SearchSupport,
     };
+    use crate::immich::search_filters::{DateRange, MediaType};
     use crate::immich::test_support::{serve_once, serve_pages, test_client};
     use serde_json::{json, Value};
     use std::time::Duration;
@@ -808,5 +820,118 @@ mod tests {
         let request: SearchRequest =
             serde_json::from_str(r#"{"text":"IMG","mode":"filename","filters":{}}"#).unwrap();
         assert_eq!(request, filename_request("IMG"));
+    }
+
+    /// The `filter` object a Search with these Search Filters (and no text) sends.
+    async fn filter_sent_for(filters: SearchFilters) -> Value {
+        let request = SearchRequest {
+            filters,
+            ..filename_request("")
+        };
+        let (_, requests) = search(vec![("200 OK", page(vec![], None))], request).await;
+        json_body(&requests[0])["filter"].clone()
+    }
+
+    fn day_range(from: Option<&str>, to: Option<&str>) -> DateRange {
+        DateRange {
+            from: from.map(str::to_string),
+            to: to.map(str::to_string),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_date_range_becomes_inclusive_bounds_on_the_capture_time() {
+        let filters = SearchFilters {
+            date: Some(day_range(
+                Some("2025-02-28T23:00:00.000Z"),
+                Some("2025-03-31T21:59:59.999Z"),
+            )),
+            ..SearchFilters::default()
+        };
+
+        assert_eq!(
+            filter_sent_for(filters).await,
+            json!({ "localDateTime": {
+                "gte": "2025-02-28T23:00:00.000Z",
+                "lte": "2025-03-31T21:59:59.999Z",
+            } })
+        );
+    }
+
+    #[tokio::test]
+    async fn either_bound_of_the_date_range_is_optional() {
+        let from_only = SearchFilters {
+            date: Some(day_range(Some("2025-02-28T23:00:00.000Z"), None)),
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(from_only).await,
+            json!({ "localDateTime": { "gte": "2025-02-28T23:00:00.000Z" } })
+        );
+        let to_only = SearchFilters {
+            date: Some(day_range(None, Some("2025-03-31T21:59:59.999Z"))),
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(to_only).await,
+            json!({ "localDateTime": { "lte": "2025-03-31T21:59:59.999Z" } })
+        );
+        let neither = SearchFilters {
+            date: Some(day_range(None, None)),
+            ..SearchFilters::default()
+        };
+        assert_eq!(filter_sent_for(neither).await, json!({}));
+    }
+
+    #[tokio::test]
+    async fn the_media_type_selects_images_or_videos() {
+        for (media_type, expected) in [(MediaType::Image, "IMAGE"), (MediaType::Video, "VIDEO")] {
+            let filters = SearchFilters {
+                media_type: Some(media_type),
+                ..SearchFilters::default()
+            };
+            assert_eq!(
+                filter_sent_for(filters).await,
+                json!({ "type": { "eq": expected } })
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn text_and_every_set_filter_combine_in_one_structured_filter() {
+        let request = SearchRequest {
+            filters: SearchFilters {
+                date: Some(day_range(Some("2025-02-28T23:00:00.000Z"), None)),
+                media_type: Some(MediaType::Video),
+            },
+            ..filename_request("IMG")
+        };
+        let (_, requests) = search(vec![("200 OK", page(vec![], None))], request).await;
+
+        let body = json_body(&requests[0]);
+        assert_eq!(
+            body["filter"],
+            json!({
+                "originalFileName": { "like": "%IMG%" },
+                "localDateTime": { "gte": "2025-02-28T23:00:00.000Z" },
+                "type": { "eq": "VIDEO" },
+            })
+        );
+        assert_eq!(body.as_object().unwrap().len(), 4, "no flat filter fields");
+    }
+
+    #[test]
+    fn filters_deserialize_from_the_frontend_shape() {
+        let request: SearchRequest = serde_json::from_str(
+            r#"{"text":"","mode":"filename","filters":{"date":{"from":"2025-01-01T00:00:00.000Z"},"mediaType":"image"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            request.filters,
+            SearchFilters {
+                date: Some(day_range(Some("2025-01-01T00:00:00.000Z"), None)),
+                media_type: Some(MediaType::Image),
+            }
+        );
     }
 }
