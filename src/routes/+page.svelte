@@ -11,6 +11,8 @@
   import ExploreView from "#lib/components/ExploreView.svelte";
   import BackBarView from "#lib/components/BackBarView.svelte";
   import AllMemoriesView from "#lib/components/AllMemoriesView.svelte";
+  import SearchBar from "#lib/components/SearchBar.svelte";
+  import SearchResultsView from "#lib/components/SearchResultsView.svelte";
   import PeopleView from "#lib/components/PeopleView.svelte";
   import PlacesView from "#lib/components/PlacesView.svelte";
   import AlbumCatalogueView from "#lib/components/AlbumCatalogueView.svelte";
@@ -51,6 +53,14 @@
   let allMemoriesScrollTop = 0;
   let albumsScrollTop = 0;
   let content = $state<HTMLElement>();
+  /** The view a Search was started from and where it was scrolled to, so Back returns there (even to a sub-view). */
+  let searchOrigin = $state<{ view: string; scrollTop: number } | null>(null);
+  /** The scroll position the open shared timeline view last reported; its scrolling area is inside the view, not `main`. */
+  let timelineScrollTop = 0;
+  /** Where the timeline view of `view` opens, set only while returning from a Search. */
+  let scrollRestore = $state<{ view: string; top: number } | null>(null);
+  /** Views that show the shared timeline view, which scrolls inside itself. */
+  const timelineScrollViews = new Set(["photos", "favorites", "archive", "trash", "person-timeline", "album-timeline", "place-timeline", "memory-timeline", "search"]);
 
   function selectPerson(person: RecognizedPerson) {
     personOrigin = currentView === "explore" ? "explore" : "people";
@@ -90,8 +100,9 @@
     void albumTimeline.refresh();
   }
 
-  const pageTitle = $derived.by(() => {
-    switch (currentView) {
+  function viewTitle(view: string) {
+    switch (view) {
+      case "search": return $t("search_title");
       case "photos": return $t("timeline_title");
       case "explore": return $t("explore_title");
       case "favorites": return $t("favorites_title");
@@ -111,7 +122,8 @@
       case "settings": return $t("settings");
       default: return $t("info");
     }
-  });
+  }
+  const pageTitle = $derived(viewTitle(currentView));
 
   function closePersonTimeline() {
     personTimeline?.clear();
@@ -246,6 +258,35 @@
     queueMicrotask(() => { if (content) content.scrollTop = albumsScrollTop; });
   }
 
+  function submitSearch() {
+    if (!search.canSubmit) return;
+    // Refining a Search from its results keeps the view the user first searched from.
+    if (currentView !== "search") {
+      searchOrigin = {
+        view: currentView,
+        scrollTop: timelineScrollViews.has(currentView) ? timelineScrollTop : (content?.scrollTop ?? 0),
+      };
+      currentView = "search";
+    }
+    void search.submit();
+  }
+
+  function returnFromSearch() {
+    const origin = searchOrigin ?? { view: "photos", scrollTop: 0 };
+    currentView = origin.view;
+    if (timelineScrollViews.has(origin.view)) scrollRestore = { view: origin.view, top: origin.scrollTop };
+    else queueMicrotask(() => { if (content) content.scrollTop = origin.scrollTop; });
+    // The Trash Timeline is dropped when it is left, and Explore may have gone stale.
+    if (origin.view === "trash") void trash.refresh();
+    if (origin.view === "explore") void explore.refreshIfStale();
+  }
+
+  function clearSearch() {
+    const isOpen = currentView === "search";
+    search.clear();
+    if (isOpen) returnFromSearch();
+  }
+
   const auth = createSessionController({
     adapter: desktop,
     t: (key, params) => $t(key, params),
@@ -264,6 +305,9 @@
       closePersonTimeline();
       closePlaceTimeline();
       closeMemoryTimeline();
+      searchOrigin = null;
+      timelineScrollTop = 0;
+      scrollRestore = null;
       currentView = "photos";
     },
     isExploreActive: () => currentView === "explore",
@@ -285,6 +329,7 @@
     explore,
     map,
     albumCatalogue,
+    search,
   } = auth;
   const preferences = createPreferencesController({
     adapter: desktop,
@@ -302,6 +347,11 @@
     const trashIsOpen = currentView === "trash";
     if (trashWasOpen && !trashIsOpen) untrack(() => trash.clear());
     trashWasOpen = trashIsOpen;
+  });
+
+  // A scroll position is restored once, when returning from a Search; later visits open at the top.
+  $effect(() => {
+    if (scrollRestore && currentView !== scrollRestore.view) untrack(() => scrollRestore = null);
   });
 
   let profileImageLoadFailed = $state(false);
@@ -338,6 +388,8 @@
     downloadArchive: desktop.downloadArchive,
     albumCatalogue: targetAlbumCatalogue,
     addAssetsToAlbum: desktop.addAssetsToAlbum,
+    initialScrollTop: scrollRestore?.view === currentView ? scrollRestore.top : 0,
+    onScrollPosition: (scrollTop: number) => { timelineScrollTop = scrollTop; },
   });
 </script>
 
@@ -536,7 +588,11 @@
         </div>
       </header>
 
-      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'favorites' || currentView === 'archive' || currentView === 'trash' || currentView === 'person-timeline' || currentView === 'album-timeline' || currentView === 'place-timeline' || currentView === 'memory-timeline' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <div class="shrink-0 px-8 pb-2">
+        <SearchBar {search} onSubmit={submitSearch} onClear={clearSearch} />
+      </div>
+
+      <main bind:this={content} class="flex-1 {currentView === 'map' || currentView === 'photos' || currentView === 'favorites' || currentView === 'archive' || currentView === 'trash' || currentView === 'person-timeline' || currentView === 'album-timeline' || currentView === 'place-timeline' || currentView === 'memory-timeline' || currentView === 'search' ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
@@ -631,6 +687,13 @@
           <BackBarView label={$t(memoryOrigin === "all-memories" ? 'memories_all_return' : 'explore_return')} onBack={returnFromMemoryTimeline}>
             <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} />
           </BackBarView>
+        {:else if currentView === "search"}
+          <SearchResultsView
+            {search}
+            backLabel={$t("search_return", { values: { view: viewTitle(searchOrigin?.view ?? "photos") } })}
+            onBack={returnFromSearch}
+            timelineProps={sharedTimelineProps}
+          />
         {:else if currentView === "dashboard"}
           <DashboardView
             status={sync.status}

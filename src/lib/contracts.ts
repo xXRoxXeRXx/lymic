@@ -205,3 +205,29 @@ export interface LoginRequest {
 export type ReleaseChannel = "github" | "store";
 
 export interface MapMarker { id: string; lat: number; lon: number; }
+
+// Search (ADR-0008, ADR-0009). Mirrors `src-tauri/src/immich/search.rs`.
+
+/** How Immich interprets the text of a Search. Each Search Mode adds a member. */
+export type SearchMode = "filename";
+
+/** The Search Filters of a Search. Each Search Filter adds one optional field. */
+export interface SearchFilters {}
+
+export interface SearchQuery {
+  text: string;
+  mode: SearchMode;
+  filters: SearchFilters;
+}
+
+/** Chronological Search Results: an Album Timeline plus whether the Search was cut at the limit. */
+export interface SearchTimeline extends AlbumTimeline {
+  truncated: boolean;
+}
+
+/** Whether the connected Immich Server is new enough to answer a Search. */
+export interface SearchSupport {
+  supported: boolean;
+  version: string;
+  requiredVersion: string;
+}
