@@ -1,11 +1,11 @@
-import { classifyExploreError, type ExploreError } from "./explore-error";
+import { classifyRequestFailure, type RequestFailure } from "./request-failure";
 
 /** The load state shared by the Places and Memories overview controllers. */
 export interface ExploreListState<T> {
   readonly items: T[];
   readonly isLoading: boolean;
   readonly isOffline: boolean;
-  readonly error: ExploreError | null;
+  readonly error: RequestFailure | null;
   refresh(): Promise<void>;
   clear(): void;
 }
@@ -19,7 +19,7 @@ export function createExploreListController<T>(options: { prefix: string; load()
   let items = $state<T[]>([]);
   let isLoading = $state(false);
   let isOffline = $state(false);
-  let error = $state<ExploreError | null>(null);
+  let error = $state<RequestFailure | null>(null);
   let generation = 0;
 
   async function refresh() {
@@ -33,7 +33,7 @@ export function createExploreListController<T>(options: { prefix: string; load()
       isOffline = false;
     } catch (reason) {
       if (requestGeneration !== generation) return;
-      error = items.length === 0 ? classifyExploreError(reason, options.prefix) : null;
+      error = items.length === 0 ? classifyRequestFailure(reason, options.prefix) : null;
       isOffline = items.length > 0;
     } finally {
       if (requestGeneration === generation) isLoading = false;

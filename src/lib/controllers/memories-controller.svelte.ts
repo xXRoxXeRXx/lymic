@@ -1,13 +1,13 @@
 import type { Memory } from "../contracts";
 import type { MemoriesDesktopAdapter } from "../tauri/desktop-adapter";
-import type { ExploreError } from "./explore-error";
+import type { RequestFailure } from "./request-failure";
 import { createExploreListController } from "./explore-list-controller.svelte";
 
 export interface MemoriesViewState {
   readonly memories: Memory[];
   readonly isLoading: boolean;
   readonly isOffline: boolean;
-  readonly error: ExploreError | null;
+  readonly error: RequestFailure | null;
   refresh(): Promise<void>;
   clear(): void;
 }

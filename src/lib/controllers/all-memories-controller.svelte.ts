@@ -1,6 +1,6 @@
 import type { Memory } from "../contracts";
 import type { AllMemoriesDesktopAdapter } from "../tauri/desktop-adapter";
-import { classifyExploreError, type ExploreError } from "./explore-error";
+import { classifyRequestFailure, type RequestFailure } from "./request-failure";
 
 export interface AllMemoriesViewState {
   readonly memories: Memory[];
@@ -11,7 +11,7 @@ export interface AllMemoriesViewState {
   readonly isOffline: boolean;
   readonly hasNextPage: boolean;
   /** The first page failed and nothing can be shown. */
-  readonly error: ExploreError | null;
+  readonly error: RequestFailure | null;
   /** A further page failed; the pages already shown are kept. */
   readonly loadMoreFailed: boolean;
   /** Reloads from the first page. */
@@ -30,7 +30,7 @@ export function createAllMemoriesController(adapter: AllMemoriesDesktopAdapter):
   let isLoadingMore = $state(false);
   let isOffline = $state(false);
   let hasNextPage = $state(false);
-  let error = $state<ExploreError | null>(null);
+  let error = $state<RequestFailure | null>(null);
   let loadMoreFailed = $state(false);
   let page = 0;
   let generation = 0;
@@ -57,7 +57,7 @@ export function createAllMemoriesController(adapter: AllMemoriesDesktopAdapter):
       .catch((reason: unknown) => {
         if (requestGeneration !== generation) return;
         if (replace) {
-          error = memories.length === 0 ? classifyExploreError(reason, "memories") : null;
+          error = memories.length === 0 ? classifyRequestFailure(reason, "memories") : null;
           isOffline = memories.length > 0;
         } else {
           loadMoreFailed = true;
