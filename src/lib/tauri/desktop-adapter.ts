@@ -147,6 +147,11 @@ export interface TagsDesktopAdapter {
   getTags(): Promise<Tag[]>;
 }
 
+export interface TagTimelineDesktopAdapter {
+  getTagTimelineBuckets(tagId: string): Promise<TimelineBucket[]>;
+  getTagTimelineBucketAssets(tagId: string, timeBucket: string): Promise<TimelineAsset[]>;
+}
+
 export interface SearchDesktopAdapter {
   /** Reads the server version once to decide whether a Search can be answered (Immich 3.2 or later). */
   getSearchSupport(): Promise<SearchSupport>;
@@ -213,6 +218,7 @@ export interface DesktopAdapter
     PeopleDesktopAdapter,
     PlacesDesktopAdapter,
     TagsDesktopAdapter,
+    TagTimelineDesktopAdapter,
     MemoriesDesktopAdapter,
     AllMemoriesDesktopAdapter,
     SearchDesktopAdapter,
@@ -281,6 +287,8 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getPersonTimelineBucketAssets: (personId, timeBucket) => invoke<TimelineAsset[]>("get_person_timeline_bucket_assets", { personId, timeBucket }),
   getPlaces: () => invoke<Place[]>("get_places"),
   getTags: () => invoke<Tag[]>("get_tags"),
+  getTagTimelineBuckets: (tagId) => invoke<TimelineBucket[]>("get_tag_timeline_buckets", { tagId }),
+  getTagTimelineBucketAssets: (tagId, timeBucket) => invoke<TimelineAsset[]>("get_tag_timeline_bucket_assets", { tagId, timeBucket }),
   getSearchSupport: () => invoke<SearchSupport>("get_search_support"),
   getSearchFeatures: () => invoke<SearchFeatures>("get_search_features"),
   searchAssets: (request) => invoke<SearchResults>("search_assets", { request }),

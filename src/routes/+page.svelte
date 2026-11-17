@@ -30,8 +30,10 @@
   import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
   import { createPlaceTimelineController } from "#lib/controllers/place-timeline-controller.svelte.ts";
   import { createMemoryTimelineController } from "#lib/controllers/memory-timeline-controller.svelte.ts";
+  import { createTagTimelineController } from "#lib/controllers/tag-timeline-controller.svelte.ts";
+  import { defaultTagOrigin, recordTagOrigin } from "#lib/controllers/tag-origin.ts";
   import { localizedMemoryTitle } from "#lib/memory-title.ts";
-  import type { AlbumCatalogueItem, Memory, Place, RecognizedPerson } from "#lib/contracts.ts";
+  import type { AlbumCatalogueItem, Memory, Place, RecognizedPerson, Tag } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
@@ -55,6 +57,10 @@
   let albumsScrollTop = 0;
   /** The Tags view's own scroll position, kept while another view is open. */
   let tagsScrollTop = 0;
+  let selectedTag = $state<Tag | null>(null);
+  let tagTimeline = $state<ReturnType<typeof createTagTimelineController> | null>(null);
+  /** The one view (and scroll position) Back returns to from a Tag Timeline, whichever view it was opened from. */
+  let tagOrigin = $state(defaultTagOrigin);
   let content = $state<HTMLElement>();
   /** The view a Search was started from and where it was scrolled to, so Back returns there (even to a sub-view). */
   let searchOrigin = $state<{ view: string; top: number } | null>(null);
@@ -63,7 +69,7 @@
   /** Where the timeline view of `view` opens, set only while returning from a Search. */
   let scrollRestore = $state<{ view: string; top: number } | null>(null);
   /** Views that show the shared timeline view, which scrolls inside itself. */
-  const timelineScrollViews = new Set(["photos", "favorites", "archive", "trash", "person-timeline", "album-timeline", "place-timeline", "memory-timeline", "search"]);
+  const timelineScrollViews = new Set(["photos", "favorites", "archive", "trash", "person-timeline", "album-timeline", "place-timeline", "memory-timeline", "tag-timeline", "search"]);
 
   function selectPerson(person: RecognizedPerson) {
     personOrigin = currentView === "explore" ? "explore" : "people";
@@ -73,6 +79,21 @@
     personTimeline = createPersonTimelineController(desktop, person.id);
     currentView = "person-timeline";
     void personTimeline.refresh();
+  }
+
+  /** The open view and its scroll position; a timeline view scrolls inside itself, any other view in `main`. */
+  function currentPosition() {
+    return { view: currentView, top: timelineScrollViews.has(currentView) ? timelineScrollTop : (content?.scrollTop ?? 0) };
+  }
+
+  /** Opens a Tag's Tag Timeline from any view; a Tag Timeline opened from another Tag Timeline keeps its origin. */
+  function selectTag(tag: Tag) {
+    tagOrigin = recordTagOrigin(tagOrigin, currentPosition());
+    tagTimeline?.clear();
+    selectedTag = tag;
+    tagTimeline = createTagTimelineController(desktop, tag.id);
+    currentView = "tag-timeline";
+    void tagTimeline.refresh();
   }
 
   function selectPlace(place: Place) {
@@ -119,6 +140,7 @@
       case "albums": return $t("albums_title");
       case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
       case "place-timeline": return selectedPlace?.city ?? $t("places_title");
+      case "tag-timeline": return selectedTag?.value ?? $t("tags_title");
       case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
       case "memory-timeline": return selectedMemory ? localizedMemoryTitle(selectedMemory, $t, $locale) : $t("memories_title");
       case "dashboard": return $t("dashboard");
@@ -133,6 +155,12 @@
     personTimeline?.clear();
     personTimeline = null;
     selectedPerson = null;
+  }
+
+  function closeTagTimeline() {
+    tagTimeline?.clear();
+    tagTimeline = null;
+    selectedTag = null;
   }
 
   function closePlaceTimeline() {
@@ -273,23 +301,30 @@
     if (!search.canSubmit) return;
     // Refining a Search from its results keeps the view the user first searched from.
     if (currentView !== "search") {
-      searchOrigin = {
-        view: currentView,
-        top: timelineScrollViews.has(currentView) ? timelineScrollTop : (content?.scrollTop ?? 0),
-      };
+      searchOrigin = currentPosition();
       currentView = "search";
     }
     void search.submit();
   }
 
-  function returnFromSearch() {
-    const origin = searchOrigin ?? { view: "photos", top: 0 };
+  /** Shows `origin.view` again at its scroll position, reloading what was dropped or went stale while it was left. */
+  function returnTo(origin: { view: string; top: number }) {
     currentView = origin.view;
     if (timelineScrollViews.has(origin.view)) scrollRestore = { view: origin.view, top: origin.top };
     else queueMicrotask(() => { if (content) content.scrollTop = origin.top; });
-    // The Trash Timeline is dropped when it is left, and Explore may have gone stale.
+    // The Trash Timeline is dropped when it is left, and Explore and Tags may have gone stale.
     if (origin.view === "trash") void trash.refresh();
     if (origin.view === "explore") void explore.refreshIfStale();
+    if (origin.view === "tags") void tags.refreshIfStale();
+  }
+
+  function returnFromSearch() {
+    returnTo(searchOrigin ?? { view: "photos", top: 0 });
+  }
+
+  function returnFromTagTimeline() {
+    closeTagTimeline();
+    returnTo(tagOrigin);
   }
 
   function clearSearch() {
@@ -313,6 +348,8 @@
       placesScrollTop = 0;
       albumsScrollTop = 0;
       tagsScrollTop = 0;
+      tagOrigin = defaultTagOrigin;
+      closeTagTimeline();
       closeAlbumTimeline();
       closePersonTimeline();
       closePlaceTimeline();
@@ -689,7 +726,7 @@
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
         {:else if currentView === "tags"}
-          <TagsView {tags} />
+          <TagsView {tags} onSelect={selectTag} />
         {:else if currentView === "albums"}
           <AlbumCatalogueView catalogue={albumCatalogue} onSelect={selectAlbum} />
         {:else if currentView === "album-timeline" && albumTimeline}
@@ -707,6 +744,10 @@
         {:else if currentView === "memory-timeline" && memoryTimeline}
           <BackBarView label={$t(memoryOrigin === "all-memories" ? 'memories_all_return' : 'explore_return')} onBack={returnFromMemoryTimeline}>
             <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} />
+          </BackBarView>
+        {:else if currentView === "tag-timeline" && tagTimeline}
+          <BackBarView label={$t("tags_timeline_return", { values: { view: viewTitle(tagOrigin.view) } })} onBack={returnFromTagTimeline}>
+            <TimelineView timeline={tagTimeline} {...sharedTimelineProps} emptyMessage={$t('tags_timeline_empty')} loadErrorMessage={$t('tags_timeline_error')} />
           </BackBarView>
         {:else if currentView === "search"}
           <SearchResultsView

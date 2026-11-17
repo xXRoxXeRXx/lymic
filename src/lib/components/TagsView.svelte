@@ -2,10 +2,12 @@
   import { tick } from "svelte";
   import { ChevronRight } from "lucide-svelte";
   import { t } from "svelte-i18n";
+  import type { Tag } from "../contracts";
   import type { TagsViewState } from "../controllers/tags-controller.svelte";
   import { validTagColor, type TagRow } from "../controllers/tags-tree";
 
-  let { tags }: { tags: TagsViewState } = $props();
+  /** `onSelect` opens the Tag's Tag Timeline; expanding is the chevron or the arrow keys. */
+  let { tags, onSelect }: { tags: TagsViewState; onSelect: (tag: Tag) => void } = $props();
 
   let tree = $state<HTMLElement>();
   /** The Tag that holds the tree's single tab stop (roving focus). */
@@ -37,7 +39,7 @@
         break;
       case "Enter":
       case " ":
-        tags.toggle(row.tag.id);
+        onSelect(row.tag);
         break;
       default: return;
     }
@@ -69,11 +71,16 @@
           data-tag-id={row.tag.id}
           class="flex cursor-default items-center gap-2 rounded-lg py-1.5 pe-3 outline-none hover:bg-slate-200 focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-zinc-800"
           style="padding-inline-start: {0.5 + (row.level - 1) * 1.25}rem"
-          onclick={() => { focusedId = row.tag.id; tags.toggle(row.tag.id); }}
+          onclick={() => { focusedId = row.tag.id; onSelect(row.tag); }}
           onfocus={() => (focusedId = row.tag.id)}
           onkeydown={(event) => onKeyDown(event, row, index)}
         >
-          <span class="flex h-4 w-4 shrink-0 items-center justify-center text-slate-400 dark:text-zinc-500" aria-hidden="true">
+          <span
+            class="flex h-4 w-4 shrink-0 items-center justify-center text-slate-400 dark:text-zinc-500 {row.hasChildren ? 'cursor-pointer hover:text-slate-700 dark:hover:text-zinc-200' : ''}"
+            aria-hidden="true"
+            data-testid={row.hasChildren ? "tag-toggle" : undefined}
+            onclick={(event) => { event.stopPropagation(); focusedId = row.tag.id; tags.toggle(row.tag.id); }}
+          >
             {#if row.hasChildren}<ChevronRight class="h-4 w-4 transition-transform {row.expanded ? 'rotate-90 rtl:-rotate-90' : 'rtl:rotate-180'}" />{/if}
           </span>
           {#if color}<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: {color}" data-testid="tag-color-dot" aria-hidden="true"></span>{/if}

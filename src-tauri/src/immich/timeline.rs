@@ -367,6 +367,38 @@ impl ImmichClient {
         )
     }
 
+    pub async fn get_tag_timeline_buckets(
+        &self,
+        tag_id: &str,
+    ) -> Result<Vec<TimelineBucket>, String> {
+        Self::validate_path_segment(tag_id, "tag ID")?;
+        self.fetch_timeline_buckets_with_query(
+            &[("size", "MONTH"), ("tagId", tag_id)],
+            "tag timeline buckets",
+            None,
+        )
+        .await
+    }
+
+    pub async fn get_tag_timeline_bucket_assets(
+        &self,
+        tag_id: &str,
+        time_bucket: &str,
+    ) -> Result<Vec<TimelineAsset>, String> {
+        Self::validate_path_segment(tag_id, "tag ID")?;
+        self.fetch_timeline_bucket_assets_with_query(
+            &[
+                ("size", "MONTH"),
+                ("timeBucket", time_bucket),
+                ("tagId", tag_id),
+            ],
+            "tag timeline bucket",
+            false,
+            None,
+        )
+        .await
+    }
+
     async fn fetch_timeline_buckets_with_query(
         &self,
         query: &[(&str, &str)],
@@ -1034,6 +1066,96 @@ mod tests {
             assets[0].taken_at.as_deref(),
             Some("2025-03-01T12:30:00.000Z")
         );
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetches_timeline_buckets_and_assets_filtered_to_a_tag() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 4096];
+            let read = stream.read(&mut request).await.unwrap();
+            let request_text = String::from_utf8_lossy(&request[..read]);
+            assert!(request_text
+                .starts_with("GET /api/timeline/buckets?size=MONTH&tagId=tag-1 HTTP/1.1"));
+            assert!(request_text.contains("x-api-key: test-key"));
+            let buckets = br#"[{"timeBucket":"2025-02-01T00:00:00.000Z","count":1},{"timeBucket":"2025-03-01T00:00:00.000Z","count":1}]"#;
+            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", buckets.len()).as_bytes()).await.unwrap();
+            stream.write_all(buckets).await.unwrap();
+
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let read = stream.read(&mut request).await.unwrap();
+            let request_text = String::from_utf8_lossy(&request[..read]);
+            assert!(request_text.starts_with("GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&tagId=tag-1 HTTP/1.1"));
+            assert!(request_text.contains("x-api-key: test-key"));
+            assert!(!request_text.contains("tagIds"));
+            let assets = br#"[{"id":"asset-1","type":"IMAGE","exifInfo":{"imageWidth":640,"imageHeight":480,"dateTimeOriginal":"2025-03-01T12:30:00.000Z"}}]"#;
+            stream.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", assets.len()).as_bytes()).await.unwrap();
+            stream.write_all(assets).await.unwrap();
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let buckets = client.get_tag_timeline_buckets("tag-1").await.unwrap();
+        let assets = client
+            .get_tag_timeline_bucket_assets("tag-1", "2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap();
+
+        assert_eq!(buckets.len(), 2);
+        assert_eq!(buckets[0].time_bucket, "2025-03-01T00:00:00.000Z");
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].id, "asset-1");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_failed_tag_timeline_request_never_names_a_permission_or_leaks_the_key() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for status in ["403 Forbidden", "500 Internal Server Error"] {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = [0_u8; 4096];
+                let _ = stream.read(&mut request).await.unwrap();
+                stream
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 {status}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                        )
+                        .as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+            }
+        });
+        let client = ImmichClient::new(
+            format!("http://{address}"),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let forbidden = client.get_tag_timeline_buckets("tag-1").await.unwrap_err();
+        let failed = client
+            .get_tag_timeline_bucket_assets("tag-1", "2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap_err();
+
+        for error in [forbidden, failed] {
+            assert!(!error.contains("permission_denied"), "{error}");
+            assert!(!error.contains("test-key"), "{error}");
+        }
         server.await.unwrap();
     }
 

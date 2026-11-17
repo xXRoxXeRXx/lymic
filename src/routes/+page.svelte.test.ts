@@ -2300,6 +2300,142 @@ describe("Place Timelines", () => {
   });
 });
 
+describe("Tag Timelines", () => {
+  const march = "2025-03-01T00:00:00.000Z";
+  const tags = [
+    { id: "t-travel", name: "Travel", value: "Travel", parentId: null, color: null },
+    { id: "t-italy", name: "Italy", value: "Travel/Italy", parentId: "t-travel", color: null },
+    { id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", parentId: "t-italy", color: null },
+    { id: "t-family", name: "Family", value: "Family", parentId: null, color: null },
+  ];
+  const taggedAsset = (id: string) => ({ id, width: 640, height: 480, type: "IMAGE", takenAt: "2025-03-02T00:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false });
+  const handlers = {
+    get_tags: async () => tags,
+    get_tag_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+    get_tag_timeline_bucket_assets: async () => [taggedAsset("asset-1")],
+  };
+  const openTags = async () => fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
+
+  it("opens the Tag Timeline of a selected Tag, titled with its full path, and loads buckets before assets", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({ ...handlers, get_tag_timeline_bucket_assets: () => new Promise(() => {}) });
+    await openTags();
+    await fireEvent.click(within(await screen.findByRole("treeitem", { name: "Italy" })).getByTestId("tag-toggle"));
+
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Rome" }));
+
+    expect(await screen.findByRole("heading", { name: "Travel/Italy/Rome", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_buckets", { tagId: "t-rome" });
+    // The scrubber and month labels appear while the first bucket's assets are still loading.
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_bucket_assets", { tagId: "t-rome", timeBucket: march }));
+    expect(screen.queryByRole("tree")).not.toBeInTheDocument();
+  });
+
+  it("opens a Tag with Enter or Space, and expanding a Tag does not open it", async () => {
+    renderAuthenticatedPage(handlers);
+    await openTags();
+    const travel = await screen.findByRole("treeitem", { name: "Travel" });
+
+    await fireEvent.click(within(travel).getByTestId("tag-toggle"));
+    expect(screen.getByRole("tree")).toBeInTheDocument();
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_tag_timeline_buckets", expect.anything());
+
+    await fireEvent.keyDown(travel, { key: "Enter" });
+    expect(await screen.findByRole("heading", { name: "Travel", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_buckets", { tagId: "t-travel" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Tags" }));
+    await fireEvent.keyDown(await screen.findByRole("treeitem", { name: "Family" }), { key: " " });
+    expect(await screen.findByRole("heading", { name: "Family", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_buckets", { tagId: "t-family" });
+  });
+
+  it("shows the shared timeline empty state for a Tag without assets", async () => {
+    renderAuthenticatedPage({ ...handlers, get_tag_timeline_buckets: async () => [] });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Family" }));
+
+    expect(await screen.findByText("This tag has no photos yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows the shared timeline load error, never an empty Tag, when the load fails", async () => {
+    renderAuthenticatedPage({ ...handlers, get_tag_timeline_buckets: async () => { throw new Error("tags_permission_denied:tag.read"); } });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Family" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("This tag could not be loaded.");
+    expect(screen.queryByText("This tag has no photos yet.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Timeline scrubber" })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Tags" }));
+    expect(await screen.findByRole("tree", { name: "Tags" })).toBeInTheDocument();
+  });
+
+  it("offers Favorite, Download and Add to album from the Lightbox of a Tag Timeline", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      ...handlers,
+      get_albums: async () => [{ id: "album-1", albumName: "Holiday" }],
+      get_asset_details: async () => ({ id: "asset-1", originalFileName: "IMG_0001.jpg", fileSize: 1024, width: 640, height: 480, isFavorite: false }),
+      set_asset_favorite: async () => undefined,
+    });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Family" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Open photo" }));
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+
+    expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Add to album" })).toBeInTheDocument();
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Add to favorites" }));
+    expect(tauri.invoke).toHaveBeenCalledWith("set_asset_favorite", { assetId: "asset-1", isFavorite: true });
+  });
+
+  it("returns to the Tags tree with its scroll position restored", async () => {
+    renderAuthenticatedPage(handlers);
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Family" });
+    const main = document.querySelector("main") as HTMLElement;
+    main.scrollTop = 180;
+    await fireEvent.scroll(main);
+
+    await fireEvent.click(screen.getByRole("treeitem", { name: "Family" }));
+    await screen.findByRole("heading", { name: "Family", level: 1 });
+    main.scrollTop = 0;
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Tags" }));
+
+    expect(await screen.findByRole("heading", { name: "Tags", level: 1 })).toBeInTheDocument();
+    await waitFor(() => expect(main.scrollTop).toBe(180));
+    expect(screen.getByRole("treeitem", { name: "Family" })).toBeInTheDocument();
+  });
+
+  it("starts at the top of the Tags tree again after signing out from a Tag Timeline", async () => {
+    renderAuthenticatedPage(handlers);
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Family" });
+    const main = document.querySelector("main") as HTMLElement;
+    main.scrollTop = 180;
+    await fireEvent.scroll(main);
+    await fireEvent.click(screen.getByRole("treeitem", { name: "Family" }));
+    await screen.findByRole("heading", { name: "Family", level: 1 });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+    expect(await screen.findByRole("heading", { name: "Login" })).toBeInTheDocument();
+    await fireEvent.input(screen.getByLabelText("Server URL"), { target: { value: "https://immich.example" } });
+    await fireEvent.input(screen.getByLabelText("API Key"), { target: { value: "secret-key" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Login" }));
+
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Tags" })).not.toBeInTheDocument();
+    await openTags();
+    expect(await screen.findByRole("tree", { name: "Tags" })).toBeInTheDocument();
+    expect(document.querySelector("main")!.scrollTop).toBe(0);
+  });
+});
+
 describe("Explore Memories", () => {
   const asset = (id: string, takenAt: string) => ({ id, width: 1600, height: 1200, type: "IMAGE", takenAt, cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false });
   const timelineOf = (...assets: ReturnType<typeof asset>[]) => {
@@ -2673,6 +2809,8 @@ describe("Tags view", () => {
   const calls = (command: string) => tauri.invoke.mock.calls.filter(([name]) => name === command).length;
   const openTags = async () => fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
   const names = () => screen.queryAllByRole("treeitem").map((item) => item.textContent?.trim());
+  /** The chevron of a Tag with children; expanding is separate from selecting the Tag. */
+  const tagToggle = async (name: string) => within(await screen.findByRole("treeitem", { name })).getByTestId("tag-toggle");
 
   it("opens from the navigation as a tree while Photos stays the view opened after login", async () => {
     renderAuthenticatedPage({ get_tags: async () => tags });
@@ -2705,7 +2843,7 @@ describe("Tags view", () => {
     renderAuthenticatedPage({ get_tags: async () => tags });
     await openTags();
     await screen.findByRole("treeitem", { name: "Italy" });
-    await fireEvent.click(screen.getByRole("treeitem", { name: "Italy" }));
+    await fireEvent.click(await tagToggle("Italy"));
 
     expect(await screen.findByRole("treeitem", { name: "Rome" })).toBeInTheDocument();
     expect(screen.queryByText("Travel/Italy/Rome")).not.toBeInTheDocument();
@@ -2715,7 +2853,7 @@ describe("Tags view", () => {
   it("expands and collapses a Tag with children by click and keeps the choice while moving between views", async () => {
     renderAuthenticatedPage({ get_tags: async () => tags });
     await openTags();
-    await fireEvent.click(await screen.findByRole("treeitem", { name: "Italy" }));
+    await fireEvent.click(await tagToggle("Italy"));
     expect(screen.getByRole("treeitem", { name: "Italy" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("treeitem", { name: "Rome" })).toBeInTheDocument();
 
@@ -2723,7 +2861,7 @@ describe("Tags view", () => {
     await openTags();
     expect(await screen.findByRole("treeitem", { name: "Rome" })).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("treeitem", { name: "Travel" }));
+    await fireEvent.click(await tagToggle("Travel"));
     expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("treeitem", { name: "Italy" })).not.toBeInTheDocument();
     expect(screen.queryByRole("treeitem", { name: "Rome" })).not.toBeInTheDocument();
@@ -2732,7 +2870,7 @@ describe("Tags view", () => {
   it("shows a colour dot only for a valid #RRGGBB colour", async () => {
     renderAuthenticatedPage({ get_tags: async () => tags });
     await openTags();
-    await fireEvent.click(await screen.findByRole("treeitem", { name: "Italy" }));
+    await fireEvent.click(await tagToggle("Italy"));
     await screen.findByRole("treeitem", { name: "Rome" });
 
     expect(within(screen.getByRole("treeitem", { name: "Travel" })).getByTestId("tag-color-dot")).toHaveStyle({ backgroundColor: "#ff0000" });
@@ -2774,7 +2912,7 @@ describe("Tags view", () => {
     await screen.findByRole("treeitem", { name: "Self" });
     // Every Tag is reachable: expand each node that has children until nothing new appears.
     for (let round = 0; round < 4; round += 1) {
-      for (const item of screen.queryAllByRole("treeitem", { expanded: false })) await fireEvent.click(item);
+      for (const item of screen.queryAllByRole("treeitem", { expanded: false })) await fireEvent.click(within(item).getByTestId("tag-toggle"));
     }
     expect(screen.getAllByRole("treeitem").map((item) => item.textContent?.trim()).sort()).toEqual(["A", "B", "C", "Self"]);
   });
@@ -2808,11 +2946,6 @@ describe("Tags view", () => {
     expect(italy).toHaveAttribute("aria-expanded", "false");
     await fireEvent.keyDown(italy, { key: "ArrowLeft" });
     expect(travel).toHaveFocus();
-
-    await fireEvent.keyDown(travel, { key: "Enter" });
-    expect(travel).toHaveAttribute("aria-expanded", "false");
-    await fireEvent.keyDown(travel, { key: " " });
-    expect(travel).toHaveAttribute("aria-expanded", "true");
 
     await fireEvent.keyDown(travel, { key: "End" });
     expect(screen.getByRole("treeitem", { name: "Italy" })).toHaveFocus();
@@ -3029,7 +3162,7 @@ describe("Tags view", () => {
     const get_tags = vi.fn().mockResolvedValueOnce(tags).mockImplementationOnce(() => new Promise(() => {}));
     renderAuthenticatedPage({ get_tags });
     await openTags();
-    await fireEvent.click(await screen.findByRole("treeitem", { name: "Italy" }));
+    await fireEvent.click(await tagToggle("Italy"));
     await screen.findByRole("treeitem", { name: "Rome" });
     const main = document.querySelector("main") as HTMLElement;
     main.scrollTop = 140;
@@ -3047,7 +3180,7 @@ describe("Tags view", () => {
     const get_tags = vi.fn().mockResolvedValue(tags);
     renderAuthenticatedPage({ get_tags });
     await openTags();
-    await fireEvent.click(await screen.findByRole("treeitem", { name: "Italy" }));
+    await fireEvent.click(await tagToggle("Italy"));
     await screen.findByRole("treeitem", { name: "Rome" });
 
     await signOutAndBackIn();
