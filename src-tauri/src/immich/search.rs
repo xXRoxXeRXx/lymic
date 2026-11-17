@@ -7,7 +7,7 @@
 
 use super::client::ImmichClient;
 use super::response::{read_response_body_limited, request_failure_code};
-use super::search_filters::{CameraFilter, DateRange, MediaType};
+use super::search_filters::{CameraFilter, DateRange, LocationFilter, MediaType};
 use super::timeline::{
     group_album_timeline_assets, timeline_asset_from_response, AlbumTimeline, TimelineAssetResponse,
 };
@@ -71,6 +71,7 @@ pub(crate) struct SearchFilters {
     pub date: Option<DateRange>,
     pub media_type: Option<MediaType>,
     pub camera: Option<CameraFilter>,
+    pub location: Option<LocationFilter>,
 }
 
 impl SearchFilters {
@@ -84,6 +85,9 @@ impl SearchFilters {
         }
         if let Some(camera) = &self.camera {
             camera.apply(filter);
+        }
+        if let Some(location) = &self.location {
+            location.apply(filter);
         }
     }
 }
@@ -295,7 +299,7 @@ mod tests {
     use super::{
         SearchFeatures, SearchFilters, SearchMode, SearchRequest, SearchResults, SearchSupport,
     };
-    use crate::immich::search_filters::{CameraFilter, DateRange, MediaType};
+    use crate::immich::search_filters::{CameraFilter, DateRange, LocationFilter, MediaType};
     use crate::immich::test_support::{serve_once, serve_pages, test_client};
     use serde_json::{json, Value};
     use std::time::Duration;
@@ -1002,6 +1006,86 @@ mod tests {
         assert_eq!(
             request.filters.camera,
             Some(camera(Some("Canon"), None, Some("RF 50mm")))
+        );
+    }
+
+    fn location(country: Option<&str>, state: Option<&str>) -> LocationFilter {
+        LocationFilter {
+            country: country.map(str::to_string),
+            state: state.map(str::to_string),
+        }
+    }
+
+    #[tokio::test]
+    async fn the_location_country_and_state_become_exact_conditions() {
+        let filters = SearchFilters {
+            location: Some(location(Some("Italy"), Some("Tuscany"))),
+            ..SearchFilters::default()
+        };
+
+        assert_eq!(
+            filter_sent_for(filters).await,
+            json!({
+                "country": { "eq": "Italy" },
+                "state": { "eq": "Tuscany" },
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn each_location_part_is_optional_and_a_blank_part_is_no_condition() {
+        let country_only = SearchFilters {
+            location: Some(location(Some("Italy"), None)),
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(country_only).await,
+            json!({ "country": { "eq": "Italy" } })
+        );
+        let state_only = SearchFilters {
+            location: Some(location(None, Some("Bavaria"))),
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(state_only).await,
+            json!({ "state": { "eq": "Bavaria" } })
+        );
+        let blank = SearchFilters {
+            location: Some(location(Some(" "), Some(""))),
+            ..SearchFilters::default()
+        };
+        assert_eq!(filter_sent_for(blank).await, json!({}));
+    }
+
+    #[tokio::test]
+    async fn the_location_combines_with_every_other_filter() {
+        let filters = SearchFilters {
+            date: Some(day_range(Some("2025-01-01T00:00:00.000Z"), None)),
+            media_type: Some(MediaType::Image),
+            camera: Some(camera(Some("Canon"), None, None)),
+            location: Some(location(Some("Italy"), None)),
+        };
+
+        assert_eq!(
+            filter_sent_for(filters).await,
+            json!({
+                "localDateTime": { "gte": "2025-01-01T00:00:00.000Z" },
+                "type": { "eq": "IMAGE" },
+                "make": { "eq": "Canon" },
+                "country": { "eq": "Italy" },
+            })
+        );
+    }
+
+    #[test]
+    fn the_location_filter_deserializes_from_the_frontend_shape() {
+        let request: SearchRequest = serde_json::from_str(
+            r#"{"text":"","mode":"filename","filters":{"location":{"country":"Italy"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            request.filters.location,
+            Some(location(Some("Italy"), None))
         );
     }
 }

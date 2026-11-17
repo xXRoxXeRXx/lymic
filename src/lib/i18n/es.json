@@ -378,4 +378,7 @@
   ,"search_suggestions_permission_denied": "No se pudieron cargar las sugerencias. La clave de API necesita el permiso asset.read."
   ,"search_suggestions_retry": "Reintentar"
   ,"search_suggestions_clear": "Quitar {filter}"
+  ,"search_filter_location": "Ubicación"
+  ,"search_filter_location_country": "País"
+  ,"search_filter_location_state": "Estado o región"
 }

@@ -2,6 +2,7 @@
   import type { SearchController } from "../controllers/search-controller.svelte";
   import SearchFilterCamera from "./SearchFilterCamera.svelte";
   import SearchFilterDate from "./SearchFilterDate.svelte";
+  import SearchFilterLocation from "./SearchFilterLocation.svelte";
   import SearchFilterMediaType from "./SearchFilterMediaType.svelte";
   import SearchModeSelector from "./SearchModeSelector.svelte";
 
@@ -17,4 +18,5 @@
   <SearchFilterDate {search} />
   <SearchFilterMediaType {search} />
   <SearchFilterCamera {search} />
+  <SearchFilterLocation {search} />
 </div>
