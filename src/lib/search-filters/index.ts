@@ -1,11 +1,13 @@
 import type { SearchFilters, SearchRequestFilters } from "../contracts";
 import { cameraFilter } from "./camera";
 import { dateFilter } from "./date";
+import { archivedFilter, favoriteFilter, unfiledFilter } from "./display";
 import { mediaTypeFilter } from "./media-type";
+import { ratingFilter } from "./rating";
 import type { SearchFilterDefinition } from "./types";
 
 /** Every Search Filter. A new Search Filter adds one entry here. */
-const searchFilters: SearchFilterDefinition[] = [dateFilter, mediaTypeFilter, cameraFilter];
+const searchFilters: SearchFilterDefinition[] = [dateFilter, mediaTypeFilter, cameraFilter, favoriteFilter, archivedFilter, unfiledFilter, ratingFilter];
 
 /** The Search request's filters: only the set Search Filters, which Immich combines with AND. */
 export function buildRequestFilters(filters: SearchFilters): SearchRequestFilters {
