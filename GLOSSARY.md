@@ -62,6 +62,10 @@ _Avoid_: uploaded file, server file, remote file
 A locally discovered Media Asset that Immich recognizes as an existing Remote Asset. A Duplicate is not uploaded again.
 _Avoid_: duplicate file, already-uploaded file
 
+**Trashed Duplicate**:
+A Duplicate whose Remote Asset is a Trashed Asset. Synchronization treats it as synchronized and leaves the Remote Asset in the Immich trash: Lymic never uploads it again and never restores it. It still receives Album Assignment where Immich allows, and the activity log reports the file as in the Immich trash so the user can restore it in the Trash Timeline (ADR-0010).
+_Avoid_: deleted duplicate, re-upload candidate
+
 ## Synchronization
 
 **Synchronization**:

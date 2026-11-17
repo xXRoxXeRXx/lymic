@@ -11,12 +11,12 @@ mod search_suggestions;
 mod session;
 mod tags;
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 mod timeline;
 mod trash;
 mod upload;
 
-pub(crate) use album::{Album, AlbumAssignmentResult, AlbumCatalogueItem};
+pub(crate) use album::{Album, AlbumAssignmentResult, AlbumCatalogueItem, ChecksumMatch};
 pub(crate) use bulk_check::BulkCheckDuplicate;
 pub(crate) use client::{AssetDetails, AssetResponse, ImmichClient};
 pub(crate) use ids::{AlbumId, RemoteAssetId};

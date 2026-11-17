@@ -6,21 +6,21 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::{
-    app::events::log_to_ui_file_error,
+    app::events::{log_to_ui_file_error, log_to_ui_keyed},
     audit::{self, audit_event, SyncAuditContext},
-    immich::{AlbumId, BulkCheckDuplicate, ImmichClient, RemoteAssetId},
+    immich::{AlbumId, BulkCheckDuplicate, ChecksumMatch, ImmichClient, RemoteAssetId},
     media::model::HashedUploadUnit,
     sync::completion::{complete_album_assignment, PendingAlbumUnit},
 };
 
-/// Resolves the Remote Asset ID for a Duplicate Upload Unit.
+/// Resolves the Remote Asset for a Duplicate Upload Unit, including one in the Immich trash.
 ///
 /// Completion persists the returned ID before it can report the Upload Unit as synchronized.
 pub(crate) async fn resolve_duplicate_remote_id(
     client: &ImmichClient,
     unit: &HashedUploadUnit,
     existing: &[BulkCheckDuplicate],
-) -> Result<RemoteAssetId, String> {
+) -> Result<ChecksumMatch, String> {
     let image_hash = &unit
         .image
         .checksums
@@ -31,14 +31,18 @@ pub(crate) async fn resolve_duplicate_remote_id(
     let resolved = match existing
         .iter()
         .find(|d| &d.hash == image_hash)
-        .and_then(|d| d.asset_id.clone())
-    {
-        Some(id) => Ok(Some(id)),
+        .and_then(|d| {
+            d.asset_id.clone().map(|asset_id| ChecksumMatch {
+                asset_id,
+                is_trashed: d.is_trashed,
+            })
+        }) {
+        Some(found) => Ok(Some(found)),
         None => client.search_asset_by_checksum(image_hash).await,
     };
 
     match resolved {
-        Ok(Some(remote_id)) => Ok(remote_id),
+        Ok(Some(found)) => Ok(found),
         Ok(None) => Err(format!(
             "Duplicate asset '{}' could not be resolved to a unique remote ID for album assignment",
             unit.image.path
@@ -48,6 +52,41 @@ pub(crate) async fn resolve_duplicate_remote_id(
             unit.image.path, err
         )),
     }
+}
+
+/// Reports a Trashed Duplicate: the Upload Unit counts as synchronized, but its Remote
+/// Asset stays in the Immich trash. Lymic never re-uploads or restores it.
+pub(crate) fn report_trashed_duplicate<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    audit_context: &SyncAuditContext,
+    unit: &HashedUploadUnit,
+    remote_id: &RemoteAssetId,
+) {
+    log_to_ui_keyed(
+        app,
+        "WARN",
+        &format!(
+            "'{}' is already in Immich, but in the Immich trash; it was not uploaded again",
+            unit.image.path
+        ),
+        "log_duplicate_in_trash",
+        [("file".to_string(), unit.image.path.clone())]
+            .into_iter()
+            .collect(),
+    );
+    audit_event(
+        app,
+        audit_context.event(
+            "sync.duplicate.trashed",
+            audit::Outcome::Success,
+            audit::Severity::Warn,
+            "Duplicate Remote Asset is in the Immich trash; left there",
+            json!({
+                "remote_asset_id": remote_id.to_string(),
+                "local_path": unit.image.path,
+            }),
+        ),
+    );
 }
 
 /// Batches all pending units by `AlbumId`, invokes Immich's `add_assets_to_album` API,
@@ -401,5 +440,108 @@ mod tests {
             queue.get::<Option<String>, _>("remote_id").as_deref(),
             Some("remote-photo")
         );
+    }
+
+    fn audit_context() -> SyncAuditContext {
+        SyncAuditContext::from_credentials(
+            &AuthConfig {
+                server_url: "http://127.0.0.1".to_string(),
+                api_key: "test-key".to_string(),
+                allow_local_http: true,
+                cloudflare_client_id: None,
+                cloudflare_client_secret: None,
+            },
+            "manual_sync",
+        )
+    }
+
+    #[tokio::test]
+    async fn a_duplicate_reported_trashed_by_the_bulk_check_resolves_to_its_trashed_remote_asset() {
+        // No server: the bulk check already named the Remote Asset, so nothing is searched.
+        let client = ImmichClient::new(
+            "http://127.0.0.1:9".to_string(),
+            "test-key".to_string(),
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+        let existing = [BulkCheckDuplicate {
+            hash: "photo-hash".to_string(),
+            asset_id: Some(RemoteAssetId::new("trashed-id")),
+            is_trashed: true,
+        }];
+
+        let resolved =
+            resolve_duplicate_remote_id(&client, &upload_unit(AlbumId::new("album-1")), &existing)
+                .await
+                .unwrap();
+
+        assert_eq!(
+            resolved,
+            ChecksumMatch {
+                asset_id: RemoteAssetId::new("trashed-id"),
+                is_trashed: true,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn a_duplicate_without_an_asset_id_finds_its_trashed_remote_asset_by_checksum() {
+        let (url, request) = crate::immich::test_support::serve_once(
+            "200 OK",
+            r#"{"assets":{"items":[{"id":"trashed-id","isTrashed":true}]}}"#,
+        )
+        .await;
+        let client = crate::immich::test_support::test_client(url, "test-key");
+        let existing = [BulkCheckDuplicate {
+            hash: "photo-hash".to_string(),
+            asset_id: None,
+            is_trashed: true,
+        }];
+
+        let resolved =
+            resolve_duplicate_remote_id(&client, &upload_unit(AlbumId::new("album-1")), &existing)
+                .await
+                .unwrap();
+
+        assert!(request.await.unwrap().contains(r#""withDeleted":true"#));
+        assert_eq!(
+            resolved,
+            ChecksumMatch {
+                asset_id: RemoteAssetId::new("trashed-id"),
+                is_trashed: true,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn a_trashed_duplicate_is_reported_as_in_the_immich_trash() {
+        let app = tauri::test::mock_app();
+        let logs = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = logs.clone();
+        tauri::Listener::listen(app.handle(), "log-message", move |event| {
+            captured
+                .lock()
+                .unwrap()
+                .push(serde_json::from_str::<serde_json::Value>(event.payload()).unwrap());
+        });
+
+        report_trashed_duplicate(
+            app.handle(),
+            &audit_context(),
+            &upload_unit(AlbumId::new("album-1")),
+            &RemoteAssetId::new("trashed-id"),
+        );
+
+        // The mock app has no audit logger, so it also logs `log_audit_failure`.
+        let logs = logs.lock().unwrap();
+        let reports: Vec<_> = logs
+            .iter()
+            .filter(|log| log["key"] == "log_duplicate_in_trash")
+            .collect();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0]["level"], "WARN");
+        assert_eq!(reports[0]["params"]["file"], "photo.jpg");
     }
 }
