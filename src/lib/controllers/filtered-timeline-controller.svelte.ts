@@ -1,26 +1,22 @@
-import type { TimelineAsset, TimelineBucket } from "../contracts";
+import { FILTERED_TIMELINES, type FilteredTimeline } from "../contracts";
+import type { FilteredTimelineDesktopAdapter } from "../tauri/desktop-adapter";
 import { classifyRequestFailure } from "./request-failure";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
 
-/** The two requests of one filtered main view (Favorites, Archive, Trash), already bound to its filter. */
-export interface FilteredTimelineSource {
-  getBuckets(): Promise<TimelineBucket[]>;
-  getBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
-  /**
-   * The backend error code prefix of the view's missing-permission failure (`<prefix>_permission_denied:`),
-   * when the backend reports one; without it `permissionDenied` is always false.
-   */
-  permissionPrefix?: string;
-}
-
-/** A filtered main view's timeline, which also reports whether the latest failed load was a missing API key permission. */
+/** A Filtered Timeline's timeline, which also reports whether the latest failed load was a missing API key permission. */
 export interface FilteredTimelineController extends TimelineController {
-  /** True while the latest request was rejected with the source's permission-denied code. */
+  /**
+   * True while the latest request was rejected with the backend's `<timeline>_permission_denied:` code.
+   * Only a Filtered Timeline whose backend request has a permission code (the Archive Timeline) can report it.
+   */
   readonly permissionDenied: boolean;
 }
 
-/** Creates the shared timeline controller over the requests of one filtered main view. */
-export function createFilteredTimelineController(source: FilteredTimelineSource): FilteredTimelineController {
+/** Creates the shared timeline controller over the requests of one Filtered Timeline. */
+export function createFilteredTimelineController(
+  adapter: FilteredTimelineDesktopAdapter,
+  filteredTimeline: FilteredTimeline,
+): FilteredTimelineController {
   let permissionDenied = $state(false);
   // Bumped by clear() so a request still in flight when the session ends cannot
   // mark the next account's timeline as permission-denied.
@@ -35,16 +31,16 @@ export function createFilteredTimelineController(source: FilteredTimelineSource)
       if (requestGeneration === generation) permissionDenied = false;
       return result;
     } catch (error) {
-      if (requestGeneration === generation && source.permissionPrefix !== undefined) {
-        permissionDenied = classifyRequestFailure(error, source.permissionPrefix) === "permission_denied";
+      if (requestGeneration === generation) {
+        permissionDenied = classifyRequestFailure(error, filteredTimeline) === "permission_denied";
       }
       throw error;
     }
   }
 
   const timeline = createTimelineController({
-    getTimelineBuckets: () => tracked(source.getBuckets()),
-    getTimelineBucketAssets: (timeBucket) => tracked(source.getBucketAssets(timeBucket)),
+    getTimelineBuckets: () => tracked(adapter.getFilteredTimelineBuckets(filteredTimeline)),
+    getTimelineBucketAssets: (timeBucket) => tracked(adapter.getFilteredTimelineBucketAssets(filteredTimeline, timeBucket)),
   });
 
   return {
@@ -67,4 +63,13 @@ export function createFilteredTimelineController(source: FilteredTimelineSource)
       permissionDenied = false;
     },
   };
+}
+
+/** One controller per Filtered Timeline (Favorites, Archive, Trash). */
+export function createFilteredTimelineControllers(
+  adapter: FilteredTimelineDesktopAdapter,
+): Record<FilteredTimeline, FilteredTimelineController> {
+  return Object.fromEntries(
+    FILTERED_TIMELINES.map((filteredTimeline) => [filteredTimeline, createFilteredTimelineController(adapter, filteredTimeline)]),
+  ) as Record<FilteredTimeline, FilteredTimelineController>;
 }

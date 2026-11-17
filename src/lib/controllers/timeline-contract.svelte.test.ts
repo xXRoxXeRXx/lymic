@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { TimelineAsset, TimelineBucket } from "../contracts";
+import { FILTERED_TIMELINES, type TimelineAsset, type TimelineBucket } from "../contracts";
 import { createAlbumTimelineController } from "./album-timeline-controller.svelte";
 import { createPlaceTimelineController } from "./place-timeline-controller.svelte";
-import { createArchiveTimelineController } from "./archive-timeline-controller.svelte";
-import { createTrashTimelineController } from "./trash-timeline-controller.svelte";
-import { createFavoritesTimelineController } from "./favorites-timeline-controller.svelte";
+import { createFilteredTimelineController } from "./filtered-timeline-controller.svelte";
 import { createPersonTimelineController } from "./person-timeline-controller.svelte";
 import { createTagTimelineController } from "./tag-timeline-controller.svelte";
 import { createSearchController } from "./search-controller.svelte";
@@ -33,18 +31,13 @@ const timelines: Array<[string, () => TimelineController]> = [
     getTimelineBuckets: bucketSource.getBuckets,
     getTimelineBucketAssets: bucketSource.getBucketAssets,
   })],
-  ["Favorites Timeline", () => createFavoritesTimelineController({
-    getFavoritesTimelineBuckets: bucketSource.getBuckets,
-    getFavoritesTimelineBucketAssets: bucketSource.getBucketAssets,
-  })],
-  ["Archive Timeline", () => createArchiveTimelineController({
-    getArchiveTimelineBuckets: bucketSource.getBuckets,
-    getArchiveTimelineBucketAssets: bucketSource.getBucketAssets,
-  })],
-  ["Trash Timeline", () => createTrashTimelineController({
-    getTrashTimelineBuckets: bucketSource.getBuckets,
-    getTrashTimelineBucketAssets: bucketSource.getBucketAssets,
-  })],
+  ...FILTERED_TIMELINES.map((filteredTimeline): [string, () => TimelineController] => [
+    `Filtered Timeline ${filteredTimeline}`,
+    () => createFilteredTimelineController({
+      getFilteredTimelineBuckets: bucketSource.getBuckets,
+      getFilteredTimelineBucketAssets: (_timeline, timeBucket) => bucketSource.getBucketAssets(timeBucket),
+    }, filteredTimeline),
+  ]),
   ["Album Timeline", () => createAlbumTimelineController({
     getAlbumTimeline: async () => ({ buckets, assetsByBucket }),
   }, "album-1")],

@@ -12,6 +12,7 @@ import type {
   Album,
   AlbumAssignmentResult,
   TrashRestoreResult,
+  FilteredTimeline,
   AlbumCatalogueItem,
   AlbumTimeline,
   PlaceTimeline,
@@ -93,19 +94,13 @@ export interface TimelineDesktopAdapter {
   getTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
 }
 
-export interface FavoritesTimelineDesktopAdapter {
-  getFavoritesTimelineBuckets(): Promise<TimelineBucket[]>;
-  getFavoritesTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
+/** The two requests of every Filtered Timeline (Favorites, Archive, Trash), which one named by `timeline`. */
+export interface FilteredTimelineDesktopAdapter {
+  getFilteredTimelineBuckets(timeline: FilteredTimeline): Promise<TimelineBucket[]>;
+  getFilteredTimelineBucketAssets(timeline: FilteredTimeline, timeBucket: string): Promise<TimelineAsset[]>;
 }
 
-export interface ArchiveTimelineDesktopAdapter {
-  getArchiveTimelineBuckets(): Promise<TimelineBucket[]>;
-  getArchiveTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
-}
-
-export interface TrashTimelineDesktopAdapter {
-  getTrashTimelineBuckets(): Promise<TimelineBucket[]>;
-  getTrashTimelineBucketAssets(timeBucket: string): Promise<TimelineAsset[]>;
+export interface TrashRestoreDesktopAdapter {
   restoreTrashedAssets(assetIds: string[]): Promise<TrashRestoreResult>;
 }
 
@@ -208,9 +203,8 @@ export interface DesktopAdapter
     AlbumAssignmentDesktopAdapter,
     AlbumCatalogueDesktopAdapter,
     TimelineDesktopAdapter,
-    FavoritesTimelineDesktopAdapter,
-    ArchiveTimelineDesktopAdapter,
-    TrashTimelineDesktopAdapter,
+    FilteredTimelineDesktopAdapter,
+    TrashRestoreDesktopAdapter,
     MapDesktopAdapter,
     AssetDesktopAdapter,
     AlbumTimelineDesktopAdapter,
@@ -266,12 +260,8 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getMapMarkers: () => invoke<MapMarker[]>("get_map_markers"),
   getTimelineBuckets: () => invoke<TimelineBucket[]>("get_timeline_buckets"),
   getTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_timeline_bucket_assets", { timeBucket }),
-  getFavoritesTimelineBuckets: () => invoke<TimelineBucket[]>("get_favorites_timeline_buckets"),
-  getFavoritesTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_favorites_timeline_bucket_assets", { timeBucket }),
-  getArchiveTimelineBuckets: () => invoke<TimelineBucket[]>("get_archive_timeline_buckets"),
-  getArchiveTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_archive_timeline_bucket_assets", { timeBucket }),
-  getTrashTimelineBuckets: () => invoke<TimelineBucket[]>("get_trash_timeline_buckets"),
-  getTrashTimelineBucketAssets: (timeBucket) => invoke<TimelineAsset[]>("get_trash_timeline_bucket_assets", { timeBucket }),
+  getFilteredTimelineBuckets: (timeline) => invoke<TimelineBucket[]>("get_filtered_timeline_buckets", { timeline }),
+  getFilteredTimelineBucketAssets: (timeline, timeBucket) => invoke<TimelineAsset[]>("get_filtered_timeline_bucket_assets", { timeline, timeBucket }),
   restoreTrashedAssets: (assetIds) => invoke<TrashRestoreResult>("restore_trashed_assets", { assetIds }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),
   setAssetFavorite: (assetId, isFavorite) => invoke<void>("set_asset_favorite", { assetId, isFavorite }),

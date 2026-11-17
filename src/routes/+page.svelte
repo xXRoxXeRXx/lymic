@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from "svelte";
+  import { onMount, tick, untrack, type ComponentProps } from "svelte";
   import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon, Compass, Archive, Trash2, Tag as TagIcon } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
@@ -34,13 +34,14 @@
   import { defaultTagOrigin, recordTagOrigin } from "#lib/controllers/tag-origin.ts";
   import { TAG_TIMELINE_VIEW, TAGS_VIEW, type ViewPosition } from "#lib/controllers/view-position.ts";
   import { localizedMemoryTitle } from "#lib/memory-title.ts";
-  import type { AlbumCatalogueItem, AssetTag, Memory, Place, RecognizedPerson } from "#lib/contracts.ts";
+  import { FILTERED_TIMELINES, type AlbumCatalogueItem, type AssetTag, type FilteredTimeline, type Memory, type Place, type RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
-  /** The filtered main views: each shows its own filtered timeline and reloads it every time it opens. */
-  const FILTERED_TIMELINE_VIEWS = ["favorites", "archive", "trash"] as const;
-  type FilteredTimelineView = (typeof FILTERED_TIMELINE_VIEWS)[number];
+  /** Whether `view` is a Filtered Timeline: a main view that shows its own filtered timeline and reloads it every time it opens. */
+  function isFilteredTimeline(view: string): view is FilteredTimeline {
+    return (FILTERED_TIMELINES as readonly string[]).includes(view);
+  }
   const desktop = tauriDesktopAdapter;
   let mapCreated = $state(false);
   let selectedAlbum = $state<AlbumCatalogueItem | null>(null);
@@ -73,7 +74,7 @@
   /** Where the timeline view of `view` opens, set only while returning from a Search. */
   let scrollRestore = $state<ViewPosition | null>(null);
   /** Views that show the shared timeline view, which scrolls inside itself. */
-  const timelineScrollViews = new Set<string>(["photos", ...FILTERED_TIMELINE_VIEWS, "person-timeline", "album-timeline", "place-timeline", "memory-timeline", TAG_TIMELINE_VIEW, "search"]);
+  const timelineScrollViews = new Set<string>(["photos", ...FILTERED_TIMELINES, "person-timeline", "album-timeline", "place-timeline", "memory-timeline", TAG_TIMELINE_VIEW, "search"]);
 
   function selectPerson(person: RecognizedPerson) {
     personOrigin = currentView === "explore" ? "explore" : "people";
@@ -194,7 +195,7 @@
     return result;
   }
 
-  function openFilteredTimeline(view: FilteredTimelineView) {
+  function openFilteredTimeline(view: FilteredTimeline) {
     if (currentView === view) return;
     currentView = view;
     void filteredTimelines[view].refresh();
@@ -296,7 +297,7 @@
     if (timelineScrollViews.has(origin.view)) scrollRestore = { view: origin.view, top: origin.top };
     else queueMicrotask(() => { if (content) content.scrollTop = origin.top; });
     // The Trash Timeline is dropped when it is left, and Explore and Tags may have gone stale.
-    if (origin.view === "trash") void trash.refresh();
+    if (origin.view === "trash") void filteredTimelines.trash.refresh();
     if (origin.view === "explore") void explore.refreshIfStale();
     if (origin.view === TAGS_VIEW) void tags.refreshIfStale();
   }
@@ -352,9 +353,7 @@
     watchedFolders,
     sync,
     timeline,
-    favorites,
-    archive,
-    trash,
+    filteredTimelines,
     people,
     places,
     tags,
@@ -365,14 +364,21 @@
     albumCatalogue,
     search,
   } = auth;
-  const filteredTimelines: Record<FilteredTimelineView, { refresh(): Promise<void> }> = { favorites, archive, trash };
+  /**
+   * What each Filtered Timeline adds to the shared timeline: its navigation icon and its own TimelineView options.
+   * Its texts are the `<timeline>_title`, `_loading`, `_empty`, `_error` and `_offline` locale keys, plus
+   * `_permission_error` when its controller reports a missing permission (only Archive does).
+   */
+  const filteredTimelineViews: Record<FilteredTimeline, { icon: typeof Heart; options(): Partial<ComponentProps<typeof TimelineView>> }> = {
+    favorites: { icon: Heart, options: () => ({ removeUnfavoritedAssets: true, showRefreshButton: false }) },
+    archive: { icon: Archive, options: () => ({}) },
+    trash: { icon: Trash2, options: () => ({ allowFavoriteAndAlbum: false, restoreTrashedAssets, hintMessage: $t("trash_hint") }) },
+  };
   /** The main views, in navigation order. A main view's navigation label is also its page title. */
   const navigationEntries = [
     { view: "photos", icon: Images, label: "timeline_title", open: openPhotos },
     { view: "explore", icon: Compass, label: "explore_title", open: openExplore },
-    { view: "favorites", icon: Heart, label: "favorites_title", open: () => openFilteredTimeline("favorites") },
-    { view: "archive", icon: Archive, label: "archive_title", open: () => openFilteredTimeline("archive") },
-    { view: "trash", icon: Trash2, label: "trash_title", open: () => openFilteredTimeline("trash") },
+    ...FILTERED_TIMELINES.map((view) => ({ view, icon: filteredTimelineViews[view].icon, label: `${view}_title`, open: () => openFilteredTimeline(view) })),
     { view: "map", icon: MapIcon, label: "map_title", open: openMap },
     { view: "albums", icon: Album, label: "albums_title", open: openAlbums },
     { view: "people", icon: Users, label: "people_title", open: openPeople },
@@ -396,7 +402,7 @@
   let trashWasOpen = false;
   $effect(() => {
     const trashIsOpen = currentView === "trash";
-    if (trashWasOpen && !trashIsOpen) untrack(() => trash.clear());
+    if (trashWasOpen && !trashIsOpen) untrack(() => filteredTimelines.trash.clear());
     trashWasOpen = trashIsOpen;
   });
 
@@ -578,42 +584,23 @@
         {#if mapCreated}<MapView mapState={map} active={currentView === "map"} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} />{/if}
         {#if currentView === "photos"}
           <TimelineView {timeline} {...sharedTimelineProps} />
-        {:else if currentView === "favorites"}
-          <TimelineView
-            timeline={favorites}
-            {...sharedTimelineProps}
-            removeUnfavoritedAssets={true}
-            showRefreshButton={false}
-            ariaLabel={$t("favorites_title")}
-            loadingMessage={$t("favorites_loading")}
-            emptyMessage={$t("favorites_empty")}
-            loadErrorMessage={$t("favorites_error")}
-            offlineMessage={$t("favorites_offline")}
-          />
-        {:else if currentView === "archive"}
-          <TimelineView
-            timeline={archive}
-            {...sharedTimelineProps}
-            ariaLabel={$t("archive_title")}
-            loadingMessage={$t("archive_loading")}
-            emptyMessage={$t("archive_empty")}
-            loadErrorMessage={archive.permissionDenied ? $t("archive_permission_error") : $t("archive_error")}
-            offlineMessage={$t("archive_offline")}
-            failureIsError={archive.permissionDenied}
-          />
-        {:else if currentView === "trash"}
-          <TimelineView
-            timeline={trash}
-            {...sharedTimelineProps}
-            allowFavoriteAndAlbum={false}
-            {restoreTrashedAssets}
-            ariaLabel={$t("trash_title")}
-            loadingMessage={$t("trash_loading")}
-            emptyMessage={$t("trash_empty")}
-            loadErrorMessage={$t("trash_error")}
-            offlineMessage={$t("trash_offline")}
-            hintMessage={$t("trash_hint")}
-          />
+        {:else if isFilteredTimeline(currentView)}
+          {@const view = currentView}
+          {@const filtered = filteredTimelines[view]}
+          <!-- Keyed so switching between Filtered Timelines mounts a fresh TimelineView, as separate views would. -->
+          {#key view}
+            <TimelineView
+              timeline={filtered}
+              {...sharedTimelineProps}
+              {...filteredTimelineViews[view].options()}
+              ariaLabel={$t(`${view}_title`)}
+              loadingMessage={$t(`${view}_loading`)}
+              emptyMessage={$t(`${view}_empty`)}
+              loadErrorMessage={filtered.permissionDenied ? $t(`${view}_permission_error`) : $t(`${view}_error`)}
+              offlineMessage={$t(`${view}_offline`)}
+              failureIsError={filtered.permissionDenied}
+            />
+          {/key}
         {:else if currentView === "explore"}
           <ExploreView {explore} {people} {places} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} onViewAllMemories={openAllMemories} onSelectMemory={selectMemory} />
         {:else if currentView === "all-memories"}

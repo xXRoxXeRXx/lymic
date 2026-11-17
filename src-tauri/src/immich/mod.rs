@@ -28,7 +28,9 @@ pub(crate) use search::{
 pub(crate) use search_suggestions::SuggestionRequest;
 pub(crate) use session::ImmichSession;
 pub(crate) use tags::Tag;
-pub(crate) use timeline::{AlbumTimeline, PlaceTimeline, TimelineAsset, TimelineBucket};
+pub(crate) use timeline::{
+    AlbumTimeline, FilteredTimeline, PlaceTimeline, TimelineAsset, TimelineBucket,
+};
 pub(crate) use trash::TrashRestoreResult;
 pub(crate) use upload::SidecarDirectoryCache;
 
