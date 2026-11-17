@@ -1277,7 +1277,7 @@ mod tests {
             filter_sent_for(filters).await,
             json!({
                 "isFavorite": { "eq": true },
-                "localDateTime": { "gte": "2025-01-01T00:00:00.000Z" },
+                "takenAt": { "gte": "2025-01-01T00:00:00.000Z" },
                 "type": { "eq": "IMAGE" },
                 "make": { "eq": "Canon" },
                 "country": { "eq": "Italy" },
