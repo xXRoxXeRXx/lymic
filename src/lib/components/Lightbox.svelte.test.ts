@@ -97,3 +97,22 @@ it("loads details again after the shared details are invalidated, ignoring the r
   expect(await screen.findByText("fresh.jpg")).toBeInTheDocument();
   expect(screen.queryByText("stale.jpg")).not.toBeInTheDocument();
 });
+
+it("closes the Lightbox before it reports the selected Tag chip, and offers no chips without Tags", async () => {
+  const calls: string[] = [];
+  const rome = { id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", color: null };
+  const withTags = createRemoteAssetActions({ getAssetDetails: vi.fn().mockResolvedValue({ ...photoDetails, tags: [rome] }), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn() });
+  const view = render(Lightbox, { ...lightboxProps(withTags), onClose: () => calls.push("close"), onSelectTag: (tag: unknown) => calls.push(`select:${(tag as { id: string }).id}`) });
+  await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+
+  await fireEvent.click(await screen.findByRole("button", { name: "Show photos tagged Travel/Italy/Rome" }));
+
+  expect(calls).toEqual(["close", "select:t-rome"]);
+  view.unmount();
+
+  const withoutTags = createRemoteAssetActions({ getAssetDetails: vi.fn().mockResolvedValue(photoDetails), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn() });
+  render(Lightbox, { ...lightboxProps(withoutTags), onSelectTag: vi.fn() });
+  await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+  await screen.findByText("IMG_0001.jpg");
+  expect(screen.queryByRole("heading", { name: "Tags" })).not.toBeInTheDocument();
+});

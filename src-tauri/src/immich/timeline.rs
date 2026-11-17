@@ -666,6 +666,7 @@ pub(super) fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTi
 #[cfg(test)]
 mod tests {
     use super::{group_album_timeline_assets, ImmichClient, TimelineAsset};
+    use crate::immich::client::AssetTag;
     use crate::immich::test_support::{serve_pages, test_client};
     use crate::immich::AssetDetails;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -861,10 +862,70 @@ mod tests {
                     image_width: None,
                     image_height: None,
                     file_size: None,
+                    tags: None,
                 }
             );
         }
         server.await.unwrap();
+    }
+
+    async fn tags_of(body: &'static str) -> Option<Vec<AssetTag>> {
+        let (url, server) = serve_pages(vec![("200 OK", body)]).await;
+        let details = test_client(url, "test-key")
+            .get_asset_details("asset-1")
+            .await
+            .unwrap();
+        assert!(server.await.unwrap()[0].starts_with("GET /api/assets/asset-1 HTTP/1.1"));
+        details.tags
+    }
+
+    fn tag(id: &str, name: &str, value: &str, color: Option<&str>) -> AssetTag {
+        AssetTag {
+            id: id.to_string(),
+            name: name.to_string(),
+            value: value.to_string(),
+            color: color.map(str::to_string),
+        }
+    }
+
+    #[tokio::test]
+    async fn reads_the_tags_of_asset_details() {
+        let tags = tags_of(
+            r##"{"tags":[{"id":"t1","name":"Rome","value":"Travel/Italy/Rome","color":"#336699","parentId":"t0","createdAt":"x"},{"id":"t2","name":"Food","value":"Food"}]}"##,
+        )
+        .await;
+
+        assert_eq!(
+            tags,
+            Some(vec![
+                tag("t1", "Rome", "Travel/Italy/Rome", Some("#336699")),
+                tag("t2", "Food", "Food", None),
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn reports_no_tags_when_the_server_omits_them() {
+        assert_eq!(tags_of(r#"{"originalFileName":"a.jpg"}"#).await, None);
+        assert_eq!(tags_of(r#"{"tags":null}"#).await, None);
+        assert_eq!(tags_of(r#"{"tags":[]}"#).await, Some(Vec::new()));
+    }
+
+    #[tokio::test]
+    async fn tolerates_partial_tag_entries_in_asset_details() {
+        let tags = tags_of(
+            r##"{"tags":[{"id":"t1","value":"Travel/Italy"},{"id":"t2","name":"Solo"},{"id":"t3","name":"Blank","value":"","color":""},{"name":"No id","value":"No id"},{"id":""},42,{"id":"t4"}]}"##,
+        )
+        .await;
+
+        assert_eq!(
+            tags,
+            Some(vec![
+                tag("t1", "Italy", "Travel/Italy", None),
+                tag("t2", "Solo", "Solo", None),
+                tag("t3", "Blank", "Blank", None),
+            ])
+        );
     }
 
     #[tokio::test]

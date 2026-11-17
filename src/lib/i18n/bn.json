@@ -275,6 +275,8 @@
   ,"timeline_info_filename": "File name"
   ,"timeline_info_dimensions": "Dimensions"
   ,"timeline_info_size": "File size"
+  ,"timeline_info_tags": "ট্যাগ"
+  ,"timeline_tag_open": "{path} ট্যাগযুক্ত ছবি দেখান"
   ,"timeline_selection_count": "{count} selected"
   ,"timeline_selection_finish": "Done"
   ,"timeline_selection_download": "নির্বাচিতগুলি ডাউনলোড করুন"

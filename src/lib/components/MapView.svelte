@@ -7,7 +7,7 @@
   import "maplibre-gl/dist/maplibre-gl.css";
   import type { MapViewState } from "../controllers/map-controller.svelte";
   import type { AssetDesktopAdapter, AlbumAssignmentDesktopAdapter, UpdateDesktopAdapter } from "../tauri/desktop-adapter";
-  import type { AssetDetails, TimelineAsset } from "../contracts";
+  import type { AssetDetails, AssetTag, TimelineAsset } from "../contracts";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import Lightbox from "./Lightbox.svelte";
   import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
@@ -19,8 +19,10 @@
     serverUrl: string;
     desktop: AssetDesktopAdapter & AlbumAssignmentDesktopAdapter & Pick<UpdateDesktopAdapter, "openExternalUrl">;
     albumCatalogue: TargetAlbumCatalogue;
+    /** Opens the Tag Timeline of a Tag chip selected in the Lightbox, which has been closed by then. */
+    onSelectTag?(tag: AssetTag): void;
   }
-  let { mapState, active, serverUrl, desktop, albumCatalogue }: Props = $props();
+  let { mapState, active, serverUrl, desktop, albumCatalogue, onSelectTag }: Props = $props();
   let container: HTMLDivElement;
   let map: MapLibreMap | undefined;
   let providerError = $state(false);
@@ -260,7 +262,7 @@
     </section>
   {/if}
   {#if selectedAsset}
-    <Lightbox asset={selectedAsset} navigateAsset={collectionNavigation ? navigateCollection : undefined} {assetActions} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={assetActions.reflectFavorite} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={desktop.setAssetFavorite} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} />
+    <Lightbox asset={selectedAsset} navigateAsset={collectionNavigation ? navigateCollection : undefined} {assetActions} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={assetActions.reflectFavorite} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={desktop.setAssetFavorite} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} {onSelectTag} />
   {/if}
 </div>
 

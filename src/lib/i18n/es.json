@@ -275,6 +275,8 @@
   ,"timeline_info_filename": "File name"
   ,"timeline_info_dimensions": "Dimensions"
   ,"timeline_info_size": "File size"
+  ,"timeline_info_tags": "Etiquetas"
+  ,"timeline_tag_open": "Mostrar fotos con la etiqueta {path}"
   ,"timeline_selection_count": "{count} selected"
   ,"timeline_selection_finish": "Done"
   ,"timeline_selection_download": "Descargar selección"

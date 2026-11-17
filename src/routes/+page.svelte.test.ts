@@ -4521,3 +4521,167 @@ describe("Search display options and Rating", () => {
     expect(within(display()).getByRole("button", { name: "Open Archive" })).toBeInTheDocument();
   });
 });
+
+describe("Lightbox Tag chips", () => {
+  const march = "2025-03-01T00:00:00.000Z";
+  const photo = (id: string) => ({ id, width: 640, height: 480, type: "IMAGE", takenAt: "2025-03-02T00:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false });
+  const timelineOf = (id: string) => ({ buckets: [{ timeBucket: march, count: 1 }], assetsByBucket: { [march]: [photo(id)] } });
+  const rome = { id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", color: "#336699" };
+  const food = { id: "t-food", name: "Food", value: "Food" };
+  const detailsWith = (tags?: unknown[]) => ({
+    originalFileName: "IMG_0001.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 640, imageHeight: 480, fileSize: 1024,
+    ...(tags ? { tags } : {}),
+  });
+  const handlers = (tags?: unknown[]) => ({
+    get_asset_details: async () => detailsWith(tags),
+    get_tags: async () => [{ id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", parentId: null, color: null }],
+    get_tag_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+    get_tag_timeline_bucket_assets: async () => [photo("tagged-1")],
+    get_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+    get_timeline_bucket_assets: async () => [photo("photo-1")],
+    get_favorites_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+    get_favorites_timeline_bucket_assets: async () => [photo("favorite-1")],
+    get_album_catalogue: async () => [{ id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null }],
+    get_album_timeline: async () => timelineOf("album-asset"),
+    get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+    get_person_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+    get_person_timeline_bucket_assets: async () => [photo("person-asset")],
+    get_places: async () => [{ city: "Paris", thumbnailAssetId: "place-asset" }],
+    get_place_timeline: async () => timelineOf("place-asset"),
+    get_memories: async () => [{ id: "m-1", kind: "onThisDay", memoryAt: "2019-01-02T00:00:00.000Z", year: 2019, personName: null, coverAssetId: "memory-asset", timeline: timelineOf("memory-asset") }],
+  });
+  const openLightbox = async () => {
+    await fireEvent.click((await screen.findAllByRole("button", { name: "Open photo" }))[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Info" }));
+    return lightbox;
+  };
+  const clickChip = async (lightbox: HTMLElement, path = "Travel/Italy/Rome") =>
+    fireEvent.click(await within(lightbox).findByRole("button", { name: `Show photos tagged ${path}` }));
+  const nav = async (name: string) => fireEvent.click(await screen.findByRole("button", { name }));
+
+  const origins: Array<[string, string, () => Promise<void>]> = [
+    ["Photos", "Photos", async () => {}],
+    ["Favorites", "Favorites", async () => { await nav("Favorites"); }],
+    ["an Album", "Holiday", async () => { await nav("Albums"); await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ })); }],
+    ["a Person", "Ada", async () => { await nav("Explore"); await fireEvent.click(await screen.findByRole("button", { name: "Ada" })); }],
+    ["a Place", "Paris", async () => { await nav("Explore"); await fireEvent.click(await screen.findByRole("button", { name: "Paris" })); }],
+    ["a Memory", "Jan 2, 2019", async () => { await nav("Explore"); await fireEvent.click(await screen.findByRole("button", { name: "Jan 2, 2019" })); }],
+  ];
+
+  it.each(origins)("opens the Tag Timeline from a chip in %s, closes the Lightbox and Back returns there", async (_name, backTo, openOrigin) => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers([rome, food]));
+    await openOrigin();
+    const lightbox = await openLightbox();
+
+    await clickChip(lightbox);
+
+    expect(await screen.findByRole("heading", { name: "Travel/Italy/Rome", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_buckets", { tagId: "t-rome" });
+
+    await fireEvent.click(screen.getByRole("button", { name: `Back to ${backTo}` }));
+
+    expect(await screen.findByRole("heading", { name: backTo, level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Travel/Italy/Rome" })).not.toBeInTheDocument();
+  });
+
+  it("shows each Tag as a read-only chip with its name, its full path for assistive technology and its colour", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers([rome, food]));
+    const lightbox = await openLightbox();
+
+    const chip = await within(lightbox).findByRole("button", { name: "Show photos tagged Travel/Italy/Rome" });
+    expect(chip).toHaveTextContent("Rome");
+    expect(chip).toHaveAttribute("title", "Travel/Italy/Rome");
+    expect(chip.querySelector("[data-testid='tag-color-dot']")).toHaveStyle({ backgroundColor: "#336699" });
+    const second = within(lightbox).getByRole("button", { name: "Show photos tagged Food" });
+    expect(second.querySelector("[data-testid='tag-color-dot']")).toBeNull();
+    expect(within(lightbox).getByRole("heading", { name: "Tags" })).toBeInTheDocument();
+    // Read-only: nothing offers to add, rename or remove a Tag.
+    expect(within(lightbox).queryByRole("button", { name: /add tag|remove tag|rename/i })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["the server does not report Tags", undefined],
+    ["the asset has no Tags", []],
+  ])("shows no chips and no error when %s", async (_name, tags) => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers(tags as unknown[] | undefined));
+    const lightbox = await openLightbox();
+
+    await within(lightbox).findByText("IMG_0001.jpg");
+    expect(within(lightbox).queryByRole("heading", { name: "Tags" })).not.toBeInTheDocument();
+    expect(within(lightbox).queryByRole("button", { name: /Show photos tagged/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("opens the Tag Timeline from the Lightbox of a Tag Timeline and Back returns to the origin of the chain, not to the first Tag", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers([rome, { id: "t-italy", name: "Italy", value: "Travel/Italy" }]));
+    const viewportOf = async () => (await screen.findByRole("button", { name: "Open photo" })).closest(".overflow-y-auto") as HTMLElement;
+    const viewport = await viewportOf();
+    viewport.scrollTop = 300;
+    await fireEvent.scroll(viewport);
+    await clickChip(await openLightbox());
+    await screen.findByRole("heading", { name: "Travel/Italy/Rome", level: 1 });
+    const tagViewport = await viewportOf();
+    tagViewport.scrollTop = 50;
+    await fireEvent.scroll(tagViewport);
+
+    await clickChip(await openLightbox(), "Travel/Italy");
+
+    expect(await screen.findByRole("heading", { name: "Travel/Italy", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_buckets", { tagId: "t-italy" });
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+    // The new Tag Timeline starts at its top, not at the previous Tag's scroll position.
+    await waitFor(async () => expect((await viewportOf()).scrollTop).toBe(0));
+    expect(screen.getByRole("button", { name: "Back to Photos" })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Photos" }));
+
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+    await waitFor(async () => expect((await viewportOf()).scrollTop).toBe(300));
+    expect(screen.queryByRole("button", { name: /Back to Travel/ })).not.toBeInTheDocument();
+  });
+
+  it("restores the scroll position of a sub-view the chip was selected in", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers([rome]));
+    await nav("Albums");
+    await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+    const viewportOf = async () => (await screen.findByRole("button", { name: "Open photo" })).closest(".overflow-y-auto") as HTMLElement;
+    const viewport = await viewportOf();
+    viewport.scrollTop = 220;
+    await fireEvent.scroll(viewport);
+
+    await clickChip(await openLightbox());
+    await screen.findByRole("heading", { name: "Travel/Italy/Rome", level: 1 });
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Holiday" }));
+
+    await waitFor(async () => expect((await viewportOf()).scrollTop).toBe(220));
+    expect(screen.getByRole("button", { name: "Back to Albums" })).toBeInTheDocument();
+  });
+
+  it("opens the Tag Timeline from a chip in the Lightbox of Search results and Back returns to the Search", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      ...handlers([rome]),
+      get_search_support: async () => ({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
+      search_assets: async () => ({ ...timelineOf("found-1"), truncated: false }),
+    });
+    await fireEvent.input(await screen.findByRole("searchbox", { name: "Search your Immich library" }), { target: { value: "IMG" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await screen.findByRole("heading", { name: "Search", level: 1 });
+
+    await clickChip(await openLightbox());
+
+    expect(await screen.findByRole("heading", { name: "Travel/Italy/Rome", level: 1 })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Search" }));
+    expect(await screen.findByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
+    expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+  });
+});

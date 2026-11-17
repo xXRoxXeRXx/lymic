@@ -176,3 +176,24 @@ it("downloads a Map View asset's original file through the shared actions", asyn
   expect(desktop.getAssetDetails).toHaveBeenCalledTimes(1);
   mapHarness.features = [];
 });
+
+it("closes the Lightbox and reports a selected Tag chip so the page can open its Tag Timeline", async () => {
+  const { fireEvent } = await import("@testing-library/svelte");
+  mapHarness.features = [{ properties: { id: "photo-1" }, geometry: { type: "Point", coordinates: [13, 52] } }];
+  const state = createMapController({ getMapMarkers: vi.fn() });
+  const rome = { id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", color: "#336699" };
+  const details = { assetType: "IMAGE", takenAt: null, imageWidth: 10, imageHeight: 10, cameraMake: null, cameraModel: null, fileSize: null, isFavorite: false, originalFileName: "photo.jpg", city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, tags: [rome] };
+  const desktop = { getAssetDetails: vi.fn().mockResolvedValue(details), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
+  const albumCatalogue = createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() });
+  const onSelectTag = vi.fn();
+  render(MapView, { mapState: state, active: true, desktop, albumCatalogue, serverUrl: "", onSelectTag });
+  mapHarness.handlers.get("moveend")?.();
+  await fireEvent.click(await screen.findByRole("button", { name: "Open asset" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Info" }));
+
+  await fireEvent.click(await screen.findByRole("button", { name: "Show photos tagged Travel/Italy/Rome" }));
+
+  expect(onSelectTag).toHaveBeenCalledWith(rome);
+  expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+  mapHarness.features = [];
+});

@@ -33,7 +33,7 @@
   import { createTagTimelineController } from "#lib/controllers/tag-timeline-controller.svelte.ts";
   import { defaultTagOrigin, recordTagOrigin } from "#lib/controllers/tag-origin.ts";
   import { localizedMemoryTitle } from "#lib/memory-title.ts";
-  import type { AlbumCatalogueItem, Memory, Place, RecognizedPerson, Tag } from "#lib/contracts.ts";
+  import type { AlbumCatalogueItem, AssetTag, Memory, Place, RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
@@ -57,7 +57,7 @@
   let albumsScrollTop = 0;
   /** The Tags view's own scroll position, kept while another view is open. */
   let tagsScrollTop = 0;
-  let selectedTag = $state<Tag | null>(null);
+  let selectedTag = $state<AssetTag | null>(null);
   let tagTimeline = $state<ReturnType<typeof createTagTimelineController> | null>(null);
   /** The one view (and scroll position) Back returns to from a Tag Timeline, whichever view it was opened from. */
   let tagOrigin = $state(defaultTagOrigin);
@@ -87,7 +87,7 @@
   }
 
   /** Opens a Tag's Tag Timeline from any view; a Tag Timeline opened from another Tag Timeline keeps its origin. */
-  function selectTag(tag: Tag) {
+  function selectTag(tag: AssetTag) {
     tagOrigin = recordTagOrigin(tagOrigin, currentPosition());
     tagTimeline?.clear();
     selectedTag = tag;
@@ -441,6 +441,7 @@
     addAssetsToAlbum: desktop.addAssetsToAlbum,
     initialScrollTop: scrollRestore?.view === currentView ? scrollRestore.top : 0,
     onScrollPosition: (scrollTop: number) => { timelineScrollTop = scrollTop; },
+    onSelectTag: selectTag,
   });
 </script>
 
@@ -674,7 +675,7 @@
           />
         {/if}
 
-        {#if mapCreated}<MapView mapState={map} active={currentView === "map"} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} />{/if}
+        {#if mapCreated}<MapView mapState={map} active={currentView === "map"} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} />{/if}
         {#if currentView === "photos"}
           <TimelineView {timeline} {...sharedTimelineProps} />
         {:else if currentView === "favorites"}
@@ -747,7 +748,10 @@
           </BackBarView>
         {:else if currentView === "tag-timeline" && tagTimeline}
           <BackBarView label={$t("tags_timeline_return", { values: { view: viewTitle(tagOrigin.view) } })} onBack={returnFromTagTimeline}>
-            <TimelineView timeline={tagTimeline} {...sharedTimelineProps} emptyMessage={$t('tags_timeline_empty')} loadErrorMessage={$t('tags_timeline_error')} />
+            <!-- A Tag chip in the Lightbox opens another Tag Timeline in this same place: start it afresh, at its top. -->
+            {#key tagTimeline}
+              <TimelineView timeline={tagTimeline} {...sharedTimelineProps} emptyMessage={$t('tags_timeline_empty')} loadErrorMessage={$t('tags_timeline_error')} />
+            {/key}
           </BackBarView>
         {:else if currentView === "search"}
           <SearchResultsView

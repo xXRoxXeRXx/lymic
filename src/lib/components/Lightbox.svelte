@@ -4,7 +4,8 @@
   import { Album, ArchiveRestore, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
-  import type { AlbumAssignmentResult, AssetDetails, TimelineAsset } from "../contracts";
+  import type { AlbumAssignmentResult, AssetDetails, AssetTag, TimelineAsset } from "../contracts";
+  import { validTagColor } from "../controllers/tags-tree";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { RemoteAssetActions } from "./remote-asset-actions.svelte";
   import { restoreFeedbackFor, restoreFeedbackMessage, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
@@ -25,8 +26,10 @@
     allowFavorite?: boolean;
     /** Offers Restore for a Trashed Asset; reports what happened and never rejects. */
     onRestore?(assetId: string): Promise<RemoteAssetRestoreOutcome>;
+    /** Shows the Tags of the asset as chips; selecting one closes the Lightbox first, then calls this to open that Tag's Tag Timeline. */
+    onSelectTag?(tag: AssetTag): void;
   }
-  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore }: Props = $props();
+  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, onSelectTag }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   let selectedAsset = $state<TimelineAsset | null>(untrack(() => asset));
   let assetDetails = $state<AssetDetails | null>(null);
@@ -218,6 +221,12 @@
     if (downloadingAssetId || isAddingToAlbum || isRestoring) return;
     onClose();
   }
+  const isBusy = $derived(downloadingAssetId !== null || isAddingToAlbum || isRestoring);
+  function selectTag(tag: AssetTag) {
+    if (!onSelectTag || isBusy) return;
+    onClose();
+    onSelectTag(tag);
+  }
   function closeFromLightboxBackdrop() {
     if (isInfoOpen) isInfoOpen = false; else closeLightbox();
   }
@@ -318,6 +327,22 @@
                     {#if assetDetails.originalFileName}<p><span class="text-white/60">{$t("timeline_info_filename")}</span><br />{assetDetails.originalFileName}</p>{/if}
                     {#if hasRealDimensions(selectedAsset, imageWidth, imageHeight)}<p><span class="text-white/60">{$t("timeline_info_dimensions")}</span><br />{imageWidth?.toLocaleString(numberLocale)} × {imageHeight?.toLocaleString(numberLocale)}</p>{/if}
                     {#if fileSize !== null}<p><span class="text-white/60">{$t("timeline_info_size")}</span><br />{(fileSize / 1024 / 1024).toFixed(1)} MB</p>{/if}
+                  </section>
+                {/if}
+                {#if assetDetails.tags && assetDetails.tags.length > 0}
+                  <section class="space-y-3">
+                    <h2 class="font-semibold text-white">{$t("timeline_info_tags")}</h2>
+                    <ul class="flex flex-wrap gap-2">
+                      {#each assetDetails.tags as tag (tag.id)}
+                        {@const color = validTagColor(tag.color)}
+                        <li>
+                          <button type="button" class="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-white hover:bg-white/25 disabled:opacity-50" title={tag.value} aria-label={$t("timeline_tag_open", { values: { path: tag.value } })} disabled={isBusy || !onSelectTag} onclick={() => selectTag(tag)}>
+                            {#if color}<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: {color}" data-testid="tag-color-dot" aria-hidden="true"></span>{/if}
+                            <span>{tag.name}</span>
+                          </button>
+                        </li>
+                      {/each}
+                    </ul>
                   </section>
                 {/if}
               </div>
