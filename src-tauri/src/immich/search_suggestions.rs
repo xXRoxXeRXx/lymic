@@ -1,7 +1,7 @@
 //! Suggestions for Search Filters whose values Immich compares exactly (`GET
 //! /api/search/suggestions`). The request is generic: a suggestion type plus optional
-//! narrowing values. Camera make, model and lens model use it; Location filters add their
-//! own suggestion types and narrowing without changing this module's shape.
+//! narrowing values. Camera make, model, lens model and the Location country and state use it;
+//! a new suggestion type adds a variant without changing this module's shape.
 
 use super::client::ImmichClient;
 use super::search::{send_json, SUGGESTIONS_MAX_BYTES};

@@ -52,8 +52,9 @@ impl MediaType {
 }
 
 /// Restricts a Search to Remote Assets in which every one of the Recognized People appears
-/// (`all`, not `any`). No chosen person adds no condition. Whether `all` means every person
-/// on the same Remote Asset is unverified against a live server.
+/// (`all`, not `any`). No chosen person adds no condition. That `all` means every person on the
+/// same Remote Asset is confirmed from Immich's server source (3.4.1), not yet observed against
+/// real people on a live server.
 pub(super) fn apply_person_ids(person_ids: &[String], filter: &mut Map<String, Value>) {
     if !person_ids.is_empty() {
         filter.insert("personIds".to_string(), json!({ "all": person_ids }));
@@ -94,18 +95,29 @@ pub(super) fn apply_unfiled(filter: &mut Map<String, Value>) {
     filter.insert("hasAlbums".to_string(), json!({ "eq": false }));
 }
 
-/// Visibility is always sent, so the result never depends on Immich's own default: Archived
-/// Assets are left out, unless the Archived option is on, which shows only Archived Assets.
 /// Leaves trashed Remote Assets out. Immich's structured `filter` returns them unless asked not to
 /// (verified on Immich 3.4.1; the flat fields hid them by default), and they belong to the Trash.
 pub(super) fn apply_not_trashed(filter: &mut Map<String, Value>) {
     filter.insert("trashedAt".to_string(), json!({ "eq": null }));
 }
 
+/// Visibility is always sent, so the result never depends on Immich's own default: Archived
+/// Assets are left out, unless the Archived option is on, which shows only Archived Assets.
 pub(super) fn apply_visibility(archived: bool, filter: &mut Map<String, Value>) {
     let visibility = if archived { "archive" } else { "timeline" };
     filter.insert("visibility".to_string(), json!({ "eq": visibility }));
 }
+
+/// Adds an exact-match condition for each present, non-blank value. The value is kept as Immich
+/// suggested it; only a blank one is no condition.
+fn apply_exact_values(values: [(&str, &Option<String>); 3], filter: &mut Map<String, Value>) {
+    for (key, value) in values {
+        if let Some(value) = value.as_deref().filter(|value| !value.trim().is_empty()) {
+            filter.insert(key.to_string(), json!({ "eq": value }));
+        }
+    }
+}
+
 /// Camera make, model and lens model, each optional. The frontend only sends values Immich
 /// suggested, because Immich compares them exactly.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
@@ -118,16 +130,14 @@ pub(crate) struct CameraFilter {
 
 impl CameraFilter {
     pub(super) fn apply(&self, filter: &mut Map<String, Value>) {
-        for (key, value) in [
-            ("make", &self.make),
-            ("model", &self.model),
-            ("lensModel", &self.lens_model),
-        ] {
-            // The value is kept as Immich suggested it; only a blank one is no condition.
-            if let Some(value) = value.as_deref().filter(|value| !value.trim().is_empty()) {
-                filter.insert(key.to_string(), json!({ "eq": value }));
-            }
-        }
+        apply_exact_values(
+            [
+                ("make", &self.make),
+                ("model", &self.model),
+                ("lensModel", &self.lens_model),
+            ],
+            filter,
+        );
     }
 }
 
@@ -144,15 +154,13 @@ pub(crate) struct LocationFilter {
 
 impl LocationFilter {
     pub(super) fn apply(&self, filter: &mut Map<String, Value>) {
-        for (key, value) in [
-            ("country", &self.country),
-            ("state", &self.state),
-            ("city", &self.city),
-        ] {
-            // The value is kept as Immich suggested it; only a blank one is no condition.
-            if let Some(value) = value.as_deref().filter(|value| !value.trim().is_empty()) {
-                filter.insert(key.to_string(), json!({ "eq": value }));
-            }
-        }
+        apply_exact_values(
+            [
+                ("country", &self.country),
+                ("state", &self.state),
+                ("city", &self.city),
+            ],
+            filter,
+        );
     }
 }
