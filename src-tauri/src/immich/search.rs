@@ -905,7 +905,7 @@ mod tests {
 
         assert_eq!(
             filter_sent_for(filters).await,
-            json!({ "localDateTime": {
+            json!({ "takenAt": {
                 "gte": "2025-02-28T23:00:00.000Z",
                 "lte": "2025-03-31T21:59:59.999Z",
             } })
@@ -920,7 +920,7 @@ mod tests {
         };
         assert_eq!(
             filter_sent_for(from_only).await,
-            json!({ "localDateTime": { "gte": "2025-02-28T23:00:00.000Z" } })
+            json!({ "takenAt": { "gte": "2025-02-28T23:00:00.000Z" } })
         );
         let to_only = SearchFilters {
             date: Some(day_range(None, Some("2025-03-31T21:59:59.999Z"))),
@@ -928,7 +928,7 @@ mod tests {
         };
         assert_eq!(
             filter_sent_for(to_only).await,
-            json!({ "localDateTime": { "lte": "2025-03-31T21:59:59.999Z" } })
+            json!({ "takenAt": { "lte": "2025-03-31T21:59:59.999Z" } })
         );
         let neither = SearchFilters {
             date: Some(day_range(None, None)),
@@ -1120,7 +1120,7 @@ mod tests {
             body["filter"],
             json!({
                 "originalFileName": { "like": "%IMG%" },
-                "localDateTime": { "gte": "2025-02-28T23:00:00.000Z" },
+                "takenAt": { "gte": "2025-02-28T23:00:00.000Z" },
                 "type": { "eq": "VIDEO" },
                 "personIds": { "all": ["person-1"] },
                 "visibility": { "eq": "timeline" },
