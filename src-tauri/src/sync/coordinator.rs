@@ -59,7 +59,17 @@ impl SyncRuntime {
         !self.inner.paused.load(Ordering::SeqCst)
     }
 
-    pub(crate) async fn wait_while_paused(&self) {
+    async fn wait_while_paused_with<OnPause, PauseFut, OnResume, ResumeFut>(
+        &self,
+        mut on_pause: OnPause,
+        mut on_resume: OnResume,
+    ) -> Result<(), String>
+    where
+        OnPause: FnMut() -> PauseFut,
+        PauseFut: std::future::Future<Output = Result<bool, String>>,
+        OnResume: FnMut() -> ResumeFut,
+        ResumeFut: std::future::Future<Output = Result<(), String>>,
+    {
         while self.inner.paused.load(Ordering::SeqCst) {
             let notified = self.inner.resume.notified();
             tokio::pin!(notified);
@@ -67,39 +77,49 @@ impl SyncRuntime {
             if !self.inner.paused.load(Ordering::SeqCst) {
                 break;
             }
-            notified.await;
+            if !on_pause().await? {
+                continue;
+            }
+            if self.inner.paused.load(Ordering::SeqCst) {
+                notified.await;
+            }
+            if !self.inner.paused.load(Ordering::SeqCst) {
+                on_resume().await?;
+            }
         }
+        Ok(())
+    }
+
+    pub(crate) async fn wait_while_paused(&self) {
+        let _ = self
+            .wait_while_paused_with(|| async { Ok(true) }, || async { Ok(()) })
+            .await;
     }
 
     pub(in crate::sync) async fn wait_while_paused_reporting(
         &self,
         reporter: &impl SyncRunReporter,
     ) -> Result<(), String> {
-        while self.inner.paused.load(Ordering::SeqCst) {
-            let notified = self.inner.resume.notified();
-            tokio::pin!(notified);
-            notified.as_mut().enable();
-            if !self.inner.paused.load(Ordering::SeqCst) {
-                break;
-            }
-            let snapshot = db::get_sync_snapshot(&self.inner.pool)
-                .await
-                .map_err(|error| format!("Could not load paused sync: {error}"))?;
-            if !self.inner.paused.load(Ordering::SeqCst) {
-                continue;
-            }
-            reporter.paused(&snapshot);
-            if self.inner.paused.load(Ordering::SeqCst) {
-                notified.await;
-            }
-            if !self.inner.paused.load(Ordering::SeqCst) {
+        self.wait_while_paused_with(
+            || async {
+                let snapshot = db::get_sync_snapshot(&self.inner.pool)
+                    .await
+                    .map_err(|error| format!("Could not load paused sync: {error}"))?;
+                if !self.inner.paused.load(Ordering::SeqCst) {
+                    return Ok(false);
+                }
+                reporter.paused(&snapshot);
+                Ok(true)
+            },
+            || async {
                 let snapshot = db::get_sync_snapshot(&self.inner.pool)
                     .await
                     .map_err(|error| format!("Could not load resumed sync: {error}"))?;
                 reporter.resumed(&snapshot);
-            }
-        }
-        Ok(())
+                Ok(())
+            },
+        )
+        .await
     }
 
     pub(in crate::sync) async fn lock_run(

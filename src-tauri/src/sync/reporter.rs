@@ -26,7 +26,74 @@ pub(crate) trait SyncRunReporter {
     fn resumed(&self, snapshot: &db::SyncSnapshot);
     fn progressed(&self, snapshot: &db::SyncSnapshot);
     fn completed(&self, snapshot: &db::SyncSnapshot, totals: &SyncSummary);
-    fn failed(&self, source: SyncSource, snapshot: Option<&db::SyncSnapshot>, error: &str);
+}
+
+fn snapshot_byte_totals(snapshot: &db::SyncSnapshot) -> (u64, u64) {
+    (
+        snapshot.total_bytes.max(0) as u64,
+        snapshot.completed_bytes.max(0) as u64,
+    )
+}
+
+/// Stateless desktop reporter for service-level tray, event, error, and audit
+/// updates outside an active run loop.
+pub(crate) struct DesktopServiceReporter<R: tauri::Runtime = tauri::Wry> {
+    app: tauri::AppHandle<R>,
+}
+
+impl<R: tauri::Runtime> DesktopServiceReporter<R> {
+    pub(crate) fn new(app: tauri::AppHandle<R>) -> Self {
+        Self { app }
+    }
+
+    pub(crate) fn claimed(&self, snapshot: &db::SyncSnapshot) {
+        tray::update_sync_action(&self.app, snapshot);
+    }
+
+    pub(crate) fn progressed(&self, snapshot: &db::SyncSnapshot) {
+        tray::update_sync_action(&self.app, snapshot);
+        let _ = self.app.emit("sync-progress-snapshot", snapshot);
+    }
+
+    pub(crate) fn paused(&self, snapshot: &db::SyncSnapshot) {
+        tray::update_sync_action(&self.app, snapshot);
+        let _ = self.app.emit("sync-paused", snapshot);
+    }
+
+    pub(crate) fn resumed(&self, snapshot: &db::SyncSnapshot) {
+        tray::update_sync_action(&self.app, snapshot);
+        let _ = self.app.emit("sync-resumed", snapshot);
+    }
+
+    pub(crate) fn resumed_audit(&self, audit_context: &SyncAuditContext) {
+        audit_event(
+            &self.app,
+            audit_context.event(
+                "sync.resumed",
+                audit::Outcome::Info,
+                audit::Severity::Info,
+                "Synchronization resumed",
+                json!({}),
+            ),
+        );
+    }
+
+    pub(crate) fn error(&self, message: &str) {
+        emit_sync_error(&self.app, message);
+    }
+
+    pub(crate) fn failed(
+        &self,
+        source: SyncSource,
+        snapshot: Option<&db::SyncSnapshot>,
+        error: &str,
+    ) {
+        if let Some(snapshot) = snapshot {
+            tray::update_sync_action(&self.app, snapshot);
+            let _ = self.app.emit("sync-progress-snapshot", snapshot);
+        }
+        audit_event(&self.app, sync_aborted_audit_event(source, error));
+    }
 }
 
 struct DesktopRunTelemetry<R: tauri::Runtime> {
@@ -48,19 +115,15 @@ impl<R: tauri::Runtime> Drop for DesktopRunTelemetry<R> {
     }
 }
 
-/// Desktop adapter that publishes tray updates, Tauri events, transfer
-/// statistics, completion notifications, and Synchronization audit records.
+/// Stateful per-run desktop adapter that publishes tray updates, Tauri events,
+/// transfer statistics, completion notifications, and Synchronization audit records.
 pub(crate) struct DesktopRunReporter<R: tauri::Runtime = tauri::Wry> {
-    app: tauri::AppHandle<R>,
-    run: Option<DesktopRunTelemetry<R>>,
+    service: DesktopServiceReporter<R>,
+    run: DesktopRunTelemetry<R>,
 }
 
 impl<R: tauri::Runtime> DesktopRunReporter<R> {
-    pub(crate) fn for_service(app: tauri::AppHandle<R>) -> Self {
-        Self { app, run: None }
-    }
-
-    pub(crate) fn for_run(
+    pub(crate) fn new(
         app: tauri::AppHandle<R>,
         source: SyncSource,
         audit_context: SyncAuditContext,
@@ -69,8 +132,8 @@ impl<R: tauri::Runtime> DesktopRunReporter<R> {
     ) -> Self {
         let transfer_stats = progress.transfer_stats();
         Self {
-            app: app.clone(),
-            run: Some(DesktopRunTelemetry {
+            service: DesktopServiceReporter::new(app.clone()),
+            run: DesktopRunTelemetry {
                 app,
                 source,
                 audit_context,
@@ -78,36 +141,15 @@ impl<R: tauri::Runtime> DesktopRunReporter<R> {
                 current_file_progress,
                 transfer_stats,
                 cleanup_armed: AtomicBool::new(false),
-            }),
+            },
         }
-    }
-
-    pub(crate) fn claimed(&self, snapshot: &db::SyncSnapshot) {
-        tray::update_sync_action(&self.app, snapshot);
-    }
-
-    pub(crate) fn resumed_audit(&self, audit_context: &SyncAuditContext) {
-        audit_event(
-            &self.app,
-            audit_context.event(
-                "sync.resumed",
-                audit::Outcome::Info,
-                audit::Severity::Info,
-                "Synchronization resumed",
-                json!({}),
-            ),
-        );
-    }
-
-    pub(crate) fn error(&self, message: &str) {
-        emit_sync_error(&self.app, message);
     }
 }
 
 impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
     fn queued_waiting(&self) {
         log_to_ui_key(
-            &self.app,
+            &self.run.app,
             "INFO",
             "Sync queued, waiting for running synchronization.",
             "log_sync_queued_waiting",
@@ -115,161 +157,136 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
     }
 
     fn started(&self, snapshot: &db::SyncSnapshot) {
-        let _ = self.app.emit("sync-started", ());
-        let _ = self.app.emit("sync-progress-snapshot", snapshot);
-        if let Some(run) = &self.run {
-            audit_event(
-                &self.app,
-                run.audit_context.event(
-                    "sync.started",
-                    audit::Outcome::Started,
-                    audit::Severity::Info,
-                    "Synchronization started",
-                    json!({ "source": run.source.audit_label() }),
-                ),
-            );
-            run.progress.sync_from_snapshot(
-                snapshot.total_bytes.max(0) as u64,
-                snapshot.completed_bytes.max(0) as u64,
-            );
-            run.transfer_stats.set_active(true);
-            run.cleanup_armed.store(true, Ordering::SeqCst);
-            spawn_transfer_reporter(self.app.clone(), run.transfer_stats.clone());
-            emit_transfer_stats(&self.app, &run.transfer_stats);
-        }
+        let _ = self.run.app.emit("sync-started", ());
+        let _ = self.run.app.emit("sync-progress-snapshot", snapshot);
+        audit_event(
+            &self.run.app,
+            self.run.audit_context.event(
+                "sync.started",
+                audit::Outcome::Started,
+                audit::Severity::Info,
+                "Synchronization started",
+                json!({ "source": self.run.source.audit_label() }),
+            ),
+        );
+        let (total_bytes, completed_bytes) = snapshot_byte_totals(snapshot);
+        self.run
+            .progress
+            .sync_from_snapshot(total_bytes, completed_bytes);
+        self.run.transfer_stats.set_active(true);
+        self.run.cleanup_armed.store(true, Ordering::SeqCst);
+        spawn_transfer_reporter(self.run.app.clone(), self.run.transfer_stats.clone());
+        emit_transfer_stats(&self.run.app, &self.run.transfer_stats);
     }
 
     fn paused(&self, snapshot: &db::SyncSnapshot) {
-        tray::update_sync_action(&self.app, snapshot);
-        if let Some(run) = &self.run {
-            run.transfer_stats.sync_queue(
-                snapshot.total_bytes.max(0) as u64,
-                snapshot.completed_bytes.max(0) as u64,
-            );
-            run.transfer_stats.set_paused(true);
-            run.current_file_progress.emit(&self.app, "");
-            emit_transfer_stats(&self.app, &run.transfer_stats);
-        }
-        let _ = self.app.emit("sync-paused", snapshot);
-        if let Some(run) = &self.run {
-            audit_event(
-                &self.app,
-                run.audit_context.event(
-                    "sync.paused",
-                    audit::Outcome::Info,
-                    audit::Severity::Info,
-                    "Synchronization paused",
-                    json!({}),
-                ),
-            );
-        }
+        let (total_bytes, completed_bytes) = snapshot_byte_totals(snapshot);
+        self.run
+            .transfer_stats
+            .sync_queue(total_bytes, completed_bytes);
+        self.run.transfer_stats.set_paused(true);
+        self.run.current_file_progress.emit(&self.run.app, "");
+        emit_transfer_stats(&self.run.app, &self.run.transfer_stats);
+        self.service.paused(snapshot);
+        audit_event(
+            &self.run.app,
+            self.run.audit_context.event(
+                "sync.paused",
+                audit::Outcome::Info,
+                audit::Severity::Info,
+                "Synchronization paused",
+                json!({}),
+            ),
+        );
     }
 
     fn resumed(&self, snapshot: &db::SyncSnapshot) {
-        tray::update_sync_action(&self.app, snapshot);
-        if let Some(run) = &self.run {
-            run.transfer_stats.sync_queue(
-                snapshot.total_bytes.max(0) as u64,
-                snapshot.completed_bytes.max(0) as u64,
-            );
-            run.transfer_stats.set_paused(false);
-            emit_transfer_stats(&self.app, &run.transfer_stats);
-        }
-        let _ = self.app.emit("sync-resumed", snapshot);
-        if let Some(run) = &self.run {
-            self.resumed_audit(&run.audit_context);
-        }
+        let (total_bytes, completed_bytes) = snapshot_byte_totals(snapshot);
+        self.run
+            .transfer_stats
+            .sync_queue(total_bytes, completed_bytes);
+        self.run.transfer_stats.set_paused(false);
+        emit_transfer_stats(&self.run.app, &self.run.transfer_stats);
+        self.service.resumed(snapshot);
+        self.service.resumed_audit(&self.run.audit_context);
     }
 
     fn progressed(&self, snapshot: &db::SyncSnapshot) {
-        tray::update_sync_action(&self.app, snapshot);
-        if let Some(run) = &self.run {
-            run.progress.sync_from_snapshot(
-                snapshot.total_bytes.max(0) as u64,
-                snapshot.completed_bytes.max(0) as u64,
-            );
-            emit_transfer_stats(&self.app, &run.transfer_stats);
-        }
-        let _ = self.app.emit("sync-progress-snapshot", snapshot);
+        let (total_bytes, completed_bytes) = snapshot_byte_totals(snapshot);
+        self.run
+            .progress
+            .sync_from_snapshot(total_bytes, completed_bytes);
+        emit_transfer_stats(&self.run.app, &self.run.transfer_stats);
+        self.service.progressed(snapshot);
     }
 
     fn completed(&self, snapshot: &db::SyncSnapshot, totals: &SyncSummary) {
-        let _ = self.app.emit("sync-progress-snapshot", snapshot);
-        tray::update_sync_action(&self.app, snapshot);
-        if let Some(run) = &self.run {
-            run.transfer_stats.sync_queue(
-                snapshot.total_bytes.max(0) as u64,
-                snapshot.completed_bytes.max(0) as u64,
+        self.service.progressed(snapshot);
+        let (total_bytes, completed_bytes) = snapshot_byte_totals(snapshot);
+        self.run
+            .transfer_stats
+            .sync_queue(total_bytes, completed_bytes);
+        self.run.transfer_stats.set_active(false);
+        self.run.cleanup_armed.store(false, Ordering::SeqCst);
+        self.run.current_file_progress.emit(&self.run.app, "");
+        emit_transfer_stats(&self.run.app, &self.run.transfer_stats);
+        let is_automatic = !self.run.source.is_manual();
+        if is_automatic {
+            let _ = self.run.app.emit("sync-idle", ());
+        }
+        if !is_automatic || totals.uploaded > 0 || totals.failed > 0 {
+            let locale = self
+                .run
+                .app
+                .try_state::<LocaleState>()
+                .and_then(|state| state.0.lock().ok().map(|locale| locale.clone()))
+                .unwrap_or_else(|| "en".to_string());
+            let translations = backend_translations(&locale);
+            let title = translations.notification_complete_title.replacen(
+                "{}",
+                if is_automatic { "Auto-sync" } else { "Sync" },
+                1,
             );
-            run.transfer_stats.set_active(false);
-            run.cleanup_armed.store(false, Ordering::SeqCst);
-            run.current_file_progress.emit(&self.app, "");
-            emit_transfer_stats(&self.app, &run.transfer_stats);
-            let is_automatic = !run.source.is_manual();
-            if is_automatic {
-                let _ = self.app.emit("sync-idle", ());
-            }
-            if !is_automatic || totals.uploaded > 0 || totals.failed > 0 {
-                let locale = self
-                    .app
-                    .try_state::<LocaleState>()
-                    .and_then(|state| state.0.lock().ok().map(|locale| locale.clone()))
-                    .unwrap_or_else(|| "en".to_string());
-                let translations = backend_translations(&locale);
-                let title = translations.notification_complete_title.replacen(
-                    "{}",
-                    if is_automatic { "Auto-sync" } else { "Sync" },
-                    1,
-                );
-                let body = translations
-                    .notification_complete_body
-                    .replace("{processed}", &totals.processed.to_string())
-                    .replace("{uploaded}", &totals.uploaded.to_string())
-                    .replace("{failed}", &totals.failed.to_string());
-                let mut params = std::collections::HashMap::new();
-                params.insert("processed".to_string(), totals.processed.to_string());
-                params.insert("uploaded".to_string(), totals.uploaded.to_string());
-                params.insert("failed".to_string(), totals.failed.to_string());
-                send_notification_keyed(
-                    &self.app,
-                    &title,
-                    &body,
-                    "INFO",
-                    "notification_complete_body",
-                    params,
-                );
-            }
-            audit_event(
-                &self.app,
-                run.audit_context.event(
-                    "sync.completed",
-                    if totals.failed == 0 {
-                        audit::Outcome::Success
-                    } else {
-                        audit::Outcome::Failure
-                    },
-                    if totals.failed == 0 {
-                        audit::Severity::Info
-                    } else {
-                        audit::Severity::Warn
-                    },
-                    "Synchronization completed",
-                    json!({
-                        "processed": totals.processed,
-                        "uploaded": totals.uploaded,
-                        "failed": totals.failed,
-                    }),
-                ),
+            let body = translations
+                .notification_complete_body
+                .replace("{processed}", &totals.processed.to_string())
+                .replace("{uploaded}", &totals.uploaded.to_string())
+                .replace("{failed}", &totals.failed.to_string());
+            let mut params = std::collections::HashMap::new();
+            params.insert("processed".to_string(), totals.processed.to_string());
+            params.insert("uploaded".to_string(), totals.uploaded.to_string());
+            params.insert("failed".to_string(), totals.failed.to_string());
+            send_notification_keyed(
+                &self.run.app,
+                &title,
+                &body,
+                "INFO",
+                "notification_complete_body",
+                params,
             );
         }
-    }
-
-    fn failed(&self, source: SyncSource, snapshot: Option<&db::SyncSnapshot>, error: &str) {
-        if let Some(snapshot) = snapshot {
-            tray::update_sync_action(&self.app, snapshot);
-            let _ = self.app.emit("sync-progress-snapshot", snapshot);
-        }
-        audit_event(&self.app, sync_aborted_audit_event(source, error));
+        audit_event(
+            &self.run.app,
+            self.run.audit_context.event(
+                "sync.completed",
+                if totals.failed == 0 {
+                    audit::Outcome::Success
+                } else {
+                    audit::Outcome::Failure
+                },
+                if totals.failed == 0 {
+                    audit::Severity::Info
+                } else {
+                    audit::Severity::Warn
+                },
+                "Synchronization completed",
+                json!({
+                    "processed": totals.processed,
+                    "uploaded": totals.uploaded,
+                    "failed": totals.failed,
+                }),
+            ),
+        );
     }
 }
 
@@ -396,7 +413,7 @@ mod tests {
             .as_str()
             .unwrap()
             .to_string();
-        let reporter = DesktopRunReporter::for_run(
+        let reporter = DesktopRunReporter::new(
             app.handle().clone(),
             SyncSource::Manual,
             audit_context,
@@ -496,7 +513,7 @@ mod tests {
             });
         }
 
-        let reporter = DesktopRunReporter::for_service(app.handle().clone());
+        let reporter = DesktopServiceReporter::new(app.handle().clone());
         let running = test_snapshot(db::SyncJobStatus::Running, 2, 0, 0);
         let paused = test_snapshot(db::SyncJobStatus::Paused, 2, 1, 0);
         let failed = test_snapshot(db::SyncJobStatus::Failed, 2, 1, 1);
@@ -595,7 +612,7 @@ mod tests {
                 captured_idle.lock().unwrap().push("sync-idle".to_string());
             });
 
-            let reporter = DesktopRunReporter::for_run(
+            let reporter = DesktopRunReporter::new(
                 app.handle().clone(),
                 source,
                 test_audit_context(source),

@@ -4,18 +4,17 @@ use crate::{
     app::events::log_to_ui_error,
     audit::SyncAuditContext,
     auth, db,
-    immich::{ImmichClient, ImmichSession},
+    immich::ImmichSession,
     media::{
         events::log_overlapping_folders, model::ScanResult, scanner::scan_watched_folders_for_media,
     },
     sync::{
         lifecycle::{LifecycleClaim, SynchronizationLifecycle},
-        queue_runner::run_sync_pipeline,
-        reporter::{DesktopRunReporter, SyncRunReporter},
+        queue_runner::{run_sync_pipeline, SyncPipelineParams},
+        reporter::DesktopServiceReporter,
         SyncRuntime,
     },
 };
-use std::sync::Arc;
 use tauri::{Manager, Runtime};
 
 /// Identifies the producer submitting Synchronization work.
@@ -81,8 +80,8 @@ impl<'a> Synchronization<'a> {
         SynchronizationLifecycle::new(self.runtime)
     }
 
-    fn reporter(&self) -> DesktopRunReporter {
-        DesktopRunReporter::for_service(self.app.clone())
+    fn reporter(&self) -> DesktopServiceReporter {
+        DesktopServiceReporter::new(self.app.clone())
     }
 
     pub(crate) async fn start(&self) -> Result<crate::sync::SyncSummary, String> {
@@ -149,34 +148,30 @@ impl<'a> Synchronization<'a> {
         };
         reporter.claimed(&started);
 
-        let session = self.open_session(source).await?;
-        let audit_context =
-            SyncAuditContext::from_credentials(session.credentials(), source.audit_label());
-        let client = session.client();
+        let params = self.pipeline_params(source).await?;
 
         if source.is_manual() {
-            let result = run_sync_pipeline(
-                self.app.clone(),
-                self.runtime.clone(),
-                client,
-                source,
-                audit_context,
-            )
-            .await;
-            match result {
+            match run_sync_pipeline(params).await {
                 Ok(summary) => Ok(Some(summary)),
                 Err(error) => self.fail_run(source, &error).await,
             }
         } else {
-            spawn_sync_runner(
-                self.app.clone(),
-                self.runtime.clone(),
-                client,
-                source,
-                audit_context,
-            );
+            spawn_sync_runner(params);
             Ok(None)
         }
+    }
+
+    async fn pipeline_params(&self, source: SyncSource) -> Result<SyncPipelineParams, String> {
+        let session = self.open_session(source).await?;
+        let audit_context =
+            SyncAuditContext::from_credentials(session.credentials(), source.audit_label());
+        Ok(SyncPipelineParams {
+            app: self.app.clone(),
+            runtime: self.runtime.clone(),
+            client: session.client(),
+            source,
+            audit_context,
+        })
     }
 
     /// Obtains the authenticated Immich session for a run, failing the run durably
@@ -246,20 +241,9 @@ impl<'a> Synchronization<'a> {
                     .await
             }
         }
-        let session = self.open_session(SyncSource::Recovery).await?;
-        let audit_context = SyncAuditContext::from_credentials(
-            session.credentials(),
-            SyncSource::Recovery.audit_label(),
-        );
-        let client = session.client();
-        self.reporter().resumed_audit(&audit_context);
-        spawn_sync_runner(
-            self.app.clone(),
-            self.runtime.clone(),
-            client,
-            SyncSource::Recovery,
-            audit_context,
-        );
+        let params = self.pipeline_params(SyncSource::Recovery).await?;
+        self.reporter().resumed_audit(&params.audit_context);
+        spawn_sync_runner(params);
         Ok(snapshot.clone())
     }
 
@@ -268,19 +252,15 @@ impl<'a> Synchronization<'a> {
     }
 }
 
-fn spawn_sync_runner(
-    app: tauri::AppHandle,
-    runtime: SyncRuntime,
-    client: Arc<ImmichClient>,
-    source: SyncSource,
-    audit_context: SyncAuditContext,
-) {
+fn spawn_sync_runner(params: SyncPipelineParams) {
+    let app = params.app.clone();
+    let runtime = params.runtime.clone();
+    let source = params.source;
     tauri::async_runtime::spawn(async move {
-        let result =
-            run_sync_pipeline(app.clone(), runtime.clone(), client, source, audit_context).await;
+        let result = run_sync_pipeline(params).await;
         if let Err(error) = result {
             fail_sync_run(&app, &runtime, source, &error).await;
-            DesktopRunReporter::for_service(app).error(&error);
+            DesktopServiceReporter::new(app).error(&error);
         }
     });
 }
@@ -292,7 +272,7 @@ async fn fail_sync_run<R: Runtime>(
     error: &str,
 ) {
     let snapshot = SynchronizationLifecycle::new(runtime).fail().await.ok();
-    DesktopRunReporter::for_service(app.clone()).failed(source, snapshot.as_ref(), error);
+    DesktopServiceReporter::new(app.clone()).failed(source, snapshot.as_ref(), error);
 }
 
 /// Queue a producer result while copying its Watched Folder's current Target
@@ -442,7 +422,7 @@ pub(crate) async fn admit_and_run(
         Ok(_) => {}
         Err(error) => {
             if source.is_manual() {
-                DesktopRunReporter::for_service(app)
+                DesktopServiceReporter::new(app)
                     .error(&format!("Synchronization admission failed: {error}"));
             }
         }
