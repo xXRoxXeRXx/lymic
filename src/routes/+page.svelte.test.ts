@@ -97,6 +97,9 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve([]);
       case "get_memories":
         return Promise.resolve([]);
+      // By default Smart Search is off, so a Search starts in Filename mode (Context is tested explicitly).
+      case "get_search_features":
+        return Promise.resolve({ smartSearch: false, ocr: true });
       case "update_locale":
         return Promise.resolve();
       case "get_release_channel":
@@ -3293,5 +3296,697 @@ describe("Trash Timeline Restore", () => {
     await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
     expect(await screen.findByText("1 selected")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Search", () => {
+  const march = "2025-03-01T00:00:00.000Z";
+  const found = (id: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false,
+  });
+  const results = (...ids: string[]) => ({ buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(found) }, truncated: false });
+  const supported = { supported: true, version: "3.4.1", requiredVersion: "3.2" };
+  const holiday = { id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null };
+  const searchBox = () => screen.findByRole("searchbox", { name: "Search your Immich library" });
+
+  async function search(text: string) {
+    await fireEvent.input(await searchBox(), { target: { value: text } });
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+  }
+
+  it("searches from an open Album Timeline, opens a result in the Lightbox and Back returns to that album", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_album_catalogue: async () => [holiday],
+      get_album_timeline: async () => results("album-asset"),
+      get_search_support: async () => supported,
+      search_assets: async () => results("found-1", "found-2"),
+      get_asset_details: async () => ({ originalFileName: "IMG_0001.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024 }),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
+    await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+    expect(await screen.findByRole("heading", { name: "Holiday" })).toBeInTheDocument();
+    // The bar is part of the content area of every page, also while a sub-view is open.
+    expect(await searchBox()).toBeInTheDocument();
+
+    await search("IMG_");
+
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG_", mode: "filename", filters: {} } }));
+    expect(tauri.invoke).toHaveBeenCalledWith("get_search_support");
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
+    expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    expect(await searchBox()).toHaveValue("IMG_");
+
+    await fireEvent.click((await screen.findAllByRole("button", { name: "Open photo" }))[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Add to album" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Add to favorites" })).toBeInTheDocument();
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Holiday" }));
+
+    expect(await screen.findByRole("heading", { name: "Holiday", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Back to Albums" })).toBeInTheDocument();
+    expect(tauri.invoke.mock.calls.filter(([command]) => command === "get_album_timeline")).toHaveLength(1);
+    // The text stays in the bar for the session.
+    expect(await searchBox()).toHaveValue("IMG_");
+  });
+
+  it("returns to the page it searched from at the same scroll position", async () => {
+    renderAuthenticatedPage({
+      get_album_catalogue: async () => [holiday],
+      get_search_support: async () => supported,
+      search_assets: async () => results("found-1"),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
+    const album = await screen.findByRole("button", { name: /Holiday/ });
+    const main = album.closest("main")!;
+    main.scrollTop = 240;
+
+    await search("IMG");
+    main.scrollTop = 0;
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Albums" }));
+
+    expect(await screen.findByRole("heading", { name: "Albums", level: 1 })).toBeInTheDocument();
+    await waitFor(() => expect(main.scrollTop).toBe(240));
+  });
+
+  it("returns to the Photo Timeline at its scroll position", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+      get_timeline_bucket_assets: async () => [found("photo-1")],
+      get_search_support: async () => supported,
+      search_assets: async () => results("found-1"),
+    });
+    const viewportOf = async () => (await screen.findByRole("button", { name: "Open photo" })).closest(".overflow-y-auto") as HTMLElement;
+    const viewport = await viewportOf();
+    viewport.scrollTop = 300;
+    await fireEvent.scroll(viewport);
+
+    await search("IMG");
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Photos" }));
+
+    await waitFor(async () => expect((await viewportOf()).scrollTop).toBe(300));
+  });
+
+  it("does nothing for an empty text", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => supported });
+
+    await search("   ");
+
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_search_support");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    expect(screen.getByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+  });
+
+  it("clears the Search, empties the bar and leaves the results", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_search_support: async () => supported,
+      search_assets: async () => results("found-1"),
+    });
+    await search("IMG");
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+    expect(await searchBox()).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+  });
+
+  it("shows an unsupported state naming the required version and leaves other views working", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => ({ supported: false, version: "3.1.0", requiredVersion: "3.2" }) });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Search needs Immich 3.2 or later, but this server runs 3.1.0.");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    await fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
+    expect(await screen.findByRole("heading", { name: "Favorites", level: 1 })).toBeInTheDocument();
+  });
+
+  it("names the missing asset.read permission and retries the same Search", async () => {
+    stubImmediateIntersectionObserver();
+    const searchAssets = vi.fn()
+      .mockRejectedValueOnce("search_permission_denied:asset.read")
+      .mockResolvedValueOnce(results("found-1"));
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: searchAssets });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Give the API key the asset.read permission in Immich.");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry timeline connection" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(searchAssets).toHaveBeenCalledTimes(2);
+    expect(searchAssets.mock.calls[1]).toEqual(searchAssets.mock.calls[0]);
+  });
+
+  it("asks to sign in again when the API key is rejected", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: () => Promise.reject("search_authentication_required") });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Immich did not accept the API key. Sign in again to search.");
+  });
+
+  it("says the response was unreadable, not that the server is unavailable or offline", async () => {
+    stubImmediateIntersectionObserver();
+    const searchAssets = vi.fn().mockRejectedValueOnce("search_invalid_response");
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: searchAssets });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Immich sent a response Lymic could not read.");
+    expect(screen.getByRole("button", { name: "Retry timeline connection" })).toBeInTheDocument();
+
+    // Over earlier results it is still an error, not the offline status.
+    searchAssets.mockResolvedValueOnce(results("asset-1")).mockRejectedValueOnce("search_invalid_response");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry timeline connection" }));
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    await search("second");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Immich sent a response Lymic could not read.");
+    expect(screen.queryByText("You are offline. The previous results stay visible until you retry.")).not.toBeInTheDocument();
+  });
+
+  it("shows an unavailable server with Retry on a first Search", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => supported, search_assets: () => Promise.reject("search_unavailable") });
+
+    await search("IMG");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The search could not be completed because the Immich Server is unavailable.");
+    expect(screen.getByRole("button", { name: "Retry timeline connection" })).toBeInTheDocument();
+  });
+
+  it("keeps the previous text and results visible with Retry when a later Search goes offline", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_search_support: async () => supported,
+      search_assets: vi.fn().mockResolvedValueOnce(results("found-1")).mockRejectedValueOnce("search_unavailable"),
+    });
+    await search("first");
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+
+    await search("second");
+
+    expect(await screen.findByText("You are offline. The previous results stay visible until you retry.")).toBeInTheDocument();
+    expect(screen.getByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry timeline connection" })).toBeInTheDocument();
+    expect(await searchBox()).toHaveValue("second");
+  });
+
+  it("says nothing matched when the Search finds nothing", async () => {
+    renderAuthenticatedPage({
+      get_search_support: async () => supported,
+      search_assets: async () => ({ buckets: [], assetsByBucket: {}, truncated: false }),
+    });
+
+    await search("zzz");
+
+    expect(await screen.findByText("Nothing matched your search. Try a different text or fewer filters.")).toBeInTheDocument();
+  });
+
+  it("shows a notice when the Search was cut at the result limit", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      get_search_support: async () => supported,
+      search_assets: async () => ({ ...results("found-1"), truncated: true }),
+    });
+
+    await search("IMG");
+
+    expect(await screen.findByText("Showing only the newest 5,000 results. Narrow your search to see the rest.")).toBeInTheDocument();
+  });
+
+  describe("Search Mode", () => {
+    const openOptions = async () => {
+      await fireEvent.click(await screen.findByRole("button", { name: "Search options" }));
+      return screen.findByRole("group", { name: "Search mode" });
+    };
+
+    it("offers Context, Filename, Description, Folder Path and OCR as one exclusive choice that starts on Context", async () => {
+      renderAuthenticatedPage({ get_search_features: async () => ({ smartSearch: true, ocr: true }) });
+
+      const group = await openOptions();
+
+      const radios = within(group).getAllByRole("radio");
+      expect(radios.map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(["Context", "Filename", "Description", "Folder Path", "OCR"]);
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeChecked();
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeEnabled();
+      await fireEvent.click(within(group).getByRole("radio", { name: "Folder Path" }));
+      expect(within(group).getByRole("radio", { name: "Folder Path" })).toBeChecked();
+      expect(within(group).getByRole("radio", { name: "Context" })).not.toBeChecked();
+      expect(within(group).getByRole("radio", { name: "OCR" })).toBeEnabled();
+    });
+
+    it("searches in the chosen mode, with the features read before the first Search", async () => {
+      renderAuthenticatedPage({
+        get_search_features: async () => ({ smartSearch: true, ocr: true }),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      await fireEvent.click(within(group).getByRole("radio", { name: "Description" }));
+      await search("sunset");
+
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "sunset", mode: "description", filters: {} } });
+      const calls = tauri.invoke.mock.calls.map(([command]) => command);
+      expect(calls.filter((command) => command === "get_search_features")).toHaveLength(1);
+      expect(calls.indexOf("get_search_features")).toBeLessThan(calls.indexOf("search_assets"));
+      expect(screen.getByRole("searchbox", { name: "Search your Immich library" })).toHaveAttribute("placeholder", "Search by description");
+    });
+
+    it("disables OCR with an explanation when the server has OCR switched off, and Filename keeps working", async () => {
+      renderAuthenticatedPage({
+        get_search_features: async () => ({ smartSearch: true, ocr: false }),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+      await fireEvent.click(within(group).getByRole("radio", { name: "Filename" }));
+
+      const ocr = await within(group).findByRole("radio", { name: "OCR" });
+      await waitFor(() => expect(ocr).toBeDisabled());
+      expect(ocr).toHaveAccessibleDescription("OCR is switched off on this Immich server, so text inside photos cannot be searched.");
+      await search("IMG");
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG", mode: "filename", filters: {} } });
+    });
+
+    it("keeps Filename working when the server features cannot be read", async () => {
+      renderAuthenticatedPage({
+        get_search_features: () => Promise.reject("search_unavailable"),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      expect(await within(group).findByText("The server's features could not be read. OCR may not be available.")).toBeInTheDocument();
+      await fireEvent.click(within(group).getByRole("radio", { name: "Filename" }));
+      await search("IMG");
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG", mode: "filename", filters: {} } });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Context Search", () => {
+    const openOptions = async () => {
+      await fireEvent.click(await screen.findByRole("button", { name: "Search options" }));
+      return screen.findByRole("group", { name: "Search mode" });
+    };
+    const smartOn = async () => ({ smartSearch: true, ocr: true });
+    const page = (ids: string[], nextPage: number | null, limitReached = false) => ({ assets: ids.map(found), nextPage, limitReached });
+    const contextRequest = (text: string) => ({ text, mode: "context", filters: {} });
+    const requestedPages = () =>
+      tauri.invoke.mock.calls.filter(([command]) => command === "search_context_page").map(([, args]) => (args as { page: number }).page);
+
+    it("shows a Context text as a flat relevance-ordered grid that loads further pages while scrolling, with Lightbox actions", async () => {
+      stubImmediateIntersectionObserver();
+      const searchContextPage = vi.fn()
+        .mockResolvedValueOnce(page(["best", "second"], 2))
+        .mockResolvedValueOnce(page(["third"], null));
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: searchContextPage,
+        get_asset_details: async () => ({ originalFileName: "IMG_0001.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024 }),
+      });
+
+      await search("dog on a beach");
+
+      await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3));
+      expect(tauri.invoke).toHaveBeenCalledWith("search_context_page", { request: contextRequest("dog on a beach"), page: 1 });
+      expect(tauri.invoke).toHaveBeenCalledWith("search_context_page", { request: contextRequest("dog on a beach"), page: 2 });
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+      // A flat list: no Timeline Bucket heading and no Scrubber.
+      expect(screen.queryByText("March 2025")).not.toBeInTheDocument();
+      expect(screen.queryByRole("navigation", { name: "Timeline scrubber" })).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
+
+      await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[2]);
+      const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+      expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+      expect(within(lightbox).getByRole("button", { name: "Add to album" })).toBeInTheDocument();
+      expect(within(lightbox).getByRole("button", { name: "Add to favorites" })).toBeInTheDocument();
+    });
+
+    it("keeps the pages already shown when a further page fails and loads it on Retry", async () => {
+      stubImmediateIntersectionObserver();
+      const searchContextPage = vi.fn()
+        .mockResolvedValueOnce(page(["best", "second"], 2))
+        .mockRejectedValueOnce("search_unavailable")
+        .mockResolvedValueOnce(page(["third"], null));
+      renderAuthenticatedPage({ get_search_features: smartOn, get_search_support: async () => supported, search_context_page: searchContextPage });
+
+      await search("dog");
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("More results could not be loaded. The results shown so far are kept.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+      await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+
+      await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(requestedPages()).toEqual([1, 2, 2]);
+    });
+
+    it("shows Context unavailable when the server rejects the search, without changing the Search Mode", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: () => Promise.reject("search_context_unavailable"),
+      });
+      const group = await openOptions();
+
+      await search("dog");
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Context is unavailable");
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeChecked();
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    });
+
+    it("shows Context's own message when Immich fails the smart search with a server error, without changing the Search Mode", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: () => Promise.reject("search_context_service_unavailable"),
+      });
+      const group = await openOptions();
+
+      await search("dog");
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Context needs Immich's machine-learning service, which could not be reached.");
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeChecked();
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    });
+
+    it("tells the user that a Context Search reached its limit of the best 1,000 results", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: async () => page(["best"], null, true),
+      });
+
+      await search("dog");
+
+      expect(await screen.findByText("Showing only the best 1,000 results. Narrow your search to see more.")).toBeInTheDocument();
+    });
+
+    it("shows no limit notice for a Context Search that ended on its own", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: async () => page(["best"], null),
+      });
+
+      await search("dog");
+
+      await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1));
+      expect(screen.queryByText(/Showing only the best/)).not.toBeInTheDocument();
+    });
+
+    it("disables Context with an explanation and searches by Filename when Smart Search is switched off", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: async () => ({ smartSearch: false, ocr: true }),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      const context = await within(group).findByRole("radio", { name: "Context" });
+      await waitFor(() => expect(context).toBeDisabled());
+      expect(context).toHaveAccessibleDescription(/Smart Search is switched off on this Immich server/);
+      expect(within(group).getByRole("radio", { name: "Filename" })).toBeChecked();
+      await search("IMG");
+
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG", mode: "filename", filters: {} } });
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_context_page", expect.anything());
+    });
+  });
+});
+
+describe("Search filter panel", () => {
+  const march = "2025-03-01T00:00:00.000Z";
+  const found = (id: string) => ({
+    id, width: 1600, height: 1200, type: "VIDEO", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: "0:00:05.000000", isFavorite: false,
+  });
+  const results = (...ids: string[]) => ({ buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(found) }, truncated: false });
+  const supported = { supported: true, version: "3.4.1", requiredVersion: "3.2" };
+  const features = { smartSearch: true, ocr: true };
+  const searchBox = () => screen.findByRole("searchbox", { name: "Search your Immich library" });
+  const filtersButton = () => screen.findByRole("button", { name: "Search options" });
+  const submit = () => fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+  async function openPanel() {
+    const button = await filtersButton();
+    if (button.getAttribute("aria-expanded") !== "true") await fireEvent.click(button);
+  }
+  const setDate = (label: "From" | "To", value: string) => fireEvent.input(screen.getByLabelText(label), { target: { value } });
+
+  it("opens the panel from the bar and runs a Search with filters and no text, shown chronologically", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("video-1") });
+    expect(await filtersButton()).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("group", { name: "Date" })).not.toBeInTheDocument();
+
+    await openPanel();
+    expect(await filtersButton()).toHaveAttribute("aria-expanded", "true");
+    await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
+    await setDate("From", "2025-03-01");
+    await setDate("To", "2025-03-31");
+    await submit();
+
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", {
+      request: {
+        text: "",
+        mode: "context",
+        filters: {
+          mediaType: "video",
+          date: { from: new Date(2025, 2, 1, 0, 0, 0, 0).toISOString(), to: new Date(2025, 2, 31, 23, 59, 59, 999).toISOString() },
+        },
+      },
+    });
+    expect(screen.getByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
+  });
+
+  it("offers All, Images and Videos with All selected by default", async () => {
+    renderAuthenticatedPage({ get_search_features: async () => features });
+    await openPanel();
+
+    const group = screen.getByRole("radiogroup", { name: "Media type" });
+    expect(within(group).getAllByRole("radio").map((radio) => (radio as HTMLInputElement).labels?.[0].textContent?.trim())).toEqual(["All", "Images", "Videos"]);
+    expect(screen.getByRole("radio", { name: "All" })).toBeChecked();
+
+    await fireEvent.click(screen.getByRole("radio", { name: "Images" }));
+    expect(screen.getByRole("radio", { name: "Images" })).toBeChecked();
+    await fireEvent.click(screen.getByRole("radio", { name: "All" }));
+    expect(screen.getByRole("radio", { name: "All" })).toBeChecked();
+  });
+
+  it("rejects a start date after the end date with a message and does not search", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features });
+    await openPanel();
+
+    await setDate("From", "2025-03-31");
+    await setDate("To", "2025-03-01");
+    await submit();
+
+    expect(await screen.findByText("The start date is after the end date. Choose a start date on or before the end date.")).toBeInTheDocument();
+    expect(screen.getByLabelText("From")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("From")).toHaveValue("2025-03-31");
+    expect(screen.getByLabelText("To")).toHaveValue("2025-03-01");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+
+    await setDate("From", "2025-03-01");
+    expect(screen.queryByText(/The start date is after the end date/)).not.toBeInTheDocument();
+  });
+
+  it("opens the closed panel to show the message when Enter is pressed with a start date after the end date", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features });
+    await openPanel();
+    await setDate("From", "2025-03-31");
+    await setDate("To", "2025-03-01");
+    await fireEvent.click(await filtersButton());
+    expect(screen.queryByRole("group", { name: "Date" })).not.toBeInTheDocument();
+
+    await fireEvent.submit(screen.getByRole("search", { name: "Search your Immich library" }));
+
+    expect(await screen.findByText("The start date is after the end date. Choose a start date on or before the end date.")).toBeInTheDocument();
+    expect(await filtersButton()).toHaveAttribute("aria-expanded", "true");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    expect(screen.getByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+  });
+
+  it("clears the date range on its own and keeps the other filters", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("video-1") });
+    await openPanel();
+    await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
+    await setDate("From", "2025-03-01");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Clear date range" }));
+
+    expect(screen.getByLabelText("From")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Clear date range" })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Videos" })).toBeChecked();
+    await submit();
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "context", filters: { mediaType: "video" } } }));
+  });
+
+  it("keeps the filters while the Search is left and entered again, and resets text and filters on clear", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("video-1") });
+    await openPanel();
+    await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
+    await setDate("To", "2025-03-31");
+    await fireEvent.input(await searchBox(), { target: { value: "IMG" } });
+    await submit();
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Photos" }));
+
+    expect(await searchBox()).toHaveValue("IMG");
+    await openPanel();
+    expect(screen.getByRole("radio", { name: "Videos" })).toBeChecked();
+    expect(screen.getByLabelText("To")).toHaveValue("2025-03-31");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(await searchBox()).toHaveValue("");
+    await openPanel();
+    expect(screen.getByRole("radio", { name: "All" })).toBeChecked();
+    expect(screen.getByLabelText("To")).toHaveValue("");
+  });
+
+  it("offers the clear control as soon as a filter is set, without any text", async () => {
+    renderAuthenticatedPage({ get_search_features: async () => features });
+    await openPanel();
+    expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("radio", { name: "Images" }));
+
+    expect(screen.getByRole("button", { name: "Clear search" })).toBeInTheDocument();
+  });
+
+  it("closes the panel with Escape and returns focus to its button", async () => {
+    renderAuthenticatedPage({ get_search_features: async () => features });
+    await openPanel();
+
+    await fireEvent.keyDown(screen.getByRole("radiogroup", { name: "Media type" }), { key: "Escape" });
+
+    expect(await filtersButton()).toHaveAttribute("aria-expanded", "false");
+    expect(await filtersButton()).toHaveFocus();
+  });
+});
+
+describe("Search display options and Rating", () => {
+  const march = "2025-03-01T00:00:00.000Z";
+  const found = (id: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false,
+  });
+  const results = (...ids: string[]) => ({ buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(found) }, truncated: false });
+  const supported = { supported: true, version: "3.4.1", requiredVersion: "3.2" };
+  const features = { smartSearch: true, ocr: true };
+  const searchBox = () => screen.findByRole("searchbox", { name: "Search your Immich library" });
+  const submit = () => fireEvent.click(screen.getByRole("button", { name: "Search" }));
+  const handlers = { get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("photo-1") };
+  const display = () => screen.getByRole("group", { name: "Display" });
+
+  async function openPanel() {
+    const button = await screen.findByRole("button", { name: "Search options" });
+    if (button.getAttribute("aria-expanded") !== "true") await fireEvent.click(button);
+  }
+
+  it("titles the group Display and offers Favorite, Archived and Unfiled, all off by default", async () => {
+    renderAuthenticatedPage(handlers);
+    await openPanel();
+
+    const group = display();
+    expect(within(group).getAllByRole("checkbox").map((box) => (box as HTMLInputElement).labels?.[0].textContent?.trim())).toEqual(["Favorites", "Archived", "Unfiled"]);
+    for (const box of within(group).getAllByRole("checkbox")) expect(box).not.toBeChecked();
+    expect(screen.queryByText("Library")).not.toBeInTheDocument();
+  });
+
+  it("restricts the Search to Favorites, Archived and Unfiled Assets and sends nothing for options that are off", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers);
+    await openPanel();
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Favorites" }));
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Unfiled" }));
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
+    await submit();
+
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "context", filters: { favorite: true, unfiled: true } } });
+  });
+
+  it("selects one Rating level, replaces it with another, and clears it by selecting it again", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers);
+    await openPanel();
+    const group = screen.getByRole("group", { name: "Rating" });
+    expect(within(group).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["1 star", "2 stars", "3 stars", "4 stars", "5 stars"]);
+    for (const button of within(group).getAllByRole("button")) expect(button).toHaveAttribute("aria-pressed", "false");
+
+    await fireEvent.click(within(group).getByRole("button", { name: "4 stars" }));
+    expect(within(group).getByRole("button", { name: "4 stars" })).toHaveAttribute("aria-pressed", "true");
+    await fireEvent.click(within(group).getByRole("button", { name: "2 stars" }));
+    expect(within(group).getByRole("button", { name: "4 stars" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(group).getByRole("button", { name: "2 stars" })).toHaveAttribute("aria-pressed", "true");
+    await submit();
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "context", filters: { rating: 2 } } }));
+
+    // Submitting closes the panel; reopened, it still shows the Rating.
+    await openPanel();
+    const reopened = screen.getByRole("group", { name: "Rating" });
+    expect(within(reopened).getByRole("button", { name: "2 stars" })).toHaveAttribute("aria-pressed", "true");
+    await fireEvent.click(within(reopened).getByRole("button", { name: "2 stars" }));
+    expect(within(reopened).getByRole("button", { name: "2 stars" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("opens the Archive from the Archived option like its navigation entry, with no Back origin, and keeps the Search session", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      ...handlers,
+      get_archive_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+      get_archive_timeline_bucket_assets: async () => [found("archived-1")],
+    });
+    await fireEvent.input(await searchBox(), { target: { value: "IMG" } });
+    await openPanel();
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
+    await fireEvent.click(screen.getByRole("group", { name: "Rating" }).querySelector("button[aria-label='3 stars']")!);
+
+    await fireEvent.click(within(display()).getByRole("button", { name: "Open Archive" }));
+
+    expect(await screen.findByRole("heading", { name: "Archive", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_archive_timeline_buckets");
+    expect(screen.queryByRole("button", { name: /^Back to/ })).not.toBeInTheDocument();
+    expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    expect(screen.getByRole("button", { name: "Archive" })).toHaveClass("active");
+
+    expect(await searchBox()).toHaveValue("IMG");
+    await openPanel();
+    expect(within(display()).getByRole("checkbox", { name: "Archived" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "3 stars" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("offers Open Archive whether or not the Archived option is on", async () => {
+    renderAuthenticatedPage(handlers);
+    await openPanel();
+
+    expect(within(display()).getByRole("button", { name: "Open Archive" })).toBeInTheDocument();
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
+    expect(within(display()).getByRole("button", { name: "Open Archive" })).toBeInTheDocument();
   });
 });

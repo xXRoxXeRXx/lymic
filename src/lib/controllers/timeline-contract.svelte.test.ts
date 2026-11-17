@@ -6,6 +6,7 @@ import { createArchiveTimelineController } from "./archive-timeline-controller.s
 import { createTrashTimelineController } from "./trash-timeline-controller.svelte";
 import { createFavoritesTimelineController } from "./favorites-timeline-controller.svelte";
 import { createPersonTimelineController } from "./person-timeline-controller.svelte";
+import { createSearchController } from "./search-controller.svelte";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
 
 const march = "2025-03-01T00:00:00.000Z";
@@ -49,6 +50,20 @@ const timelines: Array<[string, () => TimelineController]> = [
   ["Place Timeline", () => createPlaceTimelineController({
     getPlaceTimeline: async () => ({ buckets, assetsByBucket }),
   }, "Paris")],
+  ["Search Results", () => {
+    const search = createSearchController({
+      getSearchSupport: async () => ({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
+      getSearchFeatures: async () => ({ smartSearch: true, ocr: true }),
+      getSearchSuggestions: async () => [],
+      getPlaces: async () => [],
+      searchAssets: async () => ({ buckets, assetsByBucket, truncated: false }),
+      searchContextPage: async () => ({ assets: [], nextPage: null, limitReached: false }),
+    });
+    search.mode = "filename";
+    search.text = "IMG";
+    // Loading the results means submitting the Search, which is what the first refresh does for the other kinds.
+    return Object.create(search, { refresh: { value: async () => { await search.submit(); } } });
+  }],
   ["Person Timeline", () => createPersonTimelineController({
     getPersonTimelineBuckets: bucketSource.getBuckets,
     getPersonTimelineBucketAssets: (_personId, timeBucket) => bucketSource.getBucketAssets(timeBucket),

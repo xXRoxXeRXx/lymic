@@ -39,6 +39,7 @@ import {
   type TrashTimelineDesktopAdapter,
   type FavoritesTimelineDesktopAdapter,
   type PreferencesDesktopAdapter,
+  type SearchDesktopAdapter,
   type RemovableVolumeDesktopAdapter,
   type SyncDesktopAdapter,
   type TimelineDesktopAdapter,
@@ -206,6 +207,29 @@ describe("tauriDesktopAdapter", () => {
       ["removable-volume-detected", expect.any(Function)],
       ["removable-volume-removed", expect.any(Function)],
       ["removable-volume-remounted", expect.any(Function)],
+    ]);
+  });
+
+  it("invokes the Search commands with the request as one argument", async () => {
+    const searchAdapter: SearchDesktopAdapter = tauriDesktopAdapter;
+    invoke.mockClear();
+
+    await searchAdapter.getSearchSupport();
+    await searchAdapter.getSearchFeatures();
+    await searchAdapter.searchAssets({ text: "IMG", mode: "filename", filters: {} });
+    await searchAdapter.searchAssets({ text: "scan", mode: "folderPath", filters: {} });
+    await searchAdapter.searchContextPage({ text: "dog", mode: "context", filters: {} }, 2);
+    await searchAdapter.getSearchSuggestions({ type: "cameraMake" });
+    await searchAdapter.getSearchSuggestions({ type: "cameraModel", make: "Canon" });
+
+    expect(invoke.mock.calls).toEqual([
+      ["get_search_support"],
+      ["get_search_features"],
+      ["search_assets", { request: { text: "IMG", mode: "filename", filters: {} } }],
+      ["search_assets", { request: { text: "scan", mode: "folderPath", filters: {} } }],
+      ["search_context_page", { request: { text: "dog", mode: "context", filters: {} }, page: 2 }],
+      ["get_search_suggestions", { request: { type: "cameraMake" } }],
+      ["get_search_suggestions", { request: { type: "cameraModel", make: "Canon" } }],
     ]);
   });
 });

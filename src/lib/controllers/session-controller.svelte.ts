@@ -10,6 +10,7 @@ import { createMapController } from "./map-controller.svelte";
 import { createPeopleController } from "./people-controller.svelte";
 import { createPlacesController } from "./places-controller.svelte";
 import { createRemovableVolumeController } from "./removable-volume-controller.svelte";
+import { createSearchController } from "./search-controller.svelte";
 import { createSyncController } from "./sync-controller.svelte";
 import { createTargetAlbumCatalogue } from "./target-album-catalogue.svelte";
 import { createTrashTimelineController } from "./trash-timeline-controller.svelte";
@@ -27,6 +28,7 @@ import type {
   PeopleDesktopAdapter,
   PlacesDesktopAdapter,
   RemovableVolumeDesktopAdapter,
+  SearchDesktopAdapter,
   SyncDesktopAdapter,
   TimelineDesktopAdapter,
   TrashTimelineDesktopAdapter,
@@ -48,6 +50,7 @@ export type SessionDesktopAdapter =
   PlacesDesktopAdapter &
   MemoriesDesktopAdapter &
   AllMemoriesDesktopAdapter &
+  SearchDesktopAdapter &
   RemovableVolumeDesktopAdapter;
 
 export function createSessionController(options: {
@@ -96,6 +99,7 @@ export function createSessionController(options: {
   const explore = createExploreController({ people, places, memories, isActive: () => options.isExploreActive?.() ?? false });
   const map = createMapController(adapter);
   const albumCatalogue = createAlbumCatalogueController(adapter);
+  const search = createSearchController(adapter);
 
   const userState: { clear(): void }[] = [
     targetAlbumCatalogue,
@@ -113,6 +117,7 @@ export function createSessionController(options: {
     allMemories,
     map,
     albumCatalogue,
+    search,
   ];
 
   function clear() {
@@ -186,6 +191,7 @@ export function createSessionController(options: {
     explore,
     map,
     albumCatalogue,
+    search,
     startLifecycle,
     destroy,
   };

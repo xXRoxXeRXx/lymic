@@ -5,6 +5,9 @@ pub(crate) mod ids;
 mod people;
 mod places;
 mod response;
+mod search;
+mod search_filters;
+mod search_suggestions;
 mod session;
 #[cfg(test)]
 mod test_support;
@@ -18,6 +21,10 @@ pub(crate) use client::{AssetDetails, AssetResponse, ImmichClient};
 pub(crate) use ids::{AlbumId, RemoteAssetId};
 pub(crate) use people::PeoplePage;
 pub(crate) use places::Place;
+pub(crate) use search::{
+    ContextSearchPage, SearchFeatures, SearchRequest, SearchResults, SearchSupport,
+};
+pub(crate) use search_suggestions::SuggestionRequest;
 pub(crate) use session::ImmichSession;
 pub(crate) use timeline::{AlbumTimeline, PlaceTimeline, TimelineAsset, TimelineBucket};
 pub(crate) use trash::TrashRestoreResult;

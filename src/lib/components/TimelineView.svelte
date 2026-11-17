@@ -1,6 +1,6 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
-  import { untrack } from "svelte";
+  import { tick, untrack, type Snippet } from "svelte";
   import { Album, ArchiveRestore, Check, Download, Heart, HeartOff, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
@@ -42,6 +42,16 @@
     allowFavoriteAndAlbum?: boolean;
     /** Offers Restore in the Lightbox and in multi-selection: Trashed Assets only. */
     restoreTrashedAssets?(assetIds: string[]): Promise<TrashRestoreResult>;
+    /** Where to scroll to once the first buckets are shown, for a view that is reopened where the user left it. */
+    initialScrollTop?: number;
+    /** Reports the scroll position when the view opens and whenever the user scrolls. */
+    onScrollPosition?(scrollTop: number): void;
+    /** Shows one ordered list instead of month sections: no month headings and no Scrubber (Context Search Results, ADR-0009). */
+    flat?: boolean;
+    /** Called while the end of the list is near the viewport, to load a further page. Pass it only while a page can be loaded. */
+    onLoadMore?(): void;
+    /** Shown below the list, inside the scrolling area: a further page loading or failing. */
+    footer?: Snippet;
   }
 
   let {
@@ -67,11 +77,16 @@
     hintMessage = "",
     allowFavoriteAndAlbum = true,
     restoreTrashedAssets,
+    initialScrollTop = 0,
+    onScrollPosition,
+    flat = false,
+    onLoadMore,
+    footer,
   }: Props = $props();
   const targetAlbumCatalogue = $derived(allowFavoriteAndAlbum ? albumCatalogue : undefined);
   const showLoadError = $derived(!timeline.isLoading && (timeline.hasInitialLoadError || (failureIsError && timeline.isOffline)));
   const numberLocale = $derived(toBcp47Locale($locale));
-  const scrubberIndex = $derived(buildTimelineScrubberIndex(timeline.buckets));
+  const scrubberIndex = $derived(flat ? [] : buildTimelineScrubberIndex(timeline.buckets));
   const scrubberMonths = $derived(scrubberIndex.flatMap((entry) => entry.months));
   const lightboxAssets = $derived(
     timeline.buckets.flatMap((bucket) => timeline.assetsFor(bucket.timeBucket)),
@@ -211,7 +226,26 @@
     activeTimeBucket = visibleBucket;
   }
 
+  let scrollRestored = false;
+  $effect(() => {
+    const hasBuckets = timeline.buckets.length > 0;
+    if (scrollRestored || !viewport) return;
+    if (initialScrollTop <= 0) {
+      scrollRestored = true;
+      untrack(() => onScrollPosition?.(0));
+      return;
+    }
+    // The month sections reserve their height, so the position exists as soon as the buckets do.
+    if (!hasBuckets) return;
+    scrollRestored = true;
+    void tick().then(() => {
+      viewport.scrollTop = initialScrollTop;
+      onScrollPosition?.(viewport.scrollTop);
+    });
+  });
+
   function syncActiveBucket() {
+    onScrollPosition?.(viewport.scrollTop);
     if (scrollRaf !== null) return;
     updateActiveBucket();
     if (typeof requestAnimationFrame === "function") {
@@ -272,6 +306,15 @@
       const isActive = entries.some((entry) => entry.isIntersecting);
       activeBuckets = { ...activeBuckets, [timeBucket]: isActive };
       if (isActive) void Promise.resolve(timeline.activateBucket(timeBucket)).catch(() => {});
+    }, { root: viewport, rootMargin: "400px 0px" });
+    observer.observe(node);
+    return { destroy: () => observer.disconnect() };
+  }
+
+  function observeEnd(node: HTMLElement) {
+    if (typeof IntersectionObserver === "undefined") return {};
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) onLoadMore?.();
     }, { root: viewport, rootMargin: "400px 0px" });
     observer.observe(node);
     return { destroy: () => observer.disconnect() };
@@ -542,12 +585,14 @@
           id={bucketId(bucket.timeBucket)}
           use:observeBucket={bucket.timeBucket}
           class="space-y-3 scroll-mt-4"
-          style:min-height={`${layout.height + 52}px`}
+          style:min-height={`${layout.height + (flat ? 0 : 52)}px`}
         >
-          <div class="flex items-baseline justify-between">
-            <h2 class="text-xl font-bold text-slate-900 dark:text-slate-100">{monthLabel(bucket.timeBucket)}</h2>
-            <p class="text-sm text-slate-500 dark:text-zinc-400">{$t("timeline_asset_count", { values: { count: bucket.count.toLocaleString(numberLocale) } })}</p>
-          </div>
+          {#if !flat}
+            <div class="flex items-baseline justify-between">
+              <h2 class="text-xl font-bold text-slate-900 dark:text-slate-100">{monthLabel(bucket.timeBucket)}</h2>
+              <p class="text-sm text-slate-500 dark:text-zinc-400">{$t("timeline_asset_count", { values: { count: bucket.count.toLocaleString(numberLocale) } })}</p>
+            </div>
+          {/if}
           {#if activeBuckets[bucket.timeBucket] && timeline.assetsFor(bucket.timeBucket).length > 0}
             <div class="flex gap-2" style:height={`${layout.height}px`} aria-label={$t("timeline_masonry_grid")}>
               {#each layout.columns as column, columnIndex (columnIndex)}
@@ -580,8 +625,15 @@
         </section>
       {/each}
     </div>
+    {#if onLoadMore}
+      <!-- A new sentinel after every page: one that is still in view re-triggers, so a tall window keeps loading. -->
+      {#key timeline.buckets.reduce((total, bucket) => total + bucket.count, 0)}
+        <div use:observeEnd class="h-px" aria-hidden="true"></div>
+      {/key}
+    {/if}
+    {@render footer?.()}
   </div>
-  {#if showScrubber && scrubberMonths.length > 0}
+  {#if showScrubber && !flat && scrubberMonths.length > 0}
     {@const thumbRatio = scrubberMonths.length > 1 && activeTimeBucket ? Math.max(0, scrubberMonths.indexOf(activeTimeBucket)) / (scrubberMonths.length - 1) : 0}
     <nav class="absolute inset-y-0 -right-4 w-16 border-l border-slate-200/80 bg-slate-100/85 py-2 pl-1 pr-1 backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/85" aria-label={$t("timeline_scrubber")}>
       <div class="relative h-full">

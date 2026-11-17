@@ -38,6 +38,11 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
     getMemoriesPage: vi.fn().mockResolvedValue({ memories: [], hasNextPage: false }),
     getPeople: vi.fn().mockResolvedValue({ people: [], hasNextPage: false }),
     getPlaces: vi.fn().mockResolvedValue([]),
+    getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: true }),
+    getSearchSupport: vi.fn().mockResolvedValue({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
+    getSearchSuggestions: vi.fn().mockResolvedValue([]),
+    searchAssets: vi.fn().mockResolvedValue({ buckets: [{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }], assetsByBucket: {}, truncated: false }),
+    searchContextPage: vi.fn().mockResolvedValue({ assets: [], nextPage: null, limitReached: false }),
     getPersonTimelineBuckets: vi.fn().mockResolvedValue([]),
     getPersonTimelineBucketAssets: vi.fn().mockResolvedValue([]),
     subscribeToRemovableVolumeDetected: vi.fn().mockResolvedValue(() => {}),
@@ -60,6 +65,34 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
 }
 
 describe("authenticated session", () => {
+  it("keeps the Search in memory for the session and resets it on logout", async () => {
+    const { session } = setup();
+    session.search.text = "IMG";
+    session.search.mode = "description";
+    await session.search.submit();
+    expect(session.search.resultCount).toBe(1);
+    expect(session.search.mode).toBe("description");
+
+    await session.logout();
+
+    expect(session.search.text).toBe("");
+    expect(session.search.mode).toBe("context");
+    expect(session.search.submittedText).toBe("");
+    expect(session.search.buckets).toEqual([]);
+  });
+
+  it("keeps the Search Filters for the session and resets them on logout", async () => {
+    const { session } = setup();
+    session.search.filters.mediaType = "video";
+    session.search.filters.date = { from: "2025-03-01" };
+    expect(session.search.filters).toEqual({ mediaType: "video", date: { from: "2025-03-01" } });
+
+    await session.logout();
+
+    expect(session.search.filters).toEqual({});
+    expect(session.search.canSubmit).toBe(false);
+  });
+
   it("initializes and clears session-owned controllers across login, account switch, and logout", async () => {
     const { session, resetView } = setup({
       getTimelineBuckets: vi.fn()

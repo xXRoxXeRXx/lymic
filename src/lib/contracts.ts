@@ -205,3 +205,96 @@ export interface LoginRequest {
 export type ReleaseChannel = "github" | "store";
 
 export interface MapMarker { id: string; lat: number; lon: number; }
+
+// Search (ADR-0008, ADR-0009). Mirrors `src-tauri/src/immich/search.rs`.
+
+/** How Immich interprets the text of a Search. Each Search Mode adds a member. */
+export type SearchMode = "context" | "filename" | "description" | "folderPath" | "ocr";
+
+/** Images or videos; unset means all. */
+export type SearchMediaType = "image" | "video";
+
+/** One exact Rating level in stars. */
+export type SearchRating = 1 | 2 | 3 | 4 | 5;
+
+/** A date range. In `SearchFilters` the bounds are the chosen local days (`YYYY-MM-DD`); in a `SearchRequest` they are instants. */
+export interface SearchDateRange { from?: string; to?: string; }
+
+/** The Search Filters the user has set (held in memory for the session). Each Search Filter adds one optional field. */
+export interface SearchFilters {
+  date?: SearchDateRange;
+  mediaType?: SearchMediaType;
+  /** Recognized People who must all appear in a Remote Asset; unset or empty means no restriction. */
+  personIds?: string[];
+  /** Display options: each is set only while switched on; unset (or off) adds no condition. */
+  favorite?: boolean;
+  /** On shows only Archived Assets; Archived Assets are left out otherwise. */
+  archived?: boolean;
+  unfiled?: boolean;
+  rating?: SearchRating;
+  camera?: SearchCamera;
+  location?: SearchLocation;
+}
+
+/** The camera Search Filter: each part is a value Immich suggested (Immich compares them exactly). */
+export interface SearchCamera { make?: string; model?: string; lensModel?: string; }
+
+/**
+ * The Location Search Filter: each part is a value Immich offered (Immich compares them exactly): country and
+ * state from its suggestions, the city from the city listing of the Explore Places. The parts combine.
+ */
+export interface SearchLocation { country?: string; state?: string; city?: string; }
+
+/** A date range as the backend receives it: the bounds are ISO 8601 instants (UTC), not local days. */
+export interface SearchRequestDateRange { from?: string; to?: string; }
+
+/** The Search Filters as the backend receives them: the same fields, with the date bounds as instants. */
+export interface SearchRequestFilters extends Omit<SearchFilters, "date"> {
+  date?: SearchRequestDateRange;
+}
+
+export interface SearchRequest {
+  text: string;
+  mode: SearchMode;
+  filters: SearchRequestFilters;
+}
+
+/** Chronological Search Results: an Album Timeline plus whether the Search was cut at the limit. */
+export interface SearchResults extends AlbumTimeline {
+  truncated: boolean;
+}
+
+/**
+ * One page of Context Search Results in the order of relevance; `nextPage` is null on the last page.
+ * `limitReached` is set on the last page the limit of 1 000 results allows when Immich filled it, so more
+ * results may exist than are shown.
+ */
+export interface ContextSearchPage {
+  assets: TimelineAsset[];
+  nextPage: number | null;
+  limitReached: boolean;
+}
+
+/** Which optional Search Modes the connected Immich Server has switched on. */
+export interface SearchFeatures {
+  smartSearch: boolean;
+  ocr: boolean;
+}
+
+/** What Immich suggests values for. Each Search Filter chosen from suggestions adds a member. */
+export type SearchSuggestionType = "country" | "state" | "cameraMake" | "cameraModel" | "cameraLensModel";
+
+/** One suggestions request: the type, plus optional narrowing (the models of one make, the states of one country). Mirrors `src-tauri/src/immich/search_suggestions.rs`. */
+export interface SearchSuggestionsRequest {
+  type: SearchSuggestionType;
+  make?: string;
+  country?: string;
+  state?: string;
+}
+
+/** Whether the connected Immich Server is new enough to answer a Search. */
+export interface SearchSupport {
+  supported: boolean;
+  version: string;
+  requiredVersion: string;
+}

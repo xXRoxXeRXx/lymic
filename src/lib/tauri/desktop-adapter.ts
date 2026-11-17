@@ -33,6 +33,12 @@ import type {
   Memory,
   PeoplePage,
   Place,
+  ContextSearchPage,
+  SearchFeatures,
+  SearchRequest,
+  SearchSuggestionsRequest,
+  SearchSupport,
+  SearchResults,
 } from "../contracts";
 import type { LocaleCatalogEntry } from "../i18n/locale-catalog";
 
@@ -135,6 +141,18 @@ export interface PlacesDesktopAdapter {
   getPlaces(): Promise<Place[]>;
 }
 
+export interface SearchDesktopAdapter {
+  /** Reads the server version once to decide whether a Search can be answered (Immich 3.2 or later). */
+  getSearchSupport(): Promise<SearchSupport>;
+  /** Reads which optional Search Modes (Context, OCR) the server has switched on. */
+  getSearchFeatures(): Promise<SearchFeatures>;
+  searchAssets(request: SearchRequest): Promise<SearchResults>;
+  /** One page of a Context Search (Immich smart search), in the order of relevance. */
+  searchContextPage(request: SearchRequest, page: number): Promise<ContextSearchPage>;
+  /** The values Immich suggests for a Search Filter, optionally narrowed (for example the models of one make). */
+  getSearchSuggestions(request: SearchSuggestionsRequest): Promise<string[]>;
+}
+
 export interface PreferencesDesktopAdapter {
   getUploadParallelism(): Promise<number>;
   setUploadParallelism(uploadParallelism: number): Promise<void>;
@@ -190,6 +208,7 @@ export interface DesktopAdapter
     PlacesDesktopAdapter,
     MemoriesDesktopAdapter,
     AllMemoriesDesktopAdapter,
+    SearchDesktopAdapter,
     PreferencesDesktopAdapter,
     UpdateDesktopAdapter,
     RemovableVolumeDesktopAdapter {}
@@ -254,6 +273,11 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),
   getPersonTimelineBucketAssets: (personId, timeBucket) => invoke<TimelineAsset[]>("get_person_timeline_bucket_assets", { personId, timeBucket }),
   getPlaces: () => invoke<Place[]>("get_places"),
+  getSearchSupport: () => invoke<SearchSupport>("get_search_support"),
+  getSearchFeatures: () => invoke<SearchFeatures>("get_search_features"),
+  searchAssets: (request) => invoke<SearchResults>("search_assets", { request }),
+  searchContextPage: (request, page) => invoke<ContextSearchPage>("search_context_page", { request, page }),
+  getSearchSuggestions: (request) => invoke<string[]>("get_search_suggestions", { request }),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),
