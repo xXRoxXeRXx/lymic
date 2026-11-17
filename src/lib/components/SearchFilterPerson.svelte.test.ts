@@ -20,6 +20,7 @@ function setup(getPeople: (page: number, size: number) => Promise<PeoplePage>) {
     getSearchSupport: vi.fn().mockResolvedValue(SUPPORTED),
     getSearchFeatures: vi.fn().mockResolvedValue(FEATURES),
     searchAssets: vi.fn(),
+    getSearchSuggestions: vi.fn(),
   });
   render(SearchFilterPerson, { search, people });
   return { people, peopleAdapter, search };
