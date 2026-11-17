@@ -1264,9 +1264,10 @@ describe("Favorites removal in TimelineView", () => {
     await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
     expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
 
-    // Safeguard: Photo Timeline (default removeUnfavoritedAssets=false) retains unfavorited items
+    // Safeguard: without removeUnfavoritedAssets (the default, as in the Photo Timeline)
+    // the view keeps an unfavorited item, even when the timeline came from Favorites.
     view.unmount();
-    const photoController = createFilteredTimelineController({
+    const keepingController = createFilteredTimelineController({
       getFilteredTimelineBuckets: vi.fn().mockResolvedValue([
         { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
       ]),
@@ -1275,10 +1276,10 @@ describe("Favorites removal in TimelineView", () => {
         favoriteAsset("photo-2", "2025-03-04T12:00:00.000Z"),
       ]),
     }, "favorites");
-    await photoController.refresh();
+    await keepingController.refresh();
 
     render(TimelineView, {
-      timeline: photoController,
+      timeline: keepingController,
       getAssetDetails: vi.fn().mockResolvedValue(assetDetails({ isFavorite: true })),
       setAssetFavorite: vi.fn().mockResolvedValue(undefined),
     });

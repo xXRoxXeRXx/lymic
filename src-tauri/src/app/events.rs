@@ -124,6 +124,37 @@ fn log_to_ui_entry<R: Runtime>(
     let _ = app.emit("log-message", payload);
 }
 
+/// Test-only capture of the `log-message` events an app emits, so tests read
+/// activity log entries the way the frontend receives them.
+#[cfg(test)]
+pub(crate) struct CapturedUiLogs(std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>);
+
+#[cfg(test)]
+impl CapturedUiLogs {
+    pub(crate) fn listen<R: Runtime>(app: &AppHandle<R>) -> Self {
+        let logs = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = logs.clone();
+        tauri::Listener::listen(app, "log-message", move |event| {
+            captured
+                .lock()
+                .unwrap()
+                .push(serde_json::from_str(event.payload()).unwrap());
+        });
+        Self(logs)
+    }
+
+    /// The captured entries with the given i18n `key`, in emission order.
+    pub(crate) fn with_key(&self, key: &str) -> Vec<serde_json::Value> {
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|log| log["key"] == key)
+            .cloned()
+            .collect()
+    }
+}
+
 pub(crate) fn emit_sync_error(app: &AppHandle, error: &str) {
     let _ = app.emit("sync-error", error);
 }

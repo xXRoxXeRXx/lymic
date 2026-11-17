@@ -441,13 +441,7 @@ mod tests {
 
     fn audit_context() -> SyncAuditContext {
         SyncAuditContext::from_credentials(
-            &AuthConfig {
-                server_url: "http://127.0.0.1".to_string(),
-                api_key: "test-key".to_string(),
-                allow_local_http: true,
-                cloudflare_client_id: None,
-                cloudflare_client_secret: None,
-            },
+            &AuthConfig::test_fixture("http://127.0.0.1"),
             "manual_sync",
         )
     }
@@ -455,14 +449,8 @@ mod tests {
     #[tokio::test]
     async fn a_duplicate_reported_trashed_by_the_bulk_check_resolves_to_its_trashed_remote_asset() {
         // No server: the bulk check already named the Remote Asset, so nothing is searched.
-        let client = ImmichClient::new(
-            "http://127.0.0.1:9".to_string(),
-            "test-key".to_string(),
-            true,
-            None,
-            None,
-        )
-        .unwrap();
+        let client =
+            crate::immich::test_support::test_client("http://127.0.0.1:9".to_string(), "test-key");
         let existing = [BulkCheckDuplicate {
             hash: "photo-hash".to_string(),
             remote_asset: Some(DuplicateRemoteAsset {
@@ -522,14 +510,7 @@ mod tests {
     #[tokio::test]
     async fn a_trashed_duplicate_is_reported_as_in_the_immich_trash() {
         let app = tauri::test::mock_app();
-        let logs = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let captured = logs.clone();
-        tauri::Listener::listen(app.handle(), "log-message", move |event| {
-            captured
-                .lock()
-                .unwrap()
-                .push(serde_json::from_str::<serde_json::Value>(event.payload()).unwrap());
-        });
+        let logs = crate::app::events::CapturedUiLogs::listen(app.handle());
 
         report_trashed_duplicate(
             app.handle(),
@@ -539,11 +520,7 @@ mod tests {
         );
 
         // The mock app has no audit logger, so it also logs `log_audit_failure`.
-        let logs = logs.lock().unwrap();
-        let reports: Vec<_> = logs
-            .iter()
-            .filter(|log| log["key"] == "log_duplicate_in_trash")
-            .collect();
+        let reports = logs.with_key("log_duplicate_in_trash");
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0]["level"], "WARN");
         assert_eq!(reports[0]["params"]["file"], "photo.jpg");

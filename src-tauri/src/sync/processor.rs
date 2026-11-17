@@ -1239,14 +1239,7 @@ mod tests {
         .await;
         let client = Arc::new(crate::immich::test_support::test_client(url, "test-key"));
         let app = tauri::test::mock_app();
-        let logs = Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
-        let captured = logs.clone();
-        tauri::Listener::listen(app.handle(), "log-message", move |event| {
-            captured
-                .lock()
-                .unwrap()
-                .push(serde_json::from_str(event.payload()).unwrap());
-        });
+        let logs = crate::app::events::CapturedUiLogs::listen(app.handle());
         let audit_context = SyncAuditContext::from_credentials(
             &crate::auth::AuthConfig::test_fixture("http://127.0.0.1"),
             "manual_sync",
@@ -1291,13 +1284,7 @@ mod tests {
             [(path.clone(), "SYNCED".to_string())]
         );
         assert_eq!(summary.failed, 0);
-        let reports: Vec<_> = logs
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|log| log["key"] == "log_duplicate_in_trash")
-            .cloned()
-            .collect();
+        let reports = logs.with_key("log_duplicate_in_trash");
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0]["params"]["file"], path.as_str());
         std::fs::remove_dir_all(&directory).unwrap();
