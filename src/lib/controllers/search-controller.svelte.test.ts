@@ -689,3 +689,44 @@ describe("Search server features", () => {
     });
   });
 });
+
+describe("Search controller Person filter", () => {
+  it("searches the chosen Recognized People alone, without text, as a filter", async () => {
+    const { adapter, search } = setup();
+    search.filters.personIds = ["person-1", "person-2"];
+
+    expect(search.canSubmit).toBe(true);
+    expect(await search.submit()).toBe(true);
+
+    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "filename", filters: { personIds: ["person-1", "person-2"] } });
+  });
+
+  it("treats no chosen person as no filter", async () => {
+    const { adapter, search } = setup();
+    search.filters.personIds = [];
+
+    expect(search.canSubmit).toBe(false);
+    expect(await search.submit()).toBe(false);
+    expect(adapter.searchAssets).not.toHaveBeenCalled();
+  });
+
+  it("combines the people with the text and the other filters", async () => {
+    const { adapter, search } = setup();
+    search.text = "IMG";
+    search.filters.personIds = ["person-1"];
+    search.filters.mediaType = "image";
+
+    await search.submit();
+
+    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "IMG", mode: "filename", filters: { personIds: ["person-1"], mediaType: "image" } });
+  });
+
+  it("forgets the chosen people when the Search is cleared", () => {
+    const { search } = setup();
+    search.filters.personIds = ["person-1"];
+
+    search.clear();
+
+    expect(search.filters.personIds).toBeUndefined();
+  });
+});
