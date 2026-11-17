@@ -1,7 +1,7 @@
 use crate::app::background::deferred_folder_matches_registered;
 use crate::db::{
-    discard_sync_data_in_folder, enqueue_sync_assets, has_sync_work_in_folder,
-    reset_failed_queue_items_for_folder, QueueAsset, WatchedFolder,
+    add_folder, discard_sync_data_in_folder, enqueue_sync_assets, has_sync_work_in_folder,
+    remap_watched_folder_path, reset_failed_queue_items_for_folder, QueueAsset, WatchedFolder,
 };
 use crate::media::admission::{decide, watched_folder_for_path, Admission};
 use crate::media::model::{Asset, UploadUnit};
@@ -102,6 +102,43 @@ async fn eval_db_within(folder_path: &str, candidate_path: &str) -> bool {
         remaining == 0,
         "has_sync_work_in_folder and discard_sync_data_in_folder disagreed on folder={folder_path:?}, candidate={candidate_path:?}"
     );
+
+    sqlx::query("DELETE FROM sync_queue")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let folder_id = add_folder(&pool, folder_path, None).await.unwrap();
+    let remap_asset = QueueAsset {
+        path: candidate_path,
+        size: 1,
+        mtime: 1,
+        target_album_id: None,
+    };
+    enqueue_sync_assets(&pool, &[remap_asset], &[])
+        .await
+        .unwrap();
+    #[cfg(windows)]
+    let new_folder = r"Z:\RemappedTarget";
+    #[cfg(not(windows))]
+    let new_folder = "/remapped/target";
+    remap_watched_folder_path(&pool, folder_id, folder_path, new_folder)
+        .await
+        .unwrap();
+    let remapped_path: String = sqlx::query_scalar("SELECT local_path FROM sync_queue")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let was_remapped = remapped_path.starts_with(new_folder);
+    assert_eq!(
+        has_work, was_remapped,
+        "has_sync_work_in_folder and remap_watched_folder_path disagreed on folder={folder_path:?}, candidate={candidate_path:?}, remapped_path={remapped_path:?}"
+    );
+    if !has_work {
+        assert_eq!(
+            remapped_path, candidate_path,
+            "remap_watched_folder_path mutated non-contained candidate for folder={folder_path:?}"
+        );
+    }
 
     has_work
 }

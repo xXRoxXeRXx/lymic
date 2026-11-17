@@ -125,18 +125,28 @@ fn excluded_paths_at_queue_boundary(
         .collect()
 }
 
-pub(crate) async fn run_sync_pipeline(
-    app: tauri::AppHandle,
-    runtime: SyncRuntime,
-    client: Arc<ImmichClient>,
-    source: SyncSource,
-    audit_context: SyncAuditContext,
-) -> Result<SyncSummary, String> {
+/// Shared launch parameters for a Synchronization pipeline run.
+pub(crate) struct SyncPipelineParams {
+    pub(crate) app: tauri::AppHandle,
+    pub(crate) runtime: SyncRuntime,
+    pub(crate) client: Arc<ImmichClient>,
+    pub(crate) source: SyncSource,
+    pub(crate) audit_context: SyncAuditContext,
+}
+
+pub(crate) async fn run_sync_pipeline(params: SyncPipelineParams) -> Result<SyncSummary, String> {
+    let SyncPipelineParams {
+        app,
+        runtime,
+        client,
+        source,
+        audit_context,
+    } = params;
     // Admission persists producer work before this runner starts. The durable
     // queue is therefore the sole source used here, including after recovery.
     let progress = JobByteProgress::new(0, 0);
     let current_file_progress = CurrentFileProgress::default();
-    let reporter = DesktopRunReporter::for_run(
+    let reporter = DesktopRunReporter::new(
         app.clone(),
         source,
         audit_context.clone(),
@@ -412,8 +422,6 @@ mod tests {
                 failed: totals.failed,
             });
         }
-
-        fn failed(&self, _source: SyncSource, _snapshot: Option<&db::SyncSnapshot>, _error: &str) {}
     }
 
     struct FakeBlockProcessor<F>(F);

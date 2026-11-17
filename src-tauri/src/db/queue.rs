@@ -412,17 +412,10 @@ pub async fn discard_pending_sync_paths(
     }
 
     let mut tx = pool.begin().await?;
-    for path_batch in paths.chunks(500) {
-        let mut query = sqlx::QueryBuilder::new(
-            "DELETE FROM sync_queue WHERE job_id = 1 AND status = 'PENDING' AND local_path IN (",
-        );
-        let mut separated = query.separated(", ");
-        for path in path_batch {
-            separated.push_bind(path);
-        }
-        separated.push_unseparated(")");
-        query.build().execute(&mut *tx).await?;
-    }
+    super::execute_batched_in(&mut tx, paths, |query| {
+        query.push("DELETE FROM sync_queue WHERE job_id = 1 AND status = 'PENDING' AND local_path");
+    })
+    .await?;
     update_counts_and_snapshot(tx, true, None).await
 }
 
@@ -547,20 +540,13 @@ pub async fn reset_failed_queue_items_for_folder(
     .await?;
     let matching_queue_paths = super::filter_paths_within_folder(failed_queue_paths, folder_path);
 
-    let mut queue_affected: u64 = 0;
-    for path_batch in matching_queue_paths.chunks(500) {
-        let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
-            "UPDATE sync_queue SET status = 'PENDING', failure_reason = NULL WHERE job_id = ",
-        );
-        query.push_bind(SINGLETON_SYNC_JOB_ID);
-        query.push(" AND status = 'FAILED' AND local_path IN (");
-        let mut separated = query.separated(", ");
-        for path in path_batch {
-            separated.push_bind(path);
-        }
-        separated.push_unseparated(")");
-        queue_affected += query.build().execute(&mut *tx).await?.rows_affected();
-    }
+    let queue_affected = super::execute_batched_in(&mut tx, &matching_queue_paths, |query| {
+        query
+            .push("UPDATE sync_queue SET status = 'PENDING', failure_reason = NULL WHERE job_id = ")
+            .push_bind(SINGLETON_SYNC_JOB_ID)
+            .push(" AND status = 'FAILED' AND local_path");
+    })
+    .await?;
 
     let failed_state_paths: Vec<String> =
         sqlx::query_scalar("SELECT local_path FROM sync_state WHERE status = 'FAILED'")
@@ -568,17 +554,10 @@ pub async fn reset_failed_queue_items_for_folder(
             .await?;
     let matching_state_paths = super::filter_paths_within_folder(failed_state_paths, folder_path);
 
-    for path_batch in matching_state_paths.chunks(500) {
-        let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
-            "UPDATE sync_state SET status = 'PENDING', failure_reason = NULL WHERE status = 'FAILED' AND local_path IN (",
-        );
-        let mut separated = query.separated(", ");
-        for path in path_batch {
-            separated.push_bind(path);
-        }
-        separated.push_unseparated(")");
-        query.build().execute(&mut *tx).await?;
-    }
+    super::execute_batched_in(&mut tx, &matching_state_paths, |query| {
+        query.push("UPDATE sync_state SET status = 'PENDING', failure_reason = NULL WHERE status = 'FAILED' AND local_path");
+    })
+    .await?;
 
     if queue_affected > 0 {
         update_counts_and_snapshot(tx, false, running_current_path.as_deref()).await?;

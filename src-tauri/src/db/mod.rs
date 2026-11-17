@@ -18,6 +18,28 @@ pub use queue::{
     QueuedUploadUnit, SyncJobStatus, SyncSnapshot,
 };
 
+pub(super) const PATH_BATCH_SIZE: usize = 500;
+
+pub(super) async fn execute_batched_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    paths: &[String],
+    mut build_prefix: impl FnMut(&mut sqlx::QueryBuilder<'_, sqlx::Sqlite>),
+) -> Result<u64, sqlx::Error> {
+    let mut total_affected = 0;
+    for path_batch in paths.chunks(PATH_BATCH_SIZE) {
+        let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new("");
+        build_prefix(&mut query);
+        query.push(" IN (");
+        let mut separated = query.separated(", ");
+        for path in path_batch {
+            separated.push_bind(path);
+        }
+        separated.push_unseparated(")");
+        total_affected += query.build().execute(&mut **tx).await?.rows_affected();
+    }
+    Ok(total_affected)
+}
+
 pub(crate) fn filter_paths_within_folder(paths: Vec<String>, folder: &str) -> Vec<String> {
     let norm_folder = crate::media::paths::normalize_path_lexical(std::path::Path::new(folder));
     paths

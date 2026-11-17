@@ -4,7 +4,7 @@ mod removal;
 mod seams;
 
 use seams::{
-    CoordinatorSyncWork, FolderEffects, FolderPersistence, FolderSyncWork, SqliteFolderPersistence,
+    FolderEffects, FolderPersistence, FolderSyncWork, RuntimeSyncWork, SqliteFolderPersistence,
     TauriFolderEffects,
 };
 
@@ -27,7 +27,7 @@ impl<'a>
     WatchedFolders<
         SqliteFolderPersistence<'a>,
         NotifyFolderWatcher<'a>,
-        CoordinatorSyncWork,
+        RuntimeSyncWork,
         TauriFolderEffects<'a>,
     >
 {
@@ -37,7 +37,7 @@ impl<'a>
         Self::new(
             SqliteFolderPersistence { pool },
             NotifyFolderWatcher::for_tauri(app),
-            CoordinatorSyncWork { runtime },
+            RuntimeSyncWork { runtime },
             TauriFolderEffects { app },
         )
     }

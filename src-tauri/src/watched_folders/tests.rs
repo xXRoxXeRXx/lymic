@@ -1,6 +1,6 @@
 use super::seams::{
-    CoordinatorSyncWork, ExclusionPatterns, FolderEffects, FolderPersistence, FolderScanTrigger,
-    FolderSyncWork, FolderWatcher, NotifyFolderWatcher, SqliteFolderPersistence,
+    ExclusionPatterns, FolderEffects, FolderPersistence, FolderScanTrigger, FolderSyncWork,
+    FolderWatcher, NotifyFolderWatcher, RuntimeSyncWork, SqliteFolderPersistence,
 };
 use super::{RegisterFolderParams, RemovableVolumeBinding, RemoveFolderResult, WatchedFolders};
 use crate::audit::AuditEvent;
@@ -236,8 +236,8 @@ impl FolderEffects for &RecordedEffects {
     }
 }
 
-fn test_sync_work(pool: &SqlitePool) -> CoordinatorSyncWork {
-    CoordinatorSyncWork {
+fn test_sync_work(pool: &SqlitePool) -> RuntimeSyncWork {
+    RuntimeSyncWork {
         runtime: crate::sync::SyncRuntime::new(pool.clone(), false),
     }
 }
@@ -843,7 +843,7 @@ async fn unconfirmed_removal_changes_nothing_and_reports_whether_sync_work_would
     let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorSyncWork {
+        RuntimeSyncWork {
             runtime: runtime.clone(),
         },
         &removal_effects,
@@ -921,7 +921,7 @@ impl FolderWatcher for OrderedWatcher<'_> {
 }
 
 struct OrderedSync {
-    inner: CoordinatorSyncWork,
+    inner: RuntimeSyncWork,
     events: Arc<Mutex<Vec<&'static str>>>,
 }
 
@@ -964,7 +964,7 @@ async fn confirmed_removal_stops_watcher_before_cancelling_and_discarding_then_d
             events: events.clone(),
         },
         OrderedSync {
-            inner: CoordinatorSyncWork { runtime },
+            inner: RuntimeSyncWork { runtime },
             events: events.clone(),
         },
         &removal_effects,
@@ -1028,7 +1028,7 @@ async fn unwatch_failure_aborts_removal_before_cancelling_or_deleting() {
         FailingUnwatchWatcher {
             inner: NotifyFolderWatcher { watcher: &watcher },
         },
-        CoordinatorSyncWork { runtime },
+        RuntimeSyncWork { runtime },
         &removal_effects,
     );
 
@@ -1047,7 +1047,7 @@ async fn unwatch_failure_aborts_removal_before_cancelling_or_deleting() {
 }
 
 struct FailingDiscardSync {
-    inner: CoordinatorSyncWork,
+    inner: RuntimeSyncWork,
 }
 
 impl FolderSyncWork for FailingDiscardSync {
@@ -1077,7 +1077,7 @@ async fn queue_discard_failure_restores_watcher_and_keeps_folder_configured() {
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
         FailingDiscardSync {
-            inner: CoordinatorSyncWork { runtime },
+            inner: RuntimeSyncWork { runtime },
         },
         &removal_effects,
     );
@@ -1131,7 +1131,7 @@ async fn delete_failure_restores_watcher_keeps_folder_and_logs_if_restore_fails(
     let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorSyncWork {
+        RuntimeSyncWork {
             runtime: runtime.clone(),
         },
         &removal_effects,
@@ -1158,7 +1158,7 @@ async fn delete_failure_restores_watcher_keeps_folder_and_logs_if_restore_fails(
         FailingRewatchWatcher {
             inner: NotifyFolderWatcher { watcher: &watcher },
         },
-        CoordinatorSyncWork { runtime },
+        RuntimeSyncWork { runtime },
         &removal_effects,
     );
     let err = failing_restore_removal
@@ -1204,7 +1204,7 @@ async fn removing_one_folder_leaves_sibling_folder_queue_active_work_and_watcher
     let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorSyncWork { runtime },
+        RuntimeSyncWork { runtime },
         &removal_effects,
     );
 
@@ -1251,7 +1251,7 @@ async fn removing_missing_folder_requires_confirmation_before_auditing_or_refres
     let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorSyncWork { runtime },
+        RuntimeSyncWork { runtime },
         &removal_effects,
     );
 

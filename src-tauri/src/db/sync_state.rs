@@ -1,6 +1,4 @@
-use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool, Transaction};
-
-const DISCARD_PATH_BATCH_SIZE: usize = 500;
+use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -170,22 +168,17 @@ async fn delete_sync_paths(
     preserve_synced: bool,
 ) -> Result<(), sqlx::Error> {
     for table in ["sync_state", "sync_queue", "album_retry_remote_ids"] {
-        for path_batch in paths.chunks(DISCARD_PATH_BATCH_SIZE) {
-            let mut query = QueryBuilder::<Sqlite>::new(format!("DELETE FROM {table} WHERE "));
+        super::execute_batched_in(tx, paths, |query| {
+            query.push("DELETE FROM ").push(table).push(" WHERE ");
             if table == "sync_queue" {
                 query.push("job_id = 1 AND ");
             }
             if table == "sync_state" && preserve_synced {
                 query.push("status != 'SYNCED' AND ");
             }
-            query.push("local_path IN (");
-            let mut separated = query.separated(", ");
-            for path in path_batch {
-                separated.push_bind(path);
-            }
-            separated.push_unseparated(")");
-            query.build().execute(&mut **tx).await?;
-        }
+            query.push("local_path");
+        })
+        .await?;
     }
     Ok(())
 }

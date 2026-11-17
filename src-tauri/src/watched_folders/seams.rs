@@ -160,11 +160,11 @@ impl FolderWatcher for NotifyFolderWatcher<'_> {
     }
 }
 
-pub(crate) struct CoordinatorSyncWork {
+pub(crate) struct RuntimeSyncWork {
     pub(crate) runtime: crate::sync::SyncRuntime,
 }
 
-impl FolderSyncWork for CoordinatorSyncWork {
+impl FolderSyncWork for RuntimeSyncWork {
     async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
         self.runtime.has_work_in_folder(path).await
     }
