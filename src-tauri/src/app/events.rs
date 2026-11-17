@@ -34,7 +34,7 @@ pub(crate) fn send_notification_keyed(
     log_to_ui_keyed(app, level, body, key, params);
 }
 
-pub(crate) fn log_to_ui_key(app: &AppHandle, level: &str, message: &str, key: &str) {
+pub(crate) fn log_to_ui_key<R: Runtime>(app: &AppHandle<R>, level: &str, message: &str, key: &str) {
     log_to_ui_entry(app, level, message, Some(key.to_string()), None);
 }
 
@@ -48,8 +48,8 @@ pub(crate) fn log_to_ui_keyed<R: Runtime>(
     log_to_ui_entry(app, level, message, Some(key.to_string()), Some(params));
 }
 
-pub(crate) fn log_to_ui_folder(
-    app: &AppHandle,
+pub(crate) fn log_to_ui_folder<R: Runtime>(
+    app: &AppHandle<R>,
     level: &str,
     message: &str,
     key: &str,

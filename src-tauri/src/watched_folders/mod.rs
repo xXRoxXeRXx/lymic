@@ -75,7 +75,6 @@ where
     ) -> Result<(), String> {
         exclusions::update_folder_exclusion_patterns(
             &self.persistence,
-            &self.sync,
             &self.effects,
             id,
             exclusion_patterns,

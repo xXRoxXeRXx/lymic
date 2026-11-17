@@ -59,17 +59,16 @@ pub(crate) trait FolderSyncWork {
     async fn has_work_in_folder(&self, path: &str) -> Result<bool, String>;
     fn cancel_work_in_folder(&self, path: &str);
     async fn discard_folder_queue(&self, path: &str) -> Result<(), String>;
-    async fn scan_folder(&self, folder: WatchedFolder) -> Result<crate::sync::ScanResult, String>;
 }
 
 pub(crate) trait FolderEffects: FolderScanTrigger {
     fn record_audit(&self, event: AuditEvent);
     fn set_sync_enabled(&self, enabled: bool);
-    async fn admit_rescan(
+    async fn scan_and_admit(
         &self,
-        scan_result: crate::sync::ScanResult,
+        folder: WatchedFolder,
         source: crate::sync::SyncSource,
-    );
+    ) -> Result<(), String>;
     fn log_watcher_deferred(&self, path: &str);
     fn log_watcher_undo_failed(&self, path: &str, error: &str);
     fn log_unwatch_failed(&self, path: &str, error: &str);
@@ -191,14 +190,12 @@ impl FolderSyncWork for CoordinatorSyncWork<'_> {
         .await
         .map_err(|error| error.to_string())
     }
-
-    async fn scan_folder(&self, folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
-        scan_single_folder(folder).await
-    }
 }
 
-async fn scan_single_folder(folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
-    crate::sync::scan_watched_folders_for_media(vec![folder]).await
+async fn scan_single_folder(
+    folder: WatchedFolder,
+) -> Result<crate::media::model::ScanResult, String> {
+    crate::media::scanner::scan_watched_folders_for_media(vec![folder]).await
 }
 
 pub(crate) struct TauriFolderScanTrigger<'a> {
@@ -259,12 +256,15 @@ impl FolderEffects for TauriFolderEffects<'_> {
         crate::app::tray::set_sync_enabled(self.app, enabled);
     }
 
-    async fn admit_rescan(
+    async fn scan_and_admit(
         &self,
-        scan_result: crate::sync::ScanResult,
+        folder: WatchedFolder,
         source: crate::sync::SyncSource,
-    ) {
-        crate::sync::admit_and_run(self.app.clone(), self.pool.clone(), scan_result, source).await;
+    ) -> Result<(), String> {
+        crate::sync::Synchronization::for_tauri(self.app, self.pool)
+            .scan_and_admit(vec![folder], source)
+            .await
+            .map(|_| ())
     }
 
     fn log_watcher_deferred(&self, path: &str) {
