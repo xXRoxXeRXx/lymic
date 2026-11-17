@@ -227,6 +227,7 @@
   "show_secret": "Mostrar segredo",
   "hide_secret": "Ocultar segredo",
   "log_duplicate_resolve_failed": "Não foi possível resolver o duplicado {file}: {error}",
+  "log_duplicate_in_trash": "{file} já está no Immich, mas na lixeira do Immich; não foi enviado novamente. Restaure-o na Lixeira para vê-lo no Immich.",
   "log_upload_completion_persist_failed": "Não foi possível concluir a sincronização de {file}: {error}",
   "log_removable_volume_error": "Erro ao processar o evento do volume amovível: {error}"
   ,"hero_landscape": "Paisagem de destaque"

@@ -7,7 +7,7 @@ use tokio::task::JoinHandle;
 
 /// Serves the given `(status line, body)` responses in order, one connection each,
 /// and returns the base URL plus a handle that yields the request texts received.
-pub(super) async fn serve_pages<S, B>(responses: Vec<(S, B)>) -> (String, JoinHandle<Vec<String>>)
+pub(crate) async fn serve_pages<S, B>(responses: Vec<(S, B)>) -> (String, JoinHandle<Vec<String>>)
 where
     S: Into<String> + Send + 'static,
     B: Into<String> + Send + 'static,
@@ -39,13 +39,13 @@ where
 }
 
 /// Serves one canned response; the handle yields the request line and headers received.
-pub(super) async fn serve_once(status: &str, body: &str) -> (String, JoinHandle<String>) {
+pub(crate) async fn serve_once(status: &str, body: &str) -> (String, JoinHandle<String>) {
     let (url, server) = serve_pages(vec![(status.to_string(), body.to_string())]).await;
     let request = tokio::spawn(async move { server.await.unwrap().remove(0) });
     (url, request)
 }
 
 /// A client for a fake server at `url` (plain HTTP is allowed for it).
-pub(super) fn test_client(url: String, api_key: &str) -> ImmichClient {
+pub(crate) fn test_client(url: String, api_key: &str) -> ImmichClient {
     ImmichClient::new(url, api_key.to_string(), true, None, None).unwrap()
 }

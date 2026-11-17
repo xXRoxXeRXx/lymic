@@ -227,6 +227,7 @@
   "show_secret": "Показать секрет",
   "hide_secret": "Скрыть секрет",
   "log_duplicate_resolve_failed": "Не удалось обработать дубликат {file}: {error}",
+  "log_duplicate_in_trash": "{file} уже есть в Immich, но находится в корзине Immich; файл не загружался повторно. Восстановите его в Корзине, чтобы он снова появился в Immich.",
   "log_upload_completion_persist_failed": "Не удалось завершить синхронизацию {file}: {error}",
   "log_removable_volume_error": "Ошибка обработки события съёмного носителя: {error}"
   ,"hero_landscape": "Пейзаж на заставке"

@@ -133,6 +133,7 @@ describe('i18n catalogs', () => {
   it('translates every backend log message emitted to the UI', () => {
     const backendLogKeys = {
       log_duplicate_resolve_failed: ['{file}', '{error}'],
+      log_duplicate_in_trash: ['{file}'],
       log_upload_completion_persist_failed: ['{file}', '{error}'],
       log_removable_volume_error: ['{error}'],
     };
