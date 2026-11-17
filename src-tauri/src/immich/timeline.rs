@@ -224,7 +224,7 @@ where
     Ok(value.as_ref().and_then(parse_duration_value))
 }
 
-fn deserialize_next_page<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+pub(super) fn deserialize_next_page<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {

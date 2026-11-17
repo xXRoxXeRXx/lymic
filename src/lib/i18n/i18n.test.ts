@@ -338,6 +338,20 @@ describe('i18n catalogs', () => {
     expect(de.search_filter_display).toBe('Anzeige');
   });
 
+  it('translates the Context Search strings in every locale', () => {
+    const keys = [
+      'search_mode_context', 'search_placeholder_context', 'search_mode_context_unavailable',
+      'search_context_unavailable', 'search_more_error', 'search_loading_more',
+    ];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect((translations as Record<string, string>)[key], `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+      }
+    }
+    expect(en.search_mode_context).toBe('Context');
+    expect(de.search_mode_context).toBe('Kontext');
+  });
+
   it('translates the Search Mode strings in every locale', () => {
     const keys = [
       'search_options', 'search_mode_label', 'search_mode_filename', 'search_mode_description', 'search_mode_folderPath', 'search_mode_ocr',
