@@ -51,14 +51,30 @@ impl MediaType {
     }
 }
 
+/// Adds an `all` condition: the Remote Asset must match every one of the chosen ids. No chosen id
+/// adds no condition (Immich rejects an empty `all`).
+fn apply_all_ids(key: &str, ids: &[String], filter: &mut Map<String, Value>) {
+    if !ids.is_empty() {
+        filter.insert(key.to_string(), json!({ "all": ids }));
+    }
+}
+
 /// Restricts a Search to Remote Assets in which every one of the Recognized People appears
 /// (`all`, not `any`). No chosen person adds no condition. That `all` means every person on the
 /// same Remote Asset is confirmed from Immich's server source (3.4.1), not yet observed against
 /// real people on a live server.
 pub(super) fn apply_person_ids(person_ids: &[String], filter: &mut Map<String, Value>) {
-    if !person_ids.is_empty() {
-        filter.insert("personIds".to_string(), json!({ "all": person_ids }));
-    }
+    apply_all_ids("personIds", person_ids, filter);
+}
+
+/// Restricts a Search to Remote Assets that carry every one of the chosen Tags (`all`, not `any`),
+/// and only the exactly chosen Tags: their children are not added here. No chosen Tag adds no
+/// condition. This is the structured filter's `tagIds`, not the metadata search's deprecated flat
+/// `tagIds` and not the timeline's `tagId`. NOT VERIFIED on a live server (the test library had no
+/// Tags): whether `all` means that every chosen Tag must be on the Remote Asset, and whether a child
+/// Tag counts for its parent.
+pub(super) fn apply_tag_ids(tag_ids: &[String], filter: &mut Map<String, Value>) {
+    apply_all_ids("tagIds", tag_ids, filter);
 }
 
 /// One exact star level, one to five. A value outside that range is rejected when the

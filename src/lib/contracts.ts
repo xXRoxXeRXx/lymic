@@ -244,6 +244,8 @@ export interface SearchFilters {
   mediaType?: SearchMediaType;
   /** Recognized People who must all appear in a Remote Asset; unset or empty means no restriction. */
   personIds?: string[];
+  /** Tags that must all be on a Remote Asset (only these exact Tags, not their children); unset or empty means no restriction. */
+  tagIds?: string[];
   /** Display options: each is set only while switched on; unset (or off) adds no condition. */
   favorite?: boolean;
   /** On shows only Archived Assets; Archived Assets are left out otherwise. */

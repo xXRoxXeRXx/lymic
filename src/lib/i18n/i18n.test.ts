@@ -413,4 +413,17 @@ describe('i18n catalogs', () => {
     }
     expect(de.search_filter_person).toBe('Erkannte Personen');
   });
+
+  it('translates the Tag filter strings in every locale and names the tag.read permission', () => {
+    const keys = ['search_filter_tag', 'search_filter_tag_hint', 'search_filter_tag_permission_denied', 'search_filter_tag_chosen', 'search_filter_tag_clear'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect((translations as Record<string, string>)[key], `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+      }
+      expect((translations as Record<string, string>).search_filter_tag_permission_denied, `Locale ${localeCode} must name the permission`).toContain('tag.read');
+      expect((translations as Record<string, string>).search_filter_tag_chosen, `Locale ${localeCode} must keep the count placeholder`).toContain('{count}');
+    }
+    expect(en.search_filter_tag).toBe('Tags');
+    expect(de.search_filter_tag_permission_denied).toContain('Tags-Filter');
+  });
 });

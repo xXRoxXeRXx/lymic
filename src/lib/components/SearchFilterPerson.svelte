@@ -2,7 +2,9 @@
   import { t } from "svelte-i18n";
   import type { RecognizedPerson } from "../contracts";
   import type { PeopleViewState } from "../controllers/people-controller.svelte";
+  import { messageForFailure } from "../controllers/request-failure";
   import type { SearchController } from "../controllers/search-controller.svelte";
+  import { toggleChosenId } from "../search-filters/parts";
   import RecognizedPersonTile from "./RecognizedPersonTile.svelte";
   import SearchFilterHeading from "./SearchFilterHeading.svelte";
 
@@ -25,8 +27,7 @@
   });
 
   function toggle(person: RecognizedPerson) {
-    const next = chosen.includes(person.id) ? chosen.filter((id) => id !== person.id) : [...chosen, person.id];
-    search.filters.personIds = next.length > 0 ? next : undefined;
+    search.filters.personIds = toggleChosenId(search.filters.personIds, person.id);
   }
 </script>
 
@@ -37,7 +38,7 @@
     <p role="status" class="text-sm text-slate-600 dark:text-zinc-300">{$t("people_loading")}</p>
   {:else if people.error}
     <div role="alert" class="space-y-1 text-sm text-slate-700 dark:text-zinc-300">
-      <p>{$t(people.error === "permission_denied" ? "search_filter_person_permission_denied" : people.error === "unavailable" ? "people_unavailable" : "people_error")}</p>
+      <p>{messageForFailure(people.error, { permission_denied: $t("search_filter_person_permission_denied"), unavailable: $t("people_unavailable"), error: $t("people_error") })}</p>
       <button type="button" class="rounded text-xs font-medium text-blue-600 hover:underline dark:text-sky-400" onclick={() => void people.refresh()}>{$t("people_retry")}</button>
     </div>
   {:else if ordered.length === 0}

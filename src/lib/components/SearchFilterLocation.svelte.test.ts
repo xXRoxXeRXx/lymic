@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import type { Place, SearchSuggestionsRequest } from "../contracts";
 import { createSearchController } from "../controllers/search-controller.svelte";
+import { createTagsController } from "../controllers/tags-controller.svelte";
+import type { TagsDesktopAdapter } from "../tauri/desktop-adapter";
 import SearchPanel from "./SearchPanel.svelte";
 
 afterEach(cleanup);
@@ -27,7 +29,8 @@ function setup(getSearchSuggestions = vi.fn(async (request: SearchSuggestionsReq
   };
   const search = createSearchController(adapter);
   const people = { people: [], isLoading: false, isRefreshing: false, isOffline: false, hasNextPage: false, error: null, refresh: vi.fn(), loadMore: vi.fn(), clear: vi.fn() };
-  render(SearchPanel, { search, people, id: "search-panel" });
+  const tags = createTagsController({ getTags: vi.fn().mockResolvedValue([]) } as unknown as TagsDesktopAdapter);
+  render(SearchPanel, { search, people, tags, id: "search-panel" });
   return { adapter, search };
 }
 

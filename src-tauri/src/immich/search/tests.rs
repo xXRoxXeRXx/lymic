@@ -1167,6 +1167,43 @@ async fn no_chosen_person_adds_no_person_condition() {
 }
 
 #[tokio::test]
+async fn chosen_tags_must_all_be_on_the_remote_asset() {
+    let filters = SearchFilters {
+        tag_ids: Some(vec!["tag-1".to_string(), "tag-2".to_string()]),
+        ..SearchFilters::default()
+    };
+    assert_eq!(
+        filter_sent_for(filters).await,
+        json!({ "tagIds": { "all": ["tag-1", "tag-2"] } })
+    );
+}
+
+#[tokio::test]
+async fn no_chosen_tag_adds_no_tag_condition() {
+    for tag_ids in [None, Some(vec![])] {
+        let filters = SearchFilters {
+            tag_ids,
+            ..SearchFilters::default()
+        };
+        assert_eq!(filter_sent_for(filters).await, json!({}));
+    }
+}
+
+#[test]
+fn tag_ids_deserialize_from_the_frontend_shape() {
+    let request: SearchRequest =
+        serde_json::from_str(r#"{"text":"","mode":"filename","filters":{"tagIds":["tag-1"]}}"#)
+            .unwrap();
+    assert_eq!(
+        request.filters,
+        SearchFilters {
+            tag_ids: Some(vec!["tag-1".to_string()]),
+            ..SearchFilters::default()
+        }
+    );
+}
+
+#[tokio::test]
 async fn text_and_every_set_filter_combine_in_one_structured_filter() {
     let request = SearchRequest {
         filters: SearchFilters {

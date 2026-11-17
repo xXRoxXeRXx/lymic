@@ -1,3 +1,5 @@
+import type { SearchFilterDefinition } from "./types";
+
 /**
  * A multi-part Search Filter (camera, Location) with one part set (or cleared, with `undefined`); unset when no
  * part is left. Changing the `parent` part to a different value drops the `dependent` part, which may not exist
@@ -21,4 +23,22 @@ export function chosenParts<T extends object>(filter: T | undefined, keys: reado
   const chosen: Partial<T> = {};
   for (const key of keys) if (filter?.[key]) chosen[key] = filter[key];
   return Object.keys(chosen).length > 0 ? (chosen as T) : undefined;
+}
+
+/** A list of chosen ids (people, Tags) with one id toggled: added at the end, or removed; undefined when none is left. */
+export function toggleChosenId(chosen: readonly string[] | undefined, id: string): string[] | undefined {
+  const current = chosen ?? [];
+  const next = current.includes(id) ? current.filter((candidate) => candidate !== id) : [...current, id];
+  return next.length > 0 ? next : undefined;
+}
+
+/** A Search Filter that is a list of ids which must all apply (people, Tags); no id adds no condition. */
+export function allIdsFilter(key: "personIds" | "tagIds"): SearchFilterDefinition {
+  return {
+    key,
+    apply(filters, request) {
+      const ids = filters[key];
+      if (ids?.length) request[key] = [...ids];
+    },
+  };
 }

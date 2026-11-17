@@ -11,6 +11,8 @@ export interface TagsViewState {
   readonly isLoading: boolean;
   readonly isOffline: boolean;
   readonly error: RequestFailure | null;
+  /** The ids of every Tag in the last successful load (also while offline, from the cache); null before the first successful load. */
+  readonly knownIds: ReadonlySet<string> | null;
   /** True when the Library has no Tags to show. */
   readonly isEmpty: boolean;
   /** Expands or collapses a Tag that has children; kept in memory until `clear`. */
@@ -28,6 +30,7 @@ export function createTagsController(adapter: TagsDesktopAdapter, options: { isA
   const list = createExploreListController<Tag>({ prefix: "tags", load: () => adapter.getTags() });
   // The top level starts expanded and deeper levels collapsed; a choice overrides that default.
   let choices = $state<Record<string, boolean>>({});
+  const knownIds = $derived(list.isLoaded ? new Set(list.items.map((tag) => tag.id)) : null);
   const tree = $derived(buildTagTree(list.items));
   const rows = $derived(visibleTagRows(tree, (tag, level) => choices[tag.id] ?? level === 1));
   const refreshing = createRefreshWhenActive({ isActive: () => options.isActive?.() ?? false, refresh: list.refresh });
@@ -41,6 +44,7 @@ export function createTagsController(adapter: TagsDesktopAdapter, options: { isA
     get isLoading() { return list.isLoading; },
     get isOffline() { return list.isOffline; },
     get error() { return list.error; },
+    get knownIds() { return knownIds; },
     get isEmpty() { return list.items.length === 0; },
     toggle(tagId) {
       const row = rows.find((candidate) => candidate.tag.id === tagId);

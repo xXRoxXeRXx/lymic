@@ -5,7 +5,8 @@ import "../i18n";
 import type { SearchFeatures, SearchSupport } from "../contracts";
 import { createPeopleController } from "../controllers/people-controller.svelte";
 import { createSearchController } from "../controllers/search-controller.svelte";
-import type { PeopleDesktopAdapter } from "../tauri/desktop-adapter";
+import { createTagsController } from "../controllers/tags-controller.svelte";
+import type { PeopleDesktopAdapter, TagsDesktopAdapter } from "../tauri/desktop-adapter";
 import SearchBar from "./SearchBar.svelte";
 
 afterEach(cleanup);
@@ -16,6 +17,7 @@ const FEATURES: SearchFeatures = { smartSearch: true, ocr: true };
 
 function setup(overrides: { getSearchSupport?: () => Promise<SearchSupport>; searchAssets?: () => Promise<never> } = {}) {
   const people = createPeopleController({ getPeople: vi.fn().mockResolvedValue({ people: [], hasNextPage: false }) } as unknown as PeopleDesktopAdapter);
+  const tags = createTagsController({ getTags: vi.fn().mockResolvedValue([]) } as unknown as TagsDesktopAdapter);
   const search = createSearchController({
     getSearchSupport: vi.fn().mockResolvedValue(SUPPORTED),
     getSearchFeatures: vi.fn().mockResolvedValue(FEATURES),
@@ -26,7 +28,7 @@ function setup(overrides: { getSearchSupport?: () => Promise<SearchSupport>; sea
     ...overrides,
   });
   search.mode = "filename";
-  render(SearchBar, { search, people, onSubmit: vi.fn(), onClear: vi.fn(), onOpenArchive: vi.fn() });
+  render(SearchBar, { search, people, tags, onSubmit: vi.fn(), onClear: vi.fn(), onOpenArchive: vi.fn() });
   return search;
 }
 

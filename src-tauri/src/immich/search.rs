@@ -8,8 +8,8 @@
 use super::client::ImmichClient;
 use super::response::{read_response_body_limited, request_failure_code};
 use super::search_filters::{
-    apply_favorite, apply_not_trashed, apply_person_ids, apply_unfiled, apply_visibility,
-    CameraFilter, DateRange, LocationFilter, MediaType, Rating,
+    apply_favorite, apply_not_trashed, apply_person_ids, apply_tag_ids, apply_unfiled,
+    apply_visibility, CameraFilter, DateRange, LocationFilter, MediaType, Rating,
 };
 use super::timeline::{
     group_album_timeline_assets, timeline_asset_from_response, AlbumTimeline, TimelineAssetResponse,
@@ -84,6 +84,8 @@ pub(crate) struct SearchFilters {
     pub media_type: Option<MediaType>,
     /// Recognized People that must all appear in a Remote Asset.
     pub person_ids: Option<Vec<String>>,
+    /// Tags that must all be on a Remote Asset; only the chosen Tags count, not their children.
+    pub tag_ids: Option<Vec<String>>,
     /// Display option: only Favorites.
     pub favorite: bool,
     /// Display option: only Archived Assets. Off means Archived Assets are left out.
@@ -106,6 +108,9 @@ impl SearchFilters {
         }
         if let Some(person_ids) = &self.person_ids {
             apply_person_ids(person_ids, filter);
+        }
+        if let Some(tag_ids) = &self.tag_ids {
+            apply_tag_ids(tag_ids, filter);
         }
         if self.favorite {
             apply_favorite(filter);

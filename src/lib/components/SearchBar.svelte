@@ -3,6 +3,7 @@
   import { t } from "svelte-i18n";
   import type { PeopleViewState } from "../controllers/people-controller.svelte";
   import type { SearchController } from "../controllers/search-controller.svelte";
+  import type { TagsViewState } from "../controllers/tags-controller.svelte";
   import SearchPanel from "./SearchPanel.svelte";
 
   /**
@@ -11,9 +12,10 @@
    * Search Filters live in the panel that the options button opens below the field; a Search can consist of
    * filters alone.
    */
-  let { search, people, onSubmit, onClear, onOpenArchive }: {
+  let { search, people, tags, onSubmit, onClear, onOpenArchive }: {
     search: SearchController;
     people: PeopleViewState;
+    tags: TagsViewState;
     onSubmit: () => void;
     onClear: () => void;
     /** Switches to the Archive main view, like a click on its navigation entry. */
@@ -97,7 +99,7 @@
   >{$t("search_submit")}</button>
   </div>
   {#if panelOpen}
-    <SearchPanel {search} {people} id={panelId} onOpenArchive={openArchive} />
+    <SearchPanel {search} {people} {tags} id={panelId} onOpenArchive={openArchive} />
   {/if}
 </form>
 </div>
