@@ -59,7 +59,10 @@ pub(crate) async fn add_event_paths(
     Ok(())
 }
 
-pub(crate) fn log_overlapping_folders(app: &tauri::AppHandle, scan_result: &ScanResult) {
+pub(crate) fn log_overlapping_folders<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    scan_result: &ScanResult,
+) {
     for (folder, parent) in &scan_result.overlapping_folders {
         let mut params = std::collections::HashMap::new();
         params.insert("folder".to_string(), folder.display().to_string());
