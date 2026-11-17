@@ -28,7 +28,7 @@ fn matches_segment(pattern: &[u8], value: &[u8]) -> bool {
 }
 
 fn matches_pattern(pattern: &str, relative_path: &Path) -> bool {
-    let pattern = pattern.trim().to_lowercase();
+    let pattern = pattern.trim().to_ascii_lowercase();
     let pattern_segments = pattern
         .split('/')
         .filter(|part| !part.is_empty())
@@ -36,7 +36,7 @@ fn matches_pattern(pattern: &str, relative_path: &Path) -> bool {
     let path_segments = relative_path
         .components()
         .filter_map(|component| match component {
-            Component::Normal(part) => Some(part.to_string_lossy().to_lowercase()),
+            Component::Normal(part) => Some(part.to_string_lossy().to_ascii_lowercase()),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -154,7 +154,7 @@ pub(crate) fn normalize_patterns(patterns: Vec<String>) -> Result<Vec<String>, S
         }
         if !normalized
             .iter()
-            .any(|existing: &String| existing.to_lowercase() == pattern.to_lowercase())
+            .any(|existing: &String| existing.eq_ignore_ascii_case(&pattern))
         {
             normalized.push(pattern);
         }
@@ -294,6 +294,19 @@ mod tests {
                 &folders
             ),
             Admission::Admitted
+        );
+    }
+
+    #[test]
+    fn exclusion_glob_matching_preserves_ascii_only_case_folding() {
+        let folders = [folder("/Media/Photos", &["Öffentlich/**"])];
+        assert_eq!(
+            decide(&unit("/Media/Photos/öffentlich/secret.jpg", None), &folders),
+            Admission::Admitted
+        );
+        assert_eq!(
+            decide(&unit("/Media/Photos/Öffentlich/secret.jpg", None), &folders),
+            Admission::Excluded
         );
     }
 

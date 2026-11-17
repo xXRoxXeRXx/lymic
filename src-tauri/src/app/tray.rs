@@ -54,30 +54,40 @@ fn current_locale<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {
         .unwrap_or_else(|| "en".to_string())
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TrayAction {
     Pause,
     Resume,
     Start,
 }
 
-pub(crate) fn decide_sync_action(status: db::SyncJobStatus) -> TrayAction {
-    match status {
-        db::SyncJobStatus::Running => TrayAction::Pause,
-        db::SyncJobStatus::Paused => TrayAction::Resume,
-        db::SyncJobStatus::Idle | db::SyncJobStatus::Failed => TrayAction::Start,
+impl TrayAction {
+    pub(crate) fn from_status(status: db::SyncJobStatus) -> Self {
+        match status {
+            db::SyncJobStatus::Running => Self::Pause,
+            db::SyncJobStatus::Paused => Self::Resume,
+            db::SyncJobStatus::Idle | db::SyncJobStatus::Failed => Self::Start,
+        }
     }
+
+    fn label(self, translations: &crate::app::locale::BackendTranslations) -> &str {
+        match self {
+            Self::Pause => &translations.tray_pause_sync,
+            Self::Resume => &translations.tray_resume_sync,
+            Self::Start => &translations.tray_sync,
+        }
+    }
+}
+
+pub(crate) fn decide_sync_action(status: db::SyncJobStatus) -> TrayAction {
+    TrayAction::from_status(status)
 }
 
 fn sync_action_text(
     status: db::SyncJobStatus,
     translations: &crate::app::locale::BackendTranslations,
 ) -> &str {
-    match status {
-        db::SyncJobStatus::Running => &translations.tray_pause_sync,
-        db::SyncJobStatus::Paused => &translations.tray_resume_sync,
-        db::SyncJobStatus::Idle | db::SyncJobStatus::Failed => &translations.tray_sync,
-    }
+    TrayAction::from_status(status).label(translations)
 }
 
 pub(crate) fn update_transfer_status<R: tauri::Runtime>(

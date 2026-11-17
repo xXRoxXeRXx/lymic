@@ -30,10 +30,24 @@ pub(crate) fn send_notification_keyed<R: Runtime>(
     key: &str,
     params: LogParams,
 ) {
-    if cfg!(not(test)) {
-        let _ = app.notification().builder().title(title).body(body).show();
-    }
+    send_notification_keyed_with(app, title, body, level, key, params, show_os_notification);
+}
+
+pub(crate) fn send_notification_keyed_with<R: Runtime>(
+    app: &AppHandle<R>,
+    title: &str,
+    body: &str,
+    level: &str,
+    key: &str,
+    params: LogParams,
+    send_os_notification: impl FnOnce(&AppHandle<R>, &str, &str),
+) {
+    send_os_notification(app, title, body);
     log_to_ui_keyed(app, level, body, key, params);
+}
+
+pub(crate) fn show_os_notification<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
+    let _ = app.notification().builder().title(title).body(body).show();
 }
 
 pub(crate) fn log_to_ui_key<R: Runtime>(app: &AppHandle<R>, level: &str, message: &str, key: &str) {
@@ -60,8 +74,8 @@ pub(crate) fn log_to_ui_folder<R: Runtime>(
     log_to_ui_keyed(app, level, message, key, params_from(&[("folder", folder)]));
 }
 
-pub(crate) fn log_to_ui_folder_error(
-    app: &AppHandle,
+pub(crate) fn log_to_ui_folder_error<R: Runtime>(
+    app: &AppHandle<R>,
     level: &str,
     message: &str,
     key: &str,

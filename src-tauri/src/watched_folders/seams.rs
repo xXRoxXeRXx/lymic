@@ -181,12 +181,6 @@ impl FolderSyncWork for RuntimeSyncWork {
     }
 }
 
-async fn scan_single_folder(
-    folder: WatchedFolder,
-) -> Result<crate::media::model::ScanResult, String> {
-    crate::media::scanner::scan_watched_folders_for_media(vec![folder]).await
-}
-
 pub(crate) struct TauriFolderScanTrigger<'a> {
     pub(crate) app: &'a tauri::AppHandle,
 }
@@ -204,21 +198,9 @@ fn spawn_folder_scan(
 ) {
     let app_for_scan = app.clone();
     tauri::async_runtime::spawn(async move {
-        let scan_result = match scan_single_folder(folder.clone()).await {
-            Ok(result) => result,
-            Err(error) => {
-                crate::app::events::log_to_ui_folder_error(
-                    &app_for_scan,
-                    "ERROR",
-                    &format!("Folder scanning failed for '{}': {error}", folder.path),
-                    "log_folder_scan_failed",
-                    &folder.path,
-                    &error,
-                );
-                return;
-            }
-        };
-        crate::sync::admit_and_run(app_for_scan, scan_result, source).await;
+        let _ = crate::sync::Synchronization::for_tauri(&app_for_scan)
+            .scan_and_admit(vec![folder], source)
+            .await;
     });
 }
 

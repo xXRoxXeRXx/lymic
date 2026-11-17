@@ -96,15 +96,18 @@ fn path_component_eq(left: Component<'_>, right: Component<'_>) -> bool {
     }
 }
 
+fn with_normalized_pair<T>(left: &Path, right: &Path, f: impl FnOnce(&Path, &Path) -> T) -> T {
+    let norm_left = normalize_path_lexical(left);
+    let norm_right = normalize_path_lexical(right);
+    f(&norm_left, &norm_right)
+}
+
 pub(crate) fn path_is_within_lexical(path: &Path, parent: &Path) -> bool {
     relative_path_within_lexical(path, parent).is_some()
 }
 
-#[cfg(test)]
 pub(crate) fn path_is_within(path: &Path, parent: &Path) -> bool {
-    let norm_path = normalize_path_lexical(path);
-    let norm_parent = normalize_path_lexical(parent);
-    relative_path_within_lexical(&norm_path, &norm_parent).is_some()
+    with_normalized_pair(path, parent, path_is_within_lexical)
 }
 
 pub(crate) fn paths_equal_lexical(left: &Path, right: &Path) -> bool {
@@ -126,9 +129,7 @@ pub(crate) fn paths_equal_lexical(left: &Path, right: &Path) -> bool {
 }
 
 pub(crate) fn paths_equal(left: &Path, right: &Path) -> bool {
-    let norm_left = normalize_path_lexical(left);
-    let norm_right = normalize_path_lexical(right);
-    paths_equal_lexical(&norm_left, &norm_right)
+    with_normalized_pair(left, right, paths_equal_lexical)
 }
 
 pub(crate) fn relative_path_within_lexical(
@@ -149,9 +150,7 @@ pub(crate) fn relative_path_within_lexical(
 
 #[cfg(test)]
 pub(crate) fn relative_path_within(path: &Path, parent: &Path) -> Option<PathBuf> {
-    let norm_path = normalize_path_lexical(path);
-    let norm_parent = normalize_path_lexical(parent);
-    relative_path_within_lexical(&norm_path, &norm_parent)
+    with_normalized_pair(path, parent, relative_path_within_lexical)
 }
 
 pub(crate) fn overlapping_folder_paths(

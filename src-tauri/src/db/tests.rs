@@ -324,7 +324,7 @@ mod database_tests {
             .await
             .unwrap();
 
-        let snapshot = crate::sync::lifecycle::SynchronizationLifecycle::recover(&pool)
+        let snapshot = crate::sync::SyncRuntime::recover_snapshot(&pool)
             .await
             .unwrap();
         assert_eq!(snapshot.status, SyncJobStatus::Paused);
@@ -2399,7 +2399,7 @@ mod database_tests {
             "unexpected enqueue error: {enqueue_err}"
         );
 
-        let recover_err = crate::sync::lifecycle::SynchronizationLifecycle::recover(&pool)
+        let recover_err = crate::sync::SyncRuntime::recover_snapshot(&pool)
             .await
             .unwrap_err();
         assert!(

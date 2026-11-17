@@ -198,9 +198,12 @@ async fn update_job_counts(tx: &mut sqlx::Transaction<'_, Sqlite>) -> Result<(),
 }
 
 pub async fn has_sync_work_in_folder(pool: &SqlitePool, folder: &str) -> Result<bool, sqlx::Error> {
-    let paths: Vec<String> = sqlx::query_scalar(
-        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND status = 'PENDING'",
-    )
+    let prefix = super::sql_folder_prefix(folder);
+    let path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
+    let paths: Vec<String> = sqlx::query_scalar(&format!(
+        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND status = 'PENDING' AND {path_cond}"
+    ))
+    .bind(&prefix)
     .fetch_all(pool)
     .await?;
     Ok(!super::filter_paths_within_folder(paths, folder).is_empty())
@@ -210,13 +213,16 @@ pub async fn discard_sync_data_in_folder(
     pool: &SqlitePool,
     folder: &str,
 ) -> Result<(), sqlx::Error> {
-    let paths: Vec<String> = sqlx::query_scalar(
-        "SELECT local_path FROM sync_queue WHERE job_id = 1 \
+    let prefix = super::sql_folder_prefix(folder);
+    let path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
+    let paths: Vec<String> = sqlx::query_scalar(&format!(
+        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND {path_cond} \
          UNION \
-         SELECT local_path FROM sync_state WHERE status != 'SYNCED' \
+         SELECT local_path FROM sync_state WHERE status != 'SYNCED' AND {path_cond} \
          UNION \
-         SELECT local_path FROM album_retry_remote_ids",
-    )
+         SELECT local_path FROM album_retry_remote_ids WHERE {path_cond}"
+    ))
+    .bind(&prefix)
     .fetch_all(pool)
     .await?;
     let matching = super::filter_paths_within_folder(paths, folder);

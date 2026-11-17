@@ -20,6 +20,84 @@ pub use queue::{
 
 pub(super) const PATH_BATCH_SIZE: usize = 500;
 
+/// Normalizes a folder path into the prefix format expected by `sql_path_is_or_descendant_of`.
+pub(crate) fn sql_folder_prefix(folder: &str) -> String {
+    let norm = crate::media::paths::normalize_path_lexical(std::path::Path::new(folder));
+    let raw = norm.to_string_lossy();
+    #[cfg(windows)]
+    {
+        let slashed = raw.replace('\\', "/");
+        if slashed == "/" || (slashed.len() == 3 && slashed.ends_with(":/")) {
+            slashed
+        } else {
+            slashed.trim_end_matches('/').to_owned()
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        if raw == "/" {
+            "/".to_owned()
+        } else {
+            raw.trim_end_matches('/').to_owned()
+        }
+    }
+}
+
+/// Builds a SQL WHERE predicate pre-filtering paths matching `param_placeholder`
+/// (prepared with `sql_folder_prefix`) or any of its descendants.
+///
+/// Rejects sibling folders and unrelated Watched Folders directly in SQL while
+/// passing through relative dot-segment or Windows non-ASCII rows for exact Rust
+/// verification via `media::paths`.
+pub(crate) fn sql_path_is_or_descendant_of(column: &str, param_placeholder: &str) -> String {
+    #[cfg(windows)]
+    {
+        // Strip Windows verbatim prefixes (`\\?\UNC\` -> `\\`, `\\?\X:` -> `X:`) and unify slashes.
+        let unverbatim = format!(
+            "(CASE \
+             WHEN substr({col}, 1, 8) = '\\\\?\\UNC\\' THEN '//' || substr({col}, 9) \
+             WHEN substr({col}, 1, 4) = '\\\\?\\' AND substr({col}, 6, 1) = ':' THEN substr({col}, 5) \
+             ELSE {col} END)",
+            col = column
+        );
+        let slash_col = format!("replace({unverbatim}, '\\', '/')");
+        let trimmed_col = format!(
+            "(CASE WHEN {s} = '/' OR (length({s}) = 3 AND substr({s}, 2, 2) = ':/') THEN {s} ELSE rtrim({s}, '/') END)",
+            s = slash_col
+        );
+        format!(
+            "({param} != '' AND (\
+             {norm} = {param} COLLATE NOCASE \
+             OR (substr({param}, length({param}), 1) = '/' AND substr({norm}, 1, length({param})) = {param} COLLATE NOCASE) \
+             OR (substr({param}, length({param}), 1) != '/' AND substr({norm}, 1, length({param}) + 1) = ({param} || '/') COLLATE NOCASE) \
+             OR {col} LIKE '%..%' OR {col} LIKE '%/.%' OR {col} LIKE '%\\.%' \
+             OR {col} LIKE '%//%' OR substr({col}, 5) LIKE '%\\\\%' \
+             OR {col} GLOB '*[^ -~]*' OR {param} GLOB '*[^ -~]*'))",
+            col = column,
+            norm = trimmed_col,
+            param = param_placeholder
+        )
+    }
+
+    #[cfg(not(windows))]
+    {
+        let trimmed_col = format!(
+            "(CASE WHEN {col} = '/' THEN '/' ELSE rtrim({col}, '/') END)",
+            col = column
+        );
+        format!(
+            "({param} != '' AND (\
+             {norm} = {param} \
+             OR ({param} = '/' AND substr({norm}, 1, 1) = '/') \
+             OR ({param} != '/' AND substr({norm}, 1, length({param}) + 1) = {param} || '/') \
+             OR {col} LIKE '%..%' OR {col} LIKE '%/.%' OR {col} LIKE '%//%'))",
+            col = column,
+            norm = trimmed_col,
+            param = param_placeholder
+        )
+    }
+}
+
 pub(super) async fn execute_batched_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     paths: &[String],
@@ -41,16 +119,25 @@ pub(super) async fn execute_batched_in(
 }
 
 pub(crate) fn filter_paths_within_folder(paths: Vec<String>, folder: &str) -> Vec<String> {
-    let norm_folder = crate::media::paths::normalize_path_lexical(std::path::Path::new(folder));
+    let folder = std::path::Path::new(folder);
     paths
         .into_iter()
-        .filter(|path| {
-            crate::media::paths::path_is_within_lexical(
-                &crate::media::paths::normalize_path_lexical(std::path::Path::new(path)),
-                &norm_folder,
-            )
-        })
+        .filter(|path| crate::media::paths::path_is_within(std::path::Path::new(path), folder))
         .collect()
+}
+
+#[cfg(test)]
+pub(crate) async fn test_pool() -> sqlx::SqlitePool {
+    let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&format!(
+            "sqlite:file:{database_name}?mode=memory&cache=private"
+        ))
+        .await
+        .unwrap();
+    sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+    pool
 }
 
 #[cfg(test)]

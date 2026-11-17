@@ -1,15 +1,17 @@
 //! Tauri-facing sync service facade.
 
 use crate::{
-    app::events::log_to_ui_error,
+    app::events::{log_to_ui_error, log_to_ui_folder, log_to_ui_folder_error, log_to_ui_key},
     audit::SyncAuditContext,
     auth, db,
     immich::ImmichSession,
     media::{
-        events::log_overlapping_folders, model::ScanResult, scanner::scan_watched_folders_for_media,
+        events::log_overlapping_folders,
+        model::ScanResult,
+        scanner::{prepare_failed_sync_retry, scan_watched_folders_for_media},
     },
     sync::{
-        lifecycle::{LifecycleClaim, SynchronizationLifecycle},
+        lifecycle::LifecycleClaim,
         queue_runner::{run_sync_pipeline, SyncPipelineParams},
         reporter::DesktopServiceReporter,
         SyncRuntime,
@@ -52,6 +54,10 @@ impl SyncSource {
     pub(crate) const fn is_manual(self) -> bool {
         matches!(self, Self::Manual | Self::RetryFailed)
     }
+
+    const fn logs_scanning_folders(self) -> bool {
+        matches!(self, Self::Manual | Self::Startup)
+    }
 }
 
 /// The synchronization application service.
@@ -76,10 +82,6 @@ impl<'a> Synchronization<'a> {
         self.runtime.pool()
     }
 
-    fn lifecycle(&self) -> SynchronizationLifecycle<'_> {
-        SynchronizationLifecycle::new(self.runtime)
-    }
-
     fn reporter(&self) -> DesktopServiceReporter {
         DesktopServiceReporter::new(self.app.clone())
     }
@@ -96,15 +98,19 @@ impl<'a> Synchronization<'a> {
     }
 
     /// The scan-and-admit entry point for producers that have Watched Folders to
-    /// scan: logs each folder, scans for Media Assets, logs scan failures, and
-    /// admits the result into Synchronization.
+    /// scan: emits source-specific scanning logs, scans for Media Assets, handles
+    /// scan failures, and admits the result into Synchronization.
     pub(crate) async fn scan_and_admit(
         &self,
         folders: Vec<db::WatchedFolder>,
         source: SyncSource,
     ) -> Result<Option<crate::sync::SyncSummary>, String> {
-        let scan_result = scan_folders_with_logging(self.app, folders).await?;
-        self.admit_and_run(scan_result, source).await
+        let scan_result = scan_folders_with_logging(self.app, folders, source).await?;
+        match self.admit_and_run(scan_result, source).await {
+            Ok(summary) => Ok(summary),
+            Err(_) if !source.is_manual() => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 
     pub(crate) async fn retry(&self) -> Result<crate::sync::SyncSummary, String> {
@@ -117,8 +123,8 @@ impl<'a> Synchronization<'a> {
         let folders = db::get_folders(self.pool())
             .await
             .map_err(|error| error.to_string())?;
-        let scan_result = crate::sync::prepare_failed_sync_retry(failed_paths, folders).await?;
-        self.lifecycle()
+        let scan_result = prepare_failed_sync_retry(failed_paths, folders).await?;
+        self.runtime
             .discard_failed(&scan_result.discarded_paths)
             .await?;
         Ok(self
@@ -137,9 +143,8 @@ impl<'a> Synchronization<'a> {
         source: SyncSource,
     ) -> Result<Option<crate::sync::SyncSummary>, String> {
         log_overlapping_folders(self.app, &scan_result);
-        let lifecycle = self.lifecycle();
         let reporter = self.reporter();
-        let (admitted, claim) = lifecycle.admit_and_claim(&scan_result).await?;
+        let (admitted, claim) = self.runtime.admit_and_claim(&scan_result).await?;
         if let Some(snapshot) = admitted {
             reporter.progressed(&snapshot);
         }
@@ -151,10 +156,7 @@ impl<'a> Synchronization<'a> {
         let params = self.pipeline_params(source).await?;
 
         if source.is_manual() {
-            match run_sync_pipeline(params).await {
-                Ok(summary) => Ok(Some(summary)),
-                Err(error) => self.fail_run(source, &error).await,
-            }
+            run_sync_pipeline(params).await.map(Some)
         } else {
             spawn_sync_runner(params);
             Ok(None)
@@ -203,17 +205,17 @@ impl<'a> Synchronization<'a> {
     }
 
     pub(crate) async fn pause(&self) -> Result<db::SyncSnapshot, String> {
-        let snapshot = self.lifecycle().pause().await?;
+        let snapshot = self.runtime.pause().await?;
         self.reporter().paused(&snapshot);
         Ok(snapshot)
     }
 
     pub(crate) async fn resume(&self) -> Result<db::SyncSnapshot, String> {
-        let previous = self.lifecycle().status().await?;
+        let previous = self.runtime.status().await?;
         if previous.status != db::SyncJobStatus::Paused {
             return Ok(previous);
         }
-        let snapshot = self.lifecycle().resume().await?;
+        let snapshot = self.runtime.resume().await?;
         self.reporter().resumed(&snapshot);
         self.resume_recovered_work(&snapshot).await
     }
@@ -225,11 +227,13 @@ impl<'a> Synchronization<'a> {
         if snapshot.status != db::SyncJobStatus::Running {
             return Ok(snapshot.clone());
         }
-        let lifecycle = self.lifecycle();
-        if !matches!(lifecycle.start_or_join().await?, LifecycleClaim::Started(_)) {
-            return lifecycle.status().await.map_err(Into::into);
+        if !matches!(
+            self.runtime.start_or_join().await?,
+            LifecycleClaim::Started(_)
+        ) {
+            return self.runtime.status().await.map_err(Into::into);
         }
-        match lifecycle.complete().await {
+        match self.runtime.complete().await {
             Ok(Some(completed)) => {
                 self.reporter().progressed(&completed);
                 return Ok(completed);
@@ -248,18 +252,14 @@ impl<'a> Synchronization<'a> {
     }
 
     pub(crate) async fn status(&self) -> Result<db::SyncSnapshot, String> {
-        self.lifecycle().status().await.map_err(Into::into)
+        self.runtime.status().await.map_err(Into::into)
     }
 }
 
 fn spawn_sync_runner(params: SyncPipelineParams) {
     let app = params.app.clone();
-    let runtime = params.runtime.clone();
-    let source = params.source;
     tauri::async_runtime::spawn(async move {
-        let result = run_sync_pipeline(params).await;
-        if let Err(error) = result {
-            fail_sync_run(&app, &runtime, source, &error).await;
+        if let Err(error) = run_sync_pipeline(params).await {
             DesktopServiceReporter::new(app).error(&error);
         }
     });
@@ -271,7 +271,7 @@ async fn fail_sync_run<R: Runtime>(
     source: SyncSource,
     error: &str,
 ) {
-    let snapshot = SynchronizationLifecycle::new(runtime).fail().await.ok();
+    let snapshot = runtime.fail().await.ok();
     DesktopServiceReporter::new(app.clone()).failed(source, snapshot.as_ref(), error);
 }
 
@@ -303,7 +303,7 @@ fn prepare_manual_sync<R: Runtime>(
     folders: &[db::WatchedFolder],
 ) -> Result<(), String> {
     ensure_sync_has_folders(folders)?;
-    crate::app::events::log_to_ui_key(
+    log_to_ui_key(
         app,
         "INFO",
         "Starting manual synchronization...",
@@ -315,13 +315,15 @@ fn prepare_manual_sync<R: Runtime>(
 async fn scan_folders_with_logging<R: Runtime>(
     app: &tauri::AppHandle<R>,
     folders: Vec<db::WatchedFolder>,
+    source: SyncSource,
 ) -> Result<ScanResult, String> {
-    scan_folders_with_logging_using(app, folders, scan_watched_folders_for_media).await
+    scan_folders_with_logging_using(app, folders, source, scan_watched_folders_for_media).await
 }
 
 async fn scan_folders_with_logging_using<R, Scan, ScanFuture>(
     app: &tauri::AppHandle<R>,
     folders: Vec<db::WatchedFolder>,
+    source: SyncSource,
     scan: Scan,
 ) -> Result<ScanResult, String>
 where
@@ -329,25 +331,49 @@ where
     Scan: FnOnce(Vec<db::WatchedFolder>) -> ScanFuture,
     ScanFuture: std::future::Future<Output = Result<ScanResult, String>>,
 {
-    for folder in &folders {
-        crate::app::events::log_to_ui_folder(
-            app,
-            "INFO",
-            &format!("Scanning folder: {}", folder.path),
-            "log_scanning_folder",
-            &folder.path,
-        );
+    if source.logs_scanning_folders() {
+        for folder in &folders {
+            log_to_ui_folder(
+                app,
+                "INFO",
+                &format!("Scanning folder: {}", folder.path),
+                "log_scanning_folder",
+                &folder.path,
+            );
+        }
     }
+    let single_folder_path = (folders.len() == 1).then(|| folders[0].path.clone());
     match scan(folders).await {
         Ok(scan_result) => Ok(scan_result),
         Err(error) => {
-            log_to_ui_error(
-                app,
-                "ERROR",
-                &format!("Folder scanning failed: {error}"),
-                "log_scan_folders_failed",
-                &error,
-            );
+            match source {
+                SyncSource::Startup | SyncSource::DeferredFolder => {
+                    log_to_ui_error(
+                        app,
+                        "ERROR",
+                        &format!("Folder scanning failed: {error}"),
+                        "log_scan_folders_failed",
+                        &error,
+                    );
+                }
+                SyncSource::FolderAdded | SyncSource::RemovableMediaReconnect => {
+                    if let Some(folder_path) = single_folder_path {
+                        log_to_ui_folder_error(
+                            app,
+                            "ERROR",
+                            &format!("Folder scanning failed for '{folder_path}': {error}"),
+                            "log_folder_scan_failed",
+                            &folder_path,
+                            &error,
+                        );
+                    }
+                }
+                SyncSource::Manual
+                | SyncSource::RetryFailed
+                | SyncSource::Watcher
+                | SyncSource::ExclusionPatternsChanged
+                | SyncSource::Recovery => {}
+            }
             Err(error)
         }
     }
@@ -411,65 +437,33 @@ fn queue_upload_asset(asset: crate::media::model::Asset) -> db::QueueUploadAsset
     }
 }
 
-/// Producer-facing Synchronization admission-and-run seam.
-pub(crate) async fn admit_and_run(
-    app: tauri::AppHandle,
-    scan_result: ScanResult,
-    source: SyncSource,
-) {
-    let synchronization = Synchronization::for_tauri(&app);
-    match synchronization.admit_and_run(scan_result, source).await {
-        Ok(_) => {}
-        Err(error) => {
-            if source.is_manual() {
-                DesktopServiceReporter::new(app)
-                    .error(&format!("Synchronization admission failed: {error}"));
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::media::model::Asset;
+    use crate::{db::test_pool, media::model::Asset};
     use tauri::Listener;
-
-    async fn test_pool() -> sqlx::SqlitePool {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        pool
-    }
 
     #[tokio::test]
     async fn lifecycle_persists_pause_and_resume_without_a_desktop_runtime() {
         let pool = test_pool().await;
         let runtime = SyncRuntime::new(pool, false);
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
 
         assert!(matches!(
-            lifecycle.start_or_join().await.unwrap(),
+            runtime.start_or_join().await.unwrap(),
             LifecycleClaim::Started(snapshot) if snapshot.status == db::SyncJobStatus::Running
         ));
         assert_eq!(
-            lifecycle.pause().await.unwrap().status,
+            runtime.pause().await.unwrap().status,
             db::SyncJobStatus::Paused
         );
         assert!(!runtime.can_start_work());
         assert_eq!(
-            lifecycle.resume().await.unwrap().status,
+            runtime.resume().await.unwrap().status,
             db::SyncJobStatus::Running
         );
         assert!(runtime.can_start_work());
         assert_eq!(
-            lifecycle.status().await.unwrap().status,
+            runtime.status().await.unwrap().status,
             db::SyncJobStatus::Running
         );
     }
@@ -479,7 +473,6 @@ mod tests {
         let pool = test_pool().await;
         db::add_folder(&pool, "C:/photos", None).await.unwrap();
         let runtime = SyncRuntime::new(pool.clone(), false);
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
 
         let result_for = |path: &str| ScanResult {
             files: vec![Asset {
@@ -495,7 +488,7 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(
-            lifecycle.start_or_join().await.unwrap(),
+            runtime.start_or_join().await.unwrap(),
             LifecycleClaim::Started(_)
         ));
 
@@ -503,7 +496,7 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(
-            lifecycle.start_or_join().await.unwrap(),
+            runtime.start_or_join().await.unwrap(),
             LifecycleClaim::Joined
         ));
         let queued = db::next_queued_upload_units(&pool, 10).await.unwrap();
@@ -527,10 +520,9 @@ mod tests {
         .unwrap();
         let runtime = SyncRuntime::new(pool.clone(), false);
         runtime.try_claim_run();
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
 
         assert_eq!(
-            lifecycle.fail().await.unwrap().status,
+            runtime.fail().await.unwrap().status,
             db::SyncJobStatus::Failed
         );
         assert!(db::has_pending_sync_queue_items(&pool).await.unwrap());
@@ -540,9 +532,8 @@ mod tests {
     async fn lifecycle_keeps_ownership_when_work_arrives_before_completion() {
         let pool = test_pool().await;
         let runtime = SyncRuntime::new(pool.clone(), false);
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
         assert!(matches!(
-            lifecycle.start_or_join().await.unwrap(),
+            runtime.start_or_join().await.unwrap(),
             LifecycleClaim::Started(_)
         ));
         db::enqueue_sync_assets(
@@ -557,10 +548,10 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(lifecycle.complete().await.unwrap().is_none());
+        assert!(runtime.complete().await.unwrap().is_none());
         assert!(runtime.is_running());
         assert!(matches!(
-            lifecycle.start_or_join().await.unwrap(),
+            runtime.start_or_join().await.unwrap(),
             LifecycleClaim::Joined
         ));
     }
@@ -569,7 +560,6 @@ mod tests {
     async fn failed_run_keeps_pending_work_when_new_work_is_admitted() {
         let pool = test_pool().await;
         let runtime = SyncRuntime::new(pool.clone(), false);
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
         let first = db::QueueAsset {
             path: "first.jpg",
             size: 1,
@@ -577,8 +567,8 @@ mod tests {
             target_album_id: None,
         };
         db::enqueue_sync_assets(&pool, &[first], &[]).await.unwrap();
-        lifecycle.start_or_join().await.unwrap();
-        lifecycle.fail().await.unwrap();
+        runtime.start_or_join().await.unwrap();
+        runtime.fail().await.unwrap();
         let second = db::QueueAsset {
             path: "second.jpg",
             size: 1,
@@ -589,7 +579,7 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(
-            lifecycle.start_or_join().await.unwrap(),
+            runtime.start_or_join().await.unwrap(),
             LifecycleClaim::Started(_)
         ));
         assert_eq!(
@@ -626,14 +616,13 @@ mod tests {
             .unwrap();
         let (runtime, recovered) = SyncRuntime::recover(pool.clone()).await.unwrap();
         assert_eq!(recovered.status, db::SyncJobStatus::Paused);
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
         assert!(matches!(
-            lifecycle.start_or_join().await.unwrap(),
+            runtime.start_or_join().await.unwrap(),
             LifecycleClaim::Paused
         ));
-        lifecycle.resume().await.unwrap();
+        runtime.resume().await.unwrap();
         assert!(matches!(
-            lifecycle.start_or_join().await.unwrap(),
+            runtime.start_or_join().await.unwrap(),
             LifecycleClaim::Started(_)
         ));
         assert_eq!(
@@ -656,9 +645,8 @@ mod tests {
             .unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
         let runtime = SyncRuntime::new(pool.clone(), false);
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
-        lifecycle.start_or_join().await.unwrap();
-        let (completion, claim) = tokio::join!(lifecycle.complete(), async {
+        runtime.start_or_join().await.unwrap();
+        let (completion, claim) = tokio::join!(runtime.complete(), async {
             db::enqueue_sync_assets(
                 &pool,
                 &[db::QueueAsset {
@@ -671,7 +659,7 @@ mod tests {
             )
             .await
             .unwrap();
-            lifecycle.start_or_join().await.unwrap()
+            runtime.start_or_join().await.unwrap()
         });
         match completion.unwrap() {
             Some(_) => assert!(matches!(claim, LifecycleClaim::Started(_))),
@@ -709,8 +697,7 @@ mod tests {
             .unwrap();
         let runtime = SyncRuntime::new(pool.clone(), false);
         runtime.try_claim_run();
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
-        assert!(lifecycle.complete().await.unwrap().is_some());
+        assert!(runtime.complete().await.unwrap().is_some());
         db::enqueue_sync_assets(
             &pool,
             &[db::QueueAsset {
@@ -806,13 +793,12 @@ mod tests {
         .await
         .unwrap();
         let runtime = SyncRuntime::new(pool.clone(), false);
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
-        lifecycle.start_or_join().await.unwrap();
+        runtime.start_or_join().await.unwrap();
         db::discard_sync_data_in_folder(&pool, "C:/photos")
             .await
             .unwrap();
         assert_eq!(
-            lifecycle
+            runtime
                 .complete()
                 .await
                 .unwrap()
@@ -839,8 +825,7 @@ mod tests {
         .await
         .unwrap();
         let runtime = SyncRuntime::new(pool.clone(), false);
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
-        lifecycle.start_or_join().await.unwrap();
+        runtime.start_or_join().await.unwrap();
         db::finalize_queued_block(&pool, &[("first.jpg".into(), "SYNCED".into())])
             .await
             .unwrap();
@@ -878,10 +863,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            SynchronizationLifecycle::recover(&pool)
-                .await
-                .unwrap()
-                .status,
+            SyncRuntime::recover_snapshot(&pool).await.unwrap().status,
             db::SyncJobStatus::Paused
         );
     }
@@ -908,16 +890,15 @@ mod tests {
             .await
             .unwrap();
         let runtime = SyncRuntime::new(pool.clone(), false);
-        let lifecycle = SynchronizationLifecycle::new(&runtime);
-        lifecycle.pause().await.unwrap();
-        let (_, claim) = lifecycle
+        runtime.pause().await.unwrap();
+        let (_, claim) = runtime
             .admit_and_claim(&ScanResult::default())
             .await
             .unwrap();
         assert!(matches!(claim, LifecycleClaim::Paused));
         assert!(!runtime.is_running());
-        lifecycle.resume().await.unwrap();
-        let (_, claim) = lifecycle
+        runtime.resume().await.unwrap();
+        let (_, claim) = runtime
             .admit_and_claim(&ScanResult::default())
             .await
             .unwrap();
@@ -1025,16 +1006,7 @@ mod tests {
 
     #[tokio::test]
     async fn sync_folder_guard_rejects_an_empty_database() {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{}?mode=memory&cache=private",
-                database_name
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let pool = test_pool().await;
 
         let folders = db::get_folders(&pool).await.unwrap();
         assert_eq!(
@@ -1114,7 +1086,7 @@ mod tests {
             },
         ];
 
-        let scan_result = scan_folders_with_logging(app.handle(), folders)
+        let scan_result = scan_folders_with_logging(app.handle(), folders, SyncSource::Startup)
             .await
             .unwrap();
 
@@ -1148,7 +1120,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn scan_folders_with_logging_emits_failure_log_key_on_scan_error() {
+    async fn scan_folders_with_logging_preserves_per_source_ui_log_keys() {
         let app = tauri::test::mock_app();
         let logs = crate::app::events::CapturedUiLogs::listen(app.handle());
         let folder = db::WatchedFolder {
@@ -1159,12 +1131,14 @@ mod tests {
             exclusion_patterns: vec![],
         };
 
-        let err = scan_folders_with_logging_using(app.handle(), vec![folder], |_| async {
-            Err("scan exploded".to_string())
-        })
+        let err = scan_folders_with_logging_using(
+            app.handle(),
+            vec![folder.clone()],
+            SyncSource::Startup,
+            |_| async { Err("scan exploded".to_string()) },
+        )
         .await
         .unwrap_err();
-
         assert_eq!(err, "scan exploded");
         assert_eq!(logs.with_key("log_scanning_folder").len(), 1);
         let failure_logs = logs.with_key("log_scan_folders_failed");
@@ -1175,6 +1149,47 @@ mod tests {
             "Folder scanning failed: scan exploded"
         );
         assert_eq!(failure_logs[0]["params"]["error"], "scan exploded");
+
+        // DeferredFolder, ExclusionPatternsChanged, and FolderAdded do not add log_scanning_folder.
+        let deferred_err = scan_folders_with_logging_using(
+            app.handle(),
+            vec![folder.clone()],
+            SyncSource::DeferredFolder,
+            |_| async { Err("deferred boom".to_string()) },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(deferred_err, "deferred boom");
+        assert_eq!(logs.with_key("log_scanning_folder").len(), 1);
+        assert_eq!(logs.with_key("log_scan_folders_failed").len(), 2);
+
+        let added_err = scan_folders_with_logging_using(
+            app.handle(),
+            vec![folder.clone()],
+            SyncSource::FolderAdded,
+            |_| async { Err("added boom".to_string()) },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(added_err, "added boom");
+        assert_eq!(logs.with_key("log_scanning_folder").len(), 1);
+        let folder_logs = logs.with_key("log_folder_scan_failed");
+        assert_eq!(folder_logs.len(), 1);
+        assert_eq!(folder_logs[0]["params"]["folder"], "C:/photos");
+        assert_eq!(folder_logs[0]["params"]["error"], "added boom");
+
+        let excl_err = scan_folders_with_logging_using(
+            app.handle(),
+            vec![folder],
+            SyncSource::ExclusionPatternsChanged,
+            |_| async { Err("excl boom".to_string()) },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(excl_err, "excl boom");
+        assert_eq!(logs.with_key("log_scanning_folder").len(), 1);
+        assert_eq!(logs.with_key("log_scan_folders_failed").len(), 2);
+        assert_eq!(logs.with_key("log_folder_scan_failed").len(), 1);
     }
 
     #[test]

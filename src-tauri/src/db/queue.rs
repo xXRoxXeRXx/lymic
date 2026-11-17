@@ -532,9 +532,13 @@ pub async fn reset_failed_queue_items_for_folder(
     .await?
     .flatten();
 
-    let failed_queue_paths: Vec<String> = sqlx::query_scalar(
-        "SELECT local_path FROM sync_queue WHERE job_id = ? AND status = 'FAILED'",
-    )
+    let prefix = super::sql_folder_prefix(folder_path);
+    let path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
+
+    let failed_queue_paths: Vec<String> = sqlx::query_scalar(&format!(
+        "SELECT local_path FROM sync_queue WHERE job_id = ?2 AND status = 'FAILED' AND {path_cond}"
+    ))
+    .bind(&prefix)
     .bind(SINGLETON_SYNC_JOB_ID)
     .fetch_all(&mut *tx)
     .await?;
@@ -548,10 +552,12 @@ pub async fn reset_failed_queue_items_for_folder(
     })
     .await?;
 
-    let failed_state_paths: Vec<String> =
-        sqlx::query_scalar("SELECT local_path FROM sync_state WHERE status = 'FAILED'")
-            .fetch_all(&mut *tx)
-            .await?;
+    let failed_state_paths: Vec<String> = sqlx::query_scalar(&format!(
+        "SELECT local_path FROM sync_state WHERE status = 'FAILED' AND {path_cond}"
+    ))
+    .bind(&prefix)
+    .fetch_all(&mut *tx)
+    .await?;
     let matching_state_paths = super::filter_paths_within_folder(failed_state_paths, folder_path);
 
     super::execute_batched_in(&mut tx, &matching_state_paths, |query| {

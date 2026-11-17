@@ -12,8 +12,9 @@ use crate::{
     sync::{
         album_batch,
         completion::{self, PendingAlbumUnit, UploadUnitCompletion},
+        reporter::DesktopRunProgress,
         retry::check_assets_exist_with_backoff,
-        CurrentFileProgress, JobByteProgress, ProcessingContext, SyncRuntime,
+        ProcessingContext, SyncRuntime,
     },
 };
 use futures::{future, stream::FuturesUnordered, StreamExt};
@@ -21,7 +22,7 @@ use serde_json::json;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-#[derive(serde::Serialize, Default)]
+#[derive(Debug, serde::Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SyncSummary {
     pub(crate) processed: usize,
@@ -50,8 +51,7 @@ pub(crate) struct SyncRunContext<R: tauri::Runtime = tauri::Wry> {
     pub(crate) runtime: SyncRuntime,
     pub(crate) client: Arc<ImmichClient>,
     pub(crate) audit_context: SyncAuditContext,
-    pub(crate) progress: JobByteProgress,
-    pub(crate) current_file_progress: CurrentFileProgress,
+    pub(crate) progress: DesktopRunProgress<R>,
     pub(crate) sidecar_cache: SidecarDirectoryCache,
 }
 
@@ -63,7 +63,6 @@ impl<R: tauri::Runtime> Clone for SyncRunContext<R> {
             client: self.client.clone(),
             audit_context: self.audit_context.clone(),
             progress: self.progress.clone(),
-            current_file_progress: self.current_file_progress.clone(),
             sidecar_cache: self.sidecar_cache.clone(),
         }
     }
@@ -349,7 +348,7 @@ impl<R: tauri::Runtime> RunProcessor<R> {
                 queue_results.extend_from_slice(completion.queue_results());
             }
         }
-        self.run.progress.advance(&self.run.app, unit.byte_size());
+        self.run.progress.advance_bytes(unit.byte_size());
         Ok(())
     }
 
@@ -382,7 +381,7 @@ impl<R: tauri::Runtime> RunProcessor<R> {
         );
         let failure = completion::fail_upload_unit(self.run.pool(), &unit, &error_msg).await?;
         queue_results.extend_from_slice(failure.queue_results());
-        self.run.progress.advance(&self.run.app, unit.byte_size());
+        self.run.progress.advance_bytes(unit.byte_size());
         Ok(())
     }
 
@@ -597,7 +596,7 @@ async fn hash_unit<R: tauri::Runtime>(unit: UploadUnit, run: SyncRunContext<R>) 
                 &error,
             );
             audit_event(app, audit_context.event("file.hash.failed", audit::Outcome::Failure, audit::Severity::Error, "File hashing failed", json!({ "local_paths": paths, "failure_reason": audit_context.safe_error(&error) })));
-            progress.advance(app, unit.assets().map(|asset| asset.size).sum());
+            progress.advance_bytes(unit.assets().map(|asset| asset.size).sum());
             HashOutcome {
                 unit: None,
                 queue_results: unit
@@ -623,7 +622,6 @@ async fn upload_unit<R: tauri::Runtime>(
     let pool = run.pool();
     let app = &run.app;
     let progress = &run.progress;
-    let current_file_progress = &run.current_file_progress;
     let audit_context = &run.audit_context;
     let image_hash = unit.image.checksums.as_ref().unwrap().sha1_base64.clone();
     let video_path = unit
@@ -654,7 +652,7 @@ async fn upload_unit<R: tauri::Runtime>(
             details,
         ),
     );
-    current_file_progress.emit(app, &unit.image.path);
+    progress.report_current_file(&unit.image.path);
 
     let upload = run.client.upload_asset_with_live_photo(
         &unit.image.path,
@@ -759,7 +757,7 @@ async fn upload_unit<R: tauri::Runtime>(
             details,
         ),
     );
-    progress.advance(app, unit.byte_size());
+    progress.advance_bytes(unit.byte_size());
     let queue_results = durable_queue_results.unwrap_or_else(|| {
         if pending_album_unit.is_some() {
             return Vec::new();
@@ -950,18 +948,7 @@ mod tests {
         assert_eq!(BULK_CHECK_CHUNK_SIZE, 100);
     }
 
-    async fn test_pool() -> sqlx::SqlitePool {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        pool
-    }
+    use crate::db::test_pool;
 
     #[tokio::test]
     async fn pause_before_hashing_prevents_new_hashes() {
@@ -1220,8 +1207,11 @@ mod tests {
             runtime: runtime.clone(),
             client,
             audit_context,
-            progress: JobByteProgress::new(size, 0),
-            current_file_progress: CurrentFileProgress::default(),
+            progress: DesktopRunProgress::new(
+                app.handle().clone(),
+                crate::sync::JobByteProgress::new(size, 0),
+                crate::sync::CurrentFileProgress::default(),
+            ),
             sidecar_cache: crate::immich::SidecarDirectoryCache::new(),
         })
         .await

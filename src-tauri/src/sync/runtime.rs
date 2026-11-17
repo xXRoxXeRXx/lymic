@@ -46,7 +46,7 @@ impl SyncRuntime {
     pub(crate) async fn recover(
         pool: sqlx::SqlitePool,
     ) -> Result<(Self, db::SyncSnapshot), sqlx::Error> {
-        let snapshot = crate::sync::lifecycle::SynchronizationLifecycle::recover(&pool).await?;
+        let snapshot = Self::recover_snapshot(&pool).await?;
         let runtime = Self::new(pool, snapshot.status == db::SyncJobStatus::Paused);
         Ok((runtime, snapshot))
     }
@@ -135,12 +135,12 @@ impl SyncRuntime {
         }
     }
 
-    pub(crate) fn has_active_work_in(&self, folder: &str) -> bool {
+    fn has_in_flight_work_in(&self, folder: &str) -> bool {
         self.inner.active_work.has_work_in(folder)
     }
 
     pub(crate) async fn has_work_in_folder(&self, folder: &str) -> Result<bool, String> {
-        if self.has_active_work_in(folder) {
+        if self.has_in_flight_work_in(folder) {
             return Ok(true);
         }
         db::has_sync_work_in_folder(&self.inner.pool, folder)
@@ -197,19 +197,6 @@ mod tests {
         Arc,
     };
 
-    async fn test_pool() -> sqlx::SqlitePool {
-        let database_name = format!("lymic_runtime_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        pool
-    }
-
     fn unit(path: &str) -> UploadUnit {
         UploadUnit {
             image: Asset {
@@ -225,7 +212,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_handle_gates_work_until_resumed() {
-        let pool = test_pool().await;
+        let pool = db::test_pool().await;
         let runtime = SyncRuntime::new(pool, true);
         assert!(!runtime.can_start_work());
 
@@ -243,13 +230,13 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_handle_tracks_and_cancels_active_work_by_folder() {
-        let pool = test_pool().await;
+        let pool = db::test_pool().await;
         let runtime = SyncRuntime::new(pool, false);
         let photos_unit = unit("C:/Photos/active.jpg");
         let videos_unit = unit("C:/Videos/active.jpg");
         let lease = runtime.acquire_active_work(&[photos_unit.clone(), videos_unit.clone()]);
 
-        assert!(runtime.has_active_work_in("C:/Photos"));
+        assert!(runtime.has_in_flight_work_in("C:/Photos"));
         assert!(runtime.has_work_in_folder("C:/Photos").await.unwrap());
 
         runtime.cancel_work_in("C:/Photos");
@@ -258,13 +245,13 @@ mod tests {
         assert!(!lease.context().for_upload_unit(&videos_unit).is_cancelled());
 
         drop(lease);
-        assert!(!runtime.has_active_work_in("C:/Photos"));
+        assert!(!runtime.has_in_flight_work_in("C:/Photos"));
         assert!(!runtime.has_work_in_folder("C:/Photos").await.unwrap());
     }
 
     #[tokio::test]
     async fn runtime_handle_recovery_initializes_paused_state_from_persisted_work() {
-        let pool = test_pool().await;
+        let pool = db::test_pool().await;
         db::enqueue_sync_assets(
             &pool,
             &[db::QueueAsset {
@@ -286,7 +273,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_handle_run_lock_notifies_only_when_contended() {
-        let pool = test_pool().await;
+        let pool = db::test_pool().await;
         let runtime = SyncRuntime::new(pool, false);
 
         let waited_first = Arc::new(AtomicBool::new(false));

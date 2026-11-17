@@ -1,4 +1,4 @@
-//! Ownership and durable transitions for the synchronization runner.
+//! Durable synchronization state transitions on `SyncRuntime`.
 
 use crate::{
     db::{self, SyncJobStatus},
@@ -42,41 +42,19 @@ pub(crate) enum LifecycleClaim {
     NoWork,
 }
 
-/// Durable synchronization state transitions, independent of the desktop shell.
-///
-/// `Synchronization` owns the surrounding desktop orchestration; this smaller
-/// collaborator is deliberately kept free of Tauri so its state-machine
-/// contract can be exercised against the real SQLite schema.
-pub(crate) struct SynchronizationLifecycle<'a> {
-    runtime: &'a SyncRuntime,
-}
-
 impl SyncRuntime {
-    pub(crate) async fn status(&self) -> Result<db::SyncSnapshot, LifecycleError> {
-        SynchronizationLifecycle::new(self).status().await
-    }
-
-    pub(crate) async fn discard_folder(&self, path: &str) -> Result<(), LifecycleError> {
-        SynchronizationLifecycle::new(self)
-            .discard_folder(path)
-            .await
-    }
-}
-
-impl<'a> SynchronizationLifecycle<'a> {
-    pub(crate) async fn recover(pool: &sqlx::SqlitePool) -> Result<db::SyncSnapshot, sqlx::Error> {
+    pub(crate) async fn recover_snapshot(
+        pool: &sqlx::SqlitePool,
+    ) -> Result<db::SyncSnapshot, sqlx::Error> {
         // In-flight transfers and admitted-but-unclaimed work require confirmation after restart.
         sqlx::query("UPDATE sync_jobs SET status = 'PAUSED' WHERE id = 1 AND (status = 'RUNNING' OR (status IN ('IDLE', 'FAILED') AND EXISTS(SELECT 1 FROM sync_queue WHERE job_id = 1 AND status = 'PENDING')))")
-            .execute(pool).await?;
+            .execute(pool)
+            .await?;
         db::get_sync_snapshot(pool).await
     }
 
-    pub(crate) fn new(runtime: &'a SyncRuntime) -> Self {
-        Self { runtime }
-    }
-
     pub(crate) async fn start_or_join(&self) -> Result<LifecycleClaim, LifecycleError> {
-        let _guard = self.runtime.lock_lifecycle().await;
+        let _guard = self.lock_lifecycle().await;
         self.start_or_join_locked().await
     }
 
@@ -85,14 +63,14 @@ impl<'a> SynchronizationLifecycle<'a> {
         if current.status == SyncJobStatus::Paused {
             return Ok(LifecycleClaim::Paused);
         }
-        if !self.runtime.try_claim_run() {
+        if !self.try_claim_run() {
             return Ok(LifecycleClaim::Joined);
         }
 
-        match db::set_sync_status(self.runtime.pool(), SyncJobStatus::Running).await {
+        match db::set_sync_status(self.pool(), SyncJobStatus::Running).await {
             Ok(snapshot) => Ok(LifecycleClaim::Started(snapshot)),
             Err(error) => {
-                self.runtime.clear_running();
+                self.clear_running();
                 Err(error.into())
             }
         }
@@ -102,8 +80,8 @@ impl<'a> SynchronizationLifecycle<'a> {
         &self,
         scan: &crate::media::model::ScanResult,
     ) -> Result<(Option<db::SyncSnapshot>, LifecycleClaim), LifecycleError> {
-        let _guard = self.runtime.lock_lifecycle().await;
-        let pool = self.runtime.pool();
+        let _guard = self.lock_lifecycle().await;
+        let pool = self.pool();
         let admitted = if scan.files.is_empty() && scan.failures.is_empty() {
             if !db::has_pending_sync_queue_items(pool).await? {
                 return Ok((None, LifecycleClaim::NoWork));
@@ -120,20 +98,20 @@ impl<'a> SynchronizationLifecycle<'a> {
     }
 
     pub(crate) async fn discard_failed(&self, paths: &[String]) -> Result<(), LifecycleError> {
-        let _guard = self.runtime.lock_lifecycle().await;
-        db::discard_failed_sync_paths(self.runtime.pool(), paths).await?;
+        let _guard = self.lock_lifecycle().await;
+        db::discard_failed_sync_paths(self.pool(), paths).await?;
         self.reconcile_empty_job().await
     }
 
     pub(crate) async fn discard_folder(&self, path: &str) -> Result<(), LifecycleError> {
-        let _guard = self.runtime.lock_lifecycle().await;
-        db::discard_sync_data_in_folder(self.runtime.pool(), path).await?;
+        let _guard = self.lock_lifecycle().await;
+        db::discard_sync_data_in_folder(self.pool(), path).await?;
         self.reconcile_empty_job().await
     }
 
     async fn reconcile_empty_job(&self) -> Result<(), LifecycleError> {
-        let pool = self.runtime.pool();
-        if !self.runtime.is_running()
+        let pool = self.pool();
+        if !self.is_running()
             && self.status().await?.status != SyncJobStatus::Paused
             && !db::has_pending_sync_queue_items(pool).await?
         {
@@ -143,45 +121,45 @@ impl<'a> SynchronizationLifecycle<'a> {
     }
 
     pub(crate) async fn complete(&self) -> Result<Option<db::SyncSnapshot>, LifecycleError> {
-        let _guard = self.runtime.lock_lifecycle().await;
-        let snapshot = db::complete_sync_job_if_finished(self.runtime.pool()).await?;
+        let _guard = self.lock_lifecycle().await;
+        let snapshot = db::complete_sync_job_if_finished(self.pool()).await?;
         if snapshot.is_some() {
-            self.runtime.clear_running();
+            self.clear_running();
         }
         Ok(snapshot)
     }
 
     pub(crate) async fn fail(&self) -> Result<db::SyncSnapshot, LifecycleError> {
-        let _guard = self.runtime.lock_lifecycle().await;
-        let result = db::set_sync_status(self.runtime.pool(), SyncJobStatus::Failed)
+        let _guard = self.lock_lifecycle().await;
+        let result = db::set_sync_status(self.pool(), SyncJobStatus::Failed)
             .await
             .map_err(LifecycleError::from);
-        self.runtime.clear_running();
-        self.runtime.resume_work();
+        self.clear_running();
+        self.resume_work();
         result
     }
 
     pub(crate) async fn pause(&self) -> Result<db::SyncSnapshot, LifecycleError> {
-        let _guard = self.runtime.lock_lifecycle().await;
-        let snapshot = db::set_sync_status(self.runtime.pool(), SyncJobStatus::Paused).await?;
-        self.runtime.pause_work();
+        let _guard = self.lock_lifecycle().await;
+        let snapshot = db::set_sync_status(self.pool(), SyncJobStatus::Paused).await?;
+        self.pause_work();
         Ok(snapshot)
     }
 
     pub(crate) async fn resume(&self) -> Result<db::SyncSnapshot, LifecycleError> {
-        let _guard = self.runtime.lock_lifecycle().await;
+        let _guard = self.lock_lifecycle().await;
         let snapshot = self.status().await?;
         if snapshot.status != SyncJobStatus::Paused {
             return Ok(snapshot);
         }
 
-        let snapshot = db::set_sync_status(self.runtime.pool(), SyncJobStatus::Running).await?;
-        self.runtime.resume_work();
+        let snapshot = db::set_sync_status(self.pool(), SyncJobStatus::Running).await?;
+        self.resume_work();
         Ok(snapshot)
     }
 
     pub(crate) async fn status(&self) -> Result<db::SyncSnapshot, LifecycleError> {
-        db::get_sync_snapshot(self.runtime.pool())
+        db::get_sync_snapshot(self.pool())
             .await
             .map_err(LifecycleError::from)
     }

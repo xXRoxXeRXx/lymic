@@ -140,6 +140,47 @@ async fn eval_db_within(folder_path: &str, candidate_path: &str) -> bool {
         );
     }
 
+    let sql_cond = crate::db::sql_path_is_or_descendant_of("path", "?1");
+    let sql_prefix = crate::db::sql_folder_prefix(folder_path);
+    sqlx::query("CREATE TEMP TABLE IF NOT EXISTS probe_paths (path TEXT NOT NULL)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM probe_paths")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO probe_paths (path) VALUES (?1)")
+        .bind(candidate_path)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let sql_matched: bool = sqlx::query_scalar(&format!(
+        "SELECT EXISTS(SELECT 1 FROM probe_paths WHERE {sql_cond})"
+    ))
+    .bind(&sql_prefix)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    if has_work {
+        assert!(
+            sql_matched,
+            "sql_path_is_or_descendant_of dropped a matching path: folder={folder_path:?}, candidate={candidate_path:?}"
+        );
+    }
+    if candidate_path.is_ascii()
+        && folder_path.is_ascii()
+        && !candidate_path.contains("..")
+        && !candidate_path.contains("/.")
+        && !candidate_path.contains("\\.")
+        && !has_work
+    {
+        assert!(
+            !sql_matched,
+            "sql_path_is_or_descendant_of failed to reject non-matching ASCII path in SQL: folder={folder_path:?}, candidate={candidate_path:?}"
+        );
+    }
+
     has_work
 }
 

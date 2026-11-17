@@ -2,7 +2,9 @@
 
 use crate::{
     app::{
-        events::{emit_sync_error, log_to_ui_key, send_notification_keyed},
+        events::{
+            emit_sync_error, log_to_ui_key, send_notification_keyed_with, show_os_notification,
+        },
         locale::{backend_translations, LocaleState},
         tray,
     },
@@ -15,7 +17,10 @@ use crate::{
     },
 };
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tauri::{Emitter, Manager};
 
 /// Owns side effects emitted when a Synchronization run transitions state.
@@ -26,6 +31,7 @@ pub(crate) trait SyncRunReporter {
     fn resumed(&self, snapshot: &db::SyncSnapshot);
     fn progressed(&self, snapshot: &db::SyncSnapshot);
     fn completed(&self, snapshot: &db::SyncSnapshot, totals: &SyncSummary);
+    fn failed(&self, snapshot: Option<&db::SyncSnapshot>, error: &str);
 }
 
 fn snapshot_byte_totals(snapshot: &db::SyncSnapshot) -> (u64, u64) {
@@ -35,10 +41,71 @@ fn snapshot_byte_totals(snapshot: &db::SyncSnapshot) -> (u64, u64) {
     )
 }
 
+/// Publishes per-file and per-byte progress events for an active run.
+pub(crate) struct DesktopRunProgress<R: tauri::Runtime = tauri::Wry> {
+    app: tauri::AppHandle<R>,
+    byte_progress: JobByteProgress,
+    current_file: CurrentFileProgress,
+}
+
+impl<R: tauri::Runtime> Clone for DesktopRunProgress<R> {
+    fn clone(&self) -> Self {
+        Self {
+            app: self.app.clone(),
+            byte_progress: self.byte_progress.clone(),
+            current_file: self.current_file.clone(),
+        }
+    }
+}
+
+impl<R: tauri::Runtime> DesktopRunProgress<R> {
+    pub(crate) fn new(
+        app: tauri::AppHandle<R>,
+        byte_progress: JobByteProgress,
+        current_file: CurrentFileProgress,
+    ) -> Self {
+        Self {
+            app,
+            byte_progress,
+            current_file,
+        }
+    }
+
+    pub(crate) fn report_current_file(&self, path: &str) {
+        if self.current_file.should_emit(path) {
+            let _ = self.app.emit("sync-progress", path);
+        }
+    }
+
+    pub(crate) fn advance_bytes(&self, bytes: u64) {
+        if let Some(pct) = self.byte_progress.record_advance(bytes) {
+            let _ = self.app.emit("sync-progress-percent", pct);
+        }
+    }
+
+    pub(crate) fn sync_from_snapshot(&self, snapshot: &db::SyncSnapshot) {
+        let (total_bytes, completed_bytes) = snapshot_byte_totals(snapshot);
+        self.byte_progress
+            .sync_from_snapshot(total_bytes, completed_bytes);
+    }
+
+    pub(crate) fn transfer_stats(&self) -> TransferStatsTracker {
+        self.byte_progress.transfer_stats()
+    }
+}
+
 /// Stateless desktop reporter for service-level tray, event, error, and audit
 /// updates outside an active run loop.
 pub(crate) struct DesktopServiceReporter<R: tauri::Runtime = tauri::Wry> {
     app: tauri::AppHandle<R>,
+}
+
+impl<R: tauri::Runtime> Clone for DesktopServiceReporter<R> {
+    fn clone(&self) -> Self {
+        Self {
+            app: self.app.clone(),
+        }
+    }
 }
 
 impl<R: tauri::Runtime> DesktopServiceReporter<R> {
@@ -96,14 +163,24 @@ impl<R: tauri::Runtime> DesktopServiceReporter<R> {
     }
 }
 
+type OsNotifier<R> = Arc<dyn Fn(&tauri::AppHandle<R>, &str, &str) + Send + Sync>;
+
 struct DesktopRunTelemetry<R: tauri::Runtime> {
     app: tauri::AppHandle<R>,
     source: SyncSource,
     audit_context: SyncAuditContext,
-    progress: JobByteProgress,
-    current_file_progress: CurrentFileProgress,
+    progress: DesktopRunProgress<R>,
     transfer_stats: TransferStatsTracker,
     cleanup_armed: AtomicBool,
+    notifier: OsNotifier<R>,
+}
+
+impl<R: tauri::Runtime> DesktopRunTelemetry<R> {
+    fn disarm_and_finish_transfer_stats(&self) {
+        self.cleanup_armed.store(false, Ordering::SeqCst);
+        self.transfer_stats.set_active(false);
+        emit_transfer_stats(&self.app, &self.transfer_stats);
+    }
 }
 
 impl<R: tauri::Runtime> Drop for DesktopRunTelemetry<R> {
@@ -127,8 +204,23 @@ impl<R: tauri::Runtime> DesktopRunReporter<R> {
         app: tauri::AppHandle<R>,
         source: SyncSource,
         audit_context: SyncAuditContext,
-        progress: JobByteProgress,
-        current_file_progress: CurrentFileProgress,
+        progress: DesktopRunProgress<R>,
+    ) -> Self {
+        Self::new_with_notifier(
+            app,
+            source,
+            audit_context,
+            progress,
+            Arc::new(show_os_notification),
+        )
+    }
+
+    pub(crate) fn new_with_notifier(
+        app: tauri::AppHandle<R>,
+        source: SyncSource,
+        audit_context: SyncAuditContext,
+        progress: DesktopRunProgress<R>,
+        notifier: OsNotifier<R>,
     ) -> Self {
         let transfer_stats = progress.transfer_stats();
         Self {
@@ -138,9 +230,9 @@ impl<R: tauri::Runtime> DesktopRunReporter<R> {
                 source,
                 audit_context,
                 progress,
-                current_file_progress,
                 transfer_stats,
                 cleanup_armed: AtomicBool::new(false),
+                notifier,
             },
         }
     }
@@ -169,10 +261,7 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
                 json!({ "source": self.run.source.audit_label() }),
             ),
         );
-        let (total_bytes, completed_bytes) = snapshot_byte_totals(snapshot);
-        self.run
-            .progress
-            .sync_from_snapshot(total_bytes, completed_bytes);
+        self.run.progress.sync_from_snapshot(snapshot);
         self.run.transfer_stats.set_active(true);
         self.run.cleanup_armed.store(true, Ordering::SeqCst);
         spawn_transfer_reporter(self.run.app.clone(), self.run.transfer_stats.clone());
@@ -185,7 +274,7 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
             .transfer_stats
             .sync_queue(total_bytes, completed_bytes);
         self.run.transfer_stats.set_paused(true);
-        self.run.current_file_progress.emit(&self.run.app, "");
+        self.run.progress.report_current_file("");
         emit_transfer_stats(&self.run.app, &self.run.transfer_stats);
         self.service.paused(snapshot);
         audit_event(
@@ -212,10 +301,7 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
     }
 
     fn progressed(&self, snapshot: &db::SyncSnapshot) {
-        let (total_bytes, completed_bytes) = snapshot_byte_totals(snapshot);
-        self.run
-            .progress
-            .sync_from_snapshot(total_bytes, completed_bytes);
+        self.run.progress.sync_from_snapshot(snapshot);
         emit_transfer_stats(&self.run.app, &self.run.transfer_stats);
         self.service.progressed(snapshot);
     }
@@ -226,10 +312,8 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
         self.run
             .transfer_stats
             .sync_queue(total_bytes, completed_bytes);
-        self.run.transfer_stats.set_active(false);
-        self.run.cleanup_armed.store(false, Ordering::SeqCst);
-        self.run.current_file_progress.emit(&self.run.app, "");
-        emit_transfer_stats(&self.run.app, &self.run.transfer_stats);
+        self.run.progress.report_current_file("");
+        self.run.disarm_and_finish_transfer_stats();
         let is_automatic = !self.run.source.is_manual();
         if is_automatic {
             let _ = self.run.app.emit("sync-idle", ());
@@ -256,13 +340,14 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
             params.insert("processed".to_string(), totals.processed.to_string());
             params.insert("uploaded".to_string(), totals.uploaded.to_string());
             params.insert("failed".to_string(), totals.failed.to_string());
-            send_notification_keyed(
+            send_notification_keyed_with(
                 &self.run.app,
                 &title,
                 &body,
                 "INFO",
                 "notification_complete_body",
                 params,
+                |app, title, body| (self.run.notifier)(app, title, body),
             );
         }
         audit_event(
@@ -287,6 +372,12 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
                 }),
             ),
         );
+    }
+
+    fn failed(&self, snapshot: Option<&db::SyncSnapshot>, error: &str) {
+        self.run.progress.report_current_file("");
+        self.run.disarm_and_finish_transfer_stats();
+        self.service.failed(self.run.source, snapshot, error);
     }
 }
 
@@ -387,6 +478,7 @@ mod tests {
             "sync-resumed",
             "sync-transfer-stats",
             "sync-progress",
+            "sync-progress-percent",
             "sync-idle",
             "sync-error",
         ] {
@@ -399,8 +491,11 @@ mod tests {
             });
         }
 
-        let progress = JobByteProgress::new(0, 0);
-        let current_file = CurrentFileProgress::default();
+        let progress = DesktopRunProgress::new(
+            app.handle().clone(),
+            JobByteProgress::new(0, 0),
+            CurrentFileProgress::default(),
+        );
         let audit_context = test_audit_context(SyncSource::Manual);
         let expected_op_id = serde_json::to_value(audit_context.event(
             "probe",
@@ -413,16 +508,18 @@ mod tests {
             .as_str()
             .unwrap()
             .to_string();
-        let reporter = DesktopRunReporter::new(
+        let reporter = DesktopRunReporter::new_with_notifier(
             app.handle().clone(),
             SyncSource::Manual,
             audit_context,
-            progress,
-            current_file,
+            progress.clone(),
+            Arc::new(|_, _, _| {}),
         );
 
         let started = test_snapshot(db::SyncJobStatus::Running, 2, 0, 0);
         reporter.started(&started);
+        progress.report_current_file("one.jpg");
+        progress.advance_bytes(100);
         let paused = test_snapshot(db::SyncJobStatus::Paused, 2, 1, 0);
         reporter.paused(&paused);
         let resumed = test_snapshot(db::SyncJobStatus::Running, 2, 1, 0);
@@ -451,6 +548,7 @@ mod tests {
         assert!(names.contains(&"sync-progress-snapshot"));
         assert!(names.contains(&"sync-transfer-stats"));
         assert!(names.contains(&"sync-progress"));
+        assert!(names.contains(&"sync-progress-percent"));
         assert!(!names.contains(&"sync-idle"));
 
         let tray_sync = *app
@@ -485,6 +583,68 @@ mod tests {
                 "sync.resumed",
                 "sync.completed"
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn desktop_reporter_failed_clears_current_file_updates_tray_and_records_abort() {
+        let app = tauri::test::mock_app();
+        let audit_logger = Arc::new(AuditLogger::initialize(app.handle()).unwrap());
+        app.manage(audit_logger.clone());
+        app.manage(crate::app::state::TraySyncStatus(Mutex::new(
+            db::SyncJobStatus::Running,
+        )));
+        app.manage(crate::app::state::TrayTransferStatus(Mutex::new(None)));
+
+        let events = Arc::new(Mutex::new(Vec::<(String, serde_json::Value)>::new()));
+        for name in [
+            "sync-progress",
+            "sync-progress-snapshot",
+            "sync-transfer-stats",
+        ] {
+            let captured = events.clone();
+            let event_name = name.to_string();
+            app.handle().listen(name, move |event| {
+                let payload = serde_json::from_str::<serde_json::Value>(event.payload())
+                    .unwrap_or_else(|_| serde_json::Value::String(event.payload().to_string()));
+                captured.lock().unwrap().push((event_name.clone(), payload));
+            });
+        }
+
+        let reporter = DesktopRunReporter::new_with_notifier(
+            app.handle().clone(),
+            SyncSource::Manual,
+            test_audit_context(SyncSource::Manual),
+            DesktopRunProgress::new(
+                app.handle().clone(),
+                JobByteProgress::new(100, 0),
+                CurrentFileProgress::default(),
+            ),
+            Arc::new(|_, _, _| {}),
+        );
+
+        let started = test_snapshot(db::SyncJobStatus::Running, 1, 0, 0);
+        reporter.started(&started);
+        let failed = test_snapshot(db::SyncJobStatus::Failed, 1, 0, 1);
+        reporter.failed(Some(&failed), "connection lost");
+
+        let captured = events.lock().unwrap();
+        assert!(captured
+            .iter()
+            .any(|(name, payload)| name == "sync-progress" && payload == ""));
+        assert!(captured.iter().any(
+            |(name, payload)| name == "sync-progress-snapshot" && payload["status"] == "FAILED"
+        ));
+        assert!(captured
+            .iter()
+            .any(|(name, payload)| name == "sync-transfer-stats" && payload["status"] == "IDLE"));
+        assert_eq!(
+            *app.handle()
+                .state::<crate::app::state::TraySyncStatus>()
+                .0
+                .lock()
+                .unwrap(),
+            db::SyncJobStatus::Failed
         );
     }
 
@@ -612,17 +772,27 @@ mod tests {
                 captured_idle.lock().unwrap().push("sync-idle".to_string());
             });
 
-            let reporter = DesktopRunReporter::new(
+            let os_notified = Arc::new(AtomicBool::new(false));
+            let notified_flag = os_notified.clone();
+            let reporter = DesktopRunReporter::new_with_notifier(
                 app.handle().clone(),
                 source,
                 test_audit_context(source),
-                JobByteProgress::new(0, 0),
-                CurrentFileProgress::default(),
+                DesktopRunProgress::new(
+                    app.handle().clone(),
+                    JobByteProgress::new(0, 0),
+                    CurrentFileProgress::default(),
+                ),
+                Arc::new(move |_, _, _| {
+                    notified_flag.store(true, Ordering::SeqCst);
+                }),
             );
             let snapshot = test_snapshot(db::SyncJobStatus::Idle, 1, 0, totals.failed as i64);
             reporter.completed(&snapshot, &totals);
             let idle = idle_events.lock().unwrap().clone();
-            (idle, logs.with_key("notification_complete_body"))
+            let entries = logs.with_key("notification_complete_body");
+            assert_eq!(os_notified.load(Ordering::SeqCst), !entries.is_empty());
+            (idle, entries)
         }
 
         // Manual run with zero uploads/failures still notifies and does not emit sync-idle.

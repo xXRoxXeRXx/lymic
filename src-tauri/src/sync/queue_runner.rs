@@ -6,9 +6,8 @@ use crate::{
     immich::{ImmichClient, SidecarDirectoryCache},
     media::model::UploadUnit,
     sync::{
-        lifecycle::SynchronizationLifecycle,
         processor::{RunProcessor, SyncRunContext, SyncSummary},
-        reporter::{DesktopRunReporter, SyncRunReporter},
+        reporter::{DesktopRunProgress, DesktopRunReporter, SyncRunReporter},
         CurrentFileProgress, JobByteProgress, ProcessingContext, SyncRuntime, SyncSource,
     },
 };
@@ -44,6 +43,30 @@ where
     P: QueueBlockProcessor,
     R: SyncRunReporter,
 {
+    match run_queue_loop_inner(runtime, source, processor, reporter).await {
+        Ok(summary) => Ok(summary),
+        Err(error) => {
+            fail_and_report(runtime, reporter, &error).await;
+            Err(error)
+        }
+    }
+}
+
+async fn fail_and_report<R: SyncRunReporter>(runtime: &SyncRuntime, reporter: &R, error: &str) {
+    let snapshot = runtime.fail().await.ok();
+    reporter.failed(snapshot.as_ref(), error);
+}
+
+async fn run_queue_loop_inner<P, R>(
+    runtime: &SyncRuntime,
+    source: SyncSource,
+    processor: &P,
+    reporter: &R,
+) -> Result<SyncSummary, String>
+where
+    P: QueueBlockProcessor,
+    R: SyncRunReporter,
+{
     let pool = runtime.pool();
     let snapshot = db::get_sync_snapshot(pool)
         .await
@@ -66,8 +89,7 @@ where
             .await
             .map_err(|error| format!("Could not load sync queue: {error}"))?;
         if queued.is_empty() {
-            let lifecycle = SynchronizationLifecycle::new(runtime);
-            let Some(snapshot) = lifecycle.complete().await? else {
+            let Some(snapshot) = runtime.complete().await? else {
                 continue;
             };
             reporter.completed(&snapshot, &totals);
@@ -144,25 +166,29 @@ pub(crate) async fn run_sync_pipeline(params: SyncPipelineParams) -> Result<Sync
     } = params;
     // Admission persists producer work before this runner starts. The durable
     // queue is therefore the sole source used here, including after recovery.
-    let progress = JobByteProgress::new(0, 0);
-    let current_file_progress = CurrentFileProgress::default();
-    let reporter = DesktopRunReporter::new(
+    let progress = DesktopRunProgress::new(
         app.clone(),
-        source,
-        audit_context.clone(),
-        progress.clone(),
-        current_file_progress.clone(),
+        JobByteProgress::new(0, 0),
+        CurrentFileProgress::default(),
     );
-    let processor = RunProcessor::new(SyncRunContext {
+    let reporter =
+        DesktopRunReporter::new(app.clone(), source, audit_context.clone(), progress.clone());
+    let processor = match RunProcessor::new(SyncRunContext {
         app,
         runtime: runtime.clone(),
         client,
         audit_context,
         progress,
-        current_file_progress,
         sidecar_cache: SidecarDirectoryCache::new(),
     })
-    .await?;
+    .await
+    {
+        Ok(processor) => processor,
+        Err(error) => {
+            fail_and_report(&runtime, &reporter, &error).await;
+            return Err(error);
+        }
+    };
     run_queue_loop(&runtime, source, &processor, &reporter).await
 }
 
@@ -190,19 +216,7 @@ async fn persist_processor_results(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    async fn test_pool() -> sqlx::SqlitePool {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        pool
-    }
+    use crate::db::test_pool;
 
     #[test]
     fn queue_window_is_limited_to_fifty_items() {
@@ -361,6 +375,10 @@ mod tests {
             uploaded: usize,
             failed: usize,
         },
+        Failed {
+            status: Option<db::SyncJobStatus>,
+            error: String,
+        },
     }
 
     #[derive(Default)]
@@ -422,6 +440,13 @@ mod tests {
                 failed: totals.failed,
             });
         }
+
+        fn failed(&self, snapshot: Option<&db::SyncSnapshot>, error: &str) {
+            self.events.lock().unwrap().push(RecordedEvent::Failed {
+                status: snapshot.map(|s| s.status),
+                error: error.to_string(),
+            });
+        }
     }
 
     struct FakeBlockProcessor<F>(F);
@@ -466,10 +491,7 @@ mod tests {
         .await
         .unwrap();
         let runtime = SyncRuntime::new(pool.clone(), false);
-        SynchronizationLifecycle::new(&runtime)
-            .start_or_join()
-            .await
-            .unwrap();
+        runtime.start_or_join().await.unwrap();
 
         let processor = FakeBlockProcessor(
             |units: Vec<UploadUnit>, _ctx: ProcessingContext| async move {
@@ -535,10 +557,7 @@ mod tests {
         .await
         .unwrap();
         let runtime = SyncRuntime::new(pool.clone(), false);
-        SynchronizationLifecycle::new(&runtime)
-            .start_or_join()
-            .await
-            .unwrap();
+        runtime.start_or_join().await.unwrap();
 
         let paused_notify = Arc::new(tokio::sync::Notify::new());
         let reporter = Arc::new(RecordingReporter {
@@ -561,10 +580,7 @@ mod tests {
                 if call == 0 {
                     // Simulate pause requested mid-block: complete only the first item,
                     // leaving the rest pending in the durable queue.
-                    SynchronizationLifecycle::new(&self.runtime)
-                        .pause()
-                        .await
-                        .unwrap();
+                    self.runtime.pause().await.unwrap();
                     return Ok(SyncSummary {
                         processed: 1,
                         uploaded: 1,
@@ -619,10 +635,7 @@ mod tests {
             vec!["C:/photos/second.jpg", "C:/photos/third.jpg"]
         );
 
-        SynchronizationLifecycle::new(&runtime)
-            .resume()
-            .await
-            .unwrap();
+        runtime.resume().await.unwrap();
 
         let summary = tokio::time::timeout(std::time::Duration::from_secs(2), handle)
             .await
@@ -701,10 +714,7 @@ mod tests {
         .unwrap();
 
         let runtime = SyncRuntime::new(pool, false);
-        SynchronizationLifecycle::new(&runtime)
-            .start_or_join()
-            .await
-            .unwrap();
+        runtime.start_or_join().await.unwrap();
 
         let processor = FakeBlockProcessor(
             |units: Vec<UploadUnit>, _ctx: ProcessingContext| async move {
@@ -759,5 +769,45 @@ mod tests {
             ]
         );
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn queue_loop_reports_failed_and_persists_failed_status_on_processor_error() {
+        let pool = test_pool().await;
+        db::enqueue_upload_units(&pool, &[queue_asset("C:/photos/one.jpg")], &[])
+            .await
+            .unwrap();
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        runtime.start_or_join().await.unwrap();
+
+        let processor = FakeBlockProcessor(
+            |_units: Vec<UploadUnit>, _ctx: ProcessingContext| async move {
+                Err("immich unreachable".to_string())
+            },
+        );
+        let reporter = RecordingReporter::default();
+
+        let err = run_queue_loop(&runtime, SyncSource::Manual, &processor, &reporter)
+            .await
+            .unwrap_err();
+        assert_eq!(err, "immich unreachable");
+        assert!(!runtime.is_running());
+        assert_eq!(
+            db::get_sync_snapshot(&pool).await.unwrap().status,
+            db::SyncJobStatus::Failed
+        );
+        assert_eq!(
+            reporter.events(),
+            vec![
+                RecordedEvent::Started {
+                    status: db::SyncJobStatus::Running,
+                    total: 1,
+                },
+                RecordedEvent::Failed {
+                    status: Some(db::SyncJobStatus::Failed),
+                    error: "immich unreachable".to_string(),
+                },
+            ]
+        );
     }
 }

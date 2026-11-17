@@ -6,7 +6,7 @@ use crate::{
     audit::{self, audit_event},
     db,
     media::{events::log_overlapping_folders, model::ScanResult},
-    sync::{admit_and_run, SyncSource, Synchronization},
+    sync::{SyncSource, Synchronization},
     watcher::{WatcherIngestion, WATCHER_DEBOUNCE},
 };
 use serde_json::json;
@@ -233,7 +233,9 @@ fn spawn_watcher_consumer(
                     move |scan_result| async move {
                         handoff_watcher_scan(scan_result, move |scan_result, source| async move {
                             log_overlapping_folders(&handoff_handle, &scan_result);
-                            admit_and_run(handoff_handle.clone(), scan_result, source).await;
+                            let _ = Synchronization::for_tauri(&handoff_handle)
+                                .admit_and_run(scan_result, source)
+                                .await;
                         })
                         .await;
                         Ok(())
