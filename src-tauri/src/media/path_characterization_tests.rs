@@ -1,10 +1,15 @@
 use crate::app::background::deferred_folder_matches_registered;
-use crate::db::{sql_path_is_or_descendant_of, WatchedFolder};
+use crate::db::{
+    discard_sync_data_in_folder, enqueue_sync_assets, has_sync_work_in_folder,
+    reset_failed_queue_items_for_folder, QueueAsset, WatchedFolder,
+};
 use crate::media::admission::{decide, watched_folder_for_path, Admission};
 use crate::media::model::{Asset, UploadUnit};
-use crate::media::paths::{normalize_path_lexical, path_is_within_lexical};
+use crate::media::paths::{path_is_within, paths_equal};
+use crate::sync::ActiveWork;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 fn folder(path: &str, patterns: &[&str]) -> WatchedFolder {
     WatchedFolder {
@@ -29,17 +34,8 @@ fn asset_unit(path: &str) -> UploadUnit {
     }
 }
 
-fn eval_paths_lexical_within(folder_path: &str, candidate_path: &str) -> bool {
-    let norm_folder = normalize_path_lexical(Path::new(folder_path));
-    let norm_candidate = normalize_path_lexical(Path::new(candidate_path));
-    path_is_within_lexical(&norm_candidate, &norm_folder)
-}
-
-fn eval_paths_lexical_equal(left: &str, right: &str) -> bool {
-    let norm_left = normalize_path_lexical(Path::new(left));
-    let norm_right = normalize_path_lexical(Path::new(right));
-    path_is_within_lexical(&norm_left, &norm_right)
-        && path_is_within_lexical(&norm_right, &norm_left)
+fn eval_paths_within(folder_path: &str, candidate_path: &str) -> bool {
+    path_is_within(Path::new(candidate_path), Path::new(folder_path))
 }
 
 fn eval_admission_within(folder_path: &str, candidate_path: &str) -> bool {
@@ -54,18 +50,60 @@ fn eval_admission_within(folder_path: &str, candidate_path: &str) -> bool {
     by_folder_lookup
 }
 
-async fn eval_sql_within(pool: &sqlx::SqlitePool, folder_path: &str, candidate_path: &str) -> bool {
-    // Matches the binding normalization in db/sync_state.rs and db/queue.rs.
-    let trimmed_folder = folder_path.trim_end_matches(['/', '\\']);
-    let cond = sql_path_is_or_descendant_of("?1", "?2");
-    let query = format!("SELECT CASE WHEN {cond} THEN 1 ELSE 0 END");
-    let matched: i64 = sqlx::query_scalar(&query)
-        .bind(candidate_path)
-        .bind(trimmed_folder)
-        .fetch_one(pool)
+fn eval_active_work_within(folder_path: &str, candidate_path: &str) -> bool {
+    let work = Arc::new(ActiveWork::new());
+    let _lease = work.acquire(&[asset_unit(candidate_path)]);
+    work.has_work_in(folder_path)
+}
+
+async fn eval_db_within(folder_path: &str, candidate_path: &str) -> bool {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
         .await
         .unwrap();
-    matched == 1
+    sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+    let asset = QueueAsset {
+        path: candidate_path,
+        size: 1,
+        mtime: 1,
+        target_album_id: None,
+    };
+    enqueue_sync_assets(&pool, &[asset], &[]).await.unwrap();
+
+    let has_work = has_sync_work_in_folder(&pool, folder_path).await.unwrap();
+
+    sqlx::query(
+        "UPDATE sync_queue SET status = 'FAILED', failure_reason = 'err' WHERE local_path = ?",
+    )
+    .bind(candidate_path)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let reset_count = reset_failed_queue_items_for_folder(&pool, folder_path)
+        .await
+        .unwrap();
+    assert_eq!(
+        has_work,
+        reset_count == 1,
+        "has_sync_work_in_folder and reset_failed_queue_items_for_folder disagreed on folder={folder_path:?}, candidate={candidate_path:?}"
+    );
+
+    discard_sync_data_in_folder(&pool, folder_path)
+        .await
+        .unwrap();
+    let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        has_work,
+        remaining == 0,
+        "has_sync_work_in_folder and discard_sync_data_in_folder disagreed on folder={folder_path:?}, candidate={candidate_path:?}"
+    );
+
+    has_work
 }
 
 fn eval_deferred_equal(folder_path: &str, registered_path: &str) -> bool {
@@ -78,290 +116,221 @@ struct ContainmentCase {
     folder: &'static str,
     candidate: &'static str,
     #[cfg_attr(not(windows), allow(dead_code))]
-    expected_paths_win: bool,
+    expected_win: bool,
     #[cfg_attr(windows, allow(dead_code))]
-    expected_paths_nonwin: bool,
-    expected_admission: bool,
-    expected_sql: bool,
+    expected_nonwin: bool,
 }
 
 #[tokio::test]
-async fn characterize_all_path_containment_implementations() {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite::memory:")
-        .await
-        .unwrap();
-
+async fn all_containment_and_sql_cleanup_owners_agree_on_characterization_inputs() {
     let cases = [
         // 1. Sibling folders sharing a name prefix
         ContainmentCase {
             label: "sibling_windows_prefix_digit",
             folder: r"C:\Photos",
             candidate: r"C:\Photos2\a.jpg",
-            expected_paths_win: false,
-            expected_paths_nonwin: false,
-            expected_admission: false,
-            expected_sql: false,
+            expected_win: false,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "sibling_windows_prefix_hyphen",
             folder: r"C:\Photos",
             candidate: r"C:\Photos-Backup\a.jpg",
-            expected_paths_win: false,
-            expected_paths_nonwin: false,
-            expected_admission: false,
-            expected_sql: false,
+            expected_win: false,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "sibling_posix_prefix",
             folder: "/media/photos",
             candidate: "/media/photos-backup/a.jpg",
-            expected_paths_win: false,
-            expected_paths_nonwin: false,
-            expected_admission: false,
-            expected_sql: false,
+            expected_win: false,
+            expected_nonwin: false,
         },
         // 2. Trailing separators
         ContainmentCase {
             label: "trailing_backslash_on_folder",
             folder: r"C:\Photos\",
             candidate: r"C:\Photos\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false, // `\` is filename char on POSIX
-            expected_admission: true,
-            expected_sql: true,
+            expected_win: true,
+            expected_nonwin: false, // `\` is a literal filename character on POSIX
         },
         ContainmentCase {
             label: "trailing_slash_on_folder",
             folder: r"C:\Photos/",
             candidate: r"C:\Photos\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_sql: true,
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "trailing_backslash_folder_vs_bare_candidate",
             folder: r"C:\Photos\",
             candidate: r"C:\Photos",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_sql: true,
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "posix_trailing_slash",
             folder: "/media/photos/",
             candidate: "/media/photos/a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: true,
-            expected_admission: true,
-            expected_sql: true,
+            expected_win: true,
+            expected_nonwin: true,
         },
         ContainmentCase {
             label: "windows_drive_root",
             folder: r"C:\",
             candidate: r"C:\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_sql: true,
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "posix_root",
             folder: "/",
             candidate: "/a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: true,
-            expected_admission: true,
-            expected_sql: true,
+            expected_win: true,
+            expected_nonwin: true,
         },
         // 3. Backslash vs forward slash
         ContainmentCase {
             label: "slash_mismatch_root_only",
             folder: r"C:\Photos",
             candidate: "C:/Photos/a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_sql: false, // DISAGREEMENT: SQL compares `substr` literally for `\` vs `/`
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "slash_mismatch_nested_folder",
             folder: r"C:\Photos\Sub",
             candidate: "C:/Photos/Sub/a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_sql: false, // DISAGREEMENT: SQL compares `substr` literally for non-drive chars
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "slash_mismatch_folder_fwd_candidate_back",
             folder: "C:/Photos/Sub",
             candidate: r"C:\Photos\Sub\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_sql: false, // DISAGREEMENT
+            expected_win: true,
+            expected_nonwin: false,
         },
         // 4. Mixed case
         ContainmentCase {
             label: "mixed_case_drive_letter_only",
             folder: r"C:\Photos",
             candidate: r"c:\Photos\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_sql: true,
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "mixed_case_ascii_folder_segment",
             folder: r"C:\Photos",
             candidate: r"C:\photos\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_sql: false, // DISAGREEMENT: SQL is case-sensitive after drive letter
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "mixed_case_unicode_folder_segment",
             folder: r"C:\FÖTOS",
             candidate: r"C:\fötos\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: false, // DISAGREEMENT: admission uses to_ascii_lowercase(), paths uses to_lowercase()
-            expected_sql: false,       // DISAGREEMENT: SQL is case-sensitive after drive letter
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "mixed_case_posix_path",
             folder: "/Media/Photos",
             candidate: "/media/photos/a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false, // paths.rs is case-sensitive on non-Windows
-            expected_admission: true,     // DISAGREEMENT on non-Windows: admission always ASCII-lowercases!
-            expected_sql: false,          // DISAGREEMENT: SQL is case-sensitive on POSIX paths
+            expected_win: true,
+            expected_nonwin: false,
         },
         // 5. Windows verbatim prefixes & drive letters
         ContainmentCase {
             label: "verbatim_disk_folder_vs_normal_candidate",
             folder: r"\\?\C:\Photos",
             candidate: r"C:\Photos\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: false, // DISAGREEMENT: admission does not strip \\?\
-            expected_sql: false,       // DISAGREEMENT: SQL does not strip \\?\
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "normal_folder_vs_verbatim_disk_candidate",
             folder: r"C:\Photos",
             candidate: r"\\?\C:\Photos\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: false, // DISAGREEMENT
-            expected_sql: false,       // DISAGREEMENT
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "verbatim_unc_folder_vs_normal_unc_candidate",
             folder: r"\\?\UNC\server\share\Photos",
             candidate: r"\\server\share\Photos\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: false, // DISAGREEMENT: admission does not strip \\?\UNC\
-            expected_sql: false,       // DISAGREEMENT
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "normal_unc_folder_vs_verbatim_unc_candidate",
             folder: r"\\server\share\Photos",
             candidate: r"\\?\UNC\server\share\Photos\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: false, // DISAGREEMENT
-            expected_sql: false,       // DISAGREEMENT
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "drive_relative_vs_drive_root",
             folder: "C:",
             candidate: r"C:\a.jpg",
-            expected_paths_win: true, // Path("C:") has [Prefix(Disk('C'))] which is prefix of [Prefix, RootDir, Normal]
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_sql: true,
+            expected_win: true,
+            expected_nonwin: false,
         },
         // 6. Dot segments
         ContainmentCase {
             label: "dot_and_parent_staying_inside",
             folder: r"C:\Photos",
             candidate: r"C:\Photos\.\sub\..\a.jpg",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_sql: true,
+            expected_win: true,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "parent_escaping_subfolder",
             folder: r"C:\Photos\Sub",
             candidate: r"C:\Photos\Sub\..\Outside\a.jpg",
-            expected_paths_win: false,
-            expected_paths_nonwin: false,
-            expected_admission: true, // DISAGREEMENT: admission does not resolve `..`!
-            expected_sql: true,       // DISAGREEMENT: SQL does not resolve `..`!
+            expected_win: false,
+            expected_nonwin: false,
         },
         ContainmentCase {
             label: "posix_parent_escaping_subfolder",
             folder: "/media/photos/sub",
             candidate: "/media/photos/sub/../outside/a.jpg",
-            expected_paths_win: false,
-            expected_paths_nonwin: false,
-            expected_admission: true, // DISAGREEMENT
-            expected_sql: true,       // DISAGREEMENT
+            expected_win: false,
+            expected_nonwin: false,
         },
     ];
 
-    let mut disagreements = Vec::new();
-
     for case in &cases {
-        let got_paths = eval_paths_lexical_within(case.folder, case.candidate);
-        let got_admission = eval_admission_within(case.folder, case.candidate);
-        let got_sql = eval_sql_within(&pool, case.folder, case.candidate).await;
-
         #[cfg(windows)]
-        let expected_paths = case.expected_paths_win;
+        let expected = case.expected_win;
         #[cfg(not(windows))]
-        let expected_paths = case.expected_paths_nonwin;
+        let expected = case.expected_nonwin;
 
-        // Observe actual behavior against expectations so any mistake in expectation is caught immediately
+        let got_paths = eval_paths_within(case.folder, case.candidate);
+        let got_admission = eval_admission_within(case.folder, case.candidate);
+        let got_active_work = eval_active_work_within(case.folder, case.candidate);
+        let got_db = eval_db_within(case.folder, case.candidate).await;
+
         assert_eq!(
-            got_paths, expected_paths,
+            got_paths, expected,
             "paths.rs mismatch for {}: folder={:?}, candidate={:?}",
             case.label, case.folder, case.candidate
         );
         assert_eq!(
-            got_admission, case.expected_admission,
-            "admission.rs mismatch for {}: folder={:?}, candidate={:?}",
+            got_admission, got_paths,
+            "admission.rs disagreed with paths.rs for {}: folder={:?}, candidate={:?}",
             case.label, case.folder, case.candidate
         );
         assert_eq!(
-            got_sql, case.expected_sql,
-            "sql mismatch for {}: folder={:?}, candidate={:?}",
+            got_active_work, got_paths,
+            "active_work disagreed with paths.rs for {}: folder={:?}, candidate={:?}",
             case.label, case.folder, case.candidate
         );
-
-        if !(got_paths == got_admission && got_admission == got_sql) {
-            disagreements.push(format!(
-                "{}: paths={got_paths}, admission={got_admission}, sql={got_sql} (folder={:?}, candidate={:?})",
-                case.label, case.folder, case.candidate
-            ));
-        }
-    }
-
-    assert!(
-        !disagreements.is_empty(),
-        "expected characterization to expose disagreements across implementations"
-    );
-    eprintln!("Containment disagreements ({}):", disagreements.len());
-    for d in &disagreements {
-        eprintln!("  - {d}");
+        assert_eq!(
+            got_db, got_paths,
+            "SQL/DB cleanup disagreed with paths.rs for {}: folder={:?}, candidate={:?}",
+            case.label, case.folder, case.candidate
+        );
     }
 }
 
@@ -371,158 +340,111 @@ struct EqualityCase {
     left: &'static str,
     right: &'static str,
     #[cfg_attr(not(windows), allow(dead_code))]
-    expected_paths_win: bool,
+    expected_win: bool,
     #[cfg_attr(windows, allow(dead_code))]
-    expected_paths_nonwin: bool,
-    expected_admission: bool,
-    #[cfg_attr(not(windows), allow(dead_code))]
-    expected_deferred_win: bool,
-    #[cfg_attr(windows, allow(dead_code))]
-    expected_deferred_nonwin: bool,
+    expected_nonwin: bool,
 }
 
 #[test]
-fn characterize_path_equality_implementations() {
+fn all_path_equality_owners_agree_on_characterization_inputs() {
     let cases = [
         EqualityCase {
             label: "eq_trailing_backslash",
             left: r"C:\Photos\",
             right: r"C:\Photos",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_deferred_win: true,
-            expected_deferred_nonwin: false,
+            expected_win: true,
+            expected_nonwin: false,
         },
         EqualityCase {
             label: "eq_posix_trailing_slash",
             left: "/media/photos/",
             right: "/media/photos",
-            expected_paths_win: true,
-            expected_paths_nonwin: true,
-            expected_admission: true,
-            expected_deferred_win: true,
-            expected_deferred_nonwin: true,
+            expected_win: true,
+            expected_nonwin: true,
         },
         EqualityCase {
             label: "eq_slash_difference",
             left: r"C:\Photos\Sub",
             right: "C:/Photos/Sub",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_deferred_win: true,
-            expected_deferred_nonwin: false,
+            expected_win: true,
+            expected_nonwin: false,
         },
         EqualityCase {
             label: "eq_mixed_case_drive_and_segment",
             left: r"C:\Photos",
             right: r"c:\photos",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true,
-            expected_deferred_win: false, // DISAGREEMENT: PathBuf::eq is case-sensitive!
-            expected_deferred_nonwin: false,
+            expected_win: true,
+            expected_nonwin: false,
         },
         EqualityCase {
             label: "eq_mixed_case_unicode",
             left: r"C:\FÖTOS",
             right: r"C:\fötos",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: false,    // DISAGREEMENT: admission is ASCII-only lowercase
-            expected_deferred_win: false, // DISAGREEMENT: PathBuf::eq is case-sensitive
-            expected_deferred_nonwin: false,
+            expected_win: true,
+            expected_nonwin: false,
         },
         EqualityCase {
             label: "eq_mixed_case_posix",
             left: "/Media/Photos",
             right: "/media/photos",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: true, // DISAGREEMENT on non-Windows
-            expected_deferred_win: false,
-            expected_deferred_nonwin: false,
+            expected_win: true,
+            expected_nonwin: false,
         },
         EqualityCase {
             label: "eq_verbatim_disk_prefix",
             left: r"\\?\C:\Photos",
             right: r"C:\Photos",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: false,    // DISAGREEMENT
-            expected_deferred_win: false, // DISAGREEMENT
-            expected_deferred_nonwin: false,
+            expected_win: true,
+            expected_nonwin: false,
         },
         EqualityCase {
             label: "eq_verbatim_unc_prefix",
             left: r"\\?\UNC\server\share\Photos",
             right: r"\\server\share\Photos",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: false,    // DISAGREEMENT
-            expected_deferred_win: false, // DISAGREEMENT
-            expected_deferred_nonwin: false,
+            expected_win: true,
+            expected_nonwin: false,
         },
         EqualityCase {
             label: "eq_dot_parent_segments",
             left: r"C:\Photos\.\Sub\..",
             right: r"C:\Photos",
-            expected_paths_win: true,
-            expected_paths_nonwin: false,
-            expected_admission: false,    // DISAGREEMENT
-            expected_deferred_win: false, // DISAGREEMENT: PathBuf::eq does not collapse `..`
-            expected_deferred_nonwin: false,
+            expected_win: true,
+            expected_nonwin: false,
         },
         EqualityCase {
             label: "eq_sibling_prefix_never_equal",
             left: r"C:\Photos",
             right: r"C:\Photos2",
-            expected_paths_win: false,
-            expected_paths_nonwin: false,
-            expected_admission: false,
-            expected_deferred_win: false,
-            expected_deferred_nonwin: false,
+            expected_win: false,
+            expected_nonwin: false,
         },
     ];
 
-    let mut disagreements = Vec::new();
     for case in &cases {
-        let got_paths = eval_paths_lexical_equal(case.left, case.right);
-        let got_admission =
-            eval_admission_within(case.left, case.right) && eval_admission_within(case.right, case.left);
+        #[cfg(windows)]
+        let expected = case.expected_win;
+        #[cfg(not(windows))]
+        let expected = case.expected_nonwin;
+
+        let got_paths = paths_equal(Path::new(case.left), Path::new(case.right));
+        let got_admission = eval_admission_within(case.left, case.right)
+            && eval_admission_within(case.right, case.left);
         let got_deferred = eval_deferred_equal(case.left, case.right);
 
-        #[cfg(windows)]
-        let (expected_paths, expected_deferred) =
-            (case.expected_paths_win, case.expected_deferred_win);
-        #[cfg(not(windows))]
-        let (expected_paths, expected_deferred) =
-            (case.expected_paths_nonwin, case.expected_deferred_nonwin);
-
-        assert_eq!(got_paths, expected_paths, "paths.rs eq mismatch for {}", case.label);
         assert_eq!(
-            got_admission, case.expected_admission,
-            "admission eq mismatch for {}",
+            got_paths, expected,
+            "paths.rs eq mismatch for {}",
             case.label
         );
         assert_eq!(
-            got_deferred, expected_deferred,
-            "deferred eq mismatch for {}",
+            got_admission, got_paths,
+            "admission eq disagreed with paths.rs for {}",
             case.label
         );
-
-        if !(got_paths == got_admission && got_admission == got_deferred) {
-            disagreements.push(format!(
-                "{}: paths={got_paths}, admission={got_admission}, deferred={got_deferred} ({:?} vs {:?})",
-                case.label, case.left, case.right
-            ));
-        }
-    }
-
-    assert!(!disagreements.is_empty());
-    eprintln!("Equality disagreements ({}):", disagreements.len());
-    for d in &disagreements {
-        eprintln!("  - {d}");
+        assert_eq!(
+            got_deferred, got_paths,
+            "deferred eq disagreed with paths.rs for {}",
+            case.label
+        );
     }
 }
