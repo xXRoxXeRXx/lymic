@@ -118,8 +118,6 @@ pub(crate) async fn check_assets_exist_with_backoff<R: tauri::Runtime>(
     unreachable!("the final bulk-check attempt always returns")
 }
 
-pub(crate) use crate::media::scanner::prepare_failed_sync_retry;
-
 #[cfg(test)]
 mod tests {
     use super::check_assets_exist_with_backoff;

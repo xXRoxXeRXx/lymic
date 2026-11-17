@@ -10,7 +10,6 @@ use std::{
 };
 
 use serde::Serialize;
-use tauri::{Emitter, Runtime};
 
 /// Duration of the recent-transfer window used when calculating the upload rate.
 pub(crate) const TRANSFER_RATE_WINDOW: Duration = Duration::from_secs(3);
@@ -34,7 +33,7 @@ pub(crate) struct TransferStatsSnapshot {
 pub(crate) struct TransferStatsEvent {
     #[serde(flatten)]
     pub(crate) stats: TransferStatsSnapshot,
-    pub(crate) status: &'static str,
+    pub(crate) status: crate::db::SyncJobStatus,
     pub(crate) total_bytes: u64,
     pub(crate) completed_bytes: u64,
 }
@@ -169,11 +168,11 @@ impl TransferStatsTracker {
             .lock()
             .expect("transfer statistics lock poisoned");
         let status = if state.status.paused {
-            "PAUSED"
+            crate::db::SyncJobStatus::Paused
         } else if state.status.active {
-            "RUNNING"
+            crate::db::SyncJobStatus::Running
         } else {
-            "IDLE"
+            crate::db::SyncJobStatus::Idle
         };
         TransferStatsEvent {
             stats: snapshot_at_locked(&mut state, Instant::now()),
@@ -226,23 +225,20 @@ pub(crate) struct CurrentFileProgress {
 }
 
 impl CurrentFileProgress {
-    pub(crate) fn emit<R: Runtime>(&self, app: &tauri::AppHandle<R>, path: &str) {
-        self.emit_at(app, path, Instant::now());
+    pub(crate) fn should_emit(&self, path: &str) -> bool {
+        self.should_emit_at_path(path, Instant::now())
     }
 
-    fn emit_at<R: Runtime>(&self, app: &tauri::AppHandle<R>, path: &str, now: Instant) {
+    fn should_emit_at_path(&self, path: &str, now: Instant) -> bool {
         if path.is_empty() {
             self.last_emission
                 .lock()
                 .expect("current-file progress lock poisoned")
                 .take();
-            let _ = app.emit("sync-progress", path);
-            return;
+            return true;
         }
 
-        if self.should_emit_at(now) {
-            let _ = app.emit("sync-progress", path);
-        }
+        self.should_emit_at(now)
     }
 
     fn should_emit_at(&self, now: Instant) -> bool {
@@ -331,14 +327,13 @@ impl JobByteProgress {
         self.transfer_stats.clone()
     }
 
-    pub(crate) fn advance<R: Runtime>(&self, app: &tauri::AppHandle<R>, bytes: u64) {
+    pub(crate) fn record_advance(&self, bytes: u64) -> Option<u32> {
         if bytes == 0 {
-            return;
+            return None;
         }
         let (_, _, pct) = self.add_bytes(bytes);
-        if pct != self.last_emitted_pct.swap(pct, Ordering::SeqCst) {
-            let _ = app.emit("sync-progress-percent", pct);
-        }
+        let previous = self.last_emitted_pct.swap(pct, Ordering::SeqCst);
+        (pct != previous).then_some(pct)
     }
 
     #[cfg(test)]
@@ -362,8 +357,6 @@ impl JobByteProgress {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
-    use tauri::Listener;
 
     #[test]
     fn calculate_percent_matches_rounding_and_bounds() {
@@ -387,48 +380,26 @@ mod tests {
 
     #[test]
     fn emits_each_progress_percentage_only_once() {
-        let app = tauri::test::mock_app();
-        let percentages = Arc::new(Mutex::new(Vec::new()));
-        let captured_percentages = Arc::clone(&percentages);
-        app.handle().listen("sync-progress-percent", move |event| {
-            captured_percentages
-                .lock()
-                .unwrap()
-                .push(serde_json::from_str::<u32>(event.payload()).unwrap());
-        });
         let progress = JobByteProgress::new(1_000, 0);
+        let emitted = [1, 1, 8, 1]
+            .into_iter()
+            .filter_map(|bytes| progress.record_advance(bytes))
+            .collect::<Vec<_>>();
 
-        progress.advance(app.handle(), 1);
-        progress.advance(app.handle(), 1);
-        progress.advance(app.handle(), 8);
-        progress.advance(app.handle(), 1);
-
-        assert_eq!(*percentages.lock().unwrap(), vec![0, 1]);
+        assert_eq!(emitted, vec![0, 1]);
     }
 
     #[test]
     fn current_file_updates_are_throttled_and_clear_immediately() {
-        let app = tauri::test::mock_app();
-        let files = Arc::new(Mutex::new(Vec::new()));
-        let captured_files = Arc::clone(&files);
-        app.handle().listen("sync-progress", move |event| {
-            captured_files
-                .lock()
-                .unwrap()
-                .push(serde_json::from_str::<String>(event.payload()).unwrap());
-        });
         let progress = CurrentFileProgress::default();
         let start = Instant::now();
 
-        progress.emit_at(app.handle(), "first.jpg", start);
-        progress.emit_at(
-            app.handle(),
+        assert!(progress.should_emit_at_path("first.jpg", start));
+        assert!(!progress.should_emit_at_path(
             "second.jpg",
             start + CURRENT_FILE_THROTTLE - Duration::from_millis(1),
-        );
-        progress.emit_at(app.handle(), "", start + Duration::from_millis(1));
-
-        assert_eq!(*files.lock().unwrap(), vec!["first.jpg", ""]);
+        ));
+        assert!(progress.should_emit_at_path("", start + Duration::from_millis(1)));
         assert!(progress.should_emit_at(start + Duration::from_millis(1)));
     }
 
@@ -530,5 +501,22 @@ mod tests {
         assert!(value.get("transferredBytes").is_some());
         assert!(value.get("transferRateBytesPerSecond").is_some());
         assert!(value.get("estimatedSecondsRemaining").is_some());
+    }
+
+    #[test]
+    fn transfer_stats_event_serializes_status_and_fields_unchanged() {
+        let tracker = TransferStatsTracker::new(100, 40);
+        let idle = serde_json::to_value(tracker.event()).unwrap();
+        assert_eq!(idle["status"], "IDLE");
+        assert_eq!(idle["totalBytes"], 100);
+        assert_eq!(idle["completedBytes"], 40);
+
+        tracker.set_active(true);
+        let running = serde_json::to_value(tracker.event()).unwrap();
+        assert_eq!(running["status"], "RUNNING");
+
+        tracker.set_paused(true);
+        let paused = serde_json::to_value(tracker.event()).unwrap();
+        assert_eq!(paused["status"], "PAUSED");
     }
 }

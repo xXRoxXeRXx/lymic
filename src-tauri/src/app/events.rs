@@ -22,19 +22,23 @@ fn params_from(pairs: &[(&str, &str)]) -> LogParams {
         .collect()
 }
 
-pub(crate) fn send_notification_keyed(
-    app: &AppHandle,
+pub(crate) fn send_notification_keyed<R: Runtime>(
+    app: &AppHandle<R>,
     title: &str,
     body: &str,
     level: &str,
     key: &str,
     params: LogParams,
 ) {
-    let _ = app.notification().builder().title(title).body(body).show();
+    show_os_notification(app, title, body);
     log_to_ui_keyed(app, level, body, key, params);
 }
 
-pub(crate) fn log_to_ui_key(app: &AppHandle, level: &str, message: &str, key: &str) {
+fn show_os_notification<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
+    let _ = app.notification().builder().title(title).body(body).show();
+}
+
+pub(crate) fn log_to_ui_key<R: Runtime>(app: &AppHandle<R>, level: &str, message: &str, key: &str) {
     log_to_ui_entry(app, level, message, Some(key.to_string()), None);
 }
 
@@ -48,8 +52,8 @@ pub(crate) fn log_to_ui_keyed<R: Runtime>(
     log_to_ui_entry(app, level, message, Some(key.to_string()), Some(params));
 }
 
-pub(crate) fn log_to_ui_folder(
-    app: &AppHandle,
+pub(crate) fn log_to_ui_folder<R: Runtime>(
+    app: &AppHandle<R>,
     level: &str,
     message: &str,
     key: &str,
@@ -58,8 +62,8 @@ pub(crate) fn log_to_ui_folder(
     log_to_ui_keyed(app, level, message, key, params_from(&[("folder", folder)]));
 }
 
-pub(crate) fn log_to_ui_folder_error(
-    app: &AppHandle,
+pub(crate) fn log_to_ui_folder_error<R: Runtime>(
+    app: &AppHandle<R>,
     level: &str,
     message: &str,
     key: &str,
@@ -155,6 +159,6 @@ impl CapturedUiLogs {
     }
 }
 
-pub(crate) fn emit_sync_error(app: &AppHandle, error: &str) {
+pub(crate) fn emit_sync_error<R: Runtime>(app: &AppHandle<R>, error: &str) {
     let _ = app.emit("sync-error", error);
 }

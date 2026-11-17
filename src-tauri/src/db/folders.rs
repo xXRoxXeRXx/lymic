@@ -15,7 +15,7 @@ pub async fn add_folder(
     path: &str,
     target_album_id: Option<&AlbumId>,
 ) -> Result<i64, sqlx::Error> {
-    let path = normalize_windows_drive_letter(path);
+    let path = crate::media::paths::normalize_drive_letter_str(path);
     let result = sqlx::query("INSERT INTO watched_folders (path, target_album_id) VALUES (?, ?)")
         .bind(path)
         .bind(target_album_id.map(|id| id.as_str()))
@@ -31,7 +31,7 @@ pub async fn restore_folder(
     target_album_id: Option<&AlbumId>,
     exclusion_patterns: &[String],
 ) -> Result<i64, sqlx::Error> {
-    let path = normalize_windows_drive_letter(path);
+    let path = crate::media::paths::normalize_drive_letter_str(path);
     let exclusion_patterns =
         serde_json::to_string(exclusion_patterns).expect("exclusion patterns serialize");
     let result = sqlx::query(
@@ -163,63 +163,67 @@ pub async fn remap_watched_folder_path(
     old_path: &str,
     new_path: &str,
 ) -> Result<(), sqlx::Error> {
-    let clean_old = normalize_windows_drive_letter(old_path.trim_end_matches(['/', '\\']));
-    let clean_new = normalize_windows_drive_letter(new_path.trim_end_matches(['/', '\\']));
+    let remap = FolderRemap {
+        old_prefix: super::sql_folder_prefix(old_path),
+        paths: crate::media::paths::PathRemapper::new(old_path, new_path),
+    };
 
     let mut tx = pool.begin().await?;
 
     sqlx::query("UPDATE watched_folders SET path = ? WHERE id = ?")
-        .bind(&clean_new)
+        .bind(&remap.paths.clean_new)
         .bind(folder_id)
         .execute(&mut *tx)
         .await?;
 
-    let local_path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
-    let upload_unit_cond = super::sql_path_is_or_descendant_of("upload_unit_id", "?1");
-    let current_path_cond = super::sql_path_is_or_descendant_of("current_path", "?1");
-
-    for table in ["sync_state", "sync_queue", "album_retry_remote_ids"] {
-        let sql = format!(
-            "UPDATE {table} SET local_path = ?2 || substr(local_path, length(?1) + 1) WHERE {local_path_cond}"
-        );
-        sqlx::query(&sql)
-            .bind(&clean_old)
-            .bind(&clean_new)
-            .execute(&mut *tx)
+    for (table, column, row_filter) in [
+        ("sync_state", "local_path", None),
+        ("album_retry_remote_ids", "local_path", None),
+        ("sync_jobs", "current_path", Some("id = 1")),
+        ("sync_queue", "local_path", None),
+        ("sync_queue", "upload_unit_id", None),
+    ] {
+        remap
+            .remap_column(&mut tx, table, column, row_filter)
             .await?;
     }
-
-    let sync_queue_unit_sql = format!(
-        "UPDATE sync_queue \
-         SET upload_unit_id = ?2 || substr(upload_unit_id, length(?1) + 1) \
-         WHERE {upload_unit_cond}"
-    );
-    sqlx::query(&sync_queue_unit_sql)
-        .bind(&clean_old)
-        .bind(&clean_new)
-        .execute(&mut *tx)
-        .await?;
-
-    let sync_jobs_sql = format!(
-        "UPDATE sync_jobs \
-         SET current_path = ?2 || substr(current_path, length(?1) + 1) \
-         WHERE {current_path_cond}"
-    );
-    sqlx::query(&sync_jobs_sql)
-        .bind(&clean_old)
-        .bind(&clean_new)
-        .execute(&mut *tx)
-        .await?;
 
     tx.commit().await?;
     Ok(())
 }
 
-fn normalize_windows_drive_letter(path: &str) -> String {
-    let bytes = path.as_bytes();
-    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
-        format!("{}{}", (bytes[0] as char).to_ascii_uppercase(), &path[1..])
-    } else {
-        path.to_string()
+struct FolderRemap {
+    old_prefix: String,
+    paths: crate::media::paths::PathRemapper,
+}
+
+impl FolderRemap {
+    async fn remap_column(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        table: &str,
+        column: &str,
+        row_filter: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        let filter_prefix = row_filter.map(|f| format!("{f} AND ")).unwrap_or_default();
+        let path_cond = super::sql_path_is_or_descendant_of(column, "?1");
+        let paths: Vec<String> = sqlx::query_scalar(&format!(
+            "SELECT DISTINCT {column} FROM {table} WHERE {filter_prefix}{column} IS NOT NULL AND {path_cond}"
+        ))
+        .bind(&self.old_prefix)
+        .fetch_all(&mut **tx)
+        .await?;
+        for old_row_path in paths {
+            if let Some(new_row_path) = self.paths.remap_if_changed(&old_row_path) {
+                sqlx::query(&format!(
+                    "UPDATE {table} SET {column} = ? WHERE {filter_prefix}{column} = ?"
+                ))
+                .bind(&new_row_path)
+                .bind(&old_row_path)
+                .execute(&mut **tx)
+                .await?;
+            }
+        }
+        Ok(())
     }
 }

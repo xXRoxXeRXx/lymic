@@ -1,6 +1,10 @@
 use crate::{
     db::WatchedFolder,
-    sync::{add_event_paths, scan_watched_folders_for_media, Asset, FileFailure, ScanResult},
+    media::{
+        events::add_event_paths,
+        model::{Asset, FileFailure, ScanResult},
+        scanner::scan_watched_folders_for_media,
+    },
 };
 use std::{
     collections::HashMap,

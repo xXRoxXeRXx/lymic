@@ -12,16 +12,17 @@ use crate::{
     sync::{
         album_batch,
         completion::{self, PendingAlbumUnit, UploadUnitCompletion},
+        reporter::DesktopRunProgress,
         retry::check_assets_exist_with_backoff,
-        CurrentFileProgress, JobByteProgress, ProcessingContext, SyncCoordinatorInner,
+        ProcessingContext, SyncRuntime,
     },
 };
 use futures::{future, stream::FuturesUnordered, StreamExt};
 use serde_json::json;
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-#[derive(serde::Serialize, Default)]
+#[derive(Debug, serde::Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SyncSummary {
     pub(crate) processed: usize,
@@ -44,44 +45,49 @@ struct ChunkPartition {
     cancelled: bool,
 }
 
+/// Shared execution context for one synchronization run.
+pub(crate) struct SyncRunContext<R: tauri::Runtime = tauri::Wry> {
+    pub(crate) app: tauri::AppHandle<R>,
+    pub(crate) runtime: SyncRuntime,
+    pub(crate) client: Arc<ImmichClient>,
+    pub(crate) audit_context: SyncAuditContext,
+    pub(crate) progress: DesktopRunProgress<R>,
+    pub(crate) sidecar_cache: SidecarDirectoryCache,
+}
+
+impl<R: tauri::Runtime> Clone for SyncRunContext<R> {
+    fn clone(&self) -> Self {
+        Self {
+            app: self.app.clone(),
+            runtime: self.runtime.clone(),
+            client: self.client.clone(),
+            audit_context: self.audit_context.clone(),
+            progress: self.progress.clone(),
+            sidecar_cache: self.sidecar_cache.clone(),
+        }
+    }
+}
+
+impl<R: tauri::Runtime> SyncRunContext<R> {
+    fn pool(&self) -> &sqlx::SqlitePool {
+        self.runtime.pool()
+    }
+}
+
 /// Processes bounded queue blocks for one synchronization run.
 ///
 /// The run owns the collaborators that must stay consistent across blocks, while
 /// `process` remains the sole block-level entry point for the queue runner.
 pub(crate) struct RunProcessor<R: tauri::Runtime = tauri::Wry> {
-    app: tauri::AppHandle<R>,
-    pool: sqlx::SqlitePool,
-    client: Arc<ImmichClient>,
-    audit_context: SyncAuditContext,
-    progress: JobByteProgress,
-    current_file_progress: CurrentFileProgress,
-    coordinator: Arc<SyncCoordinatorInner>,
-    sidecar_cache: SidecarDirectoryCache,
+    run: SyncRunContext<R>,
     upload_parallelism: usize,
 }
 
 impl<R: tauri::Runtime> RunProcessor<R> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn new(
-        app: tauri::AppHandle<R>,
-        pool: sqlx::SqlitePool,
-        client: Arc<ImmichClient>,
-        audit_context: SyncAuditContext,
-        progress: JobByteProgress,
-        current_file_progress: CurrentFileProgress,
-        coordinator: Arc<SyncCoordinatorInner>,
-        sidecar_cache: SidecarDirectoryCache,
-    ) -> Result<Self, String> {
-        let upload_parallelism = load_upload_parallelism(&pool).await?;
+    pub(crate) async fn new(run: SyncRunContext<R>) -> Result<Self, String> {
+        let upload_parallelism = load_upload_parallelism(run.pool()).await?;
         Ok(Self {
-            app,
-            pool,
-            client,
-            audit_context,
-            progress,
-            current_file_progress,
-            coordinator,
-            sidecar_cache,
+            run,
             upload_parallelism,
         })
     }
@@ -91,12 +97,12 @@ impl<R: tauri::Runtime> RunProcessor<R> {
         units: Vec<UploadUnit>,
         active_work: ProcessingContext,
     ) -> Result<SyncSummary, String> {
-        wait_while_paused(&self.coordinator).await;
+        self.run.runtime.wait_while_paused().await;
         let (hashed_units, mut queue_results) = self.hash_units(units, &active_work).await;
 
         let mut uploaded = 0;
         for chunk in hashed_units.chunks(BULK_CHECK_CHUNK_SIZE) {
-            if !can_start_work(&self.coordinator) {
+            if !self.run.runtime.can_start_work() {
                 break;
             }
 
@@ -130,7 +136,7 @@ impl<R: tauri::Runtime> RunProcessor<R> {
             self.flush_pending_album_units(pending_album_units, &mut queue_results, &mut uploaded)
                 .await?;
 
-            if !can_start_work(&self.coordinator) {
+            if !self.run.runtime.can_start_work() {
                 break;
             }
         }
@@ -147,7 +153,7 @@ impl<R: tauri::Runtime> RunProcessor<R> {
         let mut hashed_units = Vec::new();
         let mut hashing = FuturesUnordered::new();
         for unit in units {
-            if !can_start_work(&self.coordinator) {
+            if !self.run.runtime.can_start_work() {
                 break;
             }
             let unit_work = active_work.for_upload_unit(&unit);
@@ -156,10 +162,7 @@ impl<R: tauri::Runtime> RunProcessor<R> {
             }
             hashing.push(hash_unit_or_cancellation(
                 unit,
-                self.pool.clone(),
-                self.app.clone(),
-                self.progress.clone(),
-                self.audit_context.clone(),
+                self.run.clone(),
                 unit_work.cancellation(),
             ));
             if hashing.len() == 4 {
@@ -222,7 +225,7 @@ impl<R: tauri::Runtime> RunProcessor<R> {
                 });
             }
         };
-        if !can_start_work(&self.coordinator) {
+        if !self.run.runtime.can_start_work() {
             return Ok(ChunkPartition {
                 upload_units: Vec::new(),
                 pending_album_units,
@@ -240,14 +243,18 @@ impl<R: tauri::Runtime> RunProcessor<R> {
                 .iter()
                 .any(|duplicate| &duplicate.hash == image_hash)
             {
-                match album_batch::resolve_duplicate_remote_asset(&self.client, &unit, &existing)
-                    .await
+                match album_batch::resolve_duplicate_remote_asset(
+                    &self.run.client,
+                    &unit,
+                    &existing,
+                )
+                .await
                 {
                     Ok(remote_asset) => {
                         if remote_asset.is_trashed {
                             album_batch::report_trashed_duplicate(
-                                &self.app,
-                                &self.audit_context,
+                                &self.run.app,
+                                &self.run.audit_context,
                                 &unit,
                                 &remote_asset.id,
                             );
@@ -299,8 +306,12 @@ impl<R: tauri::Runtime> RunProcessor<R> {
             .iter()
             .map(|unit| active_work.for_hashed_upload_unit(unit).cancellation())
             .collect();
-        let bulk_check =
-            check_assets_exist_with_backoff(&self.client, hashes, &self.app, &self.audit_context);
+        let bulk_check = check_assets_exist_with_backoff(
+            &self.run.client,
+            hashes,
+            &self.run.app,
+            &self.run.audit_context,
+        );
         if cancellations.is_empty() {
             return bulk_check.await.map(BulkCheckOutcome::Existing);
         }
@@ -319,9 +330,9 @@ impl<R: tauri::Runtime> RunProcessor<R> {
         uploaded: &mut usize,
     ) -> Result<(), String> {
         match begin_upload_unit_completion_or_fail(
-            &self.pool,
-            &self.app,
-            &self.audit_context,
+            self.run.pool(),
+            &self.run.app,
+            &self.run.audit_context,
             unit.clone(),
             remote_id,
             0,
@@ -337,7 +348,7 @@ impl<R: tauri::Runtime> RunProcessor<R> {
                 queue_results.extend_from_slice(completion.queue_results());
             }
         }
-        self.progress.advance(&self.app, unit.byte_size());
+        self.run.progress.advance_bytes(unit.byte_size());
         Ok(())
     }
 
@@ -348,7 +359,7 @@ impl<R: tauri::Runtime> RunProcessor<R> {
         queue_results: &mut Vec<(String, String)>,
     ) -> Result<(), String> {
         log_to_ui_file_error(
-            &self.app,
+            &self.run.app,
             "ERROR",
             &error_msg,
             "log_duplicate_resolve_failed",
@@ -356,21 +367,21 @@ impl<R: tauri::Runtime> RunProcessor<R> {
             &error_msg,
         );
         audit_event(
-            &self.app,
-            self.audit_context.event(
+            &self.run.app,
+            self.run.audit_context.event(
                 "album.duplicate.resolution.failed",
                 audit::Outcome::Failure,
                 audit::Severity::Error,
                 "Failed to resolve duplicate asset remote ID for target album",
                 json!({
                     "local_path": unit.image.path,
-                    "failure_reason": self.audit_context.safe_error(&error_msg),
+                    "failure_reason": self.run.audit_context.safe_error(&error_msg),
                 }),
             ),
         );
-        let failure = completion::fail_upload_unit(&self.pool, &unit, &error_msg).await?;
+        let failure = completion::fail_upload_unit(self.run.pool(), &unit, &error_msg).await?;
         queue_results.extend_from_slice(failure.queue_results());
-        self.progress.advance(&self.app, unit.byte_size());
+        self.run.progress.advance_bytes(unit.byte_size());
         Ok(())
     }
 
@@ -384,22 +395,12 @@ impl<R: tauri::Runtime> RunProcessor<R> {
     ) -> Result<(), String> {
         let mut pending = upload_units.into_iter();
         let mut uploads = FuturesUnordered::new();
-        while can_start_work(&self.coordinator) && uploads.len() < self.upload_parallelism {
+        while self.run.runtime.can_start_work() && uploads.len() < self.upload_parallelism {
             let Some((unit, cancellation)) = next_active_upload_unit(&mut pending, active_work)
             else {
                 break;
             };
-            uploads.push(upload_unit(
-                unit,
-                self.client.clone(),
-                self.pool.clone(),
-                self.app.clone(),
-                self.progress.clone(),
-                self.current_file_progress.clone(),
-                self.audit_context.clone(),
-                cancellation,
-                self.sidecar_cache.clone(),
-            ));
+            uploads.push(upload_unit(unit, self.run.clone(), cancellation));
         }
         while let Some(outcome) = uploads.next().await {
             let outcome = outcome?;
@@ -408,25 +409,12 @@ impl<R: tauri::Runtime> RunProcessor<R> {
             if let Some(pending_album) = outcome.pending_album_unit {
                 pending_album_units.push(pending_album);
             }
-            if can_start_work(&self.coordinator) {
-                while can_start_work(&self.coordinator) && uploads.len() < self.upload_parallelism {
-                    let Some((unit, cancellation)) =
-                        next_active_upload_unit(&mut pending, active_work)
-                    else {
-                        break;
-                    };
-                    uploads.push(upload_unit(
-                        unit,
-                        self.client.clone(),
-                        self.pool.clone(),
-                        self.app.clone(),
-                        self.progress.clone(),
-                        self.current_file_progress.clone(),
-                        self.audit_context.clone(),
-                        cancellation,
-                        self.sidecar_cache.clone(),
-                    ));
-                }
+            while self.run.runtime.can_start_work() && uploads.len() < self.upload_parallelism {
+                let Some((unit, cancellation)) = next_active_upload_unit(&mut pending, active_work)
+                else {
+                    break;
+                };
+                uploads.push(upload_unit(unit, self.run.clone(), cancellation));
             }
         }
         Ok(())
@@ -438,14 +426,14 @@ impl<R: tauri::Runtime> RunProcessor<R> {
         queue_results: &mut Vec<(String, String)>,
         uploaded: &mut usize,
     ) -> Result<(), String> {
-        if pending_album_units.is_empty() || !can_start_work(&self.coordinator) {
+        if pending_album_units.is_empty() || !self.run.runtime.can_start_work() {
             return Ok(());
         }
         album_batch::assign_pending_album_units(
-            &self.client,
-            &self.pool,
-            &self.app,
-            &self.audit_context,
+            &self.run.client,
+            self.run.pool(),
+            &self.run.app,
+            &self.run.audit_context,
             pending_album_units,
             queue_results,
             uploaded,
@@ -487,22 +475,6 @@ fn next_active_upload_unit(
     })
 }
 
-fn can_start_work(coordinator: &SyncCoordinatorInner) -> bool {
-    !coordinator.paused.load(Ordering::SeqCst)
-}
-
-async fn wait_while_paused(coordinator: &SyncCoordinatorInner) {
-    while coordinator.paused.load(Ordering::SeqCst) {
-        let notified = coordinator.resume.notified();
-        tokio::pin!(notified);
-        notified.as_mut().enable();
-        if !coordinator.paused.load(Ordering::SeqCst) {
-            break;
-        }
-        notified.await;
-    }
-}
-
 struct HashOutcome {
     unit: Option<HashedUploadUnit>,
     queue_results: Vec<(String, String)>,
@@ -510,34 +482,26 @@ struct HashOutcome {
 
 async fn hash_unit_or_cancellation<R: tauri::Runtime>(
     unit: UploadUnit,
-    pool: sqlx::SqlitePool,
-    app: tauri::AppHandle<R>,
-    progress: JobByteProgress,
-    audit_context: SyncAuditContext,
+    run: SyncRunContext<R>,
     cancellation: CancellationToken,
 ) -> HashOutcome {
-    await_or_cancellation(
-        cancellation,
-        hash_unit(unit, pool, app, progress, audit_context),
-    )
-    .await
-    .unwrap_or(HashOutcome {
-        unit: None,
-        queue_results: Vec::new(),
-    })
+    await_or_cancellation(cancellation, hash_unit(unit, run))
+        .await
+        .unwrap_or(HashOutcome {
+            unit: None,
+            queue_results: Vec::new(),
+        })
 }
 
-async fn hash_unit<R: tauri::Runtime>(
-    unit: UploadUnit,
-    pool: sqlx::SqlitePool,
-    app: tauri::AppHandle<R>,
-    progress: JobByteProgress,
-    audit_context: SyncAuditContext,
-) -> HashOutcome {
+async fn hash_unit<R: tauri::Runtime>(unit: UploadUnit, run: SyncRunContext<R>) -> HashOutcome {
+    let pool = run.pool();
+    let app = &run.app;
+    let progress = &run.progress;
+    let audit_context = &run.audit_context;
     let result: Result<HashedUploadUnit, String> = async {
         let mut hashed = Vec::new();
         for asset in unit.assets() {
-            let cached = db::get_cached_hash(&pool, &asset.path, asset.mtime, asset.size as i64)
+            let cached = db::get_cached_hash(pool, &asset.path, asset.mtime, asset.size as i64)
                 .await
                 .map_err(|error| {
                     format!("Could not load cached hash for {}: {}", asset.path, error)
@@ -578,7 +542,7 @@ async fn hash_unit<R: tauri::Runtime>(
                     .map_err(|error| format!("Hashing failed: {}", error))?;
             if cached.as_deref() != Some(&checksums.sha1_base64) {
                 db::update_sync_state(
-                    &pool,
+                    pool,
                     &asset.path,
                     &checksums.sha1_base64,
                     mtime,
@@ -618,26 +582,21 @@ async fn hash_unit<R: tauri::Runtime>(
         Err(error) => {
             let paths: Vec<_> = unit.assets().map(|asset| asset.path.clone()).collect();
             for asset in unit.assets() {
-                let _ = db::mark_sync_failed(
-                    &pool,
-                    &asset.path,
-                    asset.mtime,
-                    asset.size as i64,
-                    &error,
-                )
-                .await;
+                let _ =
+                    db::mark_sync_failed(pool, &asset.path, asset.mtime, asset.size as i64, &error)
+                        .await;
             }
             let path_list = paths.join(", ");
             log_to_ui_file_error(
-                &app,
+                app,
                 "ERROR",
                 &format!("File hashing failed for '{}': {}", path_list, error),
                 "log_file_hash_failed",
                 &path_list,
                 &error,
             );
-            audit_event(&app, audit_context.event("file.hash.failed", audit::Outcome::Failure, audit::Severity::Error, "File hashing failed", json!({ "local_paths": paths, "failure_reason": audit_context.safe_error(&error) })));
-            progress.advance(&app, unit.assets().map(|asset| asset.size).sum());
+            audit_event(app, audit_context.event("file.hash.failed", audit::Outcome::Failure, audit::Severity::Error, "File hashing failed", json!({ "local_paths": paths, "failure_reason": audit_context.safe_error(&error) })));
+            progress.advance_bytes(unit.assets().map(|asset| asset.size).sum());
             HashOutcome {
                 unit: None,
                 queue_results: unit
@@ -655,18 +614,15 @@ struct UploadOutcome {
     pending_album_unit: Option<PendingAlbumUnit>,
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn upload_unit<R: tauri::Runtime>(
     unit: HashedUploadUnit,
-    client: Arc<ImmichClient>,
-    pool: sqlx::SqlitePool,
-    app: tauri::AppHandle<R>,
-    progress: JobByteProgress,
-    current_file_progress: CurrentFileProgress,
-    audit_context: SyncAuditContext,
+    run: SyncRunContext<R>,
     cancellation: CancellationToken,
-    sidecar_cache: SidecarDirectoryCache,
 ) -> Result<UploadOutcome, String> {
+    let pool = run.pool();
+    let app = &run.app;
+    let progress = &run.progress;
+    let audit_context = &run.audit_context;
     let image_hash = unit.image.checksums.as_ref().unwrap().sha1_base64.clone();
     let video_path = unit
         .live_photo_video
@@ -687,7 +643,7 @@ async fn upload_unit<R: tauri::Runtime>(
         details["live_photo_local_path"] = json!(video.path);
     }
     audit_event(
-        &app,
+        app,
         audit_context.event(
             "file.upload.started",
             audit::Outcome::Started,
@@ -696,14 +652,14 @@ async fn upload_unit<R: tauri::Runtime>(
             details,
         ),
     );
-    current_file_progress.emit(&app, &unit.image.path);
+    progress.report_current_file(&unit.image.path);
 
-    let upload = client.upload_asset_with_live_photo(
+    let upload = run.client.upload_asset_with_live_photo(
         &unit.image.path,
         &image_hash,
         video_path,
         Some(progress.transfer_stats()),
-        sidecar_cache,
+        run.sidecar_cache.clone(),
     );
     let Some(upload_result) = await_or_cancellation(cancellation, upload).await else {
         return Ok(UploadOutcome {
@@ -717,9 +673,9 @@ async fn upload_unit<R: tauri::Runtime>(
             Ok(remote_id_str) => {
                 let remote_id = crate::immich::RemoteAssetId::new(remote_id_str);
                 match begin_upload_unit_completion_or_fail(
-                    &pool,
-                    &app,
-                    &audit_context,
+                    pool,
+                    app,
+                    audit_context,
                     unit.clone(),
                     remote_id.clone(),
                     unit.assets().count(),
@@ -749,7 +705,7 @@ async fn upload_unit<R: tauri::Runtime>(
             }
             Err(error) => {
                 log_to_ui_file_error(
-                    &app,
+                    app,
                     "ERROR",
                     &format!("Upload failed for {}: {}", unit.image.path, error),
                     "log_upload_failed",
@@ -758,7 +714,7 @@ async fn upload_unit<R: tauri::Runtime>(
                 );
                 for asset in unit.assets() {
                     let _ = db::mark_sync_failed(
-                        &pool,
+                        pool,
                         &asset.path,
                         asset.mtime,
                         asset.size as i64,
@@ -784,7 +740,7 @@ async fn upload_unit<R: tauri::Runtime>(
         details["live_photo_local_path"] = json!(video.path);
     }
     audit_event(
-        &app,
+        app,
         audit_context.event(
             "file.upload.completed",
             if status != "FAILED" {
@@ -801,7 +757,7 @@ async fn upload_unit<R: tauri::Runtime>(
             details,
         ),
     );
-    progress.advance(&app, unit.byte_size());
+    progress.advance_bytes(unit.byte_size());
     let queue_results = durable_queue_results.unwrap_or_else(|| {
         if pending_album_unit.is_some() {
             return Vec::new();
@@ -992,21 +948,22 @@ mod tests {
         assert_eq!(BULK_CHECK_CHUNK_SIZE, 100);
     }
 
-    #[test]
-    fn pause_before_hashing_prevents_new_hashes() {
-        let coordinator = SyncCoordinatorInner::new(true);
-        assert!(!can_start_work(&coordinator));
+    use crate::db::test_pool;
+
+    #[tokio::test]
+    async fn pause_before_hashing_prevents_new_hashes() {
+        let runtime = SyncRuntime::new(test_pool().await, true);
+        assert!(!runtime.can_start_work());
     }
 
     #[tokio::test]
     async fn paused_processor_observes_a_resume_notified_before_its_pause_check() {
-        let coordinator = Arc::new(SyncCoordinatorInner::new(true));
-        let waiting_coordinator = coordinator.clone();
-        let waiting = tokio::spawn(async move { wait_while_paused(&waiting_coordinator).await });
+        let runtime = SyncRuntime::new(test_pool().await, true);
+        let waiting_runtime = runtime.clone();
+        let waiting = tokio::spawn(async move { waiting_runtime.wait_while_paused().await });
         tokio::task::yield_now().await;
 
-        coordinator.paused.store(false, Ordering::SeqCst);
-        coordinator.resume.notify_waiters();
+        runtime.resume_work();
 
         tokio::time::timeout(std::time::Duration::from_millis(50), waiting)
             .await
@@ -1014,26 +971,26 @@ mod tests {
             .unwrap();
     }
 
-    #[test]
-    fn pause_during_hashing_prevents_follow_up_hashes() {
-        let coordinator = SyncCoordinatorInner::new(false);
-        assert!(can_start_work(&coordinator));
-        coordinator.paused.store(true, Ordering::SeqCst);
-        assert!(!can_start_work(&coordinator));
+    #[tokio::test]
+    async fn pause_during_hashing_prevents_follow_up_hashes() {
+        let runtime = SyncRuntime::new(test_pool().await, false);
+        assert!(runtime.can_start_work());
+        runtime.pause_work();
+        assert!(!runtime.can_start_work());
     }
 
-    #[test]
-    fn pause_before_bulk_check_prevents_new_request() {
-        let coordinator = SyncCoordinatorInner::new(true);
-        assert!(!can_start_work(&coordinator));
+    #[tokio::test]
+    async fn pause_before_bulk_check_prevents_new_request() {
+        let runtime = SyncRuntime::new(test_pool().await, true);
+        assert!(!runtime.can_start_work());
     }
 
-    #[test]
-    fn pause_during_uploads_prevents_follow_up_uploads() {
-        let coordinator = SyncCoordinatorInner::new(false);
-        assert!(can_start_work(&coordinator));
-        coordinator.paused.store(true, Ordering::SeqCst);
-        assert!(!can_start_work(&coordinator));
+    #[tokio::test]
+    async fn pause_during_uploads_prevents_follow_up_uploads() {
+        let runtime = SyncRuntime::new(test_pool().await, false);
+        assert!(runtime.can_start_work());
+        runtime.pause_work();
+        assert!(!runtime.can_start_work());
     }
 
     #[tokio::test]
@@ -1244,16 +1201,19 @@ mod tests {
             &crate::auth::AuthConfig::test_fixture("http://127.0.0.1"),
             "manual_sync",
         );
-        let processor = RunProcessor::new(
-            app.handle().clone(),
-            pool.clone(),
+        let runtime = SyncRuntime::new(pool, false);
+        let processor = RunProcessor::new(SyncRunContext {
+            app: app.handle().clone(),
+            runtime: runtime.clone(),
             client,
             audit_context,
-            JobByteProgress::new(size, 0),
-            CurrentFileProgress::default(),
-            Arc::new(SyncCoordinatorInner::new(false)),
-            crate::immich::SidecarDirectoryCache::new(),
-        )
+            progress: DesktopRunProgress::new(
+                app.handle().clone(),
+                crate::sync::JobByteProgress::new(size, 0),
+                crate::sync::CurrentFileProgress::default(),
+            ),
+            sidecar_cache: crate::immich::SidecarDirectoryCache::new(),
+        })
         .await
         .unwrap();
         let unit = UploadUnit {
@@ -1266,8 +1226,7 @@ mod tests {
             },
             live_photo_video: None,
         };
-        let work = Arc::new(crate::sync::ActiveWork::new());
-        let lease = work.acquire(std::slice::from_ref(&unit));
+        let lease = runtime.acquire_active_work(std::slice::from_ref(&unit));
 
         let summary = processor
             .process(vec![unit], lease.context())

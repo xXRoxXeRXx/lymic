@@ -4,22 +4,22 @@
 //! the Tauri surface remains separate from queue coordination and processing.
 
 pub(crate) mod active_work;
+pub(crate) mod admission;
 pub(crate) mod album_batch;
 pub(crate) mod completion;
-pub(crate) mod coordinator;
 pub(crate) mod lifecycle;
 pub(crate) mod processor;
 pub(crate) mod progress;
 pub(crate) mod queue_runner;
+pub(crate) mod reporter;
 pub(crate) mod retry;
+pub(crate) mod runtime;
 pub(crate) mod service;
 
-pub(crate) use active_work::{ActiveWork, ProcessingContext};
-pub(crate) use coordinator::{SyncCoordinator, SyncCoordinatorInner, SyncState};
+#[cfg(test)]
+pub(crate) use active_work::ActiveWork;
+pub(crate) use active_work::ProcessingContext;
 pub(crate) use processor::{load_upload_parallelism, SyncSummary};
 pub(crate) use progress::{CurrentFileProgress, JobByteProgress};
-pub(crate) use retry::prepare_failed_sync_retry;
-pub(crate) use service::{
-    add_event_paths, admit_and_run, log_overlapping_folders, scan_watched_folders_for_media, Asset,
-    FileFailure, ScanResult, SyncSource, Synchronization,
-};
+pub(crate) use runtime::SyncRuntime;
+pub(crate) use service::{SyncSource, Synchronization};

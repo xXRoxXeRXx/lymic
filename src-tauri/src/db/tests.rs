@@ -54,11 +54,17 @@ mod database_tests {
         discard_sync_data_in_folder(&pool, "C:/photos")
             .await
             .unwrap();
-        assert_eq!(get_sync_snapshot(&pool).await.unwrap().status, "PAUSED");
+        assert_eq!(
+            get_sync_snapshot(&pool).await.unwrap().status,
+            SyncJobStatus::Paused
+        );
         discard_failed_sync_paths(&pool, &["C:/photos/missing.jpg".to_string()])
             .await
             .unwrap();
-        assert_eq!(get_sync_snapshot(&pool).await.unwrap().status, "PAUSED");
+        assert_eq!(
+            get_sync_snapshot(&pool).await.unwrap().status,
+            SyncJobStatus::Paused
+        );
     }
 
     fn single_upload_unit(path: &str) -> QueueUploadUnit {
@@ -318,10 +324,10 @@ mod database_tests {
             .await
             .unwrap();
 
-        let snapshot = crate::sync::lifecycle::SynchronizationLifecycle::recover(&pool)
+        let snapshot = crate::sync::SyncRuntime::recover_snapshot(&pool)
             .await
             .unwrap();
-        assert_eq!(snapshot.status, "PAUSED");
+        assert_eq!(snapshot.status, SyncJobStatus::Paused);
     }
 
     #[tokio::test]
@@ -349,7 +355,7 @@ mod database_tests {
         }];
         let snapshot = enqueue_sync_assets(&pool, &fresh, &[]).await.unwrap();
 
-        assert_eq!(snapshot.status, "FAILED");
+        assert_eq!(snapshot.status, SyncJobStatus::Failed);
         assert_eq!(snapshot.total, 1);
         assert_eq!(snapshot.succeeded, 0);
         assert_eq!(snapshot.failed, 0);
@@ -506,7 +512,7 @@ mod database_tests {
         }];
 
         let snapshot = enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
-        assert_eq!(snapshot.status, "PAUSED");
+        assert_eq!(snapshot.status, SyncJobStatus::Paused);
         assert_eq!(snapshot.total, 1);
         assert_eq!(
             next_sync_queue_block(&pool, 1).await.unwrap()[0].local_path,
@@ -556,7 +562,7 @@ mod database_tests {
             .await
             .unwrap();
 
-        assert_eq!(snapshot.status, "PAUSED");
+        assert_eq!(snapshot.status, SyncJobStatus::Paused);
         assert_eq!(snapshot.total, 3);
         let rows: Vec<(String, String)> = sqlx::query_as(
             "SELECT local_path, status FROM sync_queue WHERE job_id = 1 ORDER BY sequence",
@@ -604,7 +610,7 @@ mod database_tests {
             .await
             .unwrap();
         let snapshot = complete_sync_job_if_finished(&pool).await.unwrap().unwrap();
-        assert_eq!(snapshot.status, "IDLE");
+        assert_eq!(snapshot.status, SyncJobStatus::Idle);
         assert_eq!(snapshot.succeeded, 1);
         assert_eq!(snapshot.failed, 1);
         assert_eq!(snapshot.total_bytes, 3);
@@ -1009,7 +1015,7 @@ mod database_tests {
                 .unwrap();
         assert_eq!(queue_count, 0);
         let snapshot = get_sync_snapshot(&pool).await.unwrap();
-        assert_eq!(snapshot.status, "IDLE");
+        assert_eq!(snapshot.status, SyncJobStatus::Idle);
         assert_eq!(snapshot.total, 1);
         assert_eq!(snapshot.failed, 1);
 
@@ -1020,7 +1026,7 @@ mod database_tests {
             .await
             .unwrap();
         let snapshot = get_sync_snapshot(&pool).await.unwrap();
-        assert_eq!(snapshot.status, "IDLE");
+        assert_eq!(snapshot.status, SyncJobStatus::Idle);
         assert_eq!(snapshot.total, 0);
         assert_eq!(snapshot.failed, 0);
     }
@@ -1997,11 +2003,148 @@ mod database_tests {
     }
 
     #[tokio::test]
-    async fn sql_path_is_or_descendant_of_predicate_format() {
-        let predicate = crate::db::sql_path_is_or_descendant_of("local_path", "?1");
+    async fn db_folder_queries_agree_with_canonical_path_rule_on_mixed_variants_and_siblings() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let assets = [
+            QueueAsset {
+                path: "C:/Photos/Sub/mixed_slash.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            },
+            QueueAsset {
+                path: r"C:\photos\sub\lower_ascii.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            },
+            QueueAsset {
+                path: r"C:\Photos\Sub\..\Outside\escaped.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            },
+            QueueAsset {
+                path: r"C:\Photos\Sub-Backup\sibling.jpg",
+                size: 1,
+                mtime: 1,
+                target_album_id: None,
+            },
+        ];
+        enqueue_sync_assets(&pool, &assets, &[]).await.unwrap();
+        mark_sync_failed(&pool, "C:/Photos/Sub/failed.jpg", 1, 1, "io error")
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO sync_queue (job_id, sequence, local_path, size, last_modified, status, upload_unit_id, is_primary, failure_reason) \
+             VALUES (1, 99, 'C:/Photos/Sub/failed.jpg', 1, 1, 'FAILED', 'C:/Photos/Sub/failed.jpg', 1, 'io error')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        #[cfg(windows)]
+        {
+            assert!(has_sync_work_in_folder(&pool, r"\\?\c:\PHOTOS\Sub\")
+                .await
+                .unwrap());
+            let reset = reset_failed_queue_items_for_folder(&pool, r"\\?\c:\PHOTOS\Sub\")
+                .await
+                .unwrap();
+            assert_eq!(reset, 1);
+
+            discard_sync_data_in_folder(&pool, r"\\?\c:\PHOTOS\Sub\")
+                .await
+                .unwrap();
+
+            let remaining: Vec<String> =
+                sqlx::query_scalar("SELECT local_path FROM sync_queue ORDER BY local_path")
+                    .fetch_all(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                remaining,
+                vec![
+                    r"C:\Photos\Sub-Backup\sibling.jpg",
+                    r"C:\Photos\Sub\..\Outside\escaped.jpg",
+                ]
+            );
+        }
+
+        #[cfg(not(windows))]
+        {
+            assert!(has_sync_work_in_folder(&pool, "/Photos/Sub").await == Ok(false));
+            discard_sync_data_in_folder(&pool, "C:/Photos/Sub/")
+                .await
+                .unwrap();
+            let remaining: Vec<String> =
+                sqlx::query_scalar("SELECT local_path FROM sync_queue ORDER BY local_path")
+                    .fetch_all(&pool)
+                    .await
+                    .unwrap();
+            assert!(remaining.contains(&r"C:\photos\sub\lower_ascii.jpg".to_string()));
+        }
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn remap_watched_folder_path_uses_canonical_containment_for_verbatim_and_mixed_paths() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let folder_id = add_folder(&pool, r"E:\FÖTOS", None).await.unwrap();
+        update_sync_state(
+            &pool,
+            r"\\?\e:\fötos\100EOS\IMG_0001.JPG",
+            "h1",
+            10,
+            10,
+            "SYNCED",
+            Some("r1"),
+        )
+        .await
+        .unwrap();
+        update_sync_state(
+            &pool,
+            r"E:\FÖTOS\..\Outside\keep.jpg",
+            "h2",
+            10,
+            10,
+            "SYNCED",
+            Some("r2"),
+        )
+        .await
+        .unwrap();
+        update_sync_state(
+            &pool,
+            r"E:\FÖTOS-Backup\sibling.jpg",
+            "h3",
+            10,
+            10,
+            "SYNCED",
+            Some("r3"),
+        )
+        .await
+        .unwrap();
+
+        remap_watched_folder_path(&pool, folder_id, r"\\?\e:\FÖTOS\", r"f:\FÖTOS\")
+            .await
+            .unwrap();
+
+        let paths: Vec<String> =
+            sqlx::query_scalar("SELECT local_path FROM sync_state ORDER BY local_path")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
         assert_eq!(
-            predicate,
-            "(local_path = ?1 OR (substr(local_path, 2, 1) = ':' AND substr(?1, 2, 1) = ':' AND substr(local_path, 1, 1) = substr(?1, 1, 1) COLLATE NOCASE AND substr(local_path, 2) = substr(?1, 2)) OR substr(local_path, 1, length(?1) + 1) = ?1 || '/' OR substr(local_path, 1, length(?1) + 1) = ?1 || '\\' OR (substr(local_path, 2, 1) = ':' AND substr(?1, 2, 1) = ':' AND substr(local_path, 1, 1) = substr(?1, 1, 1) COLLATE NOCASE AND substr(local_path, 2, length(?1) - 1) = substr(?1, 2) AND substr(local_path, length(?1) + 1, 1) IN ('/', '\\')))"
+            paths,
+            vec![
+                r"E:\FÖTOS-Backup\sibling.jpg",
+                r"E:\FÖTOS\..\Outside\keep.jpg",
+                r"F:\FÖTOS\100EOS\IMG_0001.JPG",
+            ]
         );
     }
 
@@ -2221,5 +2364,75 @@ mod database_tests {
                 Some("E:/DCIM/in-progress.jpg".to_string())
             )
         );
+    }
+
+    #[tokio::test]
+    async fn unrecognized_sync_status_in_database_surfaces_as_an_error() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        sqlx::query("PRAGMA ignore_check_constraints = ON")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE sync_jobs SET status = 'UNKNOWN' WHERE id = 1")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA ignore_check_constraints = OFF")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let snapshot_err = get_sync_snapshot(&pool).await.unwrap_err();
+        assert!(
+            snapshot_err
+                .to_string()
+                .contains("Unknown synchronization status: UNKNOWN"),
+            "unexpected snapshot error: {snapshot_err}"
+        );
+
+        let enqueue_err = enqueue_upload_units(&pool, &[], &[]).await.unwrap_err();
+        assert!(
+            enqueue_err
+                .to_string()
+                .contains("Unknown synchronization status: UNKNOWN"),
+            "unexpected enqueue error: {enqueue_err}"
+        );
+
+        let recover_err = crate::sync::SyncRuntime::recover_snapshot(&pool)
+            .await
+            .unwrap_err();
+        assert!(
+            recover_err
+                .to_string()
+                .contains("Unknown synchronization status: UNKNOWN"),
+            "unexpected recover error: {recover_err}"
+        );
+    }
+
+    #[test]
+    fn sync_snapshot_serializes_with_unchanged_json_contract() {
+        for (status, expected_status) in [
+            (SyncJobStatus::Idle, "IDLE"),
+            (SyncJobStatus::Running, "RUNNING"),
+            (SyncJobStatus::Paused, "PAUSED"),
+            (SyncJobStatus::Failed, "FAILED"),
+        ] {
+            let snapshot = SyncSnapshot {
+                status,
+                total: 10,
+                succeeded: 4,
+                failed: 1,
+                current_path: Some("/photos/a.jpg".to_string()),
+                total_bytes: 2048,
+                completed_bytes: 1024,
+            };
+            assert_eq!(
+                serde_json::to_string(&snapshot).unwrap(),
+                format!(
+                    r#"{{"status":"{expected_status}","total":10,"succeeded":4,"failed":1,"currentPath":"/photos/a.jpg","totalBytes":2048,"completedBytes":1024}}"#
+                )
+            );
+        }
     }
 }

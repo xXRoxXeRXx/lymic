@@ -96,14 +96,124 @@ fn path_component_eq(left: Component<'_>, right: Component<'_>) -> bool {
     }
 }
 
+fn with_normalized_pair<T>(left: &Path, right: &Path, f: impl FnOnce(&Path, &Path) -> T) -> T {
+    let norm_left = normalize_path_lexical(left);
+    let norm_right = normalize_path_lexical(right);
+    f(&norm_left, &norm_right)
+}
+
 pub(crate) fn path_is_within_lexical(path: &Path, parent: &Path) -> bool {
-    let mut path_components = path.components();
-    parent
-        .components()
-        .all(|parent_component| match path_components.next() {
-            Some(path_component) => path_component_eq(path_component, parent_component),
-            None => false,
-        })
+    relative_path_within_lexical(path, parent).is_some()
+}
+
+pub(crate) fn path_is_within(path: &Path, parent: &Path) -> bool {
+    with_normalized_pair(path, parent, path_is_within_lexical)
+}
+
+pub(crate) fn paths_equal_lexical(left: &Path, right: &Path) -> bool {
+    let mut left_components = left.components();
+    let mut right_components = right.components();
+    let mut saw_any = false;
+    loop {
+        match (left_components.next(), right_components.next()) {
+            (Some(l), Some(r)) => {
+                saw_any = true;
+                if !path_component_eq(l, r) {
+                    return false;
+                }
+            }
+            (None, None) => return saw_any,
+            _ => return false,
+        }
+    }
+}
+
+pub(crate) fn paths_equal(left: &Path, right: &Path) -> bool {
+    with_normalized_pair(left, right, paths_equal_lexical)
+}
+
+pub(crate) fn relative_path_within_lexical(
+    norm_path: &Path,
+    norm_parent: &Path,
+) -> Option<PathBuf> {
+    let mut parent_components = norm_parent.components().peekable();
+    parent_components.peek()?;
+    let mut path_components = norm_path.components();
+    for parent_component in parent_components {
+        let path_component = path_components.next()?;
+        if !path_component_eq(path_component, parent_component) {
+            return None;
+        }
+    }
+    Some(path_components.collect())
+}
+
+/// Remaps paths inside an old Watched Folder to a new Watched Folder path
+/// while preserving relative structure and target separator style.
+pub(crate) struct PathRemapper {
+    norm_old: PathBuf,
+    pub(crate) clean_new: String,
+}
+
+impl PathRemapper {
+    pub(crate) fn new(old_path: &str, new_path: &str) -> Self {
+        Self {
+            norm_old: normalize_path_lexical(Path::new(old_path)),
+            clean_new: normalize_drive_letter_str(trim_trailing_separators_preserving_root(
+                new_path,
+            )),
+        }
+    }
+
+    pub(crate) fn remap_if_changed(&self, candidate: &str) -> Option<String> {
+        let norm_candidate = normalize_path_lexical(Path::new(candidate));
+        let relative = relative_path_within_lexical(&norm_candidate, &self.norm_old)?;
+        let remapped = if relative.as_os_str().is_empty() {
+            self.clean_new.clone()
+        } else {
+            let sep = if self.clean_new.contains('/') && !self.clean_new.contains('\\') {
+                "/"
+            } else {
+                std::path::MAIN_SEPARATOR_STR
+            };
+            let mut remapped = if self.clean_new == "/" {
+                "/".to_owned()
+            } else {
+                self.clean_new.trim_end_matches(['/', '\\']).to_owned()
+            };
+            for component in relative.components() {
+                if let Component::Normal(part) = component {
+                    if !remapped.ends_with(['/', '\\']) {
+                        remapped.push_str(sep);
+                    }
+                    remapped.push_str(&part.to_string_lossy());
+                }
+            }
+            remapped
+        };
+        (remapped != candidate).then_some(remapped)
+    }
+}
+
+fn trim_trailing_separators_preserving_root(path: &str) -> &str {
+    let trimmed = path.trim_end_matches(['/', '\\']);
+    if trimmed.is_empty() && !path.is_empty() {
+        return "/";
+    }
+    #[cfg(windows)]
+    if trimmed.len() == 2 && trimmed.as_bytes()[1] == b':' && path.len() > 2 {
+        return &path[..3];
+    }
+    trimmed
+}
+
+pub(crate) fn normalize_drive_letter_str(path: &str) -> String {
+    let bytes = path.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        format!("{}{}", (bytes[0] as char).to_ascii_uppercase(), &path[1..])
+    } else {
+        path.to_owned()
+    }
 }
 
 pub(crate) fn overlapping_folder_paths(
@@ -134,6 +244,10 @@ pub(crate) fn overlapping_folder_paths(
 mod tests {
     use super::*;
 
+    fn relative_path_within(path: &Path, parent: &Path) -> Option<PathBuf> {
+        with_normalized_pair(path, parent, relative_path_within_lexical)
+    }
+
     #[test]
     fn removes_verbatim_prefix_and_compares_paths_case_insensitively() {
         let parent = remove_windows_verbatim_prefix(PathBuf::from(r"\\?\C:\Fotos"));
@@ -149,6 +263,38 @@ mod tests {
             normalize_path_lexical(Path::new(r"\\?\c:\Fotos\.\Urlaub\..\Familie\\")),
             PathBuf::from(r"C:\Fotos\Familie")
         );
+    }
+
+    #[test]
+    fn canonical_containment_and_equality_handle_windows_unicode_and_verbatim_prefixes() {
+        assert!(paths_equal(
+            Path::new(r"\\?\c:\FÖTOS\Sub\.."),
+            Path::new(r"C:/fötos/")
+        ));
+        assert!(paths_equal(
+            Path::new(r"\\?\UNC\Server\Share\Photos"),
+            Path::new(r"\\server\share\photos\")
+        ));
+        assert_eq!(
+            relative_path_within(
+                Path::new(r"\\?\c:\Fötos\Screenshots\img.jpg"),
+                Path::new(r"C:\FÖTOS"),
+            ),
+            Some(PathBuf::from(r"Screenshots\img.jpg"))
+        );
+        assert_eq!(
+            relative_path_within(Path::new(r"C:\Photos"), Path::new(r"C:\Photos\")),
+            Some(PathBuf::new())
+        );
+        assert_eq!(
+            relative_path_within(Path::new(r"C:\Photos2\a.jpg"), Path::new(r"C:\Photos")),
+            None
+        );
+        assert!(!path_is_within(
+            Path::new(r"C:\Photos\a.jpg"),
+            Path::new("")
+        ));
+        assert!(!paths_equal(Path::new(""), Path::new("")));
     }
 }
 
@@ -181,6 +327,36 @@ mod lexical_tests {
         assert_eq!(
             normalize_path_lexical(Path::new("../../photos/./2025")),
             PathBuf::from("../../photos/2025")
+        );
+    }
+
+    #[test]
+    fn empty_parent_never_contains_any_path() {
+        assert!(!path_is_within(
+            Path::new("/media/photos/a.jpg"),
+            Path::new("")
+        ));
+        assert!(!paths_equal(Path::new(""), Path::new("")));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn posix_containment_and_equality_are_case_sensitive() {
+        assert!(!path_is_within(
+            Path::new("/media/photos/a.jpg"),
+            Path::new("/Media/Photos")
+        ));
+        assert!(!paths_equal(
+            Path::new("/Media/Photos"),
+            Path::new("/media/photos")
+        ));
+        assert_eq!(
+            with_normalized_pair(
+                Path::new("/Media/Photos/Trips/a.jpg"),
+                Path::new("/Media/Photos"),
+                relative_path_within_lexical
+            ),
+            Some(PathBuf::from("Trips/a.jpg"))
         );
     }
 }

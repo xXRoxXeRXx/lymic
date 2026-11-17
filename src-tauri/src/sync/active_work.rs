@@ -1,6 +1,6 @@
 use crate::media::{
     model::{HashedUploadUnit, UploadUnit},
-    paths::{normalize_path_lexical, path_is_within_lexical},
+    paths::{normalize_path_lexical, path_is_within_lexical, paths_equal_lexical},
 };
 use std::{
     path::PathBuf,
@@ -143,18 +143,13 @@ impl ProcessingContext {
 
     fn for_path(&self, path: &str) -> UnitProcessingContext {
         let path = normalize_path_lexical(&PathBuf::from(path));
-        let cancellation = self
-            .entries
-            .iter()
-            .find_map(|entry| same_path(&entry.path, &path).then(|| entry.cancellation.clone()));
+        let cancellation = self.entries.iter().find_map(|entry| {
+            paths_equal_lexical(&entry.path, &path).then(|| entry.cancellation.clone())
+        });
         UnitProcessingContext {
             cancellation: cancellation.unwrap_or_default(),
         }
     }
-}
-
-fn same_path(left: &std::path::Path, right: &std::path::Path) -> bool {
-    path_is_within_lexical(left, right) && path_is_within_lexical(right, left)
 }
 
 impl UnitProcessingContext {
@@ -249,5 +244,26 @@ mod tests {
         work.cancel_work_in("C:/Removed");
 
         assert!(lease.context().for_upload_unit(&live_photo).is_cancelled());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_work_matches_verbatim_unicode_and_slash_variants_without_matching_siblings() {
+        let work = Arc::new(ActiveWork::new());
+        let active = unit(r"\\?\c:\Fötos\sub\..\active.jpg");
+        let sibling = unit(r"C:\FÖTOS-Backup\other.jpg");
+        let lease = work.acquire(&[active, sibling]);
+
+        assert!(work.has_work_in(r"C:/FÖTOS/"));
+        work.cancel_work_in(r"C:/FÖTOS/");
+
+        assert!(lease
+            .context()
+            .for_upload_unit(&unit(r"C:/fötos/active.jpg"))
+            .is_cancelled());
+        assert!(!lease
+            .context()
+            .for_upload_unit(&unit(r"C:\FÖTOS-Backup\other.jpg"))
+            .is_cancelled());
     }
 }

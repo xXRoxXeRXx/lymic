@@ -2,104 +2,38 @@
 
 use crate::{
     db,
-    sync::{SyncCoordinator, SyncState, Synchronization},
+    sync::{SyncRuntime, Synchronization},
 };
-
-fn synchronization<'a>(
-    app: &'a tauri::AppHandle,
-    pool: &'a sqlx::SqlitePool,
-    sync_state: &'a SyncState,
-    coordinator: &'a SyncCoordinator,
-) -> Synchronization<'a> {
-    Synchronization::new(app, pool, &sync_state.0, &coordinator.0)
-}
 
 #[tauri::command]
 pub(crate) async fn start_sync(
     app: tauri::AppHandle,
-    pool: tauri::State<'_, sqlx::SqlitePool>,
-    sync_state: tauri::State<'_, SyncState>,
-    sync_coordinator: tauri::State<'_, SyncCoordinator>,
+    runtime: tauri::State<'_, SyncRuntime>,
 ) -> Result<crate::sync::SyncSummary, String> {
-    synchronization(
-        &app,
-        pool.inner(),
-        sync_state.inner(),
-        sync_coordinator.inner(),
-    )
-    .start()
-    .await
+    Synchronization::new(&app, runtime.inner()).start().await
 }
 
 #[tauri::command]
 pub(crate) async fn get_sync_status(
-    app: tauri::AppHandle,
-    pool: tauri::State<'_, sqlx::SqlitePool>,
-    sync_state: tauri::State<'_, SyncState>,
-    sync_coordinator: tauri::State<'_, SyncCoordinator>,
+    runtime: tauri::State<'_, SyncRuntime>,
 ) -> Result<db::SyncSnapshot, String> {
-    synchronization(
-        &app,
-        pool.inner(),
-        sync_state.inner(),
-        sync_coordinator.inner(),
-    )
-    .status()
-    .await
+    runtime.status().await.map_err(Into::into)
 }
 
 #[tauri::command]
 pub(crate) async fn pause_sync(
     app: tauri::AppHandle,
-    pool: tauri::State<'_, sqlx::SqlitePool>,
-    sync_state: tauri::State<'_, SyncState>,
-    sync_coordinator: tauri::State<'_, SyncCoordinator>,
+    runtime: tauri::State<'_, SyncRuntime>,
 ) -> Result<db::SyncSnapshot, String> {
-    pause_sync_inner(
-        &app,
-        pool.inner(),
-        &sync_state.inner().0,
-        &sync_coordinator.inner().0,
-    )
-    .await
-}
-
-pub(crate) async fn pause_sync_inner(
-    app: &tauri::AppHandle,
-    pool: &sqlx::SqlitePool,
-    running: &std::sync::atomic::AtomicBool,
-    coordinator: &std::sync::Arc<crate::sync::SyncCoordinatorInner>,
-) -> Result<db::SyncSnapshot, String> {
-    Synchronization::new(app, pool, running, coordinator)
-        .pause()
-        .await
+    Synchronization::new(&app, runtime.inner()).pause().await
 }
 
 #[tauri::command]
 pub(crate) async fn resume_sync(
     app: tauri::AppHandle,
-    pool: tauri::State<'_, sqlx::SqlitePool>,
-    sync_state: tauri::State<'_, SyncState>,
-    sync_coordinator: tauri::State<'_, SyncCoordinator>,
+    runtime: tauri::State<'_, SyncRuntime>,
 ) -> Result<db::SyncSnapshot, String> {
-    resume_sync_inner(
-        &app,
-        pool.inner(),
-        &sync_state.inner().0,
-        &sync_coordinator.inner().0,
-    )
-    .await
-}
-
-pub(crate) async fn resume_sync_inner(
-    app: &tauri::AppHandle,
-    pool: &sqlx::SqlitePool,
-    running: &std::sync::atomic::AtomicBool,
-    coordinator: &std::sync::Arc<crate::sync::SyncCoordinatorInner>,
-) -> Result<db::SyncSnapshot, String> {
-    Synchronization::new(app, pool, running, coordinator)
-        .resume()
-        .await
+    Synchronization::new(&app, runtime.inner()).resume().await
 }
 
 #[tauri::command]
@@ -146,36 +80,15 @@ async fn set_upload_parallelism_inner(
 #[tauri::command]
 pub(crate) async fn retry_failed_syncs(
     app: tauri::AppHandle,
-    pool: tauri::State<'_, sqlx::SqlitePool>,
-    sync_state: tauri::State<'_, SyncState>,
-    sync_coordinator: tauri::State<'_, SyncCoordinator>,
+    runtime: tauri::State<'_, SyncRuntime>,
 ) -> Result<crate::sync::SyncSummary, String> {
-    synchronization(
-        &app,
-        pool.inner(),
-        sync_state.inner(),
-        sync_coordinator.inner(),
-    )
-    .retry()
-    .await
+    Synchronization::new(&app, runtime.inner()).retry().await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    async fn test_pool() -> sqlx::SqlitePool {
-        let database_name = format!("lymic_command_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        pool
-    }
+    use crate::db::test_pool;
 
     #[tokio::test]
     async fn settings_command_adapters_preserve_parallelism_values_and_validation() {

@@ -1,6 +1,6 @@
 use super::seams::{
-    CoordinatorSyncWork, ExclusionPatterns, FolderEffects, FolderPersistence, FolderScanTrigger,
-    FolderSyncWork, FolderWatcher, NotifyFolderWatcher, SqliteFolderPersistence,
+    ExclusionPatterns, FolderEffects, FolderPersistence, FolderScanTrigger, FolderSyncWork,
+    FolderWatcher, NotifyFolderWatcher, RuntimeSyncWork, SqliteFolderPersistence,
 };
 use super::{RegisterFolderParams, RemovableVolumeBinding, RemoveFolderResult, WatchedFolders};
 use crate::audit::AuditEvent;
@@ -77,7 +77,9 @@ struct TriggeredSync {
 struct RecordedEffects {
     tray_sync_enabled: Arc<Mutex<Vec<bool>>>,
     triggered_syncs: Arc<Mutex<Vec<TriggeredSync>>>,
-    admitted_scans: Arc<Mutex<Vec<(crate::sync::ScanResult, crate::sync::SyncSource)>>>,
+    scanned_folders: Arc<Mutex<Vec<i64>>>,
+    admitted_scans: Arc<Mutex<Vec<(crate::media::model::ScanResult, crate::sync::SyncSource)>>>,
+    scan_error: Arc<Mutex<Option<String>>>,
     deferred_warnings: Arc<Mutex<Vec<String>>>,
     undo_errors: Arc<Mutex<Vec<(String, String)>>>,
     unwatch_errors: Arc<Mutex<Vec<(String, String)>>>,
@@ -180,15 +182,22 @@ impl FolderEffects for &RecordedEffects {
         self.tray_sync_enabled.lock().unwrap().push(enabled);
     }
 
-    async fn admit_rescan(
+    async fn scan_and_admit(
         &self,
-        scan_result: crate::sync::ScanResult,
+        folder: WatchedFolder,
         source: crate::sync::SyncSource,
-    ) {
+    ) -> Result<(), String> {
+        self.scanned_folders.lock().unwrap().push(folder.id);
+        if let Some(error) = self.scan_error.lock().unwrap().clone() {
+            return Err(error);
+        }
+        let scan_result =
+            crate::media::scanner::scan_watched_folders_for_media(vec![folder]).await?;
         self.admitted_scans
             .lock()
             .unwrap()
             .push((scan_result, source));
+        Ok(())
     }
 
     fn log_watcher_deferred(&self, path: &str) {
@@ -227,11 +236,9 @@ impl FolderEffects for &RecordedEffects {
     }
 }
 
-fn test_sync_work(pool: &SqlitePool) -> CoordinatorSyncWork<'_> {
-    CoordinatorSyncWork {
-        pool,
-        running: Arc::new(AtomicBool::new(false)),
-        coordinator: Arc::new(crate::sync::SyncCoordinatorInner::new(false)),
+fn test_sync_work(pool: &SqlitePool) -> RuntimeSyncWork {
+    RuntimeSyncWork {
+        runtime: crate::sync::SyncRuntime::new(pool.clone(), false),
     }
 }
 
@@ -831,16 +838,13 @@ async fn unconfirmed_removal_changes_nothing_and_reports_whether_sync_work_would
     let temp = TempDir::new("remove-unconfirmed");
     let (folder_id, expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
 
-    let running = Arc::new(AtomicBool::new(false));
-    let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+    let runtime = crate::sync::SyncRuntime::new(pool.clone(), false);
     let removal_effects = RecordedEffects::default();
     let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorSyncWork {
-            pool: &pool,
-            running: running.clone(),
-            coordinator: coordinator.clone(),
+        RuntimeSyncWork {
+            runtime: runtime.clone(),
         },
         &removal_effects,
     );
@@ -868,9 +872,7 @@ async fn unconfirmed_removal_changes_nothing_and_reports_whether_sync_work_would
 
     // 2. Active in-flight work: reports true and does not cancel active work or remove folder.
     let active_unit = test_upload_unit(&expected_path, "active.jpg");
-    let lease = coordinator
-        .active_work
-        .acquire(std::slice::from_ref(&active_unit));
+    let lease = runtime.acquire_active_work(std::slice::from_ref(&active_unit));
     assert_eq!(
         removal.remove(folder_id, None).await.unwrap(),
         RemoveFolderResult {
@@ -918,12 +920,12 @@ impl FolderWatcher for OrderedWatcher<'_> {
     }
 }
 
-struct OrderedSync<'a> {
-    inner: CoordinatorSyncWork<'a>,
+struct OrderedSync {
+    inner: RuntimeSyncWork,
     events: Arc<Mutex<Vec<&'static str>>>,
 }
 
-impl FolderSyncWork for OrderedSync<'_> {
+impl FolderSyncWork for OrderedSync {
     async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
         self.inner.has_work_in_folder(path).await
     }
@@ -937,10 +939,6 @@ impl FolderSyncWork for OrderedSync<'_> {
         self.events.lock().unwrap().push("discard");
         self.inner.discard_folder_queue(path).await
     }
-
-    async fn scan_folder(&self, folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
-        self.inner.scan_folder(folder).await
-    }
 }
 
 #[tokio::test]
@@ -952,11 +950,8 @@ async fn confirmed_removal_stops_watcher_before_cancelling_and_discarding_then_d
     let (folder_id, expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
 
     let active_unit = test_upload_unit(&expected_path, "active.jpg");
-    let running = Arc::new(AtomicBool::new(false));
-    let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-    let lease = coordinator
-        .active_work
-        .acquire(std::slice::from_ref(&active_unit));
+    let runtime = crate::sync::SyncRuntime::new(pool.clone(), false);
+    let lease = runtime.acquire_active_work(std::slice::from_ref(&active_unit));
 
     enqueue_test_files(&pool, &[PathBuf::from(&expected_path).join("queued.jpg")]).await;
 
@@ -969,11 +964,7 @@ async fn confirmed_removal_stops_watcher_before_cancelling_and_discarding_then_d
             events: events.clone(),
         },
         OrderedSync {
-            inner: CoordinatorSyncWork {
-                pool: &pool,
-                running: running.clone(),
-                coordinator: coordinator.clone(),
-            },
+            inner: RuntimeSyncWork { runtime },
             events: events.clone(),
         },
         &removal_effects,
@@ -1027,12 +1018,9 @@ async fn unwatch_failure_aborts_removal_before_cancelling_or_deleting() {
     let temp = TempDir::new("remove-unwatch-fail");
     let (folder_id, expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
 
-    let running = Arc::new(AtomicBool::new(false));
-    let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+    let runtime = crate::sync::SyncRuntime::new(pool.clone(), false);
     let active_unit = test_upload_unit(&expected_path, "active.jpg");
-    let lease = coordinator
-        .active_work
-        .acquire(std::slice::from_ref(&active_unit));
+    let lease = runtime.acquire_active_work(std::slice::from_ref(&active_unit));
 
     let removal_effects = RecordedEffects::default();
     let removal = WatchedFolders::new(
@@ -1040,11 +1028,7 @@ async fn unwatch_failure_aborts_removal_before_cancelling_or_deleting() {
         FailingUnwatchWatcher {
             inner: NotifyFolderWatcher { watcher: &watcher },
         },
-        CoordinatorSyncWork {
-            pool: &pool,
-            running: running.clone(),
-            coordinator: coordinator.clone(),
-        },
+        RuntimeSyncWork { runtime },
         &removal_effects,
     );
 
@@ -1062,11 +1046,11 @@ async fn unwatch_failure_aborts_removal_before_cancelling_or_deleting() {
     assert!(removal_effects.audit_events.lock().unwrap().is_empty());
 }
 
-struct FailingDiscardSync<'a> {
-    inner: CoordinatorSyncWork<'a>,
+struct FailingDiscardSync {
+    inner: RuntimeSyncWork,
 }
 
-impl FolderSyncWork for FailingDiscardSync<'_> {
+impl FolderSyncWork for FailingDiscardSync {
     async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
         self.inner.has_work_in_folder(path).await
     }
@@ -1078,10 +1062,6 @@ impl FolderSyncWork for FailingDiscardSync<'_> {
     async fn discard_folder_queue(&self, _path: &str) -> Result<(), String> {
         Err("simulated queue discard failure".to_string())
     }
-
-    async fn scan_folder(&self, folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
-        self.inner.scan_folder(folder).await
-    }
 }
 
 #[tokio::test]
@@ -1091,18 +1071,13 @@ async fn queue_discard_failure_restores_watcher_and_keeps_folder_configured() {
     let temp = TempDir::new("remove-discard-fail");
     let (folder_id, expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
 
-    let running = Arc::new(AtomicBool::new(false));
-    let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+    let runtime = crate::sync::SyncRuntime::new(pool.clone(), false);
     let removal_effects = RecordedEffects::default();
     let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
         FailingDiscardSync {
-            inner: CoordinatorSyncWork {
-                pool: &pool,
-                running: running.clone(),
-                coordinator,
-            },
+            inner: RuntimeSyncWork { runtime },
         },
         &removal_effects,
     );
@@ -1151,16 +1126,13 @@ async fn delete_failure_restores_watcher_keeps_folder_and_logs_if_restore_fails(
     .await
     .unwrap();
 
-    let running = Arc::new(AtomicBool::new(false));
-    let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+    let runtime = crate::sync::SyncRuntime::new(pool.clone(), false);
     let removal_effects = RecordedEffects::default();
     let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorSyncWork {
-            pool: &pool,
-            running: running.clone(),
-            coordinator: coordinator.clone(),
+        RuntimeSyncWork {
+            runtime: runtime.clone(),
         },
         &removal_effects,
     );
@@ -1186,11 +1158,7 @@ async fn delete_failure_restores_watcher_keeps_folder_and_logs_if_restore_fails(
         FailingRewatchWatcher {
             inner: NotifyFolderWatcher { watcher: &watcher },
         },
-        CoordinatorSyncWork {
-            pool: &pool,
-            running: running.clone(),
-            coordinator,
-        },
+        RuntimeSyncWork { runtime },
         &removal_effects,
     );
     let err = failing_restore_removal
@@ -1220,11 +1188,8 @@ async fn removing_one_folder_leaves_sibling_folder_queue_active_work_and_watcher
     let photos_active = test_upload_unit(&photos_path, "a.jpg");
     let sibling_active = test_upload_unit(&sibling_path, "b.jpg");
 
-    let running = Arc::new(AtomicBool::new(false));
-    let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-    let lease = coordinator
-        .active_work
-        .acquire(&[photos_active.clone(), sibling_active.clone()]);
+    let runtime = crate::sync::SyncRuntime::new(pool.clone(), false);
+    let lease = runtime.acquire_active_work(&[photos_active.clone(), sibling_active.clone()]);
 
     enqueue_test_files(
         &pool,
@@ -1239,11 +1204,7 @@ async fn removing_one_folder_leaves_sibling_folder_queue_active_work_and_watcher
     let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorSyncWork {
-            pool: &pool,
-            running: running.clone(),
-            coordinator: coordinator.clone(),
-        },
+        RuntimeSyncWork { runtime },
         &removal_effects,
     );
 
@@ -1285,17 +1246,12 @@ async fn removing_one_folder_leaves_sibling_folder_queue_active_work_and_watcher
 async fn removing_missing_folder_requires_confirmation_before_auditing_or_refreshing_tray() {
     let pool = test_pool().await;
     let watcher = test_watcher();
-    let running = Arc::new(AtomicBool::new(false));
-    let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+    let runtime = crate::sync::SyncRuntime::new(pool.clone(), false);
     let removal_effects = RecordedEffects::default();
     let removal = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CoordinatorSyncWork {
-            pool: &pool,
-            running: running.clone(),
-            coordinator,
-        },
+        RuntimeSyncWork { runtime },
         &removal_effects,
     );
 
@@ -1321,30 +1277,6 @@ async fn removing_missing_folder_requires_confirmation_before_auditing_or_refres
     assert_eq!(removal_effects.audit_events.lock().unwrap().len(), 1);
 }
 
-struct CountingScanSync<'a> {
-    inner: CoordinatorSyncWork<'a>,
-    scanned_folders: Arc<Mutex<Vec<i64>>>,
-}
-
-impl FolderSyncWork for CountingScanSync<'_> {
-    async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
-        self.inner.has_work_in_folder(path).await
-    }
-
-    fn cancel_work_in_folder(&self, path: &str) {
-        self.inner.cancel_work_in_folder(path);
-    }
-
-    async fn discard_folder_queue(&self, path: &str) -> Result<(), String> {
-        self.inner.discard_folder_queue(path).await
-    }
-
-    async fn scan_folder(&self, folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
-        self.scanned_folders.lock().unwrap().push(folder.id);
-        self.inner.scan_folder(folder).await
-    }
-}
-
 #[tokio::test]
 async fn invalid_exclusion_patterns_are_rejected_before_anything_is_persisted_or_scanned() {
     let pool = test_pool().await;
@@ -1357,14 +1289,10 @@ async fn invalid_exclusion_patterns_are_rejected_before_anything_is_persisted_or
         .unwrap();
 
     let effects = RecordedEffects::default();
-    let scanned_folders = Arc::new(Mutex::new(Vec::new()));
     let folders = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CountingScanSync {
-            inner: test_sync_work(&pool),
-            scanned_folders: scanned_folders.clone(),
-        },
+        test_sync_work(&pool),
         &effects,
     );
 
@@ -1387,7 +1315,7 @@ async fn invalid_exclusion_patterns_are_rejected_before_anything_is_persisted_or
 
     let persisted = crate::db::get_folders(&pool).await.unwrap();
     assert_eq!(persisted[0].exclusion_patterns, initial_patterns);
-    assert!(scanned_folders.lock().unwrap().is_empty());
+    assert!(effects.scanned_folders.lock().unwrap().is_empty());
     assert!(effects.admitted_scans.lock().unwrap().is_empty());
 }
 
@@ -1400,14 +1328,10 @@ async fn unknown_folder_reports_not_found_and_triggers_no_scan() {
     let (_folder_id, _expected_path) = register_test_folder(&pool, &watcher, temp.path()).await;
 
     let effects = RecordedEffects::default();
-    let scanned_folders = Arc::new(Mutex::new(Vec::new()));
     let folders = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CountingScanSync {
-            inner: test_sync_work(&pool),
-            scanned_folders: scanned_folders.clone(),
-        },
+        test_sync_work(&pool),
         &effects,
     );
 
@@ -1419,7 +1343,7 @@ async fn unknown_folder_reports_not_found_and_triggers_no_scan() {
         err.to_ascii_lowercase().contains("not found"),
         "expected 'not found' error, got: {err}"
     );
-    assert!(scanned_folders.lock().unwrap().is_empty());
+    assert!(effects.scanned_folders.lock().unwrap().is_empty());
     assert!(effects.admitted_scans.lock().unwrap().is_empty());
 }
 
@@ -1440,14 +1364,10 @@ async fn successful_exclusion_update_normalizes_persists_and_rescans_only_target
     let (sibling_id, _) = register_test_folder(&pool, &watcher, &sibling).await;
 
     let effects = RecordedEffects::default();
-    let scanned_folders = Arc::new(Mutex::new(Vec::new()));
     let folders = WatchedFolders::new(
         SqliteFolderPersistence { pool: &pool },
         NotifyFolderWatcher { watcher: &watcher },
-        CountingScanSync {
-            inner: test_sync_work(&pool),
-            scanned_folders: scanned_folders.clone(),
-        },
+        test_sync_work(&pool),
         &effects,
     );
 
@@ -1469,7 +1389,7 @@ async fn successful_exclusion_update_normalizes_persists_and_rescans_only_target
     assert_eq!(updated_target.exclusion_patterns, vec!["Screenshots/**"]);
     assert!(untouched_sibling.exclusion_patterns.is_empty());
 
-    assert_eq!(*scanned_folders.lock().unwrap(), vec![target_id]);
+    assert_eq!(*effects.scanned_folders.lock().unwrap(), vec![target_id]);
 
     let admitted = effects.admitted_scans.lock().unwrap();
     assert_eq!(admitted.len(), 1);
@@ -1489,26 +1409,6 @@ async fn successful_exclusion_update_normalizes_persists_and_rescans_only_target
     assert_eq!(scanned_paths, vec![expected_keep]);
 }
 
-struct FailingScanSync<'a>(CoordinatorSyncWork<'a>);
-
-impl FolderSyncWork for FailingScanSync<'_> {
-    async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
-        self.0.has_work_in_folder(path).await
-    }
-
-    fn cancel_work_in_folder(&self, path: &str) {
-        self.0.cancel_work_in_folder(path);
-    }
-
-    async fn discard_folder_queue(&self, path: &str) -> Result<(), String> {
-        self.0.discard_folder_queue(path).await
-    }
-
-    async fn scan_folder(&self, _folder: WatchedFolder) -> Result<crate::sync::ScanResult, String> {
-        Err("scan exploded".to_string())
-    }
-}
-
 #[tokio::test]
 async fn scan_failure_after_update_keeps_new_patterns_and_admits_nothing() {
     let pool = test_pool().await;
@@ -1516,10 +1416,11 @@ async fn scan_failure_after_update_keeps_new_patterns_and_admits_nothing() {
     let persistence = ConfiguredFolderPersistence::default();
     let folder_id = persistence.add_folder("/watched", None).await.unwrap();
     let effects = RecordedEffects::default();
+    *effects.scan_error.lock().unwrap() = Some("scan exploded".to_string());
     let folders = WatchedFolders::new(
         persistence.clone(),
         NotifyFolderWatcher { watcher: &watcher },
-        FailingScanSync(test_sync_work(&pool)),
+        test_sync_work(&pool),
         &effects,
     );
 
@@ -1591,14 +1492,10 @@ async fn folder_vanishing_between_update_and_lookup_reports_not_found_and_trigge
     let persistence = VanishingFolderPersistence::default();
     let folder_id = persistence.add_folder("/watched", None).await.unwrap();
     let effects = RecordedEffects::default();
-    let scanned_folders = Arc::new(Mutex::new(Vec::new()));
     let folders = WatchedFolders::new(
         persistence,
         NotifyFolderWatcher { watcher: &watcher },
-        CountingScanSync {
-            inner: test_sync_work(&pool),
-            scanned_folders: scanned_folders.clone(),
-        },
+        test_sync_work(&pool),
         &effects,
     );
 
@@ -1608,7 +1505,7 @@ async fn folder_vanishing_between_update_and_lookup_reports_not_found_and_trigge
         .unwrap_err();
 
     assert_eq!(err, "Watched folder was not found.");
-    assert!(scanned_folders.lock().unwrap().is_empty());
+    assert!(effects.scanned_folders.lock().unwrap().is_empty());
     assert!(effects.admitted_scans.lock().unwrap().is_empty());
 }
 

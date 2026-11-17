@@ -4,7 +4,7 @@ mod removal;
 mod seams;
 
 use seams::{
-    CoordinatorSyncWork, FolderEffects, FolderPersistence, FolderSyncWork, SqliteFolderPersistence,
+    FolderEffects, FolderPersistence, FolderSyncWork, RuntimeSyncWork, SqliteFolderPersistence,
     TauriFolderEffects,
 };
 
@@ -27,23 +27,18 @@ impl<'a>
     WatchedFolders<
         SqliteFolderPersistence<'a>,
         NotifyFolderWatcher<'a>,
-        CoordinatorSyncWork<'a>,
+        RuntimeSyncWork,
         TauriFolderEffects<'a>,
     >
 {
     pub(crate) fn for_tauri(app: &'a tauri::AppHandle, pool: &'a sqlx::SqlitePool) -> Self {
         use tauri::Manager;
-        let sync_coordinator = app.state::<crate::sync::SyncCoordinator>();
-        let running = app.state::<crate::sync::SyncState>().0.clone();
+        let runtime = app.state::<crate::sync::SyncRuntime>().inner().clone();
         Self::new(
             SqliteFolderPersistence { pool },
             NotifyFolderWatcher::for_tauri(app),
-            CoordinatorSyncWork {
-                pool,
-                running,
-                coordinator: sync_coordinator.0.clone(),
-            },
-            TauriFolderEffects { app, pool },
+            RuntimeSyncWork { runtime },
+            TauriFolderEffects { app },
         )
     }
 }
@@ -75,7 +70,6 @@ where
     ) -> Result<(), String> {
         exclusions::update_folder_exclusion_patterns(
             &self.persistence,
-            &self.sync,
             &self.effects,
             id,
             exclusion_patterns,
