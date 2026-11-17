@@ -20,7 +20,7 @@ function setup(getSearchSuggestions = vi.fn(async (request: SearchSuggestionsReq
     getSearchSupport: vi.fn().mockResolvedValue({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
     getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: true }),
     searchAssets: vi.fn().mockResolvedValue({ buckets: [], assetsByBucket: {}, truncated: false }),
-    searchContextPage: vi.fn().mockResolvedValue({ assets: [], nextPage: null }),
+    searchContextPage: vi.fn().mockResolvedValue({ assets: [], nextPage: null, limitReached: false }),
     getSearchSuggestions,
     getPlaces: vi.fn().mockResolvedValue([]),
   };

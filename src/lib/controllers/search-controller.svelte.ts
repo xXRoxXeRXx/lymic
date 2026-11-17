@@ -8,13 +8,16 @@ import { createSearchSuggestions, type SearchSuggestions } from "./search-sugges
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
 
 /** Why the latest Search could not be answered. */
-export type SearchFailure = "authentication_required" | "permission_denied" | "unavailable" | "context_unavailable" | "error";
+export type SearchFailure = "authentication_required" | "permission_denied" | "unavailable" | "context_unavailable" | "context_service_unavailable" | "error";
 
 /** How the Search Results are shown (ADR-0009): chronologically in Timeline Buckets, or flat in the order of relevance. */
 export type SearchPresentation = "chronological" | "relevance";
 
 /** The most results a chronological Search shows (ADR-0009); mirrors the backend constant. */
 export const SEARCH_RESULT_LIMIT = 5_000;
+
+/** The most results a Context Search shows (ADR-0009); mirrors the backend constant. */
+export const CONTEXT_RESULT_LIMIT = 1_000;
 
 /** The Search Mode a session starts with and returns to when the Search is cleared. */
 export const DEFAULT_SEARCH_MODE: SearchMode = "context";
@@ -58,7 +61,7 @@ export interface SearchController extends TimelineController {
   readonly cities: SearchCities;
   /** The number of Remote Assets in the results. */
   readonly resultCount: number;
-  /** True when the Search was cut at the result limit and only the newest results are shown. */
+  /** True when the Search was cut at its result limit: the newest results of a chronological Search, or the best results of a Context Search. */
   readonly truncated: boolean;
   /** Set while the server is older than the Search requires; every other view is unaffected. */
   readonly unsupported: { version: string; requiredVersion: string } | null;
@@ -75,7 +78,7 @@ export interface SearchController extends TimelineController {
 }
 
 const NO_RESULTS: SearchResults = { buckets: [], assetsByBucket: {}, truncated: false };
-const NO_CONTEXT_PAGE: ContextSearchPage = { assets: [], nextPage: null };
+const NO_CONTEXT_PAGE: ContextSearchPage = { assets: [], nextPage: null, limitReached: false };
 
 function classifyFailure(reason: unknown): SearchFailure {
   // Unlike the other sections, a rejected API key is its own failure here: the view asks to sign in again
@@ -83,6 +86,7 @@ function classifyFailure(reason: unknown): SearchFailure {
   const message = failureMessage(reason);
   if (message.startsWith("search_authentication_required")) return "authentication_required";
   if (message.startsWith("search_context_unavailable")) return "context_unavailable";
+  if (message.startsWith("search_context_service_unavailable")) return "context_service_unavailable";
   return classifyRequestFailure(reason, "search");
 }
 
@@ -295,7 +299,7 @@ export function createSearchController(adapter: SearchControllerAdapter): Search
         ? context.buckets.reduce((total, bucket) => total + bucket.count, 0)
         : timeline.buckets.reduce((total, bucket) => total + bucket.count, 0);
     },
-    get truncated() { return truncated; },
+    get truncated() { return presentation === "relevance" ? context.limitReached : truncated; },
     get unsupported() { return unsupported; },
     get failure() { return failure; },
     get revision() { return revision; },

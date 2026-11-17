@@ -57,7 +57,7 @@ const timelines: Array<[string, () => TimelineController]> = [
       getSearchSuggestions: async () => [],
       getPlaces: async () => [],
       searchAssets: async () => ({ buckets, assetsByBucket, truncated: false }),
-      searchContextPage: async () => ({ assets: [], nextPage: null }),
+      searchContextPage: async () => ({ assets: [], nextPage: null, limitReached: false }),
     });
     search.mode = "filename";
     search.text = "IMG";

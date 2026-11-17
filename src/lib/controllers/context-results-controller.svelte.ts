@@ -15,6 +15,8 @@ export interface ContextResults extends TimelineController {
   readonly isLoadingMore: boolean;
   /** A further page failed; the pages already shown are kept and `loadMore()` retries it. */
   readonly loadMoreFailed: boolean;
+  /** The last page was loaded at the result limit, so Immich may have more results than are shown. */
+  readonly limitReached: boolean;
   loadMore(): Promise<void>;
 }
 
@@ -26,6 +28,7 @@ export interface ContextResultsSource {
 export function createContextResultsController(source: ContextResultsSource): ContextResults {
   let assets = $state<TimelineAsset[]>([]);
   let nextPage = $state<number | null>(null);
+  let limitReached = $state(false);
   let isLoading = $state(false);
   let isRefreshing = $state(false);
   let isOffline = $state(false);
@@ -63,6 +66,7 @@ export function createContextResultsController(source: ContextResultsSource): Co
       if (requestGeneration !== generation) return;
       append(page.assets, true);
       nextPage = page.nextPage;
+      limitReached = page.limitReached;
       refreshGeneration += 1;
       isOffline = false;
       hasInitialLoadError = false;
@@ -90,6 +94,7 @@ export function createContextResultsController(source: ContextResultsSource): Co
         if (requestGeneration !== generation) return;
         append(loaded.assets, false);
         nextPage = loaded.nextPage;
+        limitReached = loaded.limitReached;
         loadMoreFailed = false;
       })
       .catch(() => {
@@ -109,6 +114,7 @@ export function createContextResultsController(source: ContextResultsSource): Co
     pendingMore = null;
     assets = [];
     nextPage = null;
+    limitReached = false;
     isLoading = false;
     isRefreshing = false;
     isOffline = false;
@@ -150,6 +156,7 @@ export function createContextResultsController(source: ContextResultsSource): Co
     get hasNextPage() { return nextPage !== null; },
     get isLoadingMore() { return isLoadingMore; },
     get loadMoreFailed() { return loadMoreFailed; },
+    get limitReached() { return limitReached; },
     assetsFor,
     activateBucket: () => Promise.resolve(),
     refresh,

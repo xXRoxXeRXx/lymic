@@ -312,6 +312,17 @@ describe('i18n catalogs', () => {
     expect(de.search_filter_camera_make).toBe('Kamerahersteller');
   });
 
+  it('translates the Context limit and service strings in every locale and names the Recognized People filter', () => {
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      const strings = translations as Record<string, string>;
+      expect(strings.search_context_limit, `Locale ${localeCode} is missing search_context_limit`).toContain('{count}');
+      expect(strings.search_context_service_unavailable?.trim(), `Locale ${localeCode} is missing search_context_service_unavailable`).toBeTruthy();
+      expect(strings.search_filter_person?.trim(), localeCode).toBeTruthy();
+    }
+    expect(en.search_context_limit).toBe('Showing only the best {count} results. Narrow your search to see more.');
+    expect(en.search_filter_person).toBe('Recognized People');
+  });
+
   it('translates the Location filter strings in every locale', () => {
     const keys = ['search_filter_location', 'search_filter_location_country', 'search_filter_location_state', 'search_filter_location_city'];
     for (const [localeCode, translations] of Object.entries(catalog)) {
@@ -377,6 +388,6 @@ describe('i18n catalogs', () => {
       }
       expect((translations as Record<string, string>).search_filter_person_permission_denied, `Locale ${localeCode} must name the permission`).toContain('person.read');
     }
-    expect(de.search_filter_person).toBe('Person');
+    expect(de.search_filter_person).toBe('Erkannte Personen');
   });
 });

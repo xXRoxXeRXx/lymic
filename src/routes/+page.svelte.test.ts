@@ -3599,7 +3599,7 @@ describe("Search", () => {
       return screen.findByRole("group", { name: "Search mode" });
     };
     const smartOn = async () => ({ smartSearch: true, ocr: true });
-    const page = (ids: string[], nextPage: number | null) => ({ assets: ids.map(found), nextPage });
+    const page = (ids: string[], nextPage: number | null, limitReached = false) => ({ assets: ids.map(found), nextPage, limitReached });
     const contextRequest = (text: string) => ({ text, mode: "context", filters: {} });
     const requestedPages = () =>
       tauri.invoke.mock.calls.filter(([command]) => command === "search_context_page").map(([, args]) => (args as { page: number }).page);
@@ -3668,6 +3668,49 @@ describe("Search", () => {
       expect(await screen.findByRole("alert")).toHaveTextContent("Context is unavailable");
       expect(within(group).getByRole("radio", { name: "Context" })).toBeChecked();
       expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    });
+
+    it("shows Context's own message when Immich fails the smart search with a server error, without changing the Search Mode", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: () => Promise.reject("search_context_service_unavailable"),
+      });
+      const group = await openOptions();
+
+      await search("dog");
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Context needs Immich's machine-learning service, which could not be reached.");
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeChecked();
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    });
+
+    it("tells the user that a Context Search reached its limit of the best 1,000 results", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: async () => page(["best"], null, true),
+      });
+
+      await search("dog");
+
+      expect(await screen.findByText("Showing only the best 1,000 results. Narrow your search to see more.")).toBeInTheDocument();
+    });
+
+    it("shows no limit notice for a Context Search that ended on its own", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: async () => page(["best"], null),
+      });
+
+      await search("dog");
+
+      await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1));
+      expect(screen.queryByText(/Showing only the best/)).not.toBeInTheDocument();
     });
 
     it("disables Context with an explanation and searches by Filename when Smart Search is switched off", async () => {
@@ -3767,6 +3810,22 @@ describe("Search filter panel", () => {
 
     await setDate("From", "2025-03-01");
     expect(screen.queryByText(/The start date is after the end date/)).not.toBeInTheDocument();
+  });
+
+  it("opens the closed panel to show the message when Enter is pressed with a start date after the end date", async () => {
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features });
+    await openPanel();
+    await setDate("From", "2025-03-31");
+    await setDate("To", "2025-03-01");
+    await fireEvent.click(await filtersButton());
+    expect(screen.queryByRole("group", { name: "Date" })).not.toBeInTheDocument();
+
+    await fireEvent.submit(screen.getByRole("search", { name: "Search your Immich library" }));
+
+    expect(await screen.findByText("The start date is after the end date. Choose a start date on or before the end date.")).toBeInTheDocument();
+    expect(await filtersButton()).toHaveAttribute("aria-expanded", "true");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    expect(screen.getByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
   });
 
   it("clears the date range on its own and keeps the other filters", async () => {
