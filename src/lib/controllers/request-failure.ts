@@ -17,3 +17,8 @@ export function classifyRequestFailure(reason: unknown, prefix: string): Request
   if (message.startsWith(`${prefix}_authentication_required`) || message.startsWith(`${prefix}_unavailable`)) return "unavailable";
   return "error";
 }
+
+/** The text for a failed section request: one message per failure kind. */
+export function messageForFailure<T>(failure: RequestFailure, messages: Record<RequestFailure, T>): T {
+  return messages[failure];
+}

@@ -2,6 +2,7 @@
   import { t, locale } from "svelte-i18n";
   import type { Memory } from "../contracts";
   import type { AllMemoriesViewState } from "../controllers/all-memories-controller.svelte";
+  import { messageForFailure } from "../controllers/request-failure";
   import { localizedMemoryTitle } from "../memory-title";
   import MemoryCard from "./MemoryCard.svelte";
 
@@ -22,7 +23,7 @@
   {#if allMemories.isOffline}<p role="status" class="text-sm text-amber-700 dark:text-amber-300">{$t("memories_offline")}</p>{/if}
   {#if allMemories.error}
     <div role="alert" class="flex items-center gap-3 text-sm text-red-600 dark:text-red-300">
-      <p>{allMemories.error === "permission_denied" ? $t("memories_permission_denied") : allMemories.error === "unavailable" ? $t("memories_unavailable") : $t("memories_error")}</p>
+      <p>{messageForFailure(allMemories.error, { permission_denied: $t("memories_permission_denied"), unavailable: $t("memories_unavailable"), error: $t("memories_error") })}</p>
       <button type="button" class="rounded-lg px-2 py-1 font-medium hover:bg-slate-200 dark:hover:bg-zinc-800" onclick={() => void allMemories.refresh()}>{$t("explore_retry")}</button>
     </div>
   {:else if allMemories.isLoading}<p role="status">{$t("memories_loading")}</p>
