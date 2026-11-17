@@ -49,6 +49,15 @@ fn spawn_removable_volume_consumer(
     });
 }
 
+pub(crate) fn deferred_folder_matches_registered(
+    folder_path: &str,
+    registered_paths: &[std::path::PathBuf],
+) -> bool {
+    registered_paths
+        .iter()
+        .any(|path| path == &std::path::PathBuf::from(folder_path))
+}
+
 fn spawn_deferred_watches(handle: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut retry_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
@@ -149,9 +158,7 @@ fn spawn_deferred_watches(handle: tauri::AppHandle) {
                 Ok(folders) => folders
                     .into_iter()
                     .filter(|folder| {
-                        registered_paths
-                            .iter()
-                            .any(|path| path == &std::path::PathBuf::from(&folder.path))
+                        deferred_folder_matches_registered(&folder.path, &registered_paths)
                     })
                     .collect(),
                 Err(error) => {
