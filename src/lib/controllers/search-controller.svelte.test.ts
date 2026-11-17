@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { SearchFeatures, SearchSupport, SearchResults } from "../contracts";
+import type { ContextSearchPage, SearchFeatures, SearchSupport, SearchResults } from "../contracts";
 import { createSearchController } from "./search-controller.svelte";
 
 const march = "2025-03-01T00:00:00.000Z";
@@ -15,6 +15,10 @@ function results(ids: string[], truncated = false): SearchResults {
   return { buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(asset) }, truncated };
 }
 
+function contextPage(ids: string[], nextPage: number | null): ContextSearchPage {
+  return { assets: ids.map(asset), nextPage };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
@@ -22,15 +26,23 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function setup(overrides: Partial<Parameters<typeof createSearchController>[0]> = {}) {
+function setupDefaultMode(overrides: Partial<Parameters<typeof createSearchController>[0]> = {}) {
   const adapter = {
     getSearchSupport: vi.fn().mockResolvedValue(SUPPORTED),
     getSearchFeatures: vi.fn().mockResolvedValue(FEATURES),
     searchAssets: vi.fn().mockResolvedValue(results(["a", "b"])),
+    searchContextPage: vi.fn().mockResolvedValue(contextPage(["a", "b"], null)),
     getSearchSuggestions: vi.fn().mockResolvedValue(["Canon", "FUJIFILM"]),
     ...overrides,
   };
   return { adapter, search: createSearchController(adapter) };
+}
+
+/** A Search on the Filename mode, as most tests below expect; `setupDefaultMode` keeps the default Context mode. */
+function setup(overrides: Partial<Parameters<typeof createSearchController>[0]> = {}) {
+  const made = setupDefaultMode(overrides);
+  made.search.mode = "filename";
+  return made;
 }
 
 describe("Search controller", () => {
@@ -161,7 +173,7 @@ describe("Search controller", () => {
     search.clear();
 
     expect(search.text).toBe("");
-    expect(search.mode).toBe("filename");
+    expect(search.mode).toBe("context");
     expect(search.submittedText).toBe("");
     expect(search.buckets).toEqual([]);
     expect(search.truncated).toBe(false);
@@ -352,7 +364,7 @@ describe("Search controller: Search Filters", () => {
     search.clear();
 
     expect(search.text).toBe("");
-    expect(search.mode).toBe("filename");
+    expect(search.mode).toBe("context");
     expect(search.filters).toEqual({});
     expect(search.canSubmit).toBe(false);
     expect(search.filterErrors).toEqual({});
@@ -421,9 +433,9 @@ describe("camera filters", () => {
 });
 
 describe("Search Mode", () => {
-  it("starts on Filename and sends the chosen mode with the Search", async () => {
-    const { adapter, search } = setup();
-    expect(search.mode).toBe("filename");
+  it("starts on Context and sends the chosen mode with the Search", async () => {
+    const { adapter, search } = setupDefaultMode();
+    expect(search.mode).toBe("context");
 
     for (const mode of ["description", "folderPath", "ocr", "filename"] as const) {
       search.mode = mode;
@@ -453,7 +465,7 @@ describe("Search Mode", () => {
 
     search.clear();
 
-    expect(search.mode).toBe("filename");
+    expect(search.mode).toBe("context");
     expect(search.ocrAvailable).toBe(true);
     await search.loadFeatures();
     expect(adapter.getSearchFeatures).toHaveBeenCalledTimes(2);
@@ -646,6 +658,302 @@ describe("Search server features", () => {
       search.clear();
       expect(search.filters).toEqual({});
     });
+  });
+});
+
+describe("Context Search", () => {
+  it("is the default Search Mode while the server has Smart Search on, and can be chosen", async () => {
+    const { search } = setupDefaultMode();
+    expect(search.mode).toBe("context");
+    expect(search.smartSearchAvailable).toBe(true);
+
+    await search.loadFeatures();
+    search.mode = "description";
+    search.mode = "context";
+
+    expect(search.mode).toBe("context");
+    expect(search.smartSearchAvailable).toBe(true);
+  });
+
+  it("falls back to Filename and disables Context when the server has Smart Search off", async () => {
+    const { search } = setupDefaultMode({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: false, ocr: true }) });
+
+    await search.loadFeatures();
+
+    expect(search.smartSearchAvailable).toBe(false);
+    expect(search.mode).toBe("filename");
+    search.mode = "context";
+    expect(search.mode).toBe("filename");
+  });
+
+  it("does not override another mode the user chose when Smart Search turns out to be off", async () => {
+    const { search } = setupDefaultMode({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: false, ocr: true }) });
+    search.mode = "folderPath";
+
+    await search.loadFeatures();
+
+    expect(search.mode).toBe("folderPath");
+  });
+
+  it("runs a Filename Search for the first Search when the features show Smart Search is off", async () => {
+    const { adapter, search } = setupDefaultMode({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: false, ocr: true }) });
+    search.text = "beach";
+
+    await search.submit();
+
+    expect(search.mode).toBe("filename");
+    expect(search.presentation).toBe("chronological");
+    expect(adapter.searchContextPage).not.toHaveBeenCalled();
+    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "beach", mode: "filename", filters: {} });
+  });
+
+  it("shows a Context text as a flat, relevance-ordered result", async () => {
+    const { adapter, search } = setupDefaultMode({ searchContextPage: vi.fn().mockResolvedValue(contextPage(["best", "next", "last"], null)) });
+    search.text = "  dog on a beach ";
+
+    expect(await search.submit()).toBe(true);
+
+    expect(adapter.searchContextPage).toHaveBeenCalledWith({ text: "dog on a beach", mode: "context", filters: {} }, 1);
+    expect(adapter.searchAssets).not.toHaveBeenCalled();
+    expect(search.presentation).toBe("relevance");
+    expect(search.context.buckets).toHaveLength(1);
+    const bucket = search.context.buckets[0].timeBucket;
+    expect(search.context.assetsFor(bucket).map((candidate) => candidate.id)).toEqual(["best", "next", "last"]);
+    expect(search.resultCount).toBe(3);
+    expect(search.submittedText).toBe("dog on a beach");
+    expect(search.truncated).toBe(false);
+    expect(search.failure).toBeNull();
+    expect(search.context.hasNextPage).toBe(false);
+  });
+
+  it("runs a Context Search without text as the chronological filters-only Search", async () => {
+    const { adapter, search } = setupDefaultMode();
+    search.filters.mediaType = "video";
+
+    expect(await search.submit()).toBe(true);
+
+    expect(search.mode).toBe("context");
+    expect(search.presentation).toBe("chronological");
+    expect(adapter.searchContextPage).not.toHaveBeenCalled();
+    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "context", filters: { mediaType: "video" } });
+  });
+
+  it("loads further pages the server announces, keeping the order and skipping duplicates", async () => {
+    const searchContextPage = vi.fn()
+      .mockResolvedValueOnce(contextPage(["a", "b"], 2))
+      .mockResolvedValueOnce(contextPage(["b", "c"], 3))
+      .mockResolvedValueOnce(contextPage(["d"], null));
+    const { search } = setupDefaultMode({ searchContextPage });
+    search.text = "dog";
+    await search.submit();
+    expect(search.context.hasNextPage).toBe(true);
+    const bucket = search.context.buckets[0].timeBucket;
+    const generation = search.context.refreshGeneration;
+
+    await search.context.loadMore();
+    await search.context.loadMore();
+
+    expect(searchContextPage.mock.calls.map(([, page]) => page)).toEqual([1, 2, 3]);
+    expect(search.context.assetsFor(bucket).map((candidate) => candidate.id)).toEqual(["a", "b", "c", "d"]);
+    expect(search.context.buckets[0].count).toBe(4);
+    expect(search.context.hasNextPage).toBe(false);
+    expect(search.resultCount).toBe(4);
+    // Further pages are not a new result set: an open Lightbox and the selection survive them.
+    expect(search.context.refreshGeneration).toBe(generation);
+    await search.context.loadMore();
+    expect(searchContextPage).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not request the same further page twice at once", async () => {
+    const inFlight = deferred<ContextSearchPage>();
+    const searchContextPage = vi.fn().mockResolvedValueOnce(contextPage(["a"], 2)).mockReturnValueOnce(inFlight.promise);
+    const { search } = setupDefaultMode({ searchContextPage });
+    search.text = "dog";
+    await search.submit();
+
+    const first = search.context.loadMore();
+    const second = search.context.loadMore();
+    expect(search.context.isLoadingMore).toBe(true);
+    inFlight.resolve(contextPage(["b"], null));
+    await Promise.all([first, second]);
+
+    expect(searchContextPage).toHaveBeenCalledTimes(2);
+    expect(search.context.isLoadingMore).toBe(false);
+  });
+
+  it("keeps the pages already shown when a further page fails, and retries that page", async () => {
+    const searchContextPage = vi.fn()
+      .mockResolvedValueOnce(contextPage(["a", "b"], 2))
+      .mockRejectedValueOnce("search_unavailable")
+      .mockResolvedValueOnce(contextPage(["c"], null));
+    const { search } = setupDefaultMode({ searchContextPage });
+    search.text = "dog";
+    await search.submit();
+    const bucket = search.context.buckets[0].timeBucket;
+
+    await search.context.loadMore();
+
+    expect(search.context.loadMoreFailed).toBe(true);
+    expect(search.context.assetsFor(bucket).map((candidate) => candidate.id)).toEqual(["a", "b"]);
+    expect(search.context.hasInitialLoadError).toBe(false);
+    expect(search.failure).toBeNull();
+
+    await search.context.loadMore();
+
+    expect(search.context.loadMoreFailed).toBe(false);
+    expect(searchContextPage.mock.calls.map(([, page]) => page)).toEqual([1, 2, 2]);
+    expect(search.context.assetsFor(bucket).map((candidate) => candidate.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it.each([
+    ["search_authentication_required", "authentication_required"],
+    ["search_permission_denied:asset.read", "permission_denied"],
+    ["search_unavailable", "unavailable"],
+    ["search_invalid_response", "error"],
+    ["search_context_unavailable", "context_unavailable"],
+  ] as const)("classifies the failure %s of the first page as %s", async (code, expected) => {
+    const { search } = setupDefaultMode({ searchContextPage: vi.fn().mockRejectedValue(code) });
+    search.text = "dog";
+
+    await search.submit();
+
+    expect(search.failure).toBe(expected);
+    expect(search.context.hasInitialLoadError).toBe(true);
+    // A rejection by the server never silently changes the Search Mode.
+    expect(search.mode).toBe("context");
+    expect(search.text).toBe("dog");
+  });
+
+  it("keeps the earlier results offline and recovers on Retry", async () => {
+    const searchContextPage = vi.fn()
+      .mockResolvedValueOnce(contextPage(["old"], null))
+      .mockRejectedValueOnce("search_unavailable")
+      .mockResolvedValueOnce(contextPage(["new"], null));
+    const { search } = setupDefaultMode({ searchContextPage });
+    search.text = "dog";
+    await search.submit();
+    const bucket = search.context.buckets[0].timeBucket;
+
+    search.text = "cat";
+    await search.submit();
+
+    expect(search.context.isOffline).toBe(true);
+    expect(search.context.hasInitialLoadError).toBe(false);
+    expect(search.failure).toBe("unavailable");
+    expect(search.context.assetsFor(bucket).map((candidate) => candidate.id)).toEqual(["old"]);
+    expect(search.submittedText).toBe("dog");
+
+    await search.context.refresh();
+
+    expect(search.context.isOffline).toBe(false);
+    expect(search.failure).toBeNull();
+    expect(searchContextPage).toHaveBeenLastCalledWith({ text: "cat", mode: "context", filters: {} }, 1);
+    expect(search.context.assetsFor(bucket).map((candidate) => candidate.id)).toEqual(["new"]);
+  });
+
+  it("pages the Search whose results are shown, not a newer one that failed", async () => {
+    const searchContextPage = vi.fn()
+      .mockResolvedValueOnce(contextPage(["a"], 2))
+      .mockRejectedValueOnce("search_unavailable")
+      .mockResolvedValueOnce(contextPage(["b"], null));
+    const { search } = setupDefaultMode({ searchContextPage });
+    search.text = "dog";
+    await search.submit();
+    search.text = "cat";
+    await search.submit();
+
+    await search.context.loadMore();
+
+    expect(searchContextPage).toHaveBeenLastCalledWith({ text: "dog", mode: "context", filters: {} }, 2);
+  });
+
+  it("reports an unsupported server for a Context Search without searching", async () => {
+    const { adapter, search } = setupDefaultMode({ getSearchSupport: vi.fn().mockResolvedValue(UNSUPPORTED) });
+    search.text = "dog";
+
+    await search.submit();
+
+    expect(search.unsupported).toEqual({ version: "3.1.0", requiredVersion: "3.2" });
+    expect(adapter.searchContextPage).not.toHaveBeenCalled();
+    expect(search.context.buckets).toEqual([]);
+  });
+
+  it("replaces the results of the other presentation when the kind of Search changes", async () => {
+    const { search } = setupDefaultMode({ searchAssets: vi.fn().mockResolvedValue(results(["chrono"], true)) });
+    search.text = "dog";
+    await search.submit();
+    expect(search.presentation).toBe("relevance");
+
+    search.mode = "filename";
+    search.text = "IMG";
+    await search.submit();
+
+    expect(search.presentation).toBe("chronological");
+    expect(search.context.buckets).toEqual([]);
+    expect(search.truncated).toBe(true);
+
+    search.mode = "context";
+    search.text = "dog";
+    await search.submit();
+
+    expect(search.presentation).toBe("relevance");
+    expect(search.buckets).toEqual([]);
+    expect(search.truncated).toBe(false);
+  });
+
+  it("clears the Context Search Results, the text and the mode on clear", async () => {
+    const { search } = setupDefaultMode();
+    search.text = "dog";
+    await search.submit();
+
+    search.clear();
+
+    expect(search.context.buckets).toEqual([]);
+    expect(search.presentation).toBe("chronological");
+    expect(search.text).toBe("");
+    expect(search.mode).toBe("context");
+    expect(search.submittedText).toBe("");
+    expect(search.resultCount).toBe(0);
+  });
+
+  it("ignores a page that resolves after clear so the next account does not inherit it", async () => {
+    const inFlight = deferred<ContextSearchPage>();
+    const { adapter, search } = setupDefaultMode({ searchContextPage: vi.fn().mockReturnValue(inFlight.promise) });
+    search.text = "dog";
+
+    const running = search.submit();
+    await vi.waitFor(() => expect(adapter.searchContextPage).toHaveBeenCalled());
+    search.clear();
+    inFlight.resolve(contextPage(["late"], 2));
+    await running;
+
+    expect(search.context.buckets).toEqual([]);
+    expect(search.context.hasNextPage).toBe(false);
+    expect(search.submittedText).toBe("");
+  });
+
+  it("steps through the loaded results in relevance order, wrapping at the ends", async () => {
+    const { search } = setupDefaultMode({ searchContextPage: vi.fn().mockResolvedValue(contextPage(["a", "b", "c"], null)) });
+    search.text = "dog";
+    await search.submit();
+
+    expect((await search.context.stepAsset("a", 1))?.id).toBe("b");
+    expect((await search.context.stepAsset("c", 1))?.id).toBe("a");
+    expect((await search.context.stepAsset("a", -1))?.id).toBe("c");
+  });
+
+  it("removes an asset from the results and keeps the rest in order", async () => {
+    const { search } = setupDefaultMode({ searchContextPage: vi.fn().mockResolvedValue(contextPage(["a", "b", "c"], null)) });
+    search.text = "dog";
+    await search.submit();
+    const bucket = search.context.buckets[0].timeBucket;
+    expect(search.context.locateAsset("b")).toEqual({ timeBucket: bucket, index: 1 });
+
+    search.context.removeAsset("b");
+
+    expect(search.context.assetsFor(bucket).map((candidate) => candidate.id)).toEqual(["a", "c"]);
+    expect(search.context.locateAsset("b")).toBeNull();
+    expect(search.resultCount).toBe(2);
   });
 });
 

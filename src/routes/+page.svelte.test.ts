@@ -97,6 +97,9 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve([]);
       case "get_memories":
         return Promise.resolve([]);
+      // By default Smart Search is off, so a Search starts in Filename mode (Context is tested explicitly).
+      case "get_search_features":
+        return Promise.resolve({ smartSearch: false, ocr: true });
       case "update_locale":
         return Promise.resolve();
       case "get_release_channel":
@@ -3328,8 +3331,8 @@ describe("Search", () => {
 
     await search("IMG_");
 
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG_", mode: "filename", filters: {} } }));
     expect(tauri.invoke).toHaveBeenCalledWith("get_search_support");
-    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG_", mode: "filename", filters: {} } });
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
@@ -3525,17 +3528,18 @@ describe("Search", () => {
       return screen.findByRole("group", { name: "Search mode" });
     };
 
-    it("offers Filename, Description, Folder Path and OCR as one exclusive choice that starts on Filename", async () => {
+    it("offers Context, Filename, Description, Folder Path and OCR as one exclusive choice that starts on Context", async () => {
       renderAuthenticatedPage({ get_search_features: async () => ({ smartSearch: true, ocr: true }) });
 
       const group = await openOptions();
 
       const radios = within(group).getAllByRole("radio");
-      expect(radios.map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(["Filename", "Description", "Folder Path", "OCR"]);
-      expect(within(group).getByRole("radio", { name: "Filename" })).toBeChecked();
+      expect(radios.map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(["Context", "Filename", "Description", "Folder Path", "OCR"]);
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeChecked();
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeEnabled();
       await fireEvent.click(within(group).getByRole("radio", { name: "Folder Path" }));
       expect(within(group).getByRole("radio", { name: "Folder Path" })).toBeChecked();
-      expect(within(group).getByRole("radio", { name: "Filename" })).not.toBeChecked();
+      expect(within(group).getByRole("radio", { name: "Context" })).not.toBeChecked();
       expect(within(group).getByRole("radio", { name: "OCR" })).toBeEnabled();
     });
 
@@ -3564,6 +3568,7 @@ describe("Search", () => {
         search_assets: async () => results("hit-1"),
       });
       const group = await openOptions();
+      await fireEvent.click(within(group).getByRole("radio", { name: "Filename" }));
 
       const ocr = await within(group).findByRole("radio", { name: "OCR" });
       await waitFor(() => expect(ocr).toBeDisabled());
@@ -3581,9 +3586,107 @@ describe("Search", () => {
       const group = await openOptions();
 
       expect(await within(group).findByText("The server's features could not be read. OCR may not be available.")).toBeInTheDocument();
+      await fireEvent.click(within(group).getByRole("radio", { name: "Filename" }));
       await search("IMG");
       expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG", mode: "filename", filters: {} } });
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Context Search", () => {
+    const openOptions = async () => {
+      await fireEvent.click(await screen.findByRole("button", { name: "Search options" }));
+      return screen.findByRole("group", { name: "Search mode" });
+    };
+    const smartOn = async () => ({ smartSearch: true, ocr: true });
+    const page = (ids: string[], nextPage: number | null) => ({ assets: ids.map(found), nextPage });
+    const contextRequest = (text: string) => ({ text, mode: "context", filters: {} });
+    const requestedPages = () =>
+      tauri.invoke.mock.calls.filter(([command]) => command === "search_context_page").map(([, args]) => (args as { page: number }).page);
+
+    it("shows a Context text as a flat relevance-ordered grid that loads further pages while scrolling, with Lightbox actions", async () => {
+      stubImmediateIntersectionObserver();
+      const searchContextPage = vi.fn()
+        .mockResolvedValueOnce(page(["best", "second"], 2))
+        .mockResolvedValueOnce(page(["third"], null));
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: searchContextPage,
+        get_asset_details: async () => ({ originalFileName: "IMG_0001.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024 }),
+      });
+
+      await search("dog on a beach");
+
+      await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3));
+      expect(tauri.invoke).toHaveBeenCalledWith("search_context_page", { request: contextRequest("dog on a beach"), page: 1 });
+      expect(tauri.invoke).toHaveBeenCalledWith("search_context_page", { request: contextRequest("dog on a beach"), page: 2 });
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+      // A flat list: no Timeline Bucket heading and no Scrubber.
+      expect(screen.queryByText("March 2025")).not.toBeInTheDocument();
+      expect(screen.queryByRole("navigation", { name: "Timeline scrubber" })).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
+
+      await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[2]);
+      const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+      expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+      expect(within(lightbox).getByRole("button", { name: "Add to album" })).toBeInTheDocument();
+      expect(within(lightbox).getByRole("button", { name: "Add to favorites" })).toBeInTheDocument();
+    });
+
+    it("keeps the pages already shown when a further page fails and loads it on Retry", async () => {
+      stubImmediateIntersectionObserver();
+      const searchContextPage = vi.fn()
+        .mockResolvedValueOnce(page(["best", "second"], 2))
+        .mockRejectedValueOnce("search_unavailable")
+        .mockResolvedValueOnce(page(["third"], null));
+      renderAuthenticatedPage({ get_search_features: smartOn, get_search_support: async () => supported, search_context_page: searchContextPage });
+
+      await search("dog");
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("More results could not be loaded. The results shown so far are kept.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+      await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+
+      await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(requestedPages()).toEqual([1, 2, 2]);
+    });
+
+    it("shows Context unavailable when the server rejects the search, without changing the Search Mode", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: smartOn,
+        get_search_support: async () => supported,
+        search_context_page: () => Promise.reject("search_context_unavailable"),
+      });
+      const group = await openOptions();
+
+      await search("dog");
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Context is unavailable");
+      expect(within(group).getByRole("radio", { name: "Context" })).toBeChecked();
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    });
+
+    it("disables Context with an explanation and searches by Filename when Smart Search is switched off", async () => {
+      stubImmediateIntersectionObserver();
+      renderAuthenticatedPage({
+        get_search_features: async () => ({ smartSearch: false, ocr: true }),
+        get_search_support: async () => supported,
+        search_assets: async () => results("hit-1"),
+      });
+      const group = await openOptions();
+
+      const context = await within(group).findByRole("radio", { name: "Context" });
+      await waitFor(() => expect(context).toBeDisabled());
+      expect(context).toHaveAccessibleDescription(/Smart Search is switched off on this Immich server/);
+      expect(within(group).getByRole("radio", { name: "Filename" })).toBeChecked();
+      await search("IMG");
+
+      expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "IMG", mode: "filename", filters: {} } });
+      expect(tauri.invoke).not.toHaveBeenCalledWith("search_context_page", expect.anything());
     });
   });
 });
@@ -3623,7 +3726,7 @@ describe("Search filter panel", () => {
     expect(tauri.invoke).toHaveBeenCalledWith("search_assets", {
       request: {
         text: "",
-        mode: "filename",
+        mode: "context",
         filters: {
           mediaType: "video",
           date: { from: new Date(2025, 2, 1, 0, 0, 0, 0).toISOString(), to: new Date(2025, 2, 31, 23, 59, 59, 999).toISOString() },
@@ -3679,7 +3782,7 @@ describe("Search filter panel", () => {
     expect(screen.queryByRole("button", { name: "Clear date range" })).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Videos" })).toBeChecked();
     await submit();
-    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "filename", filters: { mediaType: "video" } } }));
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "context", filters: { mediaType: "video" } } }));
   });
 
   it("keeps the filters while the Search is left and entered again, and resets text and filters on clear", async () => {
@@ -3765,7 +3868,7 @@ describe("Search display options and Rating", () => {
     await submit();
 
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
-    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "filename", filters: { favorite: true, unfiled: true } } });
+    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "context", filters: { favorite: true, unfiled: true } } });
   });
 
   it("selects one Rating level, replaces it with another, and clears it by selecting it again", async () => {
@@ -3782,7 +3885,7 @@ describe("Search display options and Rating", () => {
     expect(within(group).getByRole("button", { name: "4 stars" })).toHaveAttribute("aria-pressed", "false");
     expect(within(group).getByRole("button", { name: "2 stars" })).toHaveAttribute("aria-pressed", "true");
     await submit();
-    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "filename", filters: { rating: 2 } } }));
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "context", filters: { rating: 2 } } }));
 
     // Submitting closes the panel; reopened, it still shows the Rating.
     await openPanel();

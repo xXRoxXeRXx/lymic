@@ -33,6 +33,7 @@ import type {
   Memory,
   PeoplePage,
   Place,
+  ContextSearchPage,
   SearchFeatures,
   SearchRequest,
   SearchSuggestionsRequest,
@@ -146,6 +147,8 @@ export interface SearchDesktopAdapter {
   /** Reads which optional Search Modes (Context, OCR) the server has switched on. */
   getSearchFeatures(): Promise<SearchFeatures>;
   searchAssets(request: SearchRequest): Promise<SearchResults>;
+  /** One page of a Context Search (Immich smart search), in the order of relevance. */
+  searchContextPage(request: SearchRequest, page: number): Promise<ContextSearchPage>;
   /** The values Immich suggests for a Search Filter, optionally narrowed (for example the models of one make). */
   getSearchSuggestions(request: SearchSuggestionsRequest): Promise<string[]>;
 }
@@ -273,6 +276,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getSearchSupport: () => invoke<SearchSupport>("get_search_support"),
   getSearchFeatures: () => invoke<SearchFeatures>("get_search_features"),
   searchAssets: (request) => invoke<SearchResults>("search_assets", { request }),
+  searchContextPage: (request, page) => invoke<ContextSearchPage>("search_context_page", { request, page }),
   getSearchSuggestions: (request) => invoke<string[]>("get_search_suggestions", { request }),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
