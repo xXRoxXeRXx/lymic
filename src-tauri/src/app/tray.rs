@@ -25,24 +25,20 @@ pub(crate) fn update_sync_action<R: tauri::Runtime>(
     snapshot: &db::SyncSnapshot,
 ) {
     if let Some(state) = app.try_state::<TraySyncStatus>() {
-        *state.0.lock().expect("tray sync status lock poisoned") = snapshot.status.clone();
+        *state.0.lock().expect("tray sync status lock poisoned") = snapshot.status;
     }
-    apply_sync_action(app, &snapshot.status);
+    apply_sync_action(app, snapshot.status);
 }
 
 pub(crate) fn refresh_sync_action(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<TraySyncStatus>() else {
         return;
     };
-    let status = state
-        .0
-        .lock()
-        .expect("tray sync status lock poisoned")
-        .clone();
-    apply_sync_action(app, &status);
+    let status = *state.0.lock().expect("tray sync status lock poisoned");
+    apply_sync_action(app, status);
 }
 
-fn apply_sync_action<R: tauri::Runtime>(app: &tauri::AppHandle<R>, status: &str) {
+fn apply_sync_action<R: tauri::Runtime>(app: &tauri::AppHandle<R>, status: db::SyncJobStatus) {
     let Some(tray_menu) = app.try_state::<TrayMenuState>() else {
         return;
     };
@@ -66,22 +62,22 @@ pub(crate) enum TrayAction {
     Start,
 }
 
-pub(crate) fn decide_sync_action(status: &str) -> TrayAction {
+pub(crate) fn decide_sync_action(status: db::SyncJobStatus) -> TrayAction {
     match status {
-        "RUNNING" => TrayAction::Pause,
-        "PAUSED" => TrayAction::Resume,
-        _ => TrayAction::Start,
+        db::SyncJobStatus::Running => TrayAction::Pause,
+        db::SyncJobStatus::Paused => TrayAction::Resume,
+        db::SyncJobStatus::Idle | db::SyncJobStatus::Failed => TrayAction::Start,
     }
 }
 
-fn sync_action_text<'a>(
-    status: &str,
-    translations: &'a crate::app::locale::BackendTranslations,
-) -> &'a str {
+fn sync_action_text(
+    status: db::SyncJobStatus,
+    translations: &crate::app::locale::BackendTranslations,
+) -> &str {
     match status {
-        "RUNNING" => &translations.tray_pause_sync,
-        "PAUSED" => &translations.tray_resume_sync,
-        _ => &translations.tray_sync,
+        db::SyncJobStatus::Running => &translations.tray_pause_sync,
+        db::SyncJobStatus::Paused => &translations.tray_resume_sync,
+        db::SyncJobStatus::Idle | db::SyncJobStatus::Failed => &translations.tray_sync,
     }
 }
 
@@ -118,7 +114,12 @@ fn apply_transfer_status(app: &tauri::AppHandle, event: Option<&TransferStatsEve
 
 fn transfer_status_label(event: Option<&TransferStatsEvent>, locale: &str) -> String {
     match event {
-        Some(event) if event.status == "RUNNING" || event.status == "PAUSED" => {
+        Some(event)
+            if matches!(
+                event.status,
+                db::SyncJobStatus::Running | db::SyncJobStatus::Paused
+            ) =>
+        {
             format_transfer_status(event, locale)
         }
         _ => idle_transfer_status(locale),
@@ -179,9 +180,8 @@ pub(crate) fn setup(
     app.handle().manage(TrayMenuState(menu.clone()));
     app.handle()
         .manage(TrayTransferStatus(std::sync::Mutex::new(None)));
-    app.handle().manage(TraySyncStatus(std::sync::Mutex::new(
-        recovered_sync.status.clone(),
-    )));
+    app.handle()
+        .manage(TraySyncStatus(std::sync::Mutex::new(recovered_sync.status)));
     update_sync_action(app.handle(), &recovered_sync);
     let icon = app
         .default_window_icon()
@@ -228,7 +228,7 @@ async fn handle_sync_action(app: tauri::AppHandle) {
         let snapshot = db::get_sync_snapshot(&pool)
             .await
             .map_err(|error| error.to_string())?;
-        match decide_sync_action(&snapshot.status) {
+        match decide_sync_action(snapshot.status) {
             TrayAction::Pause => sync::pause_sync_inner(&app, &pool, &running, &coordinator)
                 .await
                 .map(|_| ()),
@@ -288,7 +288,7 @@ mod tests {
     use super::*;
     use crate::sync::progress::TransferStatsSnapshot;
 
-    fn transfer_event(status: &'static str, eta: Option<u64>) -> TransferStatsEvent {
+    fn transfer_event(status: db::SyncJobStatus, eta: Option<u64>) -> TransferStatsEvent {
         TransferStatsEvent {
             stats: TransferStatsSnapshot {
                 transferred_bytes: 42_000_000,
@@ -304,29 +304,55 @@ mod tests {
     #[test]
     fn sync_action_text_follows_persisted_status() {
         let translations = backend_translations("en");
-        assert_eq!(sync_action_text("IDLE", translations), "Sync Now");
-        assert_eq!(sync_action_text("RUNNING", translations), "Pause Sync");
-        assert_eq!(sync_action_text("PAUSED", translations), "Resume Sync");
+        assert_eq!(
+            sync_action_text(db::SyncJobStatus::Idle, translations),
+            "Sync Now"
+        );
+        assert_eq!(
+            sync_action_text(db::SyncJobStatus::Running, translations),
+            "Pause Sync"
+        );
+        assert_eq!(
+            sync_action_text(db::SyncJobStatus::Paused, translations),
+            "Resume Sync"
+        );
+        assert_eq!(
+            sync_action_text(db::SyncJobStatus::Failed, translations),
+            "Sync Now"
+        );
     }
 
     #[test]
     fn sync_action_text_is_localized() {
         let translations = backend_translations("de");
         assert_eq!(
-            sync_action_text("RUNNING", translations),
+            sync_action_text(db::SyncJobStatus::Running, translations),
             "Synchronisierung pausieren"
         );
         assert_eq!(
-            sync_action_text("PAUSED", translations),
+            sync_action_text(db::SyncJobStatus::Paused, translations),
             "Synchronisierung fortsetzen"
         );
     }
 
     #[test]
     fn tray_action_dispatch_follows_persisted_status() {
-        assert_eq!(decide_sync_action("RUNNING"), TrayAction::Pause);
-        assert_eq!(decide_sync_action("PAUSED"), TrayAction::Resume);
-        assert_eq!(decide_sync_action("IDLE"), TrayAction::Start);
+        assert_eq!(
+            decide_sync_action(db::SyncJobStatus::Running),
+            TrayAction::Pause
+        );
+        assert_eq!(
+            decide_sync_action(db::SyncJobStatus::Paused),
+            TrayAction::Resume
+        );
+        assert_eq!(
+            decide_sync_action(db::SyncJobStatus::Idle),
+            TrayAction::Start
+        );
+        assert_eq!(
+            decide_sync_action(db::SyncJobStatus::Failed),
+            TrayAction::Start
+        );
     }
 
     #[test]
@@ -345,7 +371,7 @@ mod tests {
 
     #[test]
     fn idle_event_and_empty_state_yield_idle_label() {
-        let event = transfer_event("IDLE", None);
+        let event = transfer_event(db::SyncJobStatus::Idle, None);
 
         assert_eq!(
             transfer_status_label(Some(&event), "en"),
@@ -356,7 +382,7 @@ mod tests {
 
     #[test]
     fn active_transfer_status_shows_percentage_and_localized_eta_only() {
-        let event = transfer_event("RUNNING", Some(192));
+        let event = transfer_event(db::SyncJobStatus::Running, Some(192));
 
         let text = format_transfer_status(&event, "de");
 
@@ -368,21 +394,21 @@ mod tests {
 
     #[test]
     fn active_transfer_status_without_eta_shows_percentage_only() {
-        let event = transfer_event("RUNNING", None);
+        let event = transfer_event(db::SyncJobStatus::Running, None);
 
         assert_eq!(format_transfer_status(&event, "en"), "42%");
     }
 
     #[test]
     fn paused_transfer_status_without_eta_shows_percentage_only() {
-        let event = transfer_event("PAUSED", None);
+        let event = transfer_event(db::SyncJobStatus::Paused, None);
 
         assert_eq!(format_transfer_status(&event, "en"), "42%");
     }
 
     #[test]
     fn transfer_status_preserves_zero_eta_and_zero_total_behavior() {
-        let mut event = transfer_event("RUNNING", Some(0));
+        let mut event = transfer_event(db::SyncJobStatus::Running, Some(0));
         event.total_bytes = 0;
         event.completed_bytes = 0;
 
