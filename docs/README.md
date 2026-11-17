@@ -21,6 +21,7 @@ Lymic is designed as an **upload-oriented client**, not a two-way filesystem mir
 - Show synchronization status, progress, errors, and logs in the desktop UI.
 - Retry failed files.
 - Browse the Immich Library read-only from the Explore view: recognized people, places (cities) and memories, with place and memory timelines.
+- Browse the Immich Library read-only by Tag: a Tags view shows the Tags as a tree, a Tag opens as a timeline, and the Lightbox shows a photo's Tags as chips that open the same timeline.
 - Search the Immich Library read-only from a search bar on every view, by Context, file name, description, folder path or recognized text (OCR), narrowed by Recognized People, dates, Location, media type, camera, Rating, Favorites, Archived Assets and Unfiled Assets. Search needs Immich 3.2 or later.
 - Support native credential storage, system-tray controls, desktop notifications, optional autostart, signed in-app updates, English, German, and light/dark appearance preferences.
 
@@ -54,8 +55,9 @@ The existing project guidance recommends these scopes:
 | `user.read` | Retrieve the signed-in user during login. |
 | `person.read` | Explore: show recognized people; Search: the Recognized People filter. |
 | `memory.read` | Explore: show memories. |
+| `tag.read` | Tags: show the Tags tree. |
 
-The Explore view (people, places and memories, each openable as a timeline) is read-only and needs `asset.read` (places and place timelines), `person.read` (people) and `memory.read` (memories). Each Explore section depends on its own permission: a key lacking one only disables that section, which reports the missing permission where it can, and the other sections keep working. Memories also need a recent Immich server release; no minimum version is documented. Viewing thumbnails and photos also needs `asset.view`.
+The Explore view (people, places and memories, each openable as a timeline) is read-only and needs `asset.read` (places and place timelines), `person.read` (people) and `memory.read` (memories). Each Explore section depends on its own permission: a key lacking one only disables that section, which reports the missing permission where it can, and the other sections keep working. Memories also need a recent Immich server release; no minimum version is documented. The Tags view is read-only and needs `tag.read` for the tree and `asset.read` for a Tag's timeline; a missing `tag.read` only disables the Tags view, and the rest of Lymic keeps working. No minimum Immich version is documented for Tags. Viewing thumbnails and photos also needs `asset.view`.
 
 Lymic normally does not need deletion or album-write privileges.
 
