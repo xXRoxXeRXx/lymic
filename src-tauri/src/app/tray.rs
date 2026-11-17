@@ -81,7 +81,10 @@ fn sync_action_text(
     }
 }
 
-pub(crate) fn update_transfer_status(app: &tauri::AppHandle, event: TransferStatsEvent) {
+pub(crate) fn update_transfer_status<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    event: TransferStatsEvent,
+) {
     if let Some(state) = app.try_state::<TrayTransferStatus>() {
         *state.0.lock().expect("tray transfer status lock poisoned") = Some(event.clone());
     }
@@ -100,7 +103,10 @@ pub(crate) fn refresh_transfer_status(app: &tauri::AppHandle) {
     apply_transfer_status(app, event.as_ref());
 }
 
-fn apply_transfer_status(app: &tauri::AppHandle, event: Option<&TransferStatsEvent>) {
+fn apply_transfer_status<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    event: Option<&TransferStatsEvent>,
+) {
     let text = transfer_status_label(event, &current_locale(app));
     let Some(tray_menu) = app.try_state::<TrayMenuState>() else {
         return;

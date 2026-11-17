@@ -1,7 +1,7 @@
 //! Tauri-facing sync service facade.
 
 use crate::{
-    app::events::{emit_sync_error, log_to_ui_error},
+    app::events::log_to_ui_error,
     audit::SyncAuditContext,
     auth, db,
     immich::{ImmichClient, ImmichSession},
@@ -11,11 +11,12 @@ use crate::{
     sync::{
         lifecycle::{LifecycleClaim, SynchronizationLifecycle},
         queue_runner::run_sync_pipeline,
+        reporter::{DesktopRunReporter, SyncRunReporter},
         SyncCoordinator,
     },
 };
 use std::sync::Arc;
-use tauri::{Emitter, Manager, Runtime};
+use tauri::{Manager, Runtime};
 
 /// Identifies the producer submitting Synchronization work.
 ///
@@ -90,6 +91,10 @@ impl<'a> Synchronization<'a> {
         SynchronizationLifecycle::new(self.pool, self.running, self.coordinator.clone())
     }
 
+    fn reporter(&self) -> DesktopRunReporter {
+        DesktopRunReporter::for_service(self.app.clone())
+    }
+
     pub(crate) async fn start(&self) -> Result<crate::sync::SyncSummary, String> {
         let folders = db::get_folders(self.pool)
             .await
@@ -144,15 +149,15 @@ impl<'a> Synchronization<'a> {
     ) -> Result<Option<crate::sync::SyncSummary>, String> {
         log_overlapping_folders(self.app, &scan_result);
         let lifecycle = self.lifecycle();
+        let reporter = self.reporter();
         let (admitted, claim) = lifecycle.admit_and_claim(&scan_result).await?;
         if let Some(snapshot) = admitted {
-            crate::app::tray::update_sync_action(self.app, &snapshot);
-            let _ = self.app.emit("sync-progress-snapshot", &snapshot);
+            reporter.progressed(&snapshot);
         }
         let LifecycleClaim::Started(started) = claim else {
             return Ok(None);
         };
-        crate::app::tray::update_sync_action(self.app, &started);
+        reporter.claimed(&started);
 
         let session = self.open_session(source).await?;
         let audit_context =
@@ -226,8 +231,7 @@ impl<'a> Synchronization<'a> {
 
     pub(crate) async fn pause(&self) -> Result<db::SyncSnapshot, String> {
         let snapshot = self.lifecycle().pause().await?;
-        crate::app::tray::update_sync_action(self.app, &snapshot);
-        let _ = self.app.emit("sync-paused", &snapshot);
+        self.reporter().paused(&snapshot);
         Ok(snapshot)
     }
 
@@ -237,8 +241,7 @@ impl<'a> Synchronization<'a> {
             return Ok(previous);
         }
         let snapshot = self.lifecycle().resume().await?;
-        crate::app::tray::update_sync_action(self.app, &snapshot);
-        let _ = self.app.emit("sync-resumed", &snapshot);
+        self.reporter().resumed(&snapshot);
         self.resume_recovered_work(&snapshot).await
     }
 
@@ -255,8 +258,7 @@ impl<'a> Synchronization<'a> {
         }
         match lifecycle.complete().await {
             Ok(Some(completed)) => {
-                crate::app::tray::update_sync_action(self.app, &completed);
-                let _ = self.app.emit("sync-progress-snapshot", &completed);
+                self.reporter().progressed(&completed);
                 return Ok(completed);
             }
             Ok(None) => {}
@@ -272,16 +274,7 @@ impl<'a> Synchronization<'a> {
             SyncSource::Recovery.audit_label(),
         );
         let client = session.client();
-        crate::audit::audit_event(
-            self.app,
-            audit_context.event(
-                "sync.resumed",
-                crate::audit::Outcome::Info,
-                crate::audit::Severity::Info,
-                "Synchronization resumed",
-                serde_json::json!({}),
-            ),
-        );
+        self.reporter().resumed_audit(&audit_context);
         spawn_sync_runner(
             self.app.clone(),
             self.pool.clone(),
@@ -321,7 +314,7 @@ fn spawn_sync_runner(
         .await;
         if let Err(error) = result {
             fail_sync_run(&app, &pool, &running, coordinator, source, &error).await;
-            emit_sync_error(&app, &error);
+            DesktopRunReporter::for_service(app).error(&error);
         }
     });
 }
@@ -334,27 +327,11 @@ async fn fail_sync_run<R: Runtime>(
     source: SyncSource,
     error: &str,
 ) {
-    if let Ok(snapshot) = SynchronizationLifecycle::new(pool, running, coordinator)
+    let snapshot = SynchronizationLifecycle::new(pool, running, coordinator)
         .fail()
         .await
-    {
-        crate::app::tray::update_sync_action(app, &snapshot);
-        let _ = app.emit("sync-progress-snapshot", &snapshot);
-    }
-    crate::audit::audit_event(app, sync_aborted_audit_event(source, error));
-}
-
-fn sync_aborted_audit_event(source: SyncSource, error: &str) -> crate::audit::AuditEvent {
-    crate::audit::AuditEvent::new(
-        crate::audit::AuditEvent::operation_id(),
-        "sync.aborted",
-        crate::audit::Outcome::Failure,
-        crate::audit::Severity::Error,
-        None,
-        source.audit_label(),
-        "Synchronization aborted",
-        serde_json::json!({ "failure_reason": crate::audit::audit_safe_error(error, &[]) }),
-    )
+        .ok();
+    DesktopRunReporter::for_service(app.clone()).failed(source, snapshot.as_ref(), error);
 }
 
 /// Queue a producer result while copying its Watched Folder's current Target
@@ -505,7 +482,8 @@ pub(crate) async fn admit_and_run(
         Ok(_) => {}
         Err(error) => {
             if source.is_manual() {
-                emit_sync_error(&app, &format!("Synchronization admission failed: {error}"));
+                DesktopRunReporter::for_service(app)
+                    .error(&format!("Synchronization admission failed: {error}"));
             }
         }
     }
@@ -1042,12 +1020,12 @@ mod tests {
 
     #[test]
     fn manual_and_background_failures_use_the_same_aborted_sync_audit_event() {
-        let manual = serde_json::to_value(sync_aborted_audit_event(
+        let manual = serde_json::to_value(crate::sync::reporter::sync_aborted_audit_event(
             SyncSource::Manual,
             "connection lost",
         ))
         .unwrap();
-        let background = serde_json::to_value(sync_aborted_audit_event(
+        let background = serde_json::to_value(crate::sync::reporter::sync_aborted_audit_event(
             SyncSource::Watcher,
             "connection lost",
         ))
