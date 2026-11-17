@@ -5,6 +5,9 @@ use crate::{
     audit::SyncAuditContext,
     auth, db,
     immich::{ImmichClient, ImmichSession},
+    media::{
+        events::log_overlapping_folders, model::ScanResult, scanner::scan_watched_folders_for_media,
+    },
     sync::{
         lifecycle::{LifecycleClaim, SynchronizationLifecycle},
         queue_runner::run_sync_pipeline,
@@ -77,6 +80,12 @@ impl<'a> Synchronization<'a> {
         }
     }
 
+    pub(crate) fn for_tauri(app: &'a tauri::AppHandle, pool: &'a sqlx::SqlitePool) -> Self {
+        let coordinator = app.state::<SyncCoordinator>().inner();
+        let running = app.state::<crate::sync::SyncState>().inner();
+        Self::new(app, pool, &running.0, &coordinator.0)
+    }
+
     fn lifecycle(&self) -> SynchronizationLifecycle<'_> {
         SynchronizationLifecycle::new(self.pool, self.running, self.coordinator.clone())
     }
@@ -85,28 +94,23 @@ impl<'a> Synchronization<'a> {
         let folders = db::get_folders(self.pool)
             .await
             .map_err(|error| error.to_string())?;
-        ensure_sync_has_folders(&folders)?;
-        crate::app::events::log_to_ui_key(
-            self.app,
-            "INFO",
-            "Starting manual synchronization...",
-            "log_starting_sync",
-        );
-
-        for folder in &folders {
-            crate::app::events::log_to_ui_folder(
-                self.app,
-                "INFO",
-                &format!("Scanning folder: {}", folder.path),
-                "log_scanning_folder",
-                &folder.path,
-            );
-        }
-        let scan_result = scan_watched_folders_for_media(folders).await?;
+        prepare_manual_sync(self.app, &folders)?;
         Ok(self
-            .admit_and_run(scan_result, SyncSource::Manual)
+            .scan_and_admit(folders, SyncSource::Manual)
             .await?
             .unwrap_or_default())
+    }
+
+    /// The scan-and-admit entry point for producers that have Watched Folders to
+    /// scan: logs each folder, scans for Media Assets, logs scan failures, and
+    /// admits the result into Synchronization.
+    pub(crate) async fn scan_and_admit(
+        &self,
+        folders: Vec<db::WatchedFolder>,
+        source: SyncSource,
+    ) -> Result<Option<crate::sync::SyncSummary>, String> {
+        let scan_result = scan_folders_with_logging(self.app, folders).await?;
+        self.admit_and_run(scan_result, source).await
     }
 
     pub(crate) async fn retry(&self) -> Result<crate::sync::SyncSummary, String> {
@@ -369,15 +373,66 @@ pub(crate) async fn admit_scan_result(
         .map_err(|error| format!("Could not persist sync queue: {error}"))
 }
 
-pub(crate) use crate::media::events::{add_event_paths, log_overlapping_folders};
-pub(crate) use crate::media::model::{Asset, FileFailure, ScanResult};
-pub(crate) use crate::media::scanner::scan_watched_folders_for_media;
-
 pub(crate) fn ensure_sync_has_folders(folders: &[db::WatchedFolder]) -> Result<(), String> {
     if folders.is_empty() {
         return Err("Add at least one folder before starting a sync.".to_string());
     }
     Ok(())
+}
+
+fn prepare_manual_sync<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    folders: &[db::WatchedFolder],
+) -> Result<(), String> {
+    ensure_sync_has_folders(folders)?;
+    crate::app::events::log_to_ui_key(
+        app,
+        "INFO",
+        "Starting manual synchronization...",
+        "log_starting_sync",
+    );
+    Ok(())
+}
+
+async fn scan_folders_with_logging<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    folders: Vec<db::WatchedFolder>,
+) -> Result<ScanResult, String> {
+    scan_folders_with_logging_using(app, folders, scan_watched_folders_for_media).await
+}
+
+async fn scan_folders_with_logging_using<R, Scan, ScanFuture>(
+    app: &tauri::AppHandle<R>,
+    folders: Vec<db::WatchedFolder>,
+    scan: Scan,
+) -> Result<ScanResult, String>
+where
+    R: Runtime,
+    Scan: FnOnce(Vec<db::WatchedFolder>) -> ScanFuture,
+    ScanFuture: std::future::Future<Output = Result<ScanResult, String>>,
+{
+    for folder in &folders {
+        crate::app::events::log_to_ui_folder(
+            app,
+            "INFO",
+            &format!("Scanning folder: {}", folder.path),
+            "log_scanning_folder",
+            &folder.path,
+        );
+    }
+    match scan(folders).await {
+        Ok(scan_result) => Ok(scan_result),
+        Err(error) => {
+            log_to_ui_error(
+                app,
+                "ERROR",
+                &format!("Folder scanning failed: {error}"),
+                "log_scan_folders_failed",
+                &error,
+            );
+            Err(error)
+        }
+    }
 }
 
 pub(crate) fn prepare_scan_for_queue(
@@ -445,9 +500,7 @@ pub(crate) async fn admit_and_run(
     scan_result: ScanResult,
     source: SyncSource,
 ) {
-    let coordinator = app.state::<SyncCoordinator>().0.clone();
-    let running = app.state::<crate::sync::SyncState>().0.clone();
-    let synchronization = Synchronization::new(&app, &pool, &running, &coordinator);
+    let synchronization = Synchronization::for_tauri(&app, &pool);
     match synchronization.admit_and_run(scan_result, source).await {
         Ok(_) => {}
         Err(error) => {
@@ -461,6 +514,7 @@ pub(crate) async fn admit_and_run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::media::model::Asset;
     use std::sync::atomic::Ordering;
     use tauri::Listener;
 
@@ -1119,6 +1173,127 @@ mod tests {
         assert_eq!(
             recovered[0].image.target_album_id.as_deref(),
             Some("album-original")
+        );
+    }
+
+    #[tokio::test]
+    async fn scan_folders_with_logging_emits_folder_logs_and_returns_discovered_assets() {
+        let app = tauri::test::mock_app();
+        let logs = crate::app::events::CapturedUiLogs::listen(app.handle());
+        let root = std::env::temp_dir().join(format!("lymic-scan-admit-{}", uuid::Uuid::new_v4()));
+        let first = root.join("first");
+        let second = root.join("second");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        std::fs::write(first.join("keep.jpg"), b"keep").unwrap();
+        std::fs::write(first.join("skip.jpg"), b"skip").unwrap();
+        std::fs::write(second.join("second.jpg"), b"second").unwrap();
+
+        let folders = vec![
+            db::WatchedFolder {
+                id: 1,
+                path: first.to_string_lossy().to_string(),
+                recursive: true,
+                target_album_id: None,
+                exclusion_patterns: vec!["skip.jpg".to_string()],
+            },
+            db::WatchedFolder {
+                id: 2,
+                path: second.to_string_lossy().to_string(),
+                recursive: true,
+                target_album_id: None,
+                exclusion_patterns: vec![],
+            },
+        ];
+
+        let scan_result = scan_folders_with_logging(app.handle(), folders)
+            .await
+            .unwrap();
+
+        let scanning_logs = logs.with_key("log_scanning_folder");
+        assert_eq!(scanning_logs.len(), 2);
+        assert_eq!(scanning_logs[0]["level"], "INFO");
+        assert_eq!(
+            scanning_logs[0]["message"],
+            format!("Scanning folder: {}", first.to_string_lossy())
+        );
+        assert_eq!(
+            scanning_logs[0]["params"]["folder"],
+            first.to_string_lossy().as_ref()
+        );
+        assert_eq!(
+            scanning_logs[1]["params"]["folder"],
+            second.to_string_lossy().as_ref()
+        );
+
+        let discovered_paths = scan_result
+            .files
+            .iter()
+            .map(|asset| std::path::PathBuf::from(&asset.path))
+            .collect::<Vec<_>>();
+        assert_eq!(discovered_paths.len(), 2);
+        assert!(discovered_paths.contains(&first.join("keep.jpg")));
+        assert!(discovered_paths.contains(&second.join("second.jpg")));
+        assert!(!discovered_paths.contains(&first.join("skip.jpg")));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn scan_folders_with_logging_emits_failure_log_key_on_scan_error() {
+        let app = tauri::test::mock_app();
+        let logs = crate::app::events::CapturedUiLogs::listen(app.handle());
+        let folder = db::WatchedFolder {
+            id: 1,
+            path: "C:/photos".to_string(),
+            recursive: true,
+            target_album_id: None,
+            exclusion_patterns: vec![],
+        };
+
+        let err = scan_folders_with_logging_using(app.handle(), vec![folder], |_| async {
+            Err("scan exploded".to_string())
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(err, "scan exploded");
+        assert_eq!(logs.with_key("log_scanning_folder").len(), 1);
+        let failure_logs = logs.with_key("log_scan_folders_failed");
+        assert_eq!(failure_logs.len(), 1);
+        assert_eq!(failure_logs[0]["level"], "ERROR");
+        assert_eq!(
+            failure_logs[0]["message"],
+            "Folder scanning failed: scan exploded"
+        );
+        assert_eq!(failure_logs[0]["params"]["error"], "scan exploded");
+    }
+
+    #[test]
+    fn manual_sync_prelude_checks_folders_before_logging_starting_sync() {
+        let app = tauri::test::mock_app();
+        let logs = crate::app::events::CapturedUiLogs::listen(app.handle());
+
+        assert_eq!(
+            prepare_manual_sync(app.handle(), &[]),
+            Err("Add at least one folder before starting a sync.".to_string())
+        );
+        assert!(logs.with_key("log_starting_sync").is_empty());
+
+        let folders = vec![db::WatchedFolder {
+            id: 1,
+            path: "C:/photos".to_string(),
+            recursive: true,
+            target_album_id: None,
+            exclusion_patterns: vec![],
+        }];
+        prepare_manual_sync(app.handle(), &folders).unwrap();
+        let started_logs = logs.with_key("log_starting_sync");
+        assert_eq!(started_logs.len(), 1);
+        assert_eq!(started_logs[0]["level"], "INFO");
+        assert_eq!(
+            started_logs[0]["message"],
+            "Starting manual synchronization..."
         );
     }
 }

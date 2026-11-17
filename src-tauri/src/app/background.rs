@@ -5,7 +5,8 @@ use crate::app::startup::StartupContext;
 use crate::{
     audit::{self, audit_event},
     db,
-    sync::{admit_and_run, log_overlapping_folders, scan_watched_folders_for_media, SyncSource},
+    media::{events::log_overlapping_folders, model::ScanResult},
+    sync::{admit_and_run, SyncSource, Synchronization},
     watcher::{WatcherIngestion, WATCHER_DEBOUNCE},
 };
 use serde_json::json;
@@ -146,14 +147,7 @@ fn spawn_deferred_watches(handle: tauri::AppHandle) {
                 );
             }
             let scan_folders = match db::get_folders(&pool).await {
-                Ok(folders) => folders
-                    .into_iter()
-                    .filter(|folder| {
-                        registered_paths
-                            .iter()
-                            .any(|path| path == &std::path::PathBuf::from(&folder.path))
-                    })
-                    .collect(),
+                Ok(folders) => deferred_scan_folders(folders, &registered_paths),
                 Err(error) => {
                     log_to_ui_error(
                         &handle,
@@ -165,28 +159,25 @@ fn spawn_deferred_watches(handle: tauri::AppHandle) {
                     continue;
                 }
             };
-            let scan_result = match scan_watched_folders_for_media(scan_folders).await {
-                Ok(scan_result) => scan_result,
-                Err(error) => {
-                    log_to_ui_error(
-                        &handle,
-                        "ERROR",
-                        &format!("Folder scanning failed: {error}"),
-                        "log_scan_folders_failed",
-                        &error,
-                    );
-                    continue;
-                }
-            };
-            admit_and_run(
-                handle.clone(),
-                pool,
-                scan_result,
-                SyncSource::DeferredFolder,
-            )
-            .await;
+            let _ = Synchronization::for_tauri(&handle, &pool)
+                .scan_and_admit(scan_folders, SyncSource::DeferredFolder)
+                .await;
         }
     });
+}
+
+fn deferred_scan_folders(
+    folders: Vec<db::WatchedFolder>,
+    registered_paths: &[std::path::PathBuf],
+) -> Vec<db::WatchedFolder> {
+    folders
+        .into_iter()
+        .filter(|folder| {
+            registered_paths
+                .iter()
+                .any(|path| path == &std::path::PathBuf::from(&folder.path))
+        })
+        .collect()
 }
 
 fn spawn_startup_sync(handle: tauri::AppHandle) {
@@ -206,29 +197,9 @@ fn spawn_startup_sync(handle: tauri::AppHandle) {
                 return;
             }
         };
-        for folder in &folders {
-            log_to_ui_folder(
-                &handle,
-                "INFO",
-                &format!("Scanning folder: {}", folder.path),
-                "log_scanning_folder",
-                &folder.path,
-            );
-        }
-        let scan_result = match scan_watched_folders_for_media(folders).await {
-            Ok(result) => result,
-            Err(error) => {
-                log_to_ui_error(
-                    &handle,
-                    "ERROR",
-                    &format!("Folder scanning failed: {error}"),
-                    "log_scan_folders_failed",
-                    &error,
-                );
-                return;
-            }
-        };
-        admit_and_run(handle.clone(), pool, scan_result, SyncSource::Startup).await;
+        let _ = Synchronization::for_tauri(&handle, &pool)
+            .scan_and_admit(folders, SyncSource::Startup)
+            .await;
     });
 }
 
@@ -310,9 +281,9 @@ fn spawn_watcher_consumer(
     });
 }
 
-async fn handoff_watcher_scan<H, HandoffFuture>(scan_result: crate::sync::ScanResult, handoff: H)
+async fn handoff_watcher_scan<H, HandoffFuture>(scan_result: ScanResult, handoff: H)
 where
-    H: FnOnce(crate::sync::ScanResult, SyncSource) -> HandoffFuture,
+    H: FnOnce(ScanResult, SyncSource) -> HandoffFuture,
     HandoffFuture: std::future::Future<Output = ()>,
 {
     handoff(scan_result, SyncSource::Watcher).await;
@@ -381,5 +352,31 @@ mod tests {
         assert_eq!(scan_result.files.len(), 1);
         assert_eq!(scan_result.files[0].path, photo.to_string_lossy());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn deferred_scan_folders_selects_only_newly_registered_paths() {
+        let first = WatchedFolder {
+            id: 1,
+            path: "C:/photos/one".to_string(),
+            recursive: true,
+            target_album_id: None,
+            exclusion_patterns: vec![],
+        };
+        let second = WatchedFolder {
+            id: 2,
+            path: "C:/photos/two".to_string(),
+            recursive: true,
+            target_album_id: None,
+            exclusion_patterns: vec![],
+        };
+
+        let selected = deferred_scan_folders(
+            vec![first.clone(), second],
+            &[std::path::PathBuf::from("C:/photos/one")],
+        );
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].id, first.id);
+        assert_eq!(selected[0].path, first.path);
     }
 }

@@ -106,7 +106,7 @@ impl<'a> SynchronizationLifecycle<'a> {
 
     pub(crate) async fn admit_and_claim(
         &self,
-        scan: &crate::sync::ScanResult,
+        scan: &crate::media::model::ScanResult,
     ) -> Result<(Option<db::SyncSnapshot>, LifecycleClaim), LifecycleError> {
         let _guard = self.coordinator.lifecycle_lock.lock().await;
         let admitted = if scan.files.is_empty() && scan.failures.is_empty() {
