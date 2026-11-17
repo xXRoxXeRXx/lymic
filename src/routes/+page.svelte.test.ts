@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { tick } from "svelte";
 import Page from "./+page.svelte";
 
 const tauri = vi.hoisted(() => ({
@@ -2882,6 +2883,87 @@ describe("Tags view", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Tags is offline. Showing cached tags.");
     expect(screen.getByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("ignores a late response of an older request once a newer one has answered", async () => {
+    let answerOlder!: (value: unknown) => void;
+    const older = new Promise((resolve) => { answerOlder = resolve; });
+    const get_tags = vi.fn().mockImplementationOnce(() => older).mockResolvedValueOnce(tags);
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading tags…");
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+
+    answerOlder([{ id: "t-old", name: "Outdated", value: "Outdated", parentId: null, color: null }]);
+    await Promise.resolve();
+    await tick();
+
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: "Outdated" })).not.toBeInTheDocument();
+  });
+
+  it("ignores a late failure of an older request once a newer one has answered", async () => {
+    let failOlder!: (reason: unknown) => void;
+    const older = new Promise((_, reject) => { failOlder = reject; });
+    const get_tags = vi.fn().mockImplementationOnce(() => older).mockResolvedValueOnce(tags);
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("button", { name: "Photos" }));
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+
+    failOlder("tags_unavailable");
+    await Promise.resolve();
+    await tick();
+
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tags is offline. Showing cached tags.")).not.toBeInTheDocument();
+  });
+
+  it("keeps the loaded tree and the offline note when a Synchronization reload fails", async () => {
+    renderAuthenticatedPage({ get_tags: vi.fn().mockResolvedValueOnce(tags).mockRejectedValueOnce("tags_unavailable") });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Tags is offline. Showing cached tags.");
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("recovers from a failed first load through Retry without a restart", async () => {
+    const get_tags = vi.fn().mockRejectedValueOnce("tags_invalid_response").mockResolvedValueOnce(tags);
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tags could not be loaded.");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not show a response that arrives after sign-out to the next account", async () => {
+    let answer!: (value: unknown) => void;
+    const slow = new Promise((resolve) => { answer = resolve; });
+    const get_tags = vi.fn().mockImplementationOnce(() => slow).mockImplementationOnce(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    await screen.findByRole("status");
+
+    await signOutAndBackIn();
+    answer(tags);
+    await Promise.resolve();
+    await tick();
+    await openTags();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading tags…");
+    expect(screen.queryByRole("treeitem")).not.toBeInTheDocument();
   });
 
   it("keeps the rest of Lymic working when the key lacks tag.read", async () => {
