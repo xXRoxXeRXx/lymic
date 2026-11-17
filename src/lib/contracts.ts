@@ -214,6 +214,9 @@ export type SearchMode = "filename" | "description" | "folderPath" | "ocr";
 /** Images or videos; unset means all. */
 export type SearchMediaType = "image" | "video";
 
+/** One exact Rating level in stars. */
+export type SearchRating = 1 | 2 | 3 | 4 | 5;
+
 /** A date range. In `SearchFilters` the bounds are the chosen local days (`YYYY-MM-DD`); in a `SearchRequest` they are instants. */
 export interface SearchDateRange { from?: string; to?: string; }
 
@@ -223,6 +226,12 @@ export interface SearchFilters {
   mediaType?: SearchMediaType;
   /** Recognized People who must all appear in a Remote Asset; unset or empty means no restriction. */
   personIds?: string[];
+  /** Display options: each is set only while switched on; unset (or off) adds no condition. */
+  favorite?: boolean;
+  /** On shows only Archived Assets; Archived Assets are left out otherwise. */
+  archived?: boolean;
+  unfiled?: boolean;
+  rating?: SearchRating;
   camera?: SearchCamera;
 }
 

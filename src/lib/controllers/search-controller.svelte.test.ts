@@ -563,6 +563,90 @@ describe("Search server features", () => {
 
     expect(search.ocrAvailable).toBe(true);
   });
+
+  describe("display options and Rating", () => {
+    it("sends no display option and no Rating by default, so Archived Assets are not asked for", async () => {
+      const { adapter, search } = setup();
+      search.text = "IMG";
+      expect(search.filters.favorite).toBeUndefined();
+      expect(search.filters.archived).toBeUndefined();
+      expect(search.filters.unfiled).toBeUndefined();
+      expect(search.filters.rating).toBeUndefined();
+
+      await search.submit();
+
+      expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "IMG", mode: "filename", filters: {} });
+    });
+
+    it("sends each display option on its own and runs a Search with no text", async () => {
+      for (const option of ["favorite", "archived", "unfiled"] as const) {
+        const { adapter, search } = setup();
+        search.filters[option] = true;
+
+        expect(search.canSubmit).toBe(true);
+        await search.submit();
+
+        expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "filename", filters: { [option]: true } });
+      }
+    });
+
+    it("treats a switched-off display option as no filter", async () => {
+      const { adapter, search } = setup();
+      search.filters.favorite = false;
+      search.filters.archived = false;
+      search.filters.unfiled = false;
+
+      expect(search.canSubmit).toBe(false);
+      expect(await search.submit()).toBe(false);
+      expect(adapter.searchAssets).not.toHaveBeenCalled();
+
+      search.text = "IMG";
+      await search.submit();
+      expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "IMG", mode: "filename", filters: {} });
+    });
+
+    it("sends exactly one Rating level", async () => {
+      const { adapter, search } = setup();
+      for (const stars of [1, 2, 3, 4, 5] as const) {
+        search.filters.rating = stars;
+        await search.submit();
+        expect(adapter.searchAssets).toHaveBeenLastCalledWith({ text: "", mode: "filename", filters: { rating: stars } });
+      }
+    });
+
+    it("selecting the Rating again clears it, and selecting another level replaces it", () => {
+      const { search } = setup();
+
+      search.toggleRating(4);
+      expect(search.filters.rating).toBe(4);
+      search.toggleRating(2);
+      expect(search.filters.rating).toBe(2);
+      search.toggleRating(2);
+      expect(search.filters.rating).toBeUndefined();
+      expect(search.canSubmit).toBe(false);
+    });
+
+    it("combines display options and Rating with the text and the other filters, and clear resets them", async () => {
+      const { adapter, search } = setup();
+      search.text = "IMG";
+      search.filters.mediaType = "image";
+      search.filters.favorite = true;
+      search.filters.archived = true;
+      search.filters.unfiled = true;
+      search.toggleRating(5);
+
+      await search.submit();
+
+      expect(adapter.searchAssets).toHaveBeenCalledWith({
+        text: "IMG",
+        mode: "filename",
+        filters: { mediaType: "image", favorite: true, archived: true, unfiled: true, rating: 5 },
+      });
+
+      search.clear();
+      expect(search.filters).toEqual({});
+    });
+  });
 });
 
 describe("Search controller Person filter", () => {

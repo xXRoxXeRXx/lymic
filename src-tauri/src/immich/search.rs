@@ -7,7 +7,10 @@
 
 use super::client::ImmichClient;
 use super::response::{read_response_body_limited, request_failure_code};
-use super::search_filters::{apply_person_ids, CameraFilter, DateRange, MediaType};
+use super::search_filters::{
+    apply_favorite, apply_person_ids, apply_unfiled, apply_visibility, CameraFilter, DateRange,
+    MediaType, Rating,
+};
 use super::timeline::{
     group_album_timeline_assets, timeline_asset_from_response, AlbumTimeline, TimelineAssetResponse,
 };
@@ -72,6 +75,13 @@ pub(crate) struct SearchFilters {
     pub media_type: Option<MediaType>,
     /// Recognized People that must all appear in a Remote Asset.
     pub person_ids: Option<Vec<String>>,
+    /// Display option: only Favorites.
+    pub favorite: bool,
+    /// Display option: only Archived Assets. Off means Archived Assets are left out.
+    pub archived: bool,
+    /// Display option: only Unfiled Assets (in no Album).
+    pub unfiled: bool,
+    pub rating: Option<Rating>,
     pub camera: Option<CameraFilter>,
 }
 
@@ -87,6 +97,16 @@ impl SearchFilters {
         if let Some(person_ids) = &self.person_ids {
             apply_person_ids(person_ids, filter);
         }
+        if self.favorite {
+            apply_favorite(filter);
+        }
+        if self.unfiled {
+            apply_unfiled(filter);
+        }
+        if let Some(rating) = self.rating {
+            rating.apply(filter);
+        }
+        apply_visibility(self.archived, filter);
         if let Some(camera) = &self.camera {
             camera.apply(filter);
         }
@@ -300,7 +320,7 @@ mod tests {
     use super::{
         SearchFeatures, SearchFilters, SearchMode, SearchRequest, SearchResults, SearchSupport,
     };
-    use crate::immich::search_filters::{CameraFilter, DateRange, MediaType};
+    use crate::immich::search_filters::{CameraFilter, DateRange, MediaType, Rating};
     use crate::immich::test_support::{serve_once, serve_pages, test_client};
     use serde_json::{json, Value};
     use std::time::Duration;
@@ -361,7 +381,10 @@ mod tests {
         assert_eq!(
             json_body(request),
             json!({
-                "filter": { "originalFileName": { "like": "%IMG%" } },
+                "filter": {
+                    "originalFileName": { "like": "%IMG%" },
+                    "visibility": { "eq": "timeline" },
+                },
                 "orderBy": { "field": "localDateTime", "direction": "desc" },
                 "size": 1000,
                 "withExif": true,
@@ -431,7 +454,11 @@ mod tests {
             assert!(result.is_ok(), "{mode:?}");
             let request = &requests[0];
             assert!(request.starts_with("POST /api/search/metadata HTTP/1.1"));
-            assert_eq!(json_body(request)["filter"], expected, "{mode:?}");
+            assert_eq!(
+                without_default_visibility(json_body(request)["filter"].clone()),
+                expected,
+                "{mode:?}"
+            );
             assert!(json_body(request).get("query").is_none(), "{mode:?}");
         }
     }
@@ -459,7 +486,7 @@ mod tests {
         )
         .await;
         assert_eq!(
-            json_body(&requests[0])["filter"],
+            without_default_visibility(json_body(&requests[0])["filter"].clone()),
             json!({ "ocr": { "matches": "100%_a" } })
         );
     }
@@ -476,7 +503,11 @@ mod tests {
                 mode_request(mode, " "),
             )
             .await;
-            assert_eq!(json_body(&requests[0])["filter"], json!({}), "{mode:?}");
+            assert_eq!(
+                without_default_visibility(json_body(&requests[0])["filter"].clone()),
+                json!({}),
+                "{mode:?}"
+            );
         }
     }
 
@@ -505,7 +536,10 @@ mod tests {
 
         let (_, requests) =
             search(vec![("200 OK", page(vec![], None))], filename_request("  ")).await;
-        assert_eq!(json_body(&requests[0])["filter"], json!({}));
+        assert_eq!(
+            without_default_visibility(json_body(&requests[0])["filter"].clone()),
+            json!({})
+        );
     }
 
     #[tokio::test]
@@ -840,7 +874,16 @@ mod tests {
             ..filename_request("")
         };
         let (_, requests) = search(vec![("200 OK", page(vec![], None))], request).await;
-        json_body(&requests[0])["filter"].clone()
+        without_default_visibility(json_body(&requests[0])["filter"].clone())
+    }
+
+    /// The `filter` a Search sent, without the default visibility every Search carries, so a test
+    /// about another condition does not repeat it. `visibility` is asserted on its own.
+    fn without_default_visibility(mut filter: Value) -> Value {
+        if filter["visibility"] == json!({ "eq": "timeline" }) {
+            filter.as_object_mut().unwrap().remove("visibility");
+        }
+        filter
     }
 
     fn day_range(from: Option<&str>, to: Option<&str>) -> DateRange {
@@ -909,6 +952,134 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn archived_assets_are_excluded_unless_the_archived_option_is_on() {
+        let off = SearchFilters::default();
+        let (_, requests) = search(
+            vec![("200 OK", page(vec![], None))],
+            SearchRequest {
+                filters: off,
+                ..filename_request("")
+            },
+        )
+        .await;
+        assert_eq!(
+            json_body(&requests[0])["filter"],
+            json!({ "visibility": { "eq": "timeline" } }),
+            "a Search without the option asks for the timeline only, whatever Immich's default is"
+        );
+
+        let on = SearchFilters {
+            archived: true,
+            ..SearchFilters::default()
+        };
+        let (_, requests) = search(
+            vec![("200 OK", page(vec![], None))],
+            SearchRequest {
+                filters: on,
+                ..filename_request("")
+            },
+        )
+        .await;
+        assert_eq!(
+            json_body(&requests[0])["filter"],
+            json!({ "visibility": { "eq": "archive" } }),
+            "with the option on only Archived Assets are asked for"
+        );
+    }
+
+    #[tokio::test]
+    async fn favorite_restricts_the_search_to_favorites() {
+        let filters = SearchFilters {
+            favorite: true,
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(filters).await,
+            json!({ "isFavorite": { "eq": true } })
+        );
+    }
+
+    #[tokio::test]
+    async fn unfiled_restricts_the_search_to_remote_assets_in_no_album() {
+        let filters = SearchFilters {
+            unfiled: true,
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(filters).await,
+            json!({ "hasAlbums": { "eq": false } })
+        );
+    }
+
+    #[tokio::test]
+    async fn rating_selects_exactly_one_star_level() {
+        for stars in 1..=5u8 {
+            let filters = SearchFilters {
+                rating: Some(Rating::try_from(stars).unwrap()),
+                ..SearchFilters::default()
+            };
+            assert_eq!(
+                filter_sent_for(filters).await,
+                json!({ "rating": { "eq": stars } })
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn display_options_and_rating_combine_with_each_other_and_with_the_text() {
+        let request = SearchRequest {
+            filters: SearchFilters {
+                favorite: true,
+                archived: true,
+                unfiled: true,
+                rating: Some(Rating::try_from(4).unwrap()),
+                ..SearchFilters::default()
+            },
+            ..filename_request("IMG")
+        };
+        let (_, requests) = search(vec![("200 OK", page(vec![], None))], request).await;
+        assert_eq!(
+            json_body(&requests[0])["filter"],
+            json!({
+                "originalFileName": { "like": "%IMG%" },
+                "isFavorite": { "eq": true },
+                "visibility": { "eq": "archive" },
+                "hasAlbums": { "eq": false },
+                "rating": { "eq": 4 },
+            })
+        );
+    }
+
+    #[test]
+    fn a_rating_outside_one_to_five_stars_is_rejected_before_it_reaches_immich() {
+        for stars in [0, 6, 255] {
+            let json = format!(r#"{{"text":"","mode":"filename","filters":{{"rating":{stars}}}}}"#);
+            assert!(
+                serde_json::from_str::<SearchRequest>(&json).is_err(),
+                "{stars}"
+            );
+        }
+    }
+
+    #[test]
+    fn display_options_and_rating_deserialize_from_the_frontend_shape() {
+        let request: SearchRequest = serde_json::from_str(
+            r#"{"text":"","mode":"filename","filters":{"favorite":true,"archived":true,"unfiled":true,"rating":3}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            request.filters,
+            SearchFilters {
+                favorite: true,
+                archived: true,
+                unfiled: true,
+                rating: Some(Rating::try_from(3).unwrap()),
+                ..SearchFilters::default()
+            }
+        );
+    }
+
+    #[tokio::test]
     async fn chosen_people_must_all_appear_in_the_remote_asset() {
         let filters = SearchFilters {
             person_ids: Some(vec!["person-1".to_string(), "person-2".to_string()]),
@@ -952,6 +1123,7 @@ mod tests {
                 "localDateTime": { "gte": "2025-02-28T23:00:00.000Z" },
                 "type": { "eq": "VIDEO" },
                 "personIds": { "all": ["person-1"] },
+                "visibility": { "eq": "timeline" },
             })
         );
         assert_eq!(body.as_object().unwrap().len(), 4, "no flat filter fields");

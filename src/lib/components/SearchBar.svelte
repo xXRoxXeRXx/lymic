@@ -11,11 +11,13 @@
    * Search Filters live in the panel that the options button opens below the field; a Search can consist of
    * filters alone.
    */
-  let { search, people, onSubmit, onClear }: {
+  let { search, people, onSubmit, onClear, onOpenArchive }: {
     search: SearchController;
     people: PeopleViewState;
     onSubmit: () => void;
     onClear: () => void;
+    /** Switches to the Archive main view, like a click on its navigation entry. */
+    onOpenArchive: () => void;
   } = $props();
 
   const hasFilters = $derived(Object.values(search.filters).some((value) => value !== undefined));
@@ -29,6 +31,11 @@
     // A filter that cannot be searched keeps the panel open, where its message is.
     if (Object.keys(search.filterErrors).length === 0) panelOpen = false;
     onSubmit();
+  }
+
+  function openArchive() {
+    panelOpen = false;
+    onOpenArchive();
   }
 
   function closeOnEscape(event: KeyboardEvent) {
@@ -89,7 +96,7 @@
   >{$t("search_submit")}</button>
   </div>
   {#if panelOpen}
-    <SearchPanel {search} {people} id={panelId} />
+    <SearchPanel {search} {people} id={panelId} onOpenArchive={openArchive} />
   {/if}
 </form>
 </div>
