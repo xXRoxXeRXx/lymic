@@ -3,6 +3,12 @@ use reqwest::{RequestBuilder, Response, StatusCode};
 pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 8 * 1024;
 pub(super) const MAX_SUCCESS_RESPONSE_BYTES: usize = 1024 * 1024;
 
+/// A response string, or `None` when Immich sent it absent, empty or blank. Every Immich response
+/// field goes through this one rule so blank values behave the same everywhere.
+pub(super) fn non_empty(value: Option<String>) -> Option<String> {
+    value.and_then(|value| (!value.trim().is_empty()).then_some(value))
+}
+
 /// The credential-free error code of a failed request of a section (Explore, Archive, Trash): `{prefix}_authentication_required`
 /// for 401, `{prefix}_permission_denied:{permission_hint}` for 403 and `{prefix}_unavailable` otherwise.
 pub(super) fn request_failure_code(

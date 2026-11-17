@@ -1,6 +1,6 @@
 use super::client::ImmichClient;
 use super::response::{
-    read_response_body_limited, request_failure_code, MAX_SUCCESS_RESPONSE_BYTES,
+    non_empty, read_response_body_limited, request_failure_code, MAX_SUCCESS_RESPONSE_BYTES,
 };
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
@@ -19,11 +19,29 @@ pub(crate) struct Tag {
     pub color: Option<String>,
 }
 
-/// One Tag of `GET /api/tags`. Only the fields Lymic shows are read; Immich may add others.
-#[derive(Deserialize)]
-struct TagResponse {
-    id: String,
-    name: String,
+/// A Tag of one Remote Asset as shown in the Lightbox. Only the fields a chip needs; the
+/// hierarchy is not needed there.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AssetTag {
+    pub id: String,
+    /// The Tag's own name, without its ancestors.
+    pub name: String,
+    /// The Tag's full path, for example `Travel/Italy/Rome`.
+    pub value: String,
+    /// A `#RRGGBB` colour as Immich returns it; the frontend decides whether it is usable.
+    pub color: Option<String>,
+}
+
+/// One Tag as Immich sends it, in `GET /api/tags` and in the `tags` of an asset's details. Only
+/// the fields Lymic shows are read; Immich may add others. Every field is optional here so each
+/// caller decides what a usable entry needs.
+#[derive(Default, Deserialize)]
+struct TagEntry {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
     #[serde(default)]
     value: Option<String>,
     #[serde(rename = "parentId", default)]
@@ -32,26 +50,61 @@ struct TagResponse {
     color: Option<String>,
 }
 
-fn non_empty(value: Option<String>) -> Option<String> {
-    value.filter(|value| !value.is_empty())
+impl TagEntry {
+    /// An entry of the Tag list needs its id and its name.
+    fn into_tag(self) -> Option<Tag> {
+        let name = self.name?;
+        Some(Tag {
+            // Without a full path the name is the best label there is.
+            value: non_empty(self.value).unwrap_or_else(|| name.clone()),
+            id: self.id?,
+            name,
+            parent_id: non_empty(self.parent_id),
+            color: non_empty(self.color),
+        })
+    }
+
+    /// A Tag can only be opened by its id; the name falls back to the last segment of the path
+    /// and the path to the name. An entry with neither is dropped.
+    fn into_asset_tag(self) -> Option<AssetTag> {
+        let id = non_empty(self.id)?;
+        let (name, value) = match (non_empty(self.name), non_empty(self.value)) {
+            (Some(name), Some(value)) => (name, value),
+            (Some(name), None) => (name.clone(), name),
+            (None, Some(value)) => (
+                value.rsplit('/').next().unwrap_or(&value).to_string(),
+                value,
+            ),
+            (None, None) => return None,
+        };
+        Some(AssetTag {
+            id,
+            name,
+            value,
+            color: non_empty(self.color),
+        })
+    }
 }
 
-impl From<TagResponse> for Tag {
-    fn from(response: TagResponse) -> Self {
-        Self {
-            // Without a full path the name is the best label there is.
-            value: non_empty(response.value).unwrap_or_else(|| response.name.clone()),
-            id: response.id,
-            name: response.name,
-            parent_id: non_empty(response.parent_id),
-            color: non_empty(response.color),
-        }
+/// The Tags of an asset details response, kept raw until here so one malformed entry (or a
+/// `tags` that is not a list) never fails the whole details request. `None` when the server does
+/// not report Tags.
+pub(super) fn asset_tags_from_value(value: serde_json::Value) -> Option<Vec<AssetTag>> {
+    match value {
+        serde_json::Value::Array(entries) => Some(
+            entries
+                .into_iter()
+                .filter_map(|entry| serde_json::from_value::<TagEntry>(entry).ok())
+                .filter_map(TagEntry::into_asset_tag)
+                .collect(),
+        ),
+        _ => None,
     }
 }
 
 impl ImmichClient {
     /// Lists every Tag of the Immich Library. Errors carry a stable `tags_*` code and never the
-    /// response body.
+    /// response body, also when the body cannot be read in full (too large or cut off).
     pub async fn get_tags(&self) -> Result<Vec<Tag>, String> {
         let response = self
             .request(Method::GET, "tags")
@@ -61,10 +114,16 @@ impl ImmichClient {
         if !response.status().is_success() {
             return Err(request_failure_code("tags", response.status(), "tag.read"));
         }
-        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
-        let tags: Vec<TagResponse> =
+        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES)
+            .await
+            .map_err(|_| "tags_invalid_response".to_string())?;
+        let entries: Vec<TagEntry> =
             serde_json::from_slice(&body).map_err(|_| "tags_invalid_response".to_string())?;
-        Ok(tags.into_iter().map(Tag::from).collect())
+        entries
+            .into_iter()
+            .map(TagEntry::into_tag)
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| "tags_invalid_response".to_string())
     }
 }
 
@@ -120,6 +179,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn treats_whitespace_only_fields_as_absent_for_tags_and_asset_tags() {
+        let blank = r#"{"id":"t1","name":"Rome","value":"  ","parentId":" ","color":"\u0009"}"#;
+        let (tags, _) = request_with_response("200 OK", &format!("[{blank}]")).await;
+        let tag = tags.unwrap().remove(0);
+        assert_eq!(tag.value, "Rome");
+        assert_eq!(tag.parent_id, None);
+        assert_eq!(tag.color, None);
+
+        let asset_tags =
+            super::asset_tags_from_value(serde_json::from_str(&format!("[{blank}]")).unwrap())
+                .unwrap();
+        assert_eq!(asset_tags.len(), 1);
+        assert_eq!(asset_tags[0].value, "Rome");
+        assert_eq!(asset_tags[0].color, None);
+    }
+
+    #[tokio::test]
     async fn serializes_tags_for_the_frontend_in_camel_case() {
         let tag = Tag {
             id: "t1".into(),
@@ -162,6 +238,15 @@ mod tests {
         assert_eq!(malformed.unwrap_err(), "tags_invalid_response");
         let (wrong_shape, _) = request_with_response("200 OK", r#"[{"id":"t1"}]"#).await;
         assert_eq!(wrong_shape.unwrap_err(), "tags_invalid_response");
+    }
+
+    #[tokio::test]
+    async fn maps_an_oversized_body_to_an_invalid_response_without_leaking_it() {
+        let body = format!(r#"["{}"]"#, "secret".repeat(200 * 1024));
+        let (result, _) = request_with_response("200 OK", &body).await;
+        let error = result.unwrap_err();
+        assert_eq!(error, "tags_invalid_response");
+        assert!(!error.contains("secret"));
     }
 
     #[tokio::test]

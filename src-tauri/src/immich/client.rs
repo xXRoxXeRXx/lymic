@@ -2,8 +2,10 @@ use super::bulk_check::{
     bulk_check_response_error, parse_bulk_check_response, BulkCheckDuplicate, BulkCheckError,
 };
 use super::response::{
-    read_response_body_limited, send_checked, send_checked_as, MAX_SUCCESS_RESPONSE_BYTES,
+    non_empty, read_response_body_limited, send_checked, send_checked_as,
+    MAX_SUCCESS_RESPONSE_BYTES,
 };
+use super::tags::{asset_tags_from_value, AssetTag};
 use super::upload::{parse_upload_response, upload_form, SidecarDirectoryCache};
 use crate::sync::progress::TransferStatsTracker;
 use reqwest::{
@@ -94,59 +96,6 @@ pub(crate) struct AssetDetails {
     pub tags: Option<Vec<AssetTag>>,
 }
 
-/// A Tag of one Remote Asset as shown in the Lightbox. Only the fields a chip needs; the
-/// hierarchy is not needed there.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AssetTag {
-    pub id: String,
-    /// The Tag's own name, without its ancestors.
-    pub name: String,
-    /// The Tag's full path, for example `Travel/Italy/Rome`.
-    pub value: String,
-    /// A `#RRGGBB` colour as Immich returns it; the frontend decides whether it is usable.
-    pub color: Option<String>,
-}
-
-/// One Tag of an asset details response. Every field is optional so one malformed entry never
-/// fails the whole details request.
-#[derive(Default, Deserialize)]
-struct AssetTagResponse {
-    #[serde(default)]
-    id: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    value: Option<String>,
-    #[serde(default)]
-    color: Option<String>,
-}
-
-impl AssetTagResponse {
-    /// A Tag can only be opened by its id; the name falls back to the last segment of the path
-    /// and the path to the name. An entry with neither is dropped.
-    fn into_tag(self) -> Option<AssetTag> {
-        let id = non_empty(self.id)?;
-        let name = non_empty(self.name);
-        let value = non_empty(self.value);
-        let (name, value) = match (name, value) {
-            (Some(name), Some(value)) => (name, value),
-            (Some(name), None) => (name.clone(), name),
-            (None, Some(value)) => (
-                value.rsplit('/').next().unwrap_or(&value).to_string(),
-                value,
-            ),
-            (None, None) => return None,
-        };
-        Some(AssetTag {
-            id,
-            name,
-            value,
-            color: non_empty(self.color),
-        })
-    }
-}
-
 #[derive(Deserialize)]
 struct AssetDetailsResponse {
     #[serde(rename = "type", default)]
@@ -194,10 +143,6 @@ struct AssetDetailsExif {
     image_height: Option<u32>,
     #[serde(rename = "fileSizeInByte", default)]
     file_size: Option<u64>,
-}
-
-fn non_empty(value: Option<String>) -> Option<String> {
-    value.and_then(|value| (!value.trim().is_empty()).then_some(value))
 }
 
 fn original_file_name(value: Option<String>) -> Option<String> {
@@ -288,16 +233,7 @@ impl From<AssetDetailsResponse> for AssetDetails {
             image_width: exif.image_width,
             image_height: exif.image_height,
             file_size: exif.file_size,
-            tags: match response.tags {
-                Some(serde_json::Value::Array(entries)) => Some(
-                    entries
-                        .into_iter()
-                        .filter_map(|entry| serde_json::from_value::<AssetTagResponse>(entry).ok())
-                        .filter_map(AssetTagResponse::into_tag)
-                        .collect(),
-                ),
-                _ => None,
-            },
+            tags: response.tags.and_then(asset_tags_from_value),
         }
     }
 }
