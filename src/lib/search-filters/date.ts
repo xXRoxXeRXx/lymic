@@ -8,7 +8,7 @@ function parseDay(day: string | undefined): [number, number, number] | null {
   return match ? [Number(match[1]), Number(match[2]) - 1, Number(match[3])] : null;
 }
 
-/** The first instant of the chosen day in the user's local time zone. */
+/** The first instant of the chosen day in the user's local time zone, as the UTC instant Immich's `takenAt` filter compares. */
 export function startOfLocalDay(day: string): string | null {
   const parts = parseDay(day);
   return parts ? new Date(parts[0], parts[1], parts[2], 0, 0, 0, 0).toISOString() : null;

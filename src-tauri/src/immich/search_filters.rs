@@ -5,8 +5,9 @@
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
-/// A date range as instants. The frontend turns the chosen local days into the start of the
-/// first day and the end of the last day (inclusive), so no time zone is needed here.
+/// A date range as instants, sent as Immich's `takenAt` filter (a `DateFilter`, whose bounds
+/// are UTC instants). The frontend turns the chosen local days into the instant the first day
+/// starts and the instant the last day ends (inclusive), so no time zone is needed here.
 /// Either bound is optional.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
@@ -27,7 +28,7 @@ impl DateRange {
             bounds.insert("lte".to_string(), json!(to));
         }
         if !bounds.is_empty() {
-            filter.insert("localDateTime".to_string(), Value::Object(bounds));
+            filter.insert("takenAt".to_string(), Value::Object(bounds));
         }
     }
 }
