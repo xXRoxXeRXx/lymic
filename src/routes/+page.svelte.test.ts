@@ -4337,6 +4337,35 @@ describe("Search filter panel", () => {
   }
   const setDate = (label: "From" | "To", value: string) => fireEvent.input(screen.getByLabelText(label), { target: { value } });
 
+  it("searches the chosen Tags from the hierarchy in the panel, all of them, without their children", async () => {
+    stubImmediateIntersectionObserver();
+    const libraryTags = [
+      { id: "t-travel", name: "Travel", value: "Travel", parentId: null, color: null },
+      { id: "t-italy", name: "Italy", value: "Travel/Italy", parentId: "t-travel", color: null },
+      { id: "t-family", name: "Family", value: "Family", parentId: null, color: null },
+    ];
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, get_tags: async () => libraryTags, search_assets: async () => results("tagged-1") });
+    await openPanel();
+
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Travel" }));
+    await fireEvent.click(screen.getByRole("treeitem", { name: "Family" }));
+    await submit();
+
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "context", filters: { tagIds: ["t-travel", "t-family"] } } }));
+  });
+
+  it("disables only the Tag filter and names tag.read when the key lacks it", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, get_tags: async () => { throw "tags_permission_denied:tag.read"; }, search_context_page: async () => ({ assets: [found("found-1")], nextPage: null, limitReached: false }) });
+    await openPanel();
+
+    expect(await screen.findByText(/tag\.read/)).toBeInTheDocument();
+    await fireEvent.input(await searchBox(), { target: { value: "IMG" } });
+    await submit();
+
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_context_page", { request: { text: "IMG", mode: "context", filters: {} }, page: 1 }));
+  });
+
   it("opens the panel from the bar and runs a Search with filters and no text, shown chronologically", async () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("video-1") });
