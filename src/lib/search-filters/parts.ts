@@ -15,3 +15,10 @@ export function setPart<T extends object>(
   for (const key of Object.keys(next) as (keyof T)[]) if (next[key] === undefined) delete next[key];
   return Object.keys(next).length > 0 ? (next as unknown as T) : undefined;
 }
+
+/** The non-empty parts of a multi-part Search Filter, in the given order; undefined when none is set. */
+export function chosenParts<T extends object>(filter: T | undefined, keys: readonly (keyof T)[]): T | undefined {
+  const chosen: Partial<T> = {};
+  for (const key of keys) if (filter?.[key]) chosen[key] = filter[key];
+  return Object.keys(chosen).length > 0 ? (chosen as T) : undefined;
+}

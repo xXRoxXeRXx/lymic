@@ -1007,6 +1007,60 @@ describe("Context Search", () => {
     expect(search.truncated).toBe(false);
   });
 
+  it("keeps the earlier Context results visible and offline when a Search of the other kind fails, and recovers on Retry", async () => {
+    const searchAssets = vi.fn()
+      .mockRejectedValueOnce("search_unavailable")
+      .mockResolvedValueOnce(results(["chrono"]));
+    const { search } = setupDefaultMode({ searchAssets });
+    search.text = "dog";
+    await search.submit();
+
+    search.mode = "filename";
+    search.text = "IMG";
+    await search.submit();
+
+    expect(search.presentation).toBe("relevance");
+    expect(search.results.buckets).toEqual([{ timeBucket: search.context.buckets[0].timeBucket, count: 2 }]);
+    expect(search.results.isOffline).toBe(true);
+    expect(search.failure).toBe("unavailable");
+    expect(search.submittedText).toBe("dog");
+
+    await search.results.refresh();
+
+    expect(search.presentation).toBe("chronological");
+    expect(search.results.isOffline).toBe(false);
+    expect(search.failure).toBeNull();
+    expect(search.context.buckets).toEqual([]);
+    expect(search.results.buckets).toEqual([{ timeBucket: march, count: 1 }]);
+    expect(search.submittedText).toBe("IMG");
+  });
+
+  it("keeps the earlier chronological results visible and offline when a Context Search fails", async () => {
+    const searchContextPage = vi.fn()
+      .mockRejectedValueOnce("search_unavailable")
+      .mockResolvedValueOnce(contextPage(["ctx"], null));
+    const { search } = setupDefaultMode({ searchContextPage });
+    search.mode = "filename";
+    search.text = "IMG";
+    await search.submit();
+
+    search.mode = "context";
+    search.text = "dog";
+    await search.submit();
+
+    expect(search.presentation).toBe("chronological");
+    expect(search.results.buckets).toEqual([{ timeBucket: march, count: 2 }]);
+    expect(search.results.isOffline).toBe(true);
+    expect(search.submittedText).toBe("IMG");
+
+    await search.refresh();
+
+    expect(search.presentation).toBe("relevance");
+    expect(search.results.isOffline).toBe(false);
+    expect(search.buckets).toEqual([]);
+    expect(search.results.buckets).toEqual(search.context.buckets);
+  });
+
   it("clears the Context Search Results, the text and the mode on clear", async () => {
     const { search } = setupDefaultMode();
     search.text = "dog";
@@ -1063,7 +1117,7 @@ describe("Context Search", () => {
   });
 });
 
-describe("Search controller Person filter", () => {
+describe("Search controller Recognized People filter", () => {
   it("searches the chosen Recognized People alone, without text, as a filter", async () => {
     const { adapter, search } = setup();
     search.filters.personIds = ["person-1", "person-2"];
@@ -1074,7 +1128,7 @@ describe("Search controller Person filter", () => {
     expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "filename", filters: { personIds: ["person-1", "person-2"] } });
   });
 
-  it("treats no chosen person as no filter", async () => {
+  it("treats no chosen Recognized Person as no filter", async () => {
     const { adapter, search } = setup();
     search.filters.personIds = [];
 

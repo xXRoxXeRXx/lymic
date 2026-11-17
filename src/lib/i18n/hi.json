@@ -377,7 +377,7 @@
   ,"search_loading_more": "और परिणाम लोड हो रहे हैं…"
   ,"search_filter_person": "पहचाने हुए लोग"
   ,"search_filter_person_hint": "वे फ़ोटो और वीडियो दिखाता है जिनमें चुने गए सभी लोग दिखाई देते हैं।"
-  ,"search_filter_person_permission_denied": "व्यक्ति फ़िल्टर उपलब्ध नहीं है। person.read अनुमति वाली API कुंजी कॉन्फ़िगर करें। खोज का बाकी हिस्सा काम करता रहेगा।"
+  ,"search_filter_person_permission_denied": "पहचाने हुए लोग फ़िल्टर उपलब्ध नहीं है। person.read अनुमति वाली API कुंजी कॉन्फ़िगर करें। खोज का बाकी हिस्सा काम करता रहेगा।"
   ,"search_filter_display": "प्रदर्शन"
   ,"search_filter_favorite": "पसंदीदा"
   ,"search_filter_archived": "संग्रहीत"

@@ -1,5 +1,5 @@
 import type { SearchLocation } from "../contracts";
-import { setPart } from "./parts";
+import { chosenParts, setPart } from "./parts";
 import type { SearchFilterDefinition } from "./types";
 
 /**
@@ -9,11 +9,8 @@ import type { SearchFilterDefinition } from "./types";
 export const locationFilter: SearchFilterDefinition = {
   key: "location",
   apply({ location }, request) {
-    const chosen: SearchLocation = {};
-    if (location?.country) chosen.country = location.country;
-    if (location?.state) chosen.state = location.state;
-    if (location?.city) chosen.city = location.city;
-    if (Object.keys(chosen).length > 0) request.location = chosen;
+    const chosen = chosenParts(location, ["country", "state", "city"]);
+    if (chosen) request.location = chosen;
   },
 };
 

@@ -377,7 +377,7 @@
   ,"search_loading_more": "Chargement d’autres résultats…"
   ,"search_filter_person": "Personnes reconnues"
   ,"search_filter_person_hint": "Affiche les photos et vidéos où apparaissent toutes les personnes choisies."
-  ,"search_filter_person_permission_denied": "Le filtre Personne n'est pas disponible. Configurez une clé API avec l'autorisation person.read. Le reste de la recherche continue de fonctionner."
+  ,"search_filter_person_permission_denied": "Le filtre Personnes reconnues n'est pas disponible. Configurez une clé API avec l'autorisation person.read. Le reste de la recherche continue de fonctionner."
   ,"search_filter_display": "Affichage"
   ,"search_filter_favorite": "Favoris"
   ,"search_filter_archived": "Archivés"

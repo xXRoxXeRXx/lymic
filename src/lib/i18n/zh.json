@@ -377,7 +377,7 @@
   ,"search_loading_more": "正在加载更多结果…"
   ,"search_filter_person": "已识别人物"
   ,"search_filter_person_hint": "显示所有选定人物都出现的照片和视频。"
-  ,"search_filter_person_permission_denied": "人物筛选不可用。请配置具有 person.read 权限的 API 密钥。搜索的其余部分仍可使用。"
+  ,"search_filter_person_permission_denied": "已识别人物筛选不可用。请配置具有 person.read 权限的 API 密钥。搜索的其余部分仍可使用。"
   ,"search_filter_display": "显示"
   ,"search_filter_favorite": "收藏"
   ,"search_filter_archived": "已归档"

@@ -377,7 +377,7 @@
   ,"search_loading_more": "Loading more results…"
   ,"search_filter_person": "Recognized People"
   ,"search_filter_person_hint": "Shows photos and videos in which all chosen people appear."
-  ,"search_filter_person_permission_denied": "The Person filter is unavailable. Configure an API key with the person.read permission. The rest of Search keeps working."
+  ,"search_filter_person_permission_denied": "The Recognized People filter is unavailable. Configure an API key with the person.read permission. The rest of Search keeps working."
   ,"search_filter_display": "Display"
   ,"search_filter_favorite": "Favorites"
   ,"search_filter_archived": "Archived"

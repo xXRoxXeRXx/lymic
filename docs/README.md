@@ -52,7 +52,7 @@ The existing project guidance recommends these scopes:
 | `asset.upload` | Upload new media assets. |
 | `asset.read` | Check whether an asset already exists; Archive: browse archived photos and videos; Search: every search (Immich 3.2 or later). |
 | `user.read` | Retrieve the signed-in user during login. |
-| `person.read` | Explore: show recognized people; Search: the Person filter. |
+| `person.read` | Explore: show recognized people; Search: the Recognized People filter. |
 | `memory.read` | Explore: show memories. |
 
 The Explore view (people, places and memories, each openable as a timeline) is read-only and needs `asset.read` (places and place timelines), `person.read` (people) and `memory.read` (memories). Each Explore section depends on its own permission: a key lacking one only disables that section, which reports the missing permission where it can, and the other sections keep working. Memories also need a recent Immich server release; no minimum version is documented. Viewing thumbnails and photos also needs `asset.view`.
