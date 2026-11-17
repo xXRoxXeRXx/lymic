@@ -51,13 +51,13 @@ struct TagEntry {
 }
 
 impl TagEntry {
-    /// An entry of the Tag list needs its id and its name.
+    /// An entry of the Tag list needs its id and its name; a blank one counts as missing.
     fn into_tag(self) -> Option<Tag> {
-        let name = self.name?;
+        let name = non_empty(self.name)?;
         Some(Tag {
             // Without a full path the name is the best label there is.
             value: non_empty(self.value).unwrap_or_else(|| name.clone()),
-            id: self.id?,
+            id: non_empty(self.id)?,
             name,
             parent_id: non_empty(self.parent_id),
             color: non_empty(self.color),
@@ -193,6 +193,19 @@ mod tests {
         assert_eq!(asset_tags.len(), 1);
         assert_eq!(asset_tags[0].value, "Rome");
         assert_eq!(asset_tags[0].color, None);
+    }
+
+    #[tokio::test]
+    async fn rejects_a_tag_whose_id_or_name_is_blank_like_one_that_is_missing() {
+        for body in [
+            r#"[{"id":"","name":"Rome"}]"#,
+            r#"[{"id":"  ","name":"Rome"}]"#,
+            r#"[{"id":"t1","name":""}]"#,
+            r#"[{"id":"t1","name":" \t"}]"#,
+        ] {
+            let (result, _) = request_with_response("200 OK", body).await;
+            assert_eq!(result.unwrap_err(), "tags_invalid_response", "{body}");
+        }
     }
 
     #[tokio::test]

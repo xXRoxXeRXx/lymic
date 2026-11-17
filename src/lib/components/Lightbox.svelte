@@ -218,7 +218,7 @@
   }
 
   function closeLightbox() {
-    if (downloadingAssetId || isAddingToAlbum || isRestoring) return;
+    if (isBusy) return;
     onClose();
   }
   const isBusy = $derived(downloadingAssetId !== null || isAddingToAlbum || isRestoring);
@@ -232,7 +232,7 @@
   }
   let navigationGeneration = 0;
   async function navigate(delta: number) {
-    if (!selectedAsset || !navigateAsset || downloadingAssetId || isAddingToAlbum || isRestoring) return;
+    if (!selectedAsset || !navigateAsset || isBusy) return;
     const current = selectedAsset;
     const generation = ++navigationGeneration;
     const nextAsset = await navigateAsset(delta, current);
@@ -295,8 +295,8 @@
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_close_lightbox")} aria-label={$t("timeline_close_lightbox")} disabled={isBusy} onclick={closeLightbox}><X class="h-5 w-5" /></button>
         </div>
         {#if navigateAsset}
-          <button type="button" class="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum || isRestoring} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
-          <button type="button" class="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum || isRestoring} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
+          <button type="button" class="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={isBusy} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
+          <button type="button" class="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_next_asset")} disabled={isBusy} onclick={() => navigate(1)}><ChevronRight class="h-5 w-5" /></button>
         {/if}
         {#if selectedAsset.type === "VIDEO"}
           <video class="relative z-20 h-full w-full max-h-full max-w-full object-contain" controls autoplay aria-label={$t("timeline_video_preview")} src={protocolSrc("lymic-asset", "video", selectedAsset.id)}>

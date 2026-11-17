@@ -567,8 +567,8 @@
             <span>{$t('people_title')}</span>
           </button>
 
-          <button type="button" class="nav-item {currentView === 'tags' ? 'active' : ''}" onclick={openTags} aria-label={$t('tags_title')}>
-            <TagIcon class="w-4 h-4 shrink-0 {currentView === 'tags' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+          <button type="button" class="nav-item {currentView === TAGS_VIEW ? 'active' : ''}" onclick={openTags} aria-label={$t('tags_title')}>
+            <TagIcon class="w-4 h-4 shrink-0 {currentView === TAGS_VIEW ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
             <span>{$t('tags_title')}</span>
           </button>
 
