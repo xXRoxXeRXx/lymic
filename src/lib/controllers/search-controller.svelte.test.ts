@@ -1157,3 +1157,44 @@ describe("Search controller Recognized People filter", () => {
     expect(search.filters.personIds).toBeUndefined();
   });
 });
+
+describe("Search controller Tag filter", () => {
+  it("searches the chosen Tags alone, without text, as a filter", async () => {
+    const { adapter, search } = setup();
+    search.filters.tagIds = ["tag-1", "tag-2"];
+
+    expect(search.canSubmit).toBe(true);
+    expect(await search.submit()).toBe(true);
+
+    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "filename", filters: { tagIds: ["tag-1", "tag-2"] } });
+  });
+
+  it("treats no chosen Tag as no filter", async () => {
+    const { adapter, search } = setup();
+    search.filters.tagIds = [];
+
+    expect(search.canSubmit).toBe(false);
+    expect(await search.submit()).toBe(false);
+    expect(adapter.searchAssets).not.toHaveBeenCalled();
+  });
+
+  it("combines the Tags with the text, the people and the other filters", async () => {
+    const { adapter, search } = setup();
+    search.text = "IMG";
+    search.filters.tagIds = ["tag-1"];
+    search.filters.personIds = ["person-1"];
+
+    await search.submit();
+
+    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "IMG", mode: "filename", filters: { personIds: ["person-1"], tagIds: ["tag-1"] } });
+  });
+
+  it("forgets the chosen Tags when the Search is cleared", () => {
+    const { search } = setup();
+    search.filters.tagIds = ["tag-1"];
+
+    search.clear();
+
+    expect(search.filters.tagIds).toBeUndefined();
+  });
+});
