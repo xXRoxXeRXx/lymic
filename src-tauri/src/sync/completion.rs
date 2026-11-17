@@ -180,25 +180,13 @@ async fn complete_terminal_unit(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::test_pool;
     use crate::{
         db::{self, QueueAsset},
         immich::{AlbumId, RemoteAssetId},
         media::model::{Checksums, HashedUploadUnit, SyncAsset},
     };
-    use sqlx::{sqlite::SqlitePoolOptions, Row};
-
-    async fn test_pool() -> sqlx::SqlitePool {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        pool
-    }
+    use sqlx::Row;
 
     fn upload_unit(target_album_id: Option<AlbumId>) -> HashedUploadUnit {
         HashedUploadUnit {

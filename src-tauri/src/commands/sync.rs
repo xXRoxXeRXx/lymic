@@ -15,10 +15,9 @@ pub(crate) async fn start_sync(
 
 #[tauri::command]
 pub(crate) async fn get_sync_status(
-    app: tauri::AppHandle,
     runtime: tauri::State<'_, SyncRuntime>,
 ) -> Result<db::SyncSnapshot, String> {
-    Synchronization::new(&app, runtime.inner()).status().await
+    runtime.status().await.map_err(Into::into)
 }
 
 #[tauri::command]
@@ -89,19 +88,7 @@ pub(crate) async fn retry_failed_syncs(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    async fn test_pool() -> sqlx::SqlitePool {
-        let database_name = format!("lymic_command_test_{}", uuid::Uuid::new_v4());
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        pool
-    }
+    use crate::db::test_pool;
 
     #[tokio::test]
     async fn settings_command_adapters_preserve_parallelism_values_and_validation() {

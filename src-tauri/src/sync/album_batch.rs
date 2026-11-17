@@ -223,27 +223,15 @@ async fn mark_pending_unit_failed(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::test_pool;
     use crate::{
         auth::AuthConfig,
         db::{self, QueueAsset},
         media::model::{Checksums, SyncAsset},
         sync::completion::begin_upload_unit_completion,
     };
-    use sqlx::{sqlite::SqlitePoolOptions, Row};
+    use sqlx::Row;
     use tokio::{io::AsyncWriteExt, net::TcpListener};
-
-    async fn test_pool() -> SqlitePool {
-        let database_name = format!("lymic_test_{}", uuid::Uuid::new_v4());
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&format!(
-                "sqlite:file:{database_name}?mode=memory&cache=private"
-            ))
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        pool
-    }
 
     fn upload_unit(album_id: AlbumId) -> HashedUploadUnit {
         HashedUploadUnit {

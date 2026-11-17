@@ -276,6 +276,20 @@ async fn all_containment_and_sql_cleanup_owners_agree_on_characterization_inputs
             expected_nonwin: false,
         },
         ContainmentCase {
+            label: "mixed_doubled_separator",
+            folder: r"C:\Photos",
+            candidate: r"C:/Photos\/Sub/a.jpg",
+            expected_win: true,
+            expected_nonwin: false,
+        },
+        ContainmentCase {
+            label: "early_doubled_backslash",
+            folder: r"C:\Photos",
+            candidate: r"C:\\Photos\a.jpg",
+            expected_win: true,
+            expected_nonwin: false,
+        },
+        ContainmentCase {
             label: "slash_mismatch_nested_folder",
             folder: r"C:\Photos\Sub",
             candidate: "C:/Photos/Sub/a.jpg",

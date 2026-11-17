@@ -71,9 +71,12 @@ pub(crate) fn sql_path_is_or_descendant_of(column: &str, param_placeholder: &str
              OR (substr({param}, length({param}), 1) = '/' AND substr({norm}, 1, length({param})) = {param} COLLATE NOCASE) \
              OR (substr({param}, length({param}), 1) != '/' AND substr({norm}, 1, length({param}) + 1) = ({param} || '/') COLLATE NOCASE) \
              OR {col} LIKE '%..%' OR {col} LIKE '%/.%' OR {col} LIKE '%\\.%' \
-             OR {col} LIKE '%//%' OR substr({col}, 5) LIKE '%\\\\%' \
+             OR substr({s}, 1, 3) = '///' \
+             OR (substr({s}, 1, 2) = '//' AND instr(substr({s}, 3), '//') > 0) \
+             OR (substr({s}, 1, 2) != '//' AND instr({s}, '//') > 0) \
              OR {col} GLOB '*[^ -~]*' OR {param} GLOB '*[^ -~]*'))",
             col = column,
+            s = slash_col,
             norm = trimmed_col,
             param = param_placeholder
         )

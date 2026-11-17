@@ -163,33 +163,44 @@ pub async fn remap_watched_folder_path(
     old_path: &str,
     new_path: &str,
 ) -> Result<(), sqlx::Error> {
-    let remapper = PathRemapper::new(old_path, new_path);
-    let old_prefix = super::sql_folder_prefix(old_path);
+    let remap = FolderRemap {
+        old_prefix: super::sql_folder_prefix(old_path),
+        paths: crate::media::paths::PathRemapper::new(old_path, new_path),
+    };
     let local_path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
     let upload_unit_cond = super::sql_path_is_or_descendant_of("upload_unit_id", "?1");
-    let current_path_cond = super::sql_path_is_or_descendant_of("current_path", "?1");
 
     let mut tx = pool.begin().await?;
 
     sqlx::query("UPDATE watched_folders SET path = ? WHERE id = ?")
-        .bind(&remapper.clean_new)
+        .bind(&remap.paths.clean_new)
         .bind(folder_id)
         .execute(&mut *tx)
         .await?;
 
-    for table in ["sync_state", "album_retry_remote_ids"] {
-        remap_table_local_paths(&mut tx, table, &old_prefix, &local_path_cond, &remapper).await?;
+    for (table, column, extra_filter) in [
+        ("sync_state", "local_path", ""),
+        ("album_retry_remote_ids", "local_path", ""),
+        (
+            "sync_jobs",
+            "current_path",
+            "id = 1 AND current_path IS NOT NULL AND ",
+        ),
+    ] {
+        remap
+            .remap_column(&mut tx, table, column, extra_filter)
+            .await?;
     }
 
     let queue_rows: Vec<(i64, String, String)> = sqlx::query_as(&format!(
         "SELECT job_id, local_path, upload_unit_id FROM sync_queue WHERE ({local_path_cond} OR {upload_unit_cond})"
     ))
-    .bind(&old_prefix)
+    .bind(&remap.old_prefix)
     .fetch_all(&mut *tx)
     .await?;
     for (job_id, old_local_path, old_upload_unit_id) in queue_rows {
-        let new_local = remapper.remap_if_changed(&old_local_path);
-        let new_unit = remapper.remap_if_changed(&old_upload_unit_id);
+        let new_local = remap.paths.remap_if_changed(&old_local_path);
+        let new_unit = remap.paths.remap_if_changed(&old_upload_unit_id);
         if new_local.is_some() || new_unit.is_some() {
             sqlx::query(
                 "UPDATE sync_queue SET local_path = ?, upload_unit_id = ? \
@@ -204,110 +215,48 @@ pub async fn remap_watched_folder_path(
         }
     }
 
-    if let Some(current_path) = sqlx::query_scalar::<_, Option<String>>(&format!(
-        "SELECT current_path FROM sync_jobs WHERE id = 1 AND {current_path_cond}"
-    ))
-    .bind(&old_prefix)
-    .fetch_optional(&mut *tx)
-    .await?
-    .flatten()
-    {
-        if let Some(new_current_path) = remapper.remap_if_changed(&current_path) {
-            sqlx::query("UPDATE sync_jobs SET current_path = ? WHERE id = 1")
-                .bind(&new_current_path)
-                .execute(&mut *tx)
-                .await?;
-        }
-    }
-
     tx.commit().await?;
     Ok(())
 }
 
-async fn remap_table_local_paths(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    table: &str,
-    old_prefix: &str,
-    local_path_cond: &str,
-    remapper: &PathRemapper,
-) -> Result<(), sqlx::Error> {
-    let paths: Vec<String> = sqlx::query_scalar(&format!(
-        "SELECT local_path FROM {table} WHERE {local_path_cond}"
-    ))
-    .bind(old_prefix)
-    .fetch_all(&mut **tx)
-    .await?;
-    for old_row_path in paths {
-        if let Some(new_row_path) = remapper.remap_if_changed(&old_row_path) {
-            sqlx::query(&format!(
-                "UPDATE {table} SET local_path = ? WHERE local_path = ?"
-            ))
-            .bind(&new_row_path)
-            .bind(&old_row_path)
-            .execute(&mut **tx)
-            .await?;
-        }
-    }
-    Ok(())
+struct FolderRemap {
+    old_prefix: String,
+    paths: crate::media::paths::PathRemapper,
 }
 
-struct PathRemapper {
-    norm_old: std::path::PathBuf,
-    clean_new: String,
-}
-
-impl PathRemapper {
-    fn new(old_path: &str, new_path: &str) -> Self {
-        Self {
-            norm_old: crate::media::paths::normalize_path_lexical(std::path::Path::new(old_path)),
-            clean_new: normalize_windows_drive_letter(trim_trailing_separators_preserving_root(
-                new_path,
-            )),
-        }
-    }
-
-    fn remap_if_changed(&self, candidate: &str) -> Option<String> {
-        let norm_candidate =
-            crate::media::paths::normalize_path_lexical(std::path::Path::new(candidate));
-        let relative =
-            crate::media::paths::relative_path_within_lexical(&norm_candidate, &self.norm_old)?;
-        let remapped = if relative.as_os_str().is_empty() {
-            self.clean_new.clone()
+impl FolderRemap {
+    async fn remap_column(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        table: &str,
+        column: &str,
+        extra_filter: &str,
+    ) -> Result<(), sqlx::Error> {
+        let path_cond = super::sql_path_is_or_descendant_of(column, "?1");
+        let paths: Vec<String> = sqlx::query_scalar(&format!(
+            "SELECT {column} FROM {table} WHERE {extra_filter}{path_cond}"
+        ))
+        .bind(&self.old_prefix)
+        .fetch_all(&mut **tx)
+        .await?;
+        let row_filter = if table == "sync_jobs" {
+            "id = 1 AND "
         } else {
-            let sep = if self.clean_new.contains('/') && !self.clean_new.contains('\\') {
-                "/"
-            } else {
-                std::path::MAIN_SEPARATOR_STR
-            };
-            let mut remapped = if self.clean_new == "/" {
-                "/".to_owned()
-            } else {
-                self.clean_new.trim_end_matches(['/', '\\']).to_owned()
-            };
-            for component in relative.components() {
-                if let std::path::Component::Normal(part) = component {
-                    if !remapped.ends_with(['/', '\\']) {
-                        remapped.push_str(sep);
-                    }
-                    remapped.push_str(&part.to_string_lossy());
-                }
-            }
-            remapped
+            ""
         };
-        (remapped != candidate).then_some(remapped)
+        for old_row_path in paths {
+            if let Some(new_row_path) = self.paths.remap_if_changed(&old_row_path) {
+                sqlx::query(&format!(
+                    "UPDATE {table} SET {column} = ? WHERE {row_filter}{column} = ?"
+                ))
+                .bind(&new_row_path)
+                .bind(&old_row_path)
+                .execute(&mut **tx)
+                .await?;
+            }
+        }
+        Ok(())
     }
-}
-
-fn trim_trailing_separators_preserving_root(path: &str) -> &str {
-    let trimmed = path.trim_end_matches(['/', '\\']);
-    if trimmed.is_empty() && !path.is_empty() {
-        return "/";
-    }
-    #[cfg(windows)]
-    if trimmed.len() == 2 && trimmed.as_bytes()[1] == b':' && path.len() > 2 {
-        return &path[..3];
-    }
-    trimmed
 }
 
 fn normalize_windows_drive_letter(path: &str) -> String {

@@ -30,19 +30,7 @@ pub(crate) fn send_notification_keyed<R: Runtime>(
     key: &str,
     params: LogParams,
 ) {
-    send_notification_keyed_with(app, title, body, level, key, params, show_os_notification);
-}
-
-pub(crate) fn send_notification_keyed_with<R: Runtime>(
-    app: &AppHandle<R>,
-    title: &str,
-    body: &str,
-    level: &str,
-    key: &str,
-    params: LogParams,
-    send_os_notification: impl FnOnce(&AppHandle<R>, &str, &str),
-) {
-    send_os_notification(app, title, body);
+    show_os_notification(app, title, body);
     log_to_ui_keyed(app, level, body, key, params);
 }
 

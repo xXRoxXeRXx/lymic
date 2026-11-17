@@ -148,9 +148,72 @@ pub(crate) fn relative_path_within_lexical(
     Some(path_components.collect())
 }
 
-#[cfg(test)]
-pub(crate) fn relative_path_within(path: &Path, parent: &Path) -> Option<PathBuf> {
-    with_normalized_pair(path, parent, relative_path_within_lexical)
+/// Remaps paths inside an old Watched Folder to a new Watched Folder path
+/// while preserving relative structure and target separator style.
+pub(crate) struct PathRemapper {
+    norm_old: PathBuf,
+    pub(crate) clean_new: String,
+}
+
+impl PathRemapper {
+    pub(crate) fn new(old_path: &str, new_path: &str) -> Self {
+        Self {
+            norm_old: normalize_path_lexical(Path::new(old_path)),
+            clean_new: normalize_drive_letter_str(trim_trailing_separators_preserving_root(
+                new_path,
+            )),
+        }
+    }
+
+    pub(crate) fn remap_if_changed(&self, candidate: &str) -> Option<String> {
+        let norm_candidate = normalize_path_lexical(Path::new(candidate));
+        let relative = relative_path_within_lexical(&norm_candidate, &self.norm_old)?;
+        let remapped = if relative.as_os_str().is_empty() {
+            self.clean_new.clone()
+        } else {
+            let sep = if self.clean_new.contains('/') && !self.clean_new.contains('\\') {
+                "/"
+            } else {
+                std::path::MAIN_SEPARATOR_STR
+            };
+            let mut remapped = if self.clean_new == "/" {
+                "/".to_owned()
+            } else {
+                self.clean_new.trim_end_matches(['/', '\\']).to_owned()
+            };
+            for component in relative.components() {
+                if let Component::Normal(part) = component {
+                    if !remapped.ends_with(['/', '\\']) {
+                        remapped.push_str(sep);
+                    }
+                    remapped.push_str(&part.to_string_lossy());
+                }
+            }
+            remapped
+        };
+        (remapped != candidate).then_some(remapped)
+    }
+}
+
+fn trim_trailing_separators_preserving_root(path: &str) -> &str {
+    let trimmed = path.trim_end_matches(['/', '\\']);
+    if trimmed.is_empty() && !path.is_empty() {
+        return "/";
+    }
+    #[cfg(windows)]
+    if trimmed.len() == 2 && trimmed.as_bytes()[1] == b':' && path.len() > 2 {
+        return &path[..3];
+    }
+    trimmed
+}
+
+fn normalize_drive_letter_str(path: &str) -> String {
+    let bytes = path.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        format!("{}{}", (bytes[0] as char).to_ascii_uppercase(), &path[1..])
+    } else {
+        path.to_owned()
+    }
 }
 
 pub(crate) fn overlapping_folder_paths(
@@ -180,6 +243,10 @@ pub(crate) fn overlapping_folder_paths(
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+
+    fn relative_path_within(path: &Path, parent: &Path) -> Option<PathBuf> {
+        with_normalized_pair(path, parent, relative_path_within_lexical)
+    }
 
     #[test]
     fn removes_verbatim_prefix_and_compares_paths_case_insensitively() {
@@ -284,9 +351,10 @@ mod lexical_tests {
             Path::new("/media/photos")
         ));
         assert_eq!(
-            relative_path_within(
+            with_normalized_pair(
                 Path::new("/Media/Photos/Trips/a.jpg"),
-                Path::new("/Media/Photos")
+                Path::new("/Media/Photos"),
+                relative_path_within_lexical
             ),
             Some(PathBuf::from("Trips/a.jpg"))
         );

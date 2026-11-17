@@ -2,9 +2,7 @@
 
 use crate::{
     app::{
-        events::{
-            emit_sync_error, log_to_ui_key, send_notification_keyed_with, show_os_notification,
-        },
+        events::{emit_sync_error, log_to_ui_key, log_to_ui_keyed, show_os_notification},
         locale::{backend_translations, LocaleState},
         tray,
     },
@@ -340,14 +338,13 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
             params.insert("processed".to_string(), totals.processed.to_string());
             params.insert("uploaded".to_string(), totals.uploaded.to_string());
             params.insert("failed".to_string(), totals.failed.to_string());
-            send_notification_keyed_with(
+            (self.run.notifier)(&self.run.app, &title, &body);
+            log_to_ui_keyed(
                 &self.run.app,
-                &title,
-                &body,
                 "INFO",
+                &body,
                 "notification_complete_body",
                 params,
-                |app, title, body| (self.run.notifier)(app, title, body),
             );
         }
         audit_event(
@@ -375,8 +372,11 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
     }
 
     fn failed(&self, snapshot: Option<&db::SyncSnapshot>, error: &str) {
-        self.run.progress.report_current_file("");
-        self.run.disarm_and_finish_transfer_stats();
+        if self.run.cleanup_armed.swap(false, Ordering::SeqCst) {
+            self.run.progress.report_current_file("");
+            self.run.transfer_stats.set_active(false);
+            emit_transfer_stats(&self.run.app, &self.run.transfer_stats);
+        }
         self.service.failed(self.run.source, snapshot, error);
     }
 }
@@ -646,6 +646,46 @@ mod tests {
                 .unwrap(),
             db::SyncJobStatus::Failed
         );
+    }
+
+    #[tokio::test]
+    async fn desktop_reporter_early_failure_before_start_omits_progress_and_transfer_events() {
+        let app = tauri::test::mock_app();
+        let audit_logger = Arc::new(AuditLogger::initialize(app.handle()).unwrap());
+        app.manage(audit_logger);
+        app.manage(crate::app::state::TraySyncStatus(Mutex::new(
+            db::SyncJobStatus::Running,
+        )));
+
+        let events = Arc::new(Mutex::new(Vec::<String>::new()));
+        for name in [
+            "sync-progress",
+            "sync-progress-snapshot",
+            "sync-transfer-stats",
+        ] {
+            let captured = events.clone();
+            let event_name = name.to_string();
+            app.handle().listen(name, move |_| {
+                captured.lock().unwrap().push(event_name.clone());
+            });
+        }
+
+        let reporter = DesktopRunReporter::new_with_notifier(
+            app.handle().clone(),
+            SyncSource::Manual,
+            test_audit_context(SyncSource::Manual),
+            DesktopRunProgress::new(
+                app.handle().clone(),
+                JobByteProgress::new(0, 0),
+                CurrentFileProgress::default(),
+            ),
+            Arc::new(|_, _, _| {}),
+        );
+
+        let failed = test_snapshot(db::SyncJobStatus::Failed, 1, 0, 0);
+        reporter.failed(Some(&failed), "config load failed");
+
+        assert_eq!(*events.lock().unwrap(), vec!["sync-progress-snapshot"]);
     }
 
     #[tokio::test]

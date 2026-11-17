@@ -45,7 +45,7 @@ fn apply_sync_action<R: tauri::Runtime>(app: &tauri::AppHandle<R>, status: db::S
         return;
     };
     let locale = current_locale(app);
-    let _ = item.set_text(sync_action_text(status, backend_translations(&locale)));
+    let _ = item.set_text(TrayAction::from_status(status).label(backend_translations(&locale)));
 }
 
 fn current_locale<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {
@@ -77,17 +77,6 @@ impl TrayAction {
             Self::Start => &translations.tray_sync,
         }
     }
-}
-
-pub(crate) fn decide_sync_action(status: db::SyncJobStatus) -> TrayAction {
-    TrayAction::from_status(status)
-}
-
-fn sync_action_text(
-    status: db::SyncJobStatus,
-    translations: &crate::app::locale::BackendTranslations,
-) -> &str {
-    TrayAction::from_status(status).label(translations)
 }
 
 pub(crate) fn update_transfer_status<R: tauri::Runtime>(
@@ -240,7 +229,7 @@ async fn handle_sync_action(app: tauri::AppHandle) {
     let result = async {
         let snapshot = runtime.status().await.map_err(|error| error.to_string())?;
         let sync = Synchronization::new(&app, &runtime);
-        match decide_sync_action(snapshot.status) {
+        match TrayAction::from_status(snapshot.status) {
             TrayAction::Pause => sync.pause().await.map(|_| ()),
             TrayAction::Resume => sync.resume().await.map(|_| ()),
             TrayAction::Start => sync.start().await.map(|_| ()),
@@ -310,19 +299,19 @@ mod tests {
     fn sync_action_text_follows_persisted_status() {
         let translations = backend_translations("en");
         assert_eq!(
-            sync_action_text(db::SyncJobStatus::Idle, translations),
+            TrayAction::from_status(db::SyncJobStatus::Idle).label(translations),
             "Sync Now"
         );
         assert_eq!(
-            sync_action_text(db::SyncJobStatus::Running, translations),
+            TrayAction::from_status(db::SyncJobStatus::Running).label(translations),
             "Pause Sync"
         );
         assert_eq!(
-            sync_action_text(db::SyncJobStatus::Paused, translations),
+            TrayAction::from_status(db::SyncJobStatus::Paused).label(translations),
             "Resume Sync"
         );
         assert_eq!(
-            sync_action_text(db::SyncJobStatus::Failed, translations),
+            TrayAction::from_status(db::SyncJobStatus::Failed).label(translations),
             "Sync Now"
         );
     }
@@ -331,11 +320,11 @@ mod tests {
     fn sync_action_text_is_localized() {
         let translations = backend_translations("de");
         assert_eq!(
-            sync_action_text(db::SyncJobStatus::Running, translations),
+            TrayAction::from_status(db::SyncJobStatus::Running).label(translations),
             "Synchronisierung pausieren"
         );
         assert_eq!(
-            sync_action_text(db::SyncJobStatus::Paused, translations),
+            TrayAction::from_status(db::SyncJobStatus::Paused).label(translations),
             "Synchronisierung fortsetzen"
         );
     }
@@ -343,19 +332,19 @@ mod tests {
     #[test]
     fn tray_action_dispatch_follows_persisted_status() {
         assert_eq!(
-            decide_sync_action(db::SyncJobStatus::Running),
+            TrayAction::from_status(db::SyncJobStatus::Running),
             TrayAction::Pause
         );
         assert_eq!(
-            decide_sync_action(db::SyncJobStatus::Paused),
+            TrayAction::from_status(db::SyncJobStatus::Paused),
             TrayAction::Resume
         );
         assert_eq!(
-            decide_sync_action(db::SyncJobStatus::Idle),
+            TrayAction::from_status(db::SyncJobStatus::Idle),
             TrayAction::Start
         );
         assert_eq!(
-            decide_sync_action(db::SyncJobStatus::Failed),
+            TrayAction::from_status(db::SyncJobStatus::Failed),
             TrayAction::Start
         );
     }

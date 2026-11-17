@@ -21,7 +21,7 @@ pub(crate) struct SyncRuntime {
 struct SyncRuntimeInner {
     pool: sqlx::SqlitePool,
     running: AtomicBool,
-    lock: tokio::sync::Mutex<()>,
+    run_lock: tokio::sync::Mutex<()>,
     lifecycle_lock: tokio::sync::Mutex<()>,
     paused: AtomicBool,
     resume: tokio::sync::Notify,
@@ -34,7 +34,7 @@ impl SyncRuntime {
             inner: Arc::new(SyncRuntimeInner {
                 pool,
                 running: AtomicBool::new(false),
-                lock: tokio::sync::Mutex::new(()),
+                run_lock: tokio::sync::Mutex::new(()),
                 lifecycle_lock: tokio::sync::Mutex::new(()),
                 paused: AtomicBool::new(paused),
                 resume: tokio::sync::Notify::new(),
@@ -126,11 +126,11 @@ impl SyncRuntime {
         &self,
         on_waiting: impl FnOnce(),
     ) -> tokio::sync::MutexGuard<'_, ()> {
-        match self.inner.lock.try_lock() {
+        match self.inner.run_lock.try_lock() {
             Ok(guard) => guard,
             Err(_) => {
                 on_waiting();
-                self.inner.lock.lock().await
+                self.inner.run_lock.lock().await
             }
         }
     }
