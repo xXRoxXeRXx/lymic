@@ -32,6 +32,7 @@
   import { createMemoryTimelineController } from "#lib/controllers/memory-timeline-controller.svelte.ts";
   import { createTagTimelineController } from "#lib/controllers/tag-timeline-controller.svelte.ts";
   import { defaultTagOrigin, recordTagOrigin } from "#lib/controllers/tag-origin.ts";
+  import { TAG_TIMELINE_VIEW, TAGS_VIEW, type ViewPosition } from "#lib/controllers/view-position.ts";
   import { localizedMemoryTitle } from "#lib/memory-title.ts";
   import type { AlbumCatalogueItem, AssetTag, Memory, Place, RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
@@ -60,16 +61,16 @@
   let selectedTag = $state<AssetTag | null>(null);
   let tagTimeline = $state<ReturnType<typeof createTagTimelineController> | null>(null);
   /** The one view (and scroll position) Back returns to from a Tag Timeline, whichever view it was opened from. */
-  let tagOrigin = $state(defaultTagOrigin);
+  let tagOrigin = $state<ViewPosition>(defaultTagOrigin);
   let content = $state<HTMLElement>();
   /** The view a Search was started from and where it was scrolled to, so Back returns there (even to a sub-view). */
-  let searchOrigin = $state<{ view: string; top: number } | null>(null);
+  let searchOrigin = $state<ViewPosition | null>(null);
   /** The scroll position the open shared timeline view last reported; its scrolling area is inside the view, not `main`. */
   let timelineScrollTop = 0;
   /** Where the timeline view of `view` opens, set only while returning from a Search. */
-  let scrollRestore = $state<{ view: string; top: number } | null>(null);
+  let scrollRestore = $state<ViewPosition | null>(null);
   /** Views that show the shared timeline view, which scrolls inside itself. */
-  const timelineScrollViews = new Set(["photos", "favorites", "archive", "trash", "person-timeline", "album-timeline", "place-timeline", "memory-timeline", "tag-timeline", "search"]);
+  const timelineScrollViews = new Set(["photos", "favorites", "archive", "trash", "person-timeline", "album-timeline", "place-timeline", "memory-timeline", TAG_TIMELINE_VIEW, "search"]);
 
   function selectPerson(person: RecognizedPerson) {
     personOrigin = currentView === "explore" ? "explore" : "people";
@@ -82,7 +83,7 @@
   }
 
   /** The open view and its scroll position; a timeline view scrolls inside itself, any other view in `main`. */
-  function currentPosition() {
+  function currentPosition(): ViewPosition {
     return { view: currentView, top: timelineScrollViews.has(currentView) ? timelineScrollTop : (content?.scrollTop ?? 0) };
   }
 
@@ -92,7 +93,7 @@
     tagTimeline?.clear();
     selectedTag = tag;
     tagTimeline = createTagTimelineController(desktop, tag.id);
-    currentView = "tag-timeline";
+    currentView = TAG_TIMELINE_VIEW;
     void tagTimeline.refresh();
   }
 
@@ -134,13 +135,13 @@
       case "trash": return $t("trash_title");
       case "map": return $t("map_title");
       case "people": return $t("people_title");
-      case "tags": return $t("tags_title");
+      case TAGS_VIEW: return $t("tags_title");
       case "places": return $t("places_all_title");
       case "all-memories": return $t("memories_all_title");
       case "albums": return $t("albums_title");
       case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
       case "place-timeline": return selectedPlace?.city ?? $t("places_title");
-      case "tag-timeline": return selectedTag?.value ?? $t("tags_title");
+      case TAG_TIMELINE_VIEW: return selectedTag?.value ?? $t("tags_title");
       case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
       case "memory-timeline": return selectedMemory ? localizedMemoryTitle(selectedMemory, $t, $locale) : $t("memories_title");
       case "dashboard": return $t("dashboard");
@@ -235,8 +236,8 @@
   }
 
   function openTags() {
-    if (currentView === "tags") return;
-    currentView = "tags";
+    if (currentView === TAGS_VIEW) return;
+    currentView = TAGS_VIEW;
     void tags.refresh();
     void tick().then(() => { if (content) content.scrollTop = tagsScrollTop; });
   }
@@ -308,14 +309,14 @@
   }
 
   /** Shows `origin.view` again at its scroll position, reloading what was dropped or went stale while it was left. */
-  function returnTo(origin: { view: string; top: number }) {
+  function returnTo(origin: ViewPosition) {
     currentView = origin.view;
     if (timelineScrollViews.has(origin.view)) scrollRestore = { view: origin.view, top: origin.top };
     else queueMicrotask(() => { if (content) content.scrollTop = origin.top; });
     // The Trash Timeline is dropped when it is left, and Explore and Tags may have gone stale.
     if (origin.view === "trash") void trash.refresh();
     if (origin.view === "explore") void explore.refreshIfStale();
-    if (origin.view === "tags") void tags.refreshIfStale();
+    if (origin.view === TAGS_VIEW) void tags.refreshIfStale();
   }
 
   function returnFromSearch() {
@@ -360,7 +361,7 @@
       currentView = "photos";
     },
     isExploreActive: () => currentView === "explore",
-    isTagsActive: () => currentView === "tags",
+    isTagsActive: () => currentView === TAGS_VIEW,
   });
   const {
     feedback,
@@ -649,7 +650,7 @@
         <SearchBar {search} {people} onSubmit={submitSearch} onClear={clearSearch} onOpenArchive={openArchive} />
       </div>
 
-      <main bind:this={content} onscroll={() => { if (currentView === "tags" && content) tagsScrollTop = content.scrollTop; }} class="flex-1 {currentView === 'map' || timelineScrollViews.has(currentView) ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} onscroll={() => { if (currentView === TAGS_VIEW && content) tagsScrollTop = content.scrollTop; }} class="flex-1 {currentView === 'map' || timelineScrollViews.has(currentView) ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
@@ -726,7 +727,7 @@
           </BackBarView>
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
-        {:else if currentView === "tags"}
+        {:else if currentView === TAGS_VIEW}
           <TagsView {tags} onSelect={selectTag} />
         {:else if currentView === "albums"}
           <AlbumCatalogueView catalogue={albumCatalogue} onSelect={selectAlbum} />
@@ -746,7 +747,7 @@
           <BackBarView label={$t(memoryOrigin === "all-memories" ? 'memories_all_return' : 'explore_return')} onBack={returnFromMemoryTimeline}>
             <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} />
           </BackBarView>
-        {:else if currentView === "tag-timeline" && tagTimeline}
+        {:else if currentView === TAG_TIMELINE_VIEW && tagTimeline}
           <BackBarView label={$t("tags_timeline_return", { values: { view: viewTitle(tagOrigin.view) } })} onBack={returnFromTagTimeline}>
             <!-- A Tag chip in the Lightbox opens another Tag Timeline in this same place: start it afresh, at its top. -->
             {#key tagTimeline}

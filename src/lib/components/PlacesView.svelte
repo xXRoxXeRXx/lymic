@@ -2,6 +2,7 @@
   import { t } from "svelte-i18n";
   import type { Place } from "../contracts";
   import type { PlacesViewState } from "../controllers/places-controller.svelte";
+  import { messageForFailure } from "../controllers/request-failure";
   import PlaceTile from "./PlaceTile.svelte";
 
   /** "All Places": every Place in a grid. It has no navigation entry; Explore opens it. */
@@ -12,7 +13,7 @@
   {#if places.isOffline}<p role="status" class="text-sm text-amber-700 dark:text-amber-300">{$t("places_offline")}</p>{/if}
   {#if places.error}
     <div role="alert" class="flex items-center gap-3 text-sm text-red-600 dark:text-red-300">
-      <p>{places.error === "permission_denied" ? $t("places_permission_denied") : places.error === "unavailable" ? $t("places_unavailable") : $t("places_error")}</p>
+      <p>{messageForFailure(places.error, { permission_denied: $t("places_permission_denied"), unavailable: $t("places_unavailable"), error: $t("places_error") })}</p>
       <button type="button" class="rounded-lg px-2 py-1 font-medium hover:bg-slate-200 dark:hover:bg-zinc-800" onclick={() => void places.refresh()}>{$t("explore_retry")}</button>
     </div>
   {:else if places.isLoading}<p role="status">{$t("places_loading")}</p>

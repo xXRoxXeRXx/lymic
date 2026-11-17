@@ -4,6 +4,7 @@
   import type { RecognizedPerson } from "../contracts";
   import RecognizedPersonTile from "./RecognizedPersonTile.svelte";
   import type { PeopleViewState } from "../controllers/people-controller.svelte";
+  import { messageForFailure } from "../controllers/request-failure";
   let { people, onSelect }: { people: PeopleViewState; onSelect: (person: RecognizedPerson) => void } = $props();
   function loadMoreWhenVisible(node: HTMLElement) {
     if (typeof IntersectionObserver === "undefined") return {};
@@ -21,9 +22,7 @@
     <button type="button" class="rounded-lg p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" aria-label={$t("people_refresh")} aria-busy={people.isRefreshing} disabled={people.isRefreshing} onclick={() => void people.refresh()}><RefreshCw class={`h-4 w-4 ${people.isRefreshing ? "animate-spin" : ""}`} /></button>
   </div>
   {#if people.isLoading}<p role="status">{$t("people_loading")}</p>
-  {:else if people.error === "permission_denied"}<div role="alert"><p>{$t("people_permission_denied")}</p><button type="button" onclick={() => void people.refresh()}>{$t("people_retry")}</button></div>
-  {:else if people.error === "unavailable"}<div role="alert"><p>{$t("people_unavailable")}</p><button type="button" onclick={() => void people.refresh()}>{$t("people_retry")}</button></div>
-  {:else if people.error}<div role="alert"><p>{$t("people_error")}</p><button type="button" onclick={() => void people.refresh()}>{$t("people_retry")}</button></div>
+  {:else if people.error}<div role="alert"><p>{messageForFailure(people.error, { permission_denied: $t("people_permission_denied"), unavailable: $t("people_unavailable"), error: $t("people_error") })}</p><button type="button" onclick={() => void people.refresh()}>{$t("people_retry")}</button></div>
   {:else if people.people.length === 0}<p>{$t("people_empty")}</p>
   {:else}<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
     {#each people.people as person (person.id)}

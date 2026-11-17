@@ -5,7 +5,7 @@
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { AlbumAssignmentResult, AssetDetails, AssetTag, TimelineAsset } from "../contracts";
-  import { validTagColor } from "../controllers/tags-tree";
+  import TagColorDot from "./TagColorDot.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { RemoteAssetActions } from "./remote-asset-actions.svelte";
   import { restoreFeedbackFor, restoreFeedbackMessage, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
@@ -292,7 +292,7 @@
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-label={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={isFavorite(selectedAsset)} disabled={Boolean(updatingFavoriteAssetIds[selectedAsset.id])} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {isFavorite(selectedAsset) ? 'fill-current' : ''}" /></button>
           {/if}
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80" title={$t("timeline_info")} aria-label={$t("timeline_info")} aria-pressed={isInfoOpen} onclick={() => isInfoOpen = !isInfoOpen}><Info class="h-5 w-5" /></button>
-          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_close_lightbox")} aria-label={$t("timeline_close_lightbox")} disabled={downloadingAssetId !== null || isAddingToAlbum || isRestoring} onclick={closeLightbox}><X class="h-5 w-5" /></button>
+          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_close_lightbox")} aria-label={$t("timeline_close_lightbox")} disabled={isBusy} onclick={closeLightbox}><X class="h-5 w-5" /></button>
         </div>
         {#if navigateAsset}
           <button type="button" class="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" aria-label={$t("timeline_previous_asset")} disabled={downloadingAssetId !== null || isAddingToAlbum || isRestoring} onclick={() => navigate(-1)}><ChevronLeft class="h-5 w-5" /></button>
@@ -334,10 +334,9 @@
                     <h2 class="font-semibold text-white">{$t("timeline_info_tags")}</h2>
                     <ul class="flex flex-wrap gap-2">
                       {#each assetDetails.tags as tag (tag.id)}
-                        {@const color = validTagColor(tag.color)}
                         <li>
                           <button type="button" class="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-white hover:bg-white/25 disabled:opacity-50" title={tag.value} aria-label={$t("timeline_tag_open", { values: { path: tag.value } })} disabled={isBusy || !onSelectTag} onclick={() => selectTag(tag)}>
-                            {#if color}<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: {color}" data-testid="tag-color-dot" aria-hidden="true"></span>{/if}
+                            <TagColorDot color={tag.color} />
                             <span>{tag.name}</span>
                           </button>
                         </li>

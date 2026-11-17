@@ -3149,6 +3149,60 @@ describe("Tags view", () => {
     await waitFor(() => expect(main.scrollTop).toBe(140));
   });
 
+  /** Gives `main` a real layout: its scroll height is what the rendered tree gives it, and a scroll position beyond that is clamped, as in a browser. */
+  function layOut(main: HTMLElement) {
+    let top = 0;
+    Object.defineProperty(main, "clientHeight", { configurable: true, get: () => 100 });
+    Object.defineProperty(main, "scrollHeight", { configurable: true, get: () => 100 + main.querySelectorAll('[role="treeitem"]').length * 100 });
+    Object.defineProperty(main, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (value: number) => { top = Math.max(0, Math.min(value, main.scrollHeight - main.clientHeight)); },
+    });
+  }
+
+  it("restores its scroll position on reopening while the tree reloads after a Synchronization settled elsewhere", async () => {
+    const get_tags = vi.fn().mockResolvedValueOnce(tags).mockImplementation(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    const main = document.querySelector("main") as HTMLElement;
+    layOut(main);
+    main.scrollTop = 140;
+    await fireEvent.scroll(main);
+    await fireEvent.click(screen.getByRole("button", { name: "Explore" }));
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    main.scrollTop = 0;
+
+    await openTags();
+
+    await waitFor(() => expect(calls("get_tags")).toBeGreaterThanOrEqual(2));
+    expect(screen.getAllByRole("treeitem").length).toBeGreaterThan(1);
+    await waitFor(() => expect(main.scrollTop).toBe(140));
+  });
+
+  it("restores its scroll position on returning from a Tag Timeline while the tree reloads", async () => {
+    const get_tags = vi.fn().mockResolvedValueOnce(tags).mockImplementation(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_tags, get_tag_timeline_buckets: async () => [], get_tag_timeline_bucket_assets: async () => [] });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    const main = document.querySelector("main") as HTMLElement;
+    layOut(main);
+    main.scrollTop = 140;
+    await fireEvent.scroll(main);
+    await fireEvent.click(screen.getByRole("treeitem", { name: "Family" }));
+    await screen.findByRole("heading", { name: "Family", level: 1 });
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    main.scrollTop = 0;
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Tags" }));
+
+    await waitFor(() => expect(calls("get_tags")).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(main.scrollTop).toBe(140));
+  });
+
   async function signOutAndBackIn() {
     await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Logout" }));

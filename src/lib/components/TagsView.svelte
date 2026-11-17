@@ -4,7 +4,9 @@
   import { t } from "svelte-i18n";
   import type { Tag } from "../contracts";
   import type { TagsViewState } from "../controllers/tags-controller.svelte";
-  import { validTagColor, type TagRow } from "../controllers/tags-tree";
+  import type { TagRow } from "../controllers/tags-tree";
+  import { messageForFailure } from "../controllers/request-failure";
+  import TagColorDot from "./TagColorDot.svelte";
 
   /** `onSelect` opens the Tag's Tag Timeline; expanding is the chevron or the arrow keys. */
   let { tags, onSelect }: { tags: TagsViewState; onSelect: (tag: Tag) => void } = $props();
@@ -52,14 +54,13 @@
   {#if tags.isLoading}<p role="status">{$t("tags_loading")}</p>
   {:else if tags.error}
     <div role="alert">
-      <p>{$t(tags.error === "permission_denied" ? "tags_permission_denied" : tags.error === "unavailable" ? "tags_unavailable" : "tags_error")}</p>
+      <p>{messageForFailure(tags.error, { permission_denied: $t("tags_permission_denied"), unavailable: $t("tags_unavailable"), error: $t("tags_error") })}</p>
       <button type="button" onclick={() => void tags.refresh()}>{$t("tags_retry")}</button>
     </div>
   {:else if tags.isEmpty}<p>{$t("tags_empty")}</p>
   {:else}
     <div bind:this={tree} role="tree" aria-label={$t("tags_title")} class="flex flex-col text-sm text-slate-800 dark:text-zinc-100">
       {#each tags.rows as row, index (row.tag.id)}
-        {@const color = validTagColor(row.tag.color)}
         <div
           role="treeitem"
           aria-selected="false"
@@ -83,7 +84,7 @@
           >
             {#if row.hasChildren}<ChevronRight class="h-4 w-4 transition-transform {row.expanded ? 'rotate-90 rtl:-rotate-90' : 'rtl:rotate-180'}" />{/if}
           </span>
-          {#if color}<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: {color}" data-testid="tag-color-dot" aria-hidden="true"></span>{/if}
+          <TagColorDot color={row.tag.color} />
           <span class="truncate">{row.tag.name}</span>
         </div>
       {/each}
