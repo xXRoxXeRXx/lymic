@@ -55,6 +55,7 @@ const timelines: Array<[string, () => TimelineController]> = [
       getSearchSupport: async () => ({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
       getSearchFeatures: async () => ({ smartSearch: true, ocr: true }),
       getSearchSuggestions: async () => [],
+      getPlaces: async () => [],
       searchAssets: async () => ({ buckets, assetsByBucket, truncated: false }),
       searchContextPage: async () => ({ assets: [], nextPage: null }),
     });

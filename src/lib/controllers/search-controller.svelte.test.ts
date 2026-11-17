@@ -33,6 +33,7 @@ function setupDefaultMode(overrides: Partial<Parameters<typeof createSearchContr
     searchAssets: vi.fn().mockResolvedValue(results(["a", "b"])),
     searchContextPage: vi.fn().mockResolvedValue(contextPage(["a", "b"], null)),
     getSearchSuggestions: vi.fn().mockResolvedValue(["Canon", "FUJIFILM"]),
+    getPlaces: vi.fn().mockResolvedValue([{ city: "Florence", thumbnailAssetId: "asset-1" }]),
     ...overrides,
   };
   return { adapter, search: createSearchController(adapter) };
@@ -459,6 +460,54 @@ describe("Location filter", () => {
       mode: "filename",
       filters: { camera: { make: "Canon" }, location: { state: "Bavaria" } },
     });
+  });
+
+  it("runs a Search with the chosen city, combined with country and state, sent exactly as chosen", async () => {
+    const { adapter, search } = setup();
+    search.filters.location = { country: "Italy", state: "Tuscany", city: " Florence " };
+
+    expect(await search.submit()).toBe(true);
+
+    expect(adapter.searchAssets).toHaveBeenCalledWith({
+      text: "",
+      mode: "filename",
+      filters: { location: { country: "Italy", state: "Tuscany", city: " Florence " } },
+    });
+  });
+
+  it("runs a Search with a city alone", async () => {
+    const { adapter, search } = setup();
+    search.filters.location = { city: "Florence" };
+
+    expect(search.canSubmit).toBe(true);
+    await search.submit();
+
+    expect(vi.mocked(adapter.searchAssets).mock.calls[0][0].filters).toEqual({ location: { city: "Florence" } });
+  });
+
+  it("reads the city listing only when asked, keeps it for the session and forgets it on clear", async () => {
+    const { adapter, search } = setup();
+    search.text = "dinner";
+    await search.submit();
+    expect(adapter.getPlaces).not.toHaveBeenCalled();
+
+    await search.cities.load();
+    await search.cities.load();
+    expect(adapter.getPlaces).toHaveBeenCalledTimes(1);
+    expect(search.cities.state.items).toEqual(["Florence"]);
+
+    search.clear();
+    expect(search.cities.state.status).toBe("idle");
+  });
+
+  it("does not fail a Search when the city listing fails", async () => {
+    const { search } = setup({ getPlaces: vi.fn().mockRejectedValue("places_unavailable") });
+    await search.cities.load();
+    search.text = "IMG";
+
+    expect(search.cities.state.failure).toBe("unavailable");
+    expect(await search.submit()).toBe(true);
+    expect(search.failure).toBeNull();
   });
 
   it("is no filter when no part is chosen, and is reset by clear", () => {

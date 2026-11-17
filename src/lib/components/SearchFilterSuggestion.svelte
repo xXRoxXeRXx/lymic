@@ -2,6 +2,7 @@
   import { X } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import type { SearchSuggestionsRequest } from "../contracts";
+  import type { SuggestionsState } from "../controllers/search-suggestions.svelte";
   import type { SearchController } from "../controllers/search-controller.svelte";
 
   /**
@@ -9,12 +10,15 @@
    * filters the suggestion list as the user types but never applies the typed text: only a suggestion that is
    * clicked, or highlighted with the arrow keys and chosen with Enter, becomes the value. A failure to read
    * the suggestions is shown here, in this filter, with Retry; nothing else in Search is affected.
-   * Location filters reuse this component with their own suggestion `request`.
+   * Location filters reuse this component with their own suggestion `request`; the city takes its names from a
+   * `source` of its own (the city listing of the Explore Places) instead of Immich's suggestions.
    */
-  let { search, request, label, value, onChange, id }: {
+  let { search, request, source, label, value, onChange, id }: {
     search: SearchController;
-    /** What to suggest, including narrowing (for example the chosen make for models). */
-    request: SearchSuggestionsRequest;
+    /** What to suggest from Immich's suggestions, including narrowing (for example the chosen make for models). Not used with a `source`. */
+    request?: SearchSuggestionsRequest;
+    /** Another list to choose from, read lazily the first time the field is used; used instead of `request`. */
+    source?: { readonly state: SuggestionsState; load(): Promise<void> };
     /** The translated name of the filter. */
     label: string;
     /** The chosen suggestion, if any. */
@@ -29,7 +33,7 @@
   let active = $state(-1);
   let input = $state<HTMLInputElement | null>(null);
 
-  const suggestions = $derived(search.suggestions.stateFor(request));
+  const suggestions = $derived(source ? source.state : search.suggestions.stateFor(request ?? { type: "country" }));
   const shown = $derived.by(() => {
     const typed = query.trim().toLowerCase();
     return typed === "" ? suggestions.items : suggestions.items.filter((item) => item.toLowerCase().includes(typed));
@@ -40,7 +44,8 @@
 
   function openList() {
     open = true;
-    void search.suggestions.load(request);
+    if (source) void source.load();
+    else if (request) void search.suggestions.load(request);
   }
 
   function close() {

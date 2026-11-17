@@ -22,6 +22,7 @@ function setup(getSearchSuggestions = vi.fn(async (request: SearchSuggestionsReq
     searchAssets: vi.fn().mockResolvedValue({ buckets: [], assetsByBucket: {}, truncated: false }),
     searchContextPage: vi.fn().mockResolvedValue({ assets: [], nextPage: null }),
     getSearchSuggestions,
+    getPlaces: vi.fn().mockResolvedValue([]),
   };
   const search = createSearchController(adapter);
   const people = { people: [], isLoading: false, isRefreshing: false, isOffline: false, hasNextPage: false, error: null, refresh: vi.fn(), loadMore: vi.fn(), clear: vi.fn() };

@@ -239,8 +239,11 @@ export interface SearchFilters {
 /** The camera Search Filter: each part is a value Immich suggested (Immich compares them exactly). */
 export interface SearchCamera { make?: string; model?: string; lensModel?: string; }
 
-/** The Location Search Filter: each part is a value Immich suggested (Immich compares them exactly). */
-export interface SearchLocation { country?: string; state?: string; }
+/**
+ * The Location Search Filter: each part is a value Immich offered (Immich compares them exactly): country and
+ * state from its suggestions, the city from the city listing of the Explore Places. The parts combine.
+ */
+export interface SearchLocation { country?: string; state?: string; city?: string; }
 
 /** The Search Filters as the backend receives them: the same fields, with date bounds as ISO 8601 instants. */
 export type SearchRequestFilters = SearchFilters;

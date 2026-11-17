@@ -125,19 +125,24 @@ impl CameraFilter {
     }
 }
 
-/// Location: country and state or region, each optional. The frontend only sends values Immich
-/// suggested, because Immich compares them exactly. A city part joins these two when the city
-/// Search Filter lands: one more field here and one more entry in `apply`.
+/// Location: country, state or region and city, each optional and combinable. The frontend only
+/// sends values Immich offered (suggestions for country and state, the city listing of the
+/// Explore Places for the city), because Immich compares them exactly.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
 pub(crate) struct LocationFilter {
     pub country: Option<String>,
     pub state: Option<String>,
+    pub city: Option<String>,
 }
 
 impl LocationFilter {
     pub(super) fn apply(&self, filter: &mut Map<String, Value>) {
-        for (key, value) in [("country", &self.country), ("state", &self.state)] {
+        for (key, value) in [
+            ("country", &self.country),
+            ("state", &self.state),
+            ("city", &self.city),
+        ] {
             // The value is kept as Immich suggested it; only a blank one is no condition.
             if let Some(value) = value.as_deref().filter(|value| !value.trim().is_empty()) {
                 filter.insert(key.to_string(), json!({ "eq": value }));

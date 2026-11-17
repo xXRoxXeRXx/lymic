@@ -313,7 +313,7 @@ describe('i18n catalogs', () => {
   });
 
   it('translates the Location filter strings in every locale', () => {
-    const keys = ['search_filter_location', 'search_filter_location_country', 'search_filter_location_state'];
+    const keys = ['search_filter_location', 'search_filter_location_country', 'search_filter_location_state', 'search_filter_location_city'];
     for (const [localeCode, translations] of Object.entries(catalog)) {
       for (const key of keys) {
         expect((translations as Record<string, string>)[key], `Locale ${localeCode} is missing ${key}`).toBeTruthy();
@@ -322,6 +322,8 @@ describe('i18n catalogs', () => {
     expect(en.search_filter_location).toBe('Location');
     expect(en.search_filter_location_state).toBe('State or region');
     expect(de.search_filter_location_country).toBe('Land');
+    expect(en.search_filter_location_city).toBe('City');
+    expect(de.search_filter_location_city).toBe('Stadt');
   });
 
   it('translates the Search display option and Rating strings in every locale', () => {

@@ -1,8 +1,9 @@
 import type { ContextSearchPage, SearchFeatures, SearchFilters, SearchMode, SearchRating, SearchRequest, SearchResults } from "../contracts";
 import { buildRequestFilters, filterErrors as validateFilters } from "../search-filters";
-import type { SearchDesktopAdapter } from "../tauri/desktop-adapter";
+import type { PlacesDesktopAdapter, SearchDesktopAdapter } from "../tauri/desktop-adapter";
 import { createContextResultsController, type ContextResults } from "./context-results-controller.svelte";
 import { classifyRequestFailure, failureMessage } from "./request-failure";
+import { createSearchCities, type SearchCities } from "./search-cities.svelte";
 import { createSearchSuggestions, type SearchSuggestions } from "./search-suggestions.svelte";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
 
@@ -51,8 +52,10 @@ export interface SearchController extends TimelineController {
   readonly context: ContextResults;
   /** The text of the Search whose results are shown (empty before the first successful Search). */
   readonly submittedText: string;
-  /** The suggestions Immich offers for the Search Filters chosen from them (camera, later Location). */
+  /** The suggestions Immich offers for the Search Filters chosen from them (camera, country and state). */
   readonly suggestions: SearchSuggestions;
+  /** The cities of the Location filter, from the city listing of the Explore Places; read lazily, a failure stays in that filter. */
+  readonly cities: SearchCities;
   /** The number of Remote Assets in the results. */
   readonly resultCount: number;
   /** True when the Search was cut at the result limit and only the newest results are shown. */
@@ -83,7 +86,10 @@ function classifyFailure(reason: unknown): SearchFailure {
   return classifyRequestFailure(reason, "search");
 }
 
-export function createSearchController(adapter: SearchDesktopAdapter): SearchController {
+/** The Search's adapter, plus the Explore Places' city listing that the Location filter takes its cities from. */
+export type SearchControllerAdapter = SearchDesktopAdapter & Pick<PlacesDesktopAdapter, "getPlaces">;
+
+export function createSearchController(adapter: SearchControllerAdapter): SearchController {
   let text = $state("");
   let mode = $state<SearchMode>(DEFAULT_SEARCH_MODE);
   let filters = $state<SearchFilters>({});
@@ -108,6 +114,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   let featuresGeneration = 0;
 
   const suggestions = createSearchSuggestions(adapter);
+  const cities = createSearchCities(adapter);
   const ocrAvailable = $derived(features === null || features.ocr);
   const smartSearchAvailable = $derived(features === null || features.smartSearch);
 
@@ -229,6 +236,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     filters = {};
     featuresGeneration += 1;
     suggestions.clear();
+    cities.clear();
     features = null;
     featuresFailed = false;
     featuresRead = null;
@@ -280,6 +288,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     get presentation() { return presentation; },
     context,
     suggestions,
+    cities,
     get submittedText() { return submittedText; },
     get resultCount() {
       return presentation === "relevance"

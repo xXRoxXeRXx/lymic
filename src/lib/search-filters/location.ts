@@ -2,8 +2,8 @@ import type { SearchLocation } from "../contracts";
 import type { SearchFilterDefinition } from "./types";
 
 /**
- * Location: country and state or region, each optional and each chosen from Immich's suggestions. The city
- * joins these as one more optional part (`SearchLocation.city`, one more line in `apply` and in the panel).
+ * Location: country, state or region and city, each optional and each chosen from what Immich offers (country and
+ * state from its suggestions, the city from the city listing of the Explore Places). The parts combine.
  */
 export const locationFilter: SearchFilterDefinition = {
   key: "location",
@@ -11,6 +11,7 @@ export const locationFilter: SearchFilterDefinition = {
     const chosen: SearchLocation = {};
     if (location?.country) chosen.country = location.country;
     if (location?.state) chosen.state = location.state;
+    if (location?.city) chosen.city = location.city;
     if (Object.keys(chosen).length > 0) request.location = chosen;
   },
 };
