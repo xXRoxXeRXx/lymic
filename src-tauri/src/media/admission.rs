@@ -1,21 +1,10 @@
 use crate::db::WatchedFolder;
 use crate::media::model::{upload_units_from_assets, Asset, UploadUnit};
-use std::{collections::HashSet, path::Path};
-
-fn normalized_path(path: &str) -> String {
-    path.replace('\\', "/")
-        .trim_end_matches('/')
-        .to_ascii_lowercase()
-}
-
-fn relative_path(folder: &str, path: &str) -> Option<String> {
-    let normalized_folder = normalized_path(folder);
-    let normalized_path = normalized_path(path);
-    let relative_start = normalized_folder.len();
-    (normalized_path == normalized_folder
-        || normalized_path.starts_with(&(normalized_folder + "/")))
-    .then(|| normalized_path[relative_start..].to_owned())
-}
+use crate::media::paths::{normalize_path_lexical, relative_path_within_lexical};
+use std::{
+    collections::HashSet,
+    path::{Component, Path, PathBuf},
+};
 
 fn matches_segment(pattern: &[u8], value: &[u8]) -> bool {
     let (mut p, mut v, mut star, mut retry) = (0, 0, None, 0);
@@ -38,17 +27,20 @@ fn matches_segment(pattern: &[u8], value: &[u8]) -> bool {
     pattern[p..].iter().all(|character| *character == b'*')
 }
 
-fn matches_pattern(pattern: &str, relative_path: &str) -> bool {
-    let pattern = normalized_path(pattern);
-    let path = normalized_path(relative_path);
+fn matches_pattern(pattern: &str, relative_path: &Path) -> bool {
+    let pattern = pattern.trim().to_lowercase();
     let pattern_segments = pattern
         .split('/')
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>();
-    let path_segments = path
-        .split('/')
-        .filter(|part| !part.is_empty())
+    let path_segments = relative_path
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(part) => Some(part.to_string_lossy().to_lowercase()),
+            _ => None,
+        })
         .collect::<Vec<_>>();
+    let path_segment_refs = path_segments.iter().map(String::as_str).collect::<Vec<_>>();
 
     fn matches(pattern: &[&str], path: &[&str]) -> bool {
         match pattern.split_first() {
@@ -62,17 +54,25 @@ fn matches_pattern(pattern: &str, relative_path: &str) -> bool {
         }
     }
 
-    matches(&pattern_segments, &path_segments)
+    matches(&pattern_segments, &path_segment_refs)
 }
 
 fn folder_for_path<'a>(
     path: &str,
     folders: &'a [WatchedFolder],
-) -> Option<(&'a WatchedFolder, String)> {
+) -> Option<(&'a WatchedFolder, PathBuf)> {
+    let norm_path = normalize_path_lexical(Path::new(path));
     folders
         .iter()
-        .filter_map(|folder| relative_path(&folder.path, path).map(|relative| (folder, relative)))
-        .max_by_key(|(folder, _)| normalized_path(&folder.path).len())
+        .filter_map(|folder| {
+            let norm_folder = normalize_path_lexical(Path::new(&folder.path));
+            relative_path_within_lexical(&norm_path, &norm_folder).map(|relative| {
+                let depth = norm_folder.components().count();
+                (folder, relative, depth)
+            })
+        })
+        .max_by_key(|(_, _, depth)| *depth)
+        .map(|(folder, relative, _)| (folder, relative))
 }
 
 pub(crate) fn watched_folder_for_path<'a>(
@@ -154,7 +154,7 @@ pub(crate) fn normalize_patterns(patterns: Vec<String>) -> Result<Vec<String>, S
         }
         if !normalized
             .iter()
-            .any(|existing: &String| existing.eq_ignore_ascii_case(&pattern))
+            .any(|existing: &String| existing.to_lowercase() == pattern.to_lowercase())
         {
             normalized.push(pattern);
         }
@@ -237,6 +237,7 @@ mod tests {
         assert!(normalize_patterns(vec!["../private/**".to_owned()]).is_err());
     }
 
+    #[cfg(windows)]
     #[test]
     fn resolves_the_most_specific_watched_folder_case_insensitively() {
         let root = folder("C:/Photos", &["**/*.mov"]);
@@ -250,6 +251,50 @@ mod tests {
             Some(2)
         );
         assert!(watched_folder_for_path(&folders, Path::new("C:/Elsewhere/keep.jpg")).is_none());
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn resolves_watched_folder_case_sensitively_while_matching_exclusion_globs_case_insensitively()
+    {
+        let root = folder("/Media/Photos", &["Screenshots/**"]);
+        let mut private = folder("/Media/Photos/Private", &["**/*.jpg"]);
+        private.id = 2;
+        let folders = [root, private];
+
+        assert!(
+            watched_folder_for_path(&folders, Path::new("/media/photos/private/keep.JPG"))
+                .is_none()
+        );
+        assert_eq!(
+            watched_folder_for_path(&folders, Path::new("/Media/Photos/Private/nested/keep.JPG"))
+                .map(|folder| folder.id),
+            Some(2)
+        );
+        assert_eq!(
+            decide(
+                &unit("/Media/Photos/screenshots/private.JPG", None),
+                &folders
+            ),
+            Admission::Excluded
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_admission_matches_verbatim_unicode_and_dot_segments_consistently() {
+        let folders = [folder(r"\\?\C:\FÖTOS", &["Screenshots/**"])];
+        assert_eq!(
+            decide(&unit(r"c:\fötos\screenshots\nested.jpg", None), &folders),
+            Admission::Excluded
+        );
+        assert_eq!(
+            decide(
+                &unit(r"C:\FÖTOS\Screenshots\..\Keep\photo.jpg", None),
+                &folders
+            ),
+            Admission::Admitted
+        );
     }
 
     #[test]

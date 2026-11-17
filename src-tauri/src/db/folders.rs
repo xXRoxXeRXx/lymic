@@ -163,8 +163,9 @@ pub async fn remap_watched_folder_path(
     old_path: &str,
     new_path: &str,
 ) -> Result<(), sqlx::Error> {
-    let clean_old = normalize_windows_drive_letter(old_path.trim_end_matches(['/', '\\']));
-    let clean_new = normalize_windows_drive_letter(new_path.trim_end_matches(['/', '\\']));
+    let clean_new =
+        normalize_windows_drive_letter(trim_trailing_separators_preserving_root(new_path));
+    let norm_old = crate::media::paths::normalize_path_lexical(std::path::Path::new(old_path));
 
     let mut tx = pool.begin().await?;
 
@@ -174,45 +175,113 @@ pub async fn remap_watched_folder_path(
         .execute(&mut *tx)
         .await?;
 
-    let local_path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
-    let upload_unit_cond = super::sql_path_is_or_descendant_of("upload_unit_id", "?1");
-    let current_path_cond = super::sql_path_is_or_descendant_of("current_path", "?1");
-
-    for table in ["sync_state", "sync_queue", "album_retry_remote_ids"] {
-        let sql = format!(
-            "UPDATE {table} SET local_path = ?2 || substr(local_path, length(?1) + 1) WHERE {local_path_cond}"
-        );
-        sqlx::query(&sql)
-            .bind(&clean_old)
-            .bind(&clean_new)
-            .execute(&mut *tx)
+    for table in ["sync_state", "album_retry_remote_ids"] {
+        let paths: Vec<String> = sqlx::query_scalar(&format!("SELECT local_path FROM {table}"))
+            .fetch_all(&mut *tx)
             .await?;
+        for old_row_path in paths {
+            if let Some(new_row_path) = remap_path_if_within(&old_row_path, &norm_old, &clean_new) {
+                if new_row_path != old_row_path {
+                    sqlx::query(&format!(
+                        "UPDATE {table} SET local_path = ? WHERE local_path = ?"
+                    ))
+                    .bind(&new_row_path)
+                    .bind(&old_row_path)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+            }
+        }
     }
 
-    let sync_queue_unit_sql = format!(
-        "UPDATE sync_queue \
-         SET upload_unit_id = ?2 || substr(upload_unit_id, length(?1) + 1) \
-         WHERE {upload_unit_cond}"
-    );
-    sqlx::query(&sync_queue_unit_sql)
-        .bind(&clean_old)
-        .bind(&clean_new)
-        .execute(&mut *tx)
-        .await?;
+    let queue_rows: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT job_id, local_path, upload_unit_id FROM sync_queue")
+            .fetch_all(&mut *tx)
+            .await?;
+    for (job_id, old_local_path, old_upload_unit_id) in queue_rows {
+        let new_local_path = remap_path_if_within(&old_local_path, &norm_old, &clean_new);
+        let new_upload_unit_id = remap_path_if_within(&old_upload_unit_id, &norm_old, &clean_new);
+        if new_local_path.is_some() || new_upload_unit_id.is_some() {
+            let target_local = new_local_path.as_deref().unwrap_or(&old_local_path);
+            let target_unit = new_upload_unit_id.as_deref().unwrap_or(&old_upload_unit_id);
+            if target_local != old_local_path || target_unit != old_upload_unit_id {
+                sqlx::query(
+                    "UPDATE sync_queue SET local_path = ?, upload_unit_id = ? \
+                     WHERE job_id = ? AND local_path = ?",
+                )
+                .bind(target_local)
+                .bind(target_unit)
+                .bind(job_id)
+                .bind(&old_local_path)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+    }
 
-    let sync_jobs_sql = format!(
-        "UPDATE sync_jobs \
-         SET current_path = ?2 || substr(current_path, length(?1) + 1) \
-         WHERE {current_path_cond}"
-    );
-    sqlx::query(&sync_jobs_sql)
-        .bind(&clean_old)
-        .bind(&clean_new)
-        .execute(&mut *tx)
-        .await?;
+    if let Some(current_path) =
+        sqlx::query_scalar::<_, Option<String>>("SELECT current_path FROM sync_jobs WHERE id = 1")
+            .fetch_optional(&mut *tx)
+            .await?
+            .flatten()
+    {
+        if let Some(new_current_path) = remap_path_if_within(&current_path, &norm_old, &clean_new) {
+            if new_current_path != current_path {
+                sqlx::query("UPDATE sync_jobs SET current_path = ? WHERE id = 1")
+                    .bind(&new_current_path)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+    }
 
     tx.commit().await?;
     Ok(())
+}
+
+fn trim_trailing_separators_preserving_root(path: &str) -> &str {
+    let trimmed = path.trim_end_matches(['/', '\\']);
+    if trimmed.is_empty() && !path.is_empty() {
+        return "/";
+    }
+    #[cfg(windows)]
+    if trimmed.len() == 2 && trimmed.as_bytes()[1] == b':' && path.len() > 2 {
+        return &path[..3];
+    }
+    trimmed
+}
+
+fn remap_path_if_within(
+    candidate: &str,
+    norm_old_folder: &std::path::Path,
+    clean_new: &str,
+) -> Option<String> {
+    let norm_candidate =
+        crate::media::paths::normalize_path_lexical(std::path::Path::new(candidate));
+    let relative =
+        crate::media::paths::relative_path_within_lexical(&norm_candidate, norm_old_folder)?;
+    if relative.as_os_str().is_empty() {
+        return Some(clean_new.to_owned());
+    }
+    let sep = if clean_new.contains('/') && !clean_new.contains('\\') {
+        "/"
+    } else {
+        std::path::MAIN_SEPARATOR_STR
+    };
+    let mut remapped = if clean_new == "/" {
+        "/".to_owned()
+    } else {
+        clean_new.trim_end_matches(['/', '\\']).to_owned()
+    };
+    for component in relative.components() {
+        if let std::path::Component::Normal(part) = component {
+            if !remapped.ends_with(['/', '\\']) {
+                remapped.push_str(sep);
+            }
+            remapped.push_str(&part.to_string_lossy());
+        }
+    }
+    Some(remapped)
 }
 
 fn normalize_windows_drive_letter(path: &str) -> String {

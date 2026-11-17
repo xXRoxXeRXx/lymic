@@ -4,3 +4,6 @@ pub(crate) mod extensions;
 pub(crate) mod model;
 pub(crate) mod paths;
 pub(crate) mod scanner;
+
+#[cfg(test)]
+mod path_characterization_tests;

@@ -18,24 +18,17 @@ pub use queue::{
     QueuedUploadUnit, SyncJobStatus, SyncSnapshot,
 };
 
-/// Builds a SQL WHERE predicate condition matching a path column against a root prefix or any of its descendants.
-///
-/// Prevents false prefix matches against sibling folders (e.g. `/media/drive2` matching `/media/drive`).
-pub(crate) fn sql_path_is_or_descendant_of(column: &str, param_placeholder: &str) -> String {
-    format!(
-        "({col} = {param} \
-         OR (substr({col}, 2, 1) = ':' AND substr({param}, 2, 1) = ':' \
-             AND substr({col}, 1, 1) = substr({param}, 1, 1) COLLATE NOCASE \
-             AND substr({col}, 2) = substr({param}, 2)) \
-         OR substr({col}, 1, length({param}) + 1) = {param} || '/' \
-         OR substr({col}, 1, length({param}) + 1) = {param} || '\\' \
-         OR (substr({col}, 2, 1) = ':' AND substr({param}, 2, 1) = ':' \
-             AND substr({col}, 1, 1) = substr({param}, 1, 1) COLLATE NOCASE \
-             AND substr({col}, 2, length({param}) - 1) = substr({param}, 2) \
-             AND substr({col}, length({param}) + 1, 1) IN ('/', '\\')))",
-        col = column,
-        param = param_placeholder
-    )
+pub(crate) fn filter_paths_within_folder(paths: Vec<String>, folder: &str) -> Vec<String> {
+    let norm_folder = crate::media::paths::normalize_path_lexical(std::path::Path::new(folder));
+    paths
+        .into_iter()
+        .filter(|path| {
+            crate::media::paths::path_is_within_lexical(
+                &crate::media::paths::normalize_path_lexical(std::path::Path::new(path)),
+                &norm_folder,
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]

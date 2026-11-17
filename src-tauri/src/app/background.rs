@@ -50,6 +50,16 @@ fn spawn_removable_volume_consumer(
     });
 }
 
+pub(crate) fn deferred_folder_matches_registered(
+    folder_path: &str,
+    registered_paths: &[std::path::PathBuf],
+) -> bool {
+    let folder = std::path::Path::new(folder_path);
+    registered_paths
+        .iter()
+        .any(|path| crate::media::paths::paths_equal(path, folder))
+}
+
 fn spawn_deferred_watches(handle: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut retry_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
@@ -172,11 +182,7 @@ fn deferred_scan_folders(
 ) -> Vec<db::WatchedFolder> {
     folders
         .into_iter()
-        .filter(|folder| {
-            registered_paths
-                .iter()
-                .any(|path| path == &std::path::PathBuf::from(&folder.path))
-        })
+        .filter(|folder| deferred_folder_matches_registered(&folder.path, registered_paths))
         .collect()
 }
 
@@ -352,6 +358,34 @@ mod tests {
         assert_eq!(scan_result.files.len(), 1);
         assert_eq!(scan_result.files[0].path, photo.to_string_lossy());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn deferred_folder_equality_uses_canonical_path_rule() {
+        #[cfg(windows)]
+        {
+            let registered = [std::path::PathBuf::from(r"\\?\c:\FÖTOS\Sub\..")];
+            assert!(deferred_folder_matches_registered(
+                r"C:/fötos/",
+                &registered
+            ));
+            assert!(!deferred_folder_matches_registered(
+                r"C:\FÖTOS-Backup",
+                &registered
+            ));
+        }
+        #[cfg(not(windows))]
+        {
+            let registered = [std::path::PathBuf::from("/Media/Photos/")];
+            assert!(deferred_folder_matches_registered(
+                "/Media/Photos",
+                &registered
+            ));
+            assert!(!deferred_folder_matches_registered(
+                "/media/photos",
+                &registered
+            ));
+        }
     }
 
     #[test]
