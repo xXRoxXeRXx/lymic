@@ -374,20 +374,32 @@
     archive: { icon: Archive, options: () => ({}) },
     trash: { icon: Trash2, options: () => ({ allowFavoriteAndAlbum: false, restoreTrashedAssets, hintMessage: $t("trash_hint") }) },
   };
-  /** The main views, in navigation order. A main view's navigation label is also its page title. */
-  const navigationEntries = [
-    { view: "photos", icon: Images, label: "timeline_title", open: openPhotos },
-    { view: "explore", icon: Compass, label: "explore_title", open: openExplore },
-    ...FILTERED_TIMELINES.map((view) => ({ view, icon: filteredTimelineViews[view].icon, label: `${view}_title`, open: () => openFilteredTimeline(view) })),
-    { view: "map", icon: MapIcon, label: "map_title", open: openMap },
-    { view: "albums", icon: Album, label: "albums_title", open: openAlbums },
-    { view: "people", icon: Users, label: "people_title", open: openPeople },
-    { view: TAGS_VIEW, icon: TagIcon, label: "tags_title", open: openTags },
-    { view: "dashboard", icon: FolderSync, label: "dashboard", open: () => currentView = "dashboard" },
-    { view: "logs", icon: ScrollText, label: "logs", open: () => currentView = "logs" },
-    { view: "settings", icon: SettingsIcon, label: "settings", open: () => currentView = "settings" },
-    { view: "info", icon: InfoIcon, label: "info", open: () => currentView = "info" },
+  function filteredTimelineEntry(view: FilteredTimeline) {
+    return { view, icon: filteredTimelineViews[view].icon, label: `${view}_title`, open: () => openFilteredTimeline(view) };
+  }
+  /** The main views, grouped in navigation order. A main view's navigation label is also its page title. */
+  const navigationGroups = [
+    [
+      { view: "photos", icon: Images, label: "timeline_title", open: openPhotos },
+      { view: "explore", icon: Compass, label: "explore_title", open: openExplore },
+      { view: "map", icon: MapIcon, label: "map_title", open: openMap },
+      { view: "people", icon: Users, label: "people_title", open: openPeople },
+      filteredTimelineEntry("favorites"),
+      { view: "albums", icon: Album, label: "albums_title", open: openAlbums },
+      { view: TAGS_VIEW, icon: TagIcon, label: "tags_title", open: openTags },
+      filteredTimelineEntry("archive"),
+      filteredTimelineEntry("trash"),
+    ],
+    [
+      { view: "dashboard", icon: FolderSync, label: "dashboard", open: () => currentView = "dashboard" },
+      { view: "logs", icon: ScrollText, label: "logs", open: () => currentView = "logs" },
+    ],
+    [
+      { view: "settings", icon: SettingsIcon, label: "settings", open: () => currentView = "settings" },
+      { view: "info", icon: InfoIcon, label: "info", open: () => currentView = "info" },
+    ],
   ];
+  const navigationEntries = navigationGroups.flat();
   const preferences = createPreferencesController({
     adapter: desktop,
     reportError: feedback.report,
@@ -497,7 +509,7 @@
   {:else}
     <!-- Authenticated Layout: Left Sidebar + Right Content Area -->
     <aside class="w-60 shrink-0 h-full flex flex-col justify-between border-r border-black/5 dark:border-white/10 bg-slate-100/70 dark:bg-zinc-900/60 pt-6 pb-4 px-3 select-none">
-      <div class="space-y-6">
+      <div class="space-y-6 min-h-0 overflow-y-auto">
         <!-- Brand / Header (padded for desktop window controls) -->
         <div class="flex items-center gap-3 px-3 py-1">
           <img src={logo} alt={$t('lymic_logo')} class="w-8 h-8 object-contain shrink-0" />
@@ -508,13 +520,17 @@
         </div>
 
         <!-- Navigation items -->
-        <nav class="space-y-1" aria-label={$t('main_navigation')}>
-          {#each navigationEntries as entry (entry.view)}
-            {@const active = currentView === entry.view}
-            <button type="button" class="nav-item {active ? 'active' : ''}" onclick={entry.open} aria-label={$t(entry.label)}>
-              <entry.icon class="w-4 h-4 shrink-0 {active ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-              <span>{$t(entry.label)}</span>
-            </button>
+        <nav class="space-y-4" aria-label={$t('main_navigation')}>
+          {#each navigationGroups as group, index (index)}
+            <div class="space-y-1">
+              {#each group as entry (entry.view)}
+                {@const active = currentView === entry.view}
+                <button type="button" class="nav-item {active ? 'active' : ''}" onclick={entry.open} aria-label={$t(entry.label)}>
+                  <entry.icon class="w-4 h-4 shrink-0 {active ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+                  <span>{$t(entry.label)}</span>
+                </button>
+              {/each}
+            </div>
           {/each}
         </nav>
       </div>

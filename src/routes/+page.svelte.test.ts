@@ -194,6 +194,25 @@ function stubImmediateIntersectionObserver() {
   });
 }
 
+describe("main navigation", () => {
+  it("lists the main navigation entries in the configured order and separates library, sync, and app sections", async () => {
+    renderAuthenticatedPage();
+
+    const nav = await screen.findByRole("navigation", { name: "Main navigation" });
+    const groups = Array.from(nav.children).map((group) =>
+      within(group as HTMLElement)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    );
+
+    expect(groups).toEqual([
+      ["Photos", "Explore", "Map", "People", "Favorites", "Albums", "Tags", "Archive", "Trash"],
+      ["Synchronization", "Logs"],
+      ["Settings", "Info"],
+    ]);
+  });
+});
+
 describe("app version", () => {
   it("displays the version provided by the Tauri runtime in the info view", async () => {
     tauri.getVersion.mockResolvedValue("1.2.3");
@@ -1963,7 +1982,7 @@ describe("Explore Overview", () => {
     const names = within(screen.getByRole("navigation", { name: "Main navigation" }))
       .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label"));
-    expect(names.slice(0, 3)).toEqual(["Photos", "Explore", "Favorites"]);
+    expect(names.slice(0, 3)).toEqual(["Photos", "Explore", "Map"]);
     expect(names).toContain("People");
   });
 
@@ -3258,12 +3277,14 @@ describe("Archive Timeline", () => {
     fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
   };
 
-  it("lists Archive directly after Favorites in the navigation with an accessible name and no count badge", async () => {
+  it("lists Archive directly after Tags and before Trash in the navigation with an accessible name and no count badge", async () => {
     renderAuthenticatedPage();
 
-    const favorites = await screen.findByRole("button", { name: "Favorites" });
+    const tags = await screen.findByRole("button", { name: "Tags" });
     const archive = screen.getByRole("button", { name: "Archive" });
-    expect(favorites.nextElementSibling).toBe(archive);
+    const trash = screen.getByRole("button", { name: "Trash" });
+    expect(tags.nextElementSibling).toBe(archive);
+    expect(archive.nextElementSibling).toBe(trash);
     expect(archive).toHaveTextContent("Archive");
     expect(archive).not.toHaveTextContent(/\d/);
   });
