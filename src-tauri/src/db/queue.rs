@@ -36,10 +36,33 @@ impl std::str::FromStr for SyncJobStatus {
     }
 }
 
+impl serde::Serialize for SyncJobStatus {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl sqlx::Type<sqlx::Sqlite> for SyncJobStatus {
+    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
+        <str as sqlx::Type<sqlx::Sqlite>>::type_info()
+    }
+
+    fn compatible(ty: &sqlx::sqlite::SqliteTypeInfo) -> bool {
+        <str as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for SyncJobStatus {
+    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let text = <&str as sqlx::Decode<'r, sqlx::Sqlite>>::decode(value)?;
+        text.parse().map_err(Into::into)
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncSnapshot {
-    pub status: String,
+    pub status: SyncJobStatus,
     pub total: i64,
     pub succeeded: i64,
     pub failed: i64,
@@ -149,7 +172,7 @@ pub async fn enqueue_upload_units(
     failures: &[(String, String)],
 ) -> Result<SyncSnapshot, sqlx::Error> {
     let mut tx = pool.begin().await?;
-    let status: String = sqlx::query_scalar("SELECT status FROM sync_jobs WHERE id = 1")
+    let status: SyncJobStatus = sqlx::query_scalar("SELECT status FROM sync_jobs WHERE id = 1")
         .fetch_one(&mut *tx)
         .await?;
     let has_pending: bool = sqlx::query_scalar(
@@ -157,7 +180,8 @@ pub async fn enqueue_upload_units(
     )
     .fetch_one(&mut *tx)
     .await?;
-    let should_reset = ((status == "IDLE" || status == "FAILED") && !has_pending)
+    let should_reset = (matches!(status, SyncJobStatus::Idle | SyncJobStatus::Failed)
+        && !has_pending)
         && (!units.is_empty() || !failures.is_empty());
     if should_reset {
         sqlx::query(

@@ -18,4 +18,4 @@ pub(crate) struct TrayTransferStatus(
     pub(crate) std::sync::Mutex<Option<crate::sync::progress::TransferStatsEvent>>,
 );
 
-pub(crate) struct TraySyncStatus(pub(crate) std::sync::Mutex<String>);
+pub(crate) struct TraySyncStatus(pub(crate) std::sync::Mutex<crate::db::SyncJobStatus>);

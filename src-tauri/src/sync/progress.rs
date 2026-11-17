@@ -34,7 +34,7 @@ pub(crate) struct TransferStatsSnapshot {
 pub(crate) struct TransferStatsEvent {
     #[serde(flatten)]
     pub(crate) stats: TransferStatsSnapshot,
-    pub(crate) status: &'static str,
+    pub(crate) status: crate::db::SyncJobStatus,
     pub(crate) total_bytes: u64,
     pub(crate) completed_bytes: u64,
 }
@@ -169,11 +169,11 @@ impl TransferStatsTracker {
             .lock()
             .expect("transfer statistics lock poisoned");
         let status = if state.status.paused {
-            "PAUSED"
+            crate::db::SyncJobStatus::Paused
         } else if state.status.active {
-            "RUNNING"
+            crate::db::SyncJobStatus::Running
         } else {
-            "IDLE"
+            crate::db::SyncJobStatus::Idle
         };
         TransferStatsEvent {
             stats: snapshot_at_locked(&mut state, Instant::now()),
@@ -530,5 +530,22 @@ mod tests {
         assert!(value.get("transferredBytes").is_some());
         assert!(value.get("transferRateBytesPerSecond").is_some());
         assert!(value.get("estimatedSecondsRemaining").is_some());
+    }
+
+    #[test]
+    fn transfer_stats_event_serializes_status_and_fields_unchanged() {
+        let tracker = TransferStatsTracker::new(100, 40);
+        let idle = serde_json::to_value(tracker.event()).unwrap();
+        assert_eq!(idle["status"], "IDLE");
+        assert_eq!(idle["totalBytes"], 100);
+        assert_eq!(idle["completedBytes"], 40);
+
+        tracker.set_active(true);
+        let running = serde_json::to_value(tracker.event()).unwrap();
+        assert_eq!(running["status"], "RUNNING");
+
+        tracker.set_paused(true);
+        let paused = serde_json::to_value(tracker.event()).unwrap();
+        assert_eq!(paused["status"], "PAUSED");
     }
 }

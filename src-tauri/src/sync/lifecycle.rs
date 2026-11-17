@@ -7,14 +7,13 @@ use std::sync::{atomic::Ordering, Arc};
 pub(crate) enum LifecycleError {
     Database(sqlx::Error),
     Admission(String),
-    InvalidStatus(String),
 }
 
 impl std::fmt::Display for LifecycleError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Database(error) => error.fmt(formatter),
-            Self::Admission(error) | Self::InvalidStatus(error) => formatter.write_str(error),
+            Self::Admission(error) => formatter.write_str(error),
         }
     }
 }
@@ -79,12 +78,7 @@ impl<'a> SynchronizationLifecycle<'a> {
 
     async fn start_or_join_locked(&self) -> Result<LifecycleClaim, LifecycleError> {
         let current = self.status().await?;
-        if current
-            .status
-            .parse::<SyncJobStatus>()
-            .map_err(LifecycleError::InvalidStatus)?
-            == SyncJobStatus::Paused
-        {
+        if current.status == SyncJobStatus::Paused {
             return Ok(LifecycleClaim::Paused);
         }
         if self
@@ -138,13 +132,7 @@ impl<'a> SynchronizationLifecycle<'a> {
 
     async fn reconcile_empty_job(&self) -> Result<(), LifecycleError> {
         if !self.running.load(Ordering::SeqCst)
-            && self
-                .status()
-                .await?
-                .status
-                .parse::<SyncJobStatus>()
-                .map_err(LifecycleError::InvalidStatus)?
-                != SyncJobStatus::Paused
+            && self.status().await?.status != SyncJobStatus::Paused
             && !db::has_pending_sync_queue_items(self.pool).await?
         {
             db::set_sync_status(self.pool, SyncJobStatus::Idle).await?;
@@ -182,12 +170,7 @@ impl<'a> SynchronizationLifecycle<'a> {
     pub(crate) async fn resume(&self) -> Result<db::SyncSnapshot, LifecycleError> {
         let _guard = self.coordinator.lifecycle_lock.lock().await;
         let snapshot = self.status().await?;
-        if snapshot
-            .status
-            .parse::<SyncJobStatus>()
-            .map_err(LifecycleError::InvalidStatus)?
-            != SyncJobStatus::Paused
-        {
+        if snapshot.status != SyncJobStatus::Paused {
             return Ok(snapshot);
         }
 
