@@ -96,6 +96,12 @@ pub(super) fn apply_unfiled(filter: &mut Map<String, Value>) {
 
 /// Visibility is always sent, so the result never depends on Immich's own default: Archived
 /// Assets are left out, unless the Archived option is on, which shows only Archived Assets.
+/// Leaves trashed Remote Assets out. Immich's structured `filter` returns them unless asked not to
+/// (verified on Immich 3.4.1; the flat fields hid them by default), and they belong to the Trash.
+pub(super) fn apply_not_trashed(filter: &mut Map<String, Value>) {
+    filter.insert("trashedAt".to_string(), json!({ "eq": null }));
+}
+
 pub(super) fn apply_visibility(archived: bool, filter: &mut Map<String, Value>) {
     let visibility = if archived { "archive" } else { "timeline" };
     filter.insert("visibility".to_string(), json!({ "eq": visibility }));

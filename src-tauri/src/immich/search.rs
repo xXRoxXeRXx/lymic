@@ -8,12 +8,11 @@
 use super::client::ImmichClient;
 use super::response::{read_response_body_limited, request_failure_code};
 use super::search_filters::{
-    apply_favorite, apply_person_ids, apply_unfiled, apply_visibility, CameraFilter, DateRange,
-    LocationFilter, MediaType, Rating,
+    apply_favorite, apply_not_trashed, apply_person_ids, apply_unfiled, apply_visibility,
+    CameraFilter, DateRange, LocationFilter, MediaType, Rating,
 };
 use super::timeline::{
-    deserialize_next_page, group_album_timeline_assets, timeline_asset_from_response,
-    AlbumTimeline, TimelineAssetResponse,
+    group_album_timeline_assets, timeline_asset_from_response, AlbumTimeline, TimelineAssetResponse,
 };
 use super::{TimelineAsset, TimelineBucket};
 use reqwest::{Method, StatusCode};
@@ -25,6 +24,9 @@ use std::collections::{BTreeMap, HashSet};
 pub(crate) const SEARCH_RESULT_LIMIT: usize = 5_000;
 /// Context Search Results per page (ADR-0009); a constant, not a setting.
 const CONTEXT_PAGE_SIZE: usize = 100;
+/// The most Context Search Results Immich answers in one request: the structured smart search has no
+/// paging, so this is also the most a Context Search shows (ADR-0009).
+const CONTEXT_RESULT_LIMIT: usize = 1_000;
 /// Immich's largest metadata search page.
 const SEARCH_PAGE_SIZE: usize = 1_000;
 /// A page of 1 000 Remote Assets with EXIF data is larger than the default response limit.
@@ -115,6 +117,7 @@ impl SearchFilters {
             rating.apply(filter);
         }
         apply_visibility(self.archived, filter);
+        apply_not_trashed(filter);
         if let Some(camera) = &self.camera {
             camera.apply(filter);
         }
@@ -194,12 +197,6 @@ struct ContextSearchResponse {
 struct ContextSearchAssets {
     #[serde(default)]
     items: Vec<TimelineAssetResponse>,
-    #[serde(
-        rename = "nextPage",
-        default,
-        deserialize_with = "deserialize_next_page"
-    )]
-    next_page: Option<u64>,
 }
 
 /// Escapes `\`, `%` and `_` so Immich's `like` matches them literally.
@@ -380,6 +377,11 @@ impl ImmichClient {
 impl ImmichClient {
     /// Runs one page of a Context Search: Immich's smart search with the text and the structured
     /// filter, in the order of relevance. The caller pages with the `next_page` it is given.
+    ///
+    /// Immich's structured smart search has no paging (it rejects `page` next to `filter` and
+    /// answers without a next page), so page `n` asks for the best `n * 100` results and keeps the
+    /// last 100. Immich ranks deterministically (distance, then asset id), so the pages join without
+    /// gaps or repeats. At most [`CONTEXT_RESULT_LIMIT`] results can be asked for.
     pub async fn search_context_page(
         &self,
         request: &SearchRequest,
@@ -389,11 +391,15 @@ impl ImmichClient {
         if request.mode != SearchMode::Context || text.is_empty() {
             return Err(invalid_request());
         }
+        let window = usize::try_from(page)
+            .ok()
+            .and_then(|page| page.checked_mul(CONTEXT_PAGE_SIZE))
+            .filter(|window| (CONTEXT_PAGE_SIZE..=CONTEXT_RESULT_LIMIT).contains(window))
+            .ok_or_else(invalid_request)?;
         let body = json!({
             "query": text,
             "filter": build_filter(request),
-            "page": page,
-            "size": CONTEXT_PAGE_SIZE,
+            "size": window,
             "withExif": true,
         });
         // A 400 means the server rejects smart search although its features reported it on.
@@ -403,17 +409,17 @@ impl ImmichClient {
             Some("search_context_unavailable"),
         )
         .await?;
-        if payload.assets.next_page.is_some_and(|next| next <= page) {
-            return Err(invalid_response());
-        }
+        let filled_the_window = payload.assets.items.len() >= window;
         Ok(ContextSearchPage {
             assets: payload
                 .assets
                 .items
                 .into_iter()
+                .skip(window - CONTEXT_PAGE_SIZE)
+                .take(CONTEXT_PAGE_SIZE)
                 .map(|asset| timeline_asset_from_response(asset, false))
                 .collect(),
-            next_page: payload.assets.next_page,
+            next_page: (filled_the_window && window < CONTEXT_RESULT_LIMIT).then_some(page + 1),
         })
     }
 }
@@ -490,6 +496,7 @@ mod tests {
                 "filter": {
                     "originalFileName": { "like": "%IMG%" },
                     "visibility": { "eq": "timeline" },
+                    "trashedAt": { "eq": null },
                 },
                 "orderBy": { "field": "localDateTime", "direction": "desc" },
                 "size": 1000,
@@ -990,7 +997,7 @@ mod tests {
         assert!(request.starts_with("POST /api/search/metadata HTTP/1.1"));
         assert_eq!(
             json_body(request)["filter"],
-            json!({ "visibility": { "eq": "timeline" } })
+            json!({ "visibility": { "eq": "timeline" }, "trashedAt": { "eq": null } })
         );
         assert!(json_body(request).get("query").is_none());
     }
@@ -1032,7 +1039,7 @@ mod tests {
                 asset("second", "2025-03-01T10:00:00.000Z"),
                 json!({ "id": "undated", "type": "VIDEO", "exifInfo": {} }),
             ],
-            Some("2"),
+            None,
         );
         let (result, requests) = context_page(
             "200 OK",
@@ -1050,8 +1057,8 @@ mod tests {
             json!({
                 "query": "dog on a beach",
                 // Archived Assets are left out by default, as in every Search.
-                "filter": { "visibility": { "eq": "timeline" } },
-                "page": 1,
+                "filter": { "visibility": { "eq": "timeline" }, "trashedAt": { "eq": null } },
+                // Structured smart search has no paging (Immich 3.4.1 rejects `page` next to `filter`).
                 "size": 100,
                 "withExif": true,
             })
@@ -1060,7 +1067,8 @@ mod tests {
         // The server's relevance order is kept and nothing needs a capture time.
         let ids: Vec<_> = page.assets.iter().map(|asset| asset.id.as_str()).collect();
         assert_eq!(ids, vec!["best", "second", "undated"]);
-        assert_eq!(page.next_page, Some(2));
+        // Fewer results than asked for: nothing more to load.
+        assert_eq!(page.next_page, None);
     }
 
     #[tokio::test]
@@ -1078,22 +1086,156 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             json_body(&requests[0])["filter"],
-            json!({ "visibility": { "eq": "archive" }, "isFavorite": { "eq": true } })
+            json!({ "visibility": { "eq": "archive" }, "trashedAt": { "eq": null }, "isFavorite": { "eq": true } })
         );
     }
 
+    /// `count` results with ids `r0`, `r1`, ... in the order Immich ranks them.
+    fn ranked(count: usize) -> Vec<Value> {
+        (0..count)
+            .map(|index| asset(&format!("r{index}"), "2025-03-01T10:00:00.000Z"))
+            .collect()
+    }
+
+    fn ids(page: &ContextSearchPage) -> Vec<&str> {
+        page.assets.iter().map(|asset| asset.id.as_str()).collect()
+    }
+
     #[tokio::test]
-    async fn a_later_context_page_asks_for_the_page_the_server_announced() {
+    async fn a_later_context_page_asks_for_a_longer_window_and_keeps_only_its_own_results() {
+        // Immich's structured smart search cannot be paged, so page 2 asks for the best 200 and
+        // shows results 101 to 200.
         let (result, requests) = context_page(
             "200 OK",
-            smart_page(vec![asset("c", "2025-03-01T10:00:00.000Z")], None),
+            smart_page(ranked(200), None),
             mode_request(SearchMode::Context, "dog"),
-            3,
+            2,
         )
         .await;
 
-        assert_eq!(json_body(&requests[0])["page"], json!(3));
+        let body = json_body(&requests[0]);
+        assert_eq!(body["size"], json!(200));
+        assert!(body.get("page").is_none());
+        let page = result.unwrap();
+        assert_eq!(page.assets.len(), 100);
+        assert_eq!(ids(&page).first(), Some(&"r100"));
+        assert_eq!(ids(&page).last(), Some(&"r199"));
+        assert_eq!(page.next_page, Some(3));
+    }
+
+    #[tokio::test]
+    async fn another_context_page_follows_only_while_immich_filled_the_window() {
+        let (result, _) = context_page(
+            "200 OK",
+            smart_page(ranked(100), None),
+            mode_request(SearchMode::Context, "dog"),
+            1,
+        )
+        .await;
+        assert_eq!(
+            result.unwrap().next_page,
+            Some(2),
+            "a full window may have more"
+        );
+
+        let (result, _) = context_page(
+            "200 OK",
+            smart_page(ranked(150), None),
+            mode_request(SearchMode::Context, "dog"),
+            2,
+        )
+        .await;
+        let page = result.unwrap();
+        assert_eq!(page.assets.len(), 50);
+        assert_eq!(page.next_page, None, "an unfilled window is the last page");
+
+        let (result, _) = context_page(
+            "200 OK",
+            smart_page(vec![], None),
+            mode_request(SearchMode::Context, "dog"),
+            2,
+        )
+        .await;
+        let page = result.unwrap();
+        assert!(page.assets.is_empty());
+        assert_eq!(page.next_page, None);
+    }
+
+    #[tokio::test]
+    async fn a_context_search_shows_at_most_the_best_thousand_results() {
+        // 1 000 is the most Immich answers in one request, so page 10 is the last one.
+        let (result, requests) = context_page(
+            "200 OK",
+            smart_page(ranked(1_000), None),
+            mode_request(SearchMode::Context, "dog"),
+            10,
+        )
+        .await;
+        assert_eq!(json_body(&requests[0])["size"], json!(1_000));
+        let page = result.unwrap();
+        assert_eq!(page.assets.len(), 100);
+        assert_eq!(page.next_page, None);
+
+        let client = test_client("http://127.0.0.1:9".to_string(), "test-key");
+        let result = client
+            .search_context_page(&mode_request(SearchMode::Context, "dog"), 11)
+            .await;
+        assert_eq!(result.unwrap_err(), "search_invalid_request");
+        let result = client
+            .search_context_page(&mode_request(SearchMode::Context, "dog"), 0)
+            .await;
+        assert_eq!(result.unwrap_err(), "search_invalid_request");
+    }
+
+    #[tokio::test]
+    async fn a_page_announced_by_the_server_is_not_followed() {
+        let (result, _) = context_page(
+            "200 OK",
+            smart_page(ranked(3), Some("9")),
+            mode_request(SearchMode::Context, "dog"),
+            1,
+        )
+        .await;
+
         assert_eq!(result.unwrap().next_page, None);
+    }
+
+    #[tokio::test]
+    async fn every_search_leaves_out_trashed_remote_assets() {
+        // Immich's structured filter includes trashed Remote Assets unless told otherwise.
+        let trashed_left_out = json!({ "eq": null });
+        for mode in [SearchMode::Filename, SearchMode::Ocr, SearchMode::Context] {
+            let (_, requests) = search(
+                vec![("200 OK", page(vec![], None))],
+                mode_request(mode, " "),
+            )
+            .await;
+            assert_eq!(
+                json_body(&requests[0])["filter"]["trashedAt"],
+                trashed_left_out,
+                "{mode:?} without text"
+            );
+        }
+        let (_, requests) = search(
+            vec![("200 OK", page(vec![], None))],
+            mode_request(SearchMode::Filename, "IMG"),
+        )
+        .await;
+        assert_eq!(
+            json_body(&requests[0])["filter"]["trashedAt"],
+            trashed_left_out
+        );
+        let (_, requests) = context_page(
+            "200 OK",
+            smart_page(vec![], None),
+            mode_request(SearchMode::Context, "dog"),
+            1,
+        )
+        .await;
+        assert_eq!(
+            json_body(&requests[0])["filter"]["trashedAt"],
+            trashed_left_out
+        );
     }
 
     #[tokio::test]
@@ -1110,19 +1252,6 @@ mod tests {
             .search_context_page(&mode_request(SearchMode::Filename, "dog"), 1)
             .await;
         assert_eq!(result.unwrap_err(), "search_invalid_request");
-    }
-
-    #[tokio::test]
-    async fn a_next_page_that_does_not_advance_is_rejected_by_a_context_search() {
-        let (result, _) = context_page(
-            "200 OK",
-            smart_page(vec![asset("a", "2025-03-01T10:00:00.000Z")], Some("2")),
-            mode_request(SearchMode::Context, "dog"),
-            2,
-        )
-        .await;
-
-        assert_eq!(result.unwrap_err(), "search_invalid_response");
     }
 
     #[tokio::test]
@@ -1203,12 +1332,15 @@ mod tests {
         without_default_visibility(json_body(&requests[0])["filter"].clone())
     }
 
-    /// The `filter` a Search sent, without the default visibility every Search carries, so a test
-    /// about another condition does not repeat it. `visibility` is asserted on its own.
+    /// The `filter` a Search sent, without the default conditions every Search carries (the timeline
+    /// visibility and the exclusion of trashed Remote Assets), so a test about another condition does
+    /// not repeat them. Both are asserted on their own.
     fn without_default_visibility(mut filter: Value) -> Value {
-        if filter["visibility"] == json!({ "eq": "timeline" }) {
-            filter.as_object_mut().unwrap().remove("visibility");
+        let conditions = filter.as_object_mut().unwrap();
+        if conditions.get("visibility") == Some(&json!({ "eq": "timeline" })) {
+            conditions.remove("visibility");
         }
+        conditions.remove("trashedAt");
         filter
     }
 
@@ -1290,7 +1422,7 @@ mod tests {
         .await;
         assert_eq!(
             json_body(&requests[0])["filter"],
-            json!({ "visibility": { "eq": "timeline" } }),
+            json!({ "visibility": { "eq": "timeline" }, "trashedAt": { "eq": null } }),
             "a Search without the option asks for the timeline only, whatever Immich's default is"
         );
 
@@ -1308,7 +1440,7 @@ mod tests {
         .await;
         assert_eq!(
             json_body(&requests[0])["filter"],
-            json!({ "visibility": { "eq": "archive" } }),
+            json!({ "visibility": { "eq": "archive" }, "trashedAt": { "eq": null } }),
             "with the option on only Archived Assets are asked for"
         );
     }
@@ -1370,6 +1502,7 @@ mod tests {
                 "originalFileName": { "like": "%IMG%" },
                 "isFavorite": { "eq": true },
                 "visibility": { "eq": "archive" },
+                "trashedAt": { "eq": null },
                 "hasAlbums": { "eq": false },
                 "rating": { "eq": 4 },
             })
@@ -1450,6 +1583,7 @@ mod tests {
                 "type": { "eq": "VIDEO" },
                 "personIds": { "all": ["person-1"] },
                 "visibility": { "eq": "timeline" },
+                "trashedAt": { "eq": null },
             })
         );
         assert_eq!(body.as_object().unwrap().len(), 4, "no flat filter fields");
