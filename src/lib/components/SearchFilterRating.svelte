@@ -3,6 +3,7 @@
   import { t } from "svelte-i18n";
   import type { SearchRating } from "../contracts";
   import type { SearchController } from "../controllers/search-controller.svelte";
+  import SearchFilterHeading from "./SearchFilterHeading.svelte";
 
   /** The Rating Search Filter: one exact star level; selecting the selected level again clears it. */
   let { search }: { search: SearchController } = $props();
@@ -12,7 +13,7 @@
 </script>
 
 <div role="group" aria-labelledby="search-filter-rating-label" class="space-y-2">
-  <span id="search-filter-rating-label" class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{$t("search_filter_rating")}</span>
+  <SearchFilterHeading id="search-filter-rating-label" text={$t("search_filter_rating")} />
   <div class="flex gap-1">
     {#each levels as level (level)}
       {@const selected = search.filters.rating === level}

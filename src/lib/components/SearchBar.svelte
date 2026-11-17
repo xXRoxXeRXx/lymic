@@ -28,8 +28,8 @@
   const placeholder = $derived(search.mode === "filename" ? $t("search_placeholder") : $t(`search_placeholder_${search.mode}`));
 
   function submit() {
-    // A filter that cannot be searched keeps the panel open, where its message is.
-    if (Object.keys(search.filterErrors).length === 0) panelOpen = false;
+    // A filter that cannot be searched blocks the Search, so the panel opens (or stays open): its message is there.
+    panelOpen = Object.keys(search.filterErrors).length > 0;
     onSubmit();
   }
 

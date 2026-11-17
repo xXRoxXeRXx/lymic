@@ -1,4 +1,5 @@
 import type { SearchLocation } from "../contracts";
+import { setPart } from "./parts";
 import type { SearchFilterDefinition } from "./types";
 
 /**
@@ -21,8 +22,5 @@ export const locationFilter: SearchFilterDefinition = {
  * country drops the chosen state, which may not exist there (state suggestions are limited by the country).
  */
 export function setLocationPart(location: SearchLocation | undefined, part: keyof SearchLocation, value: string | undefined): SearchLocation | undefined {
-  const next: SearchLocation = { ...location, [part]: value };
-  if (part === "country" && value !== undefined && value !== location?.country) next.state = undefined;
-  for (const key of Object.keys(next) as (keyof SearchLocation)[]) if (next[key] === undefined) delete next[key];
-  return Object.keys(next).length > 0 ? next : undefined;
+  return setPart(location, part, value, { parent: "country", dependent: "state" });
 }

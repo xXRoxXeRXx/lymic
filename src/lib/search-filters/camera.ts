@@ -1,4 +1,5 @@
 import type { SearchCamera } from "../contracts";
+import { setPart } from "./parts";
 import type { SearchFilterDefinition } from "./types";
 
 /** Camera: make, model and lens model, each optional and each chosen from Immich's suggestions. */
@@ -18,8 +19,5 @@ export const cameraFilter: SearchFilterDefinition = {
  * make drops the chosen model, which may not exist for that make (model suggestions are limited by the make).
  */
 export function setCameraPart(camera: SearchCamera | undefined, part: keyof SearchCamera, value: string | undefined): SearchCamera | undefined {
-  const next: SearchCamera = { ...camera, [part]: value };
-  if (part === "make" && value !== undefined && value !== camera?.make) next.model = undefined;
-  for (const key of Object.keys(next) as (keyof SearchCamera)[]) if (next[key] === undefined) delete next[key];
-  return Object.keys(next).length > 0 ? next : undefined;
+  return setPart(camera, part, value, { parent: "make", dependent: "model" });
 }

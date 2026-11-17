@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from "svelte-i18n";
   import type { SearchController } from "../controllers/search-controller.svelte";
+  import SearchFilterHeading from "./SearchFilterHeading.svelte";
 
   /** The Date Search Filter: an optional first and last local day, both inclusive. */
   let { search }: { search: SearchController } = $props();
@@ -17,7 +18,7 @@
 
 <div role="group" aria-labelledby="search-filter-date-label" class="space-y-2">
   <div class="flex items-center justify-between">
-    <span id="search-filter-date-label" class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{$t("search_filter_date")}</span>
+    <SearchFilterHeading id="search-filter-date-label" text={$t("search_filter_date")} />
     {#if date}
       <button
         type="button"

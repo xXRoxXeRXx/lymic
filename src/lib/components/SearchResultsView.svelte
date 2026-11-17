@@ -3,7 +3,7 @@
   import { AlertCircle } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
-  import { SEARCH_RESULT_LIMIT, type SearchController } from "../controllers/search-controller.svelte";
+  import { CONTEXT_RESULT_LIMIT, SEARCH_RESULT_LIMIT, type SearchController } from "../controllers/search-controller.svelte";
   import BackBarView from "./BackBarView.svelte";
   import TimelineView from "./TimelineView.svelte";
 
@@ -34,15 +34,21 @@
       case "permission_denied": return $t("search_permission_denied");
       case "authentication_required": return $t("search_authentication_required");
       case "context_unavailable": return $t("search_context_unavailable");
+      case "context_service_unavailable": return $t("search_context_service_unavailable");
       case "error": return $t("search_invalid_response");
       default: return null;
     }
   });
   const failureIsError = $derived(failureError !== null);
   const loadErrorMessage = $derived(failureError ?? $t("search_unavailable"));
-  const hintMessage = $derived(
-    search.truncated ? $t("search_truncated", { values: { count: SEARCH_RESULT_LIMIT.toLocaleString(numberLocale) } }) : "",
-  );
+  // Both limits are cut-offs the user can fix by narrowing the Search: the newest results of a chronological
+  // Search, the best results of a Context Search.
+  const hintMessage = $derived.by(() => {
+    if (!search.truncated) return "";
+    return relevance
+      ? $t("search_context_limit", { values: { count: CONTEXT_RESULT_LIMIT.toLocaleString(numberLocale) } })
+      : $t("search_truncated", { values: { count: SEARCH_RESULT_LIMIT.toLocaleString(numberLocale) } });
+  });
 </script>
 
 <BackBarView label={backLabel} onBack={onBack}>

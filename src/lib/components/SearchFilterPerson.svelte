@@ -4,6 +4,7 @@
   import type { PeopleViewState } from "../controllers/people-controller.svelte";
   import type { SearchController } from "../controllers/search-controller.svelte";
   import RecognizedPersonTile from "./RecognizedPersonTile.svelte";
+  import SearchFilterHeading from "./SearchFilterHeading.svelte";
 
   /**
    * The Person Search Filter: choose one or more Recognized People, named ones first; a Search returns the
@@ -30,7 +31,7 @@
 </script>
 
 <div class="space-y-2">
-  <span id="search-filter-person-label" class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{$t("search_filter_person")}</span>
+  <SearchFilterHeading id="search-filter-person-label" text={$t("search_filter_person")} />
   <p class="text-xs text-slate-500 dark:text-zinc-400">{$t("search_filter_person_hint")}</p>
   {#if people.isLoading}
     <p role="status" class="text-sm text-slate-600 dark:text-zinc-300">{$t("people_loading")}</p>

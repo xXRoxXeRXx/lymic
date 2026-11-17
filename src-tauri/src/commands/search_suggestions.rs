@@ -1,7 +1,6 @@
 use crate::immich::{ImmichSession, SuggestionRequest};
 
-/// Values Immich suggests for a Search Filter (camera make, model, lens model; more types
-/// follow with their filters), optionally narrowed. Read-only.
+/// Values Immich suggests for a Search Filter (camera make, model, lens model, country and state), optionally narrowed. Read-only.
 #[tauri::command]
 pub(crate) async fn get_search_suggestions(
     request: SuggestionRequest,

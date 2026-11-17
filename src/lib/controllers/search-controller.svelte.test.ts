@@ -15,8 +15,8 @@ function results(ids: string[], truncated = false): SearchResults {
   return { buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(asset) }, truncated };
 }
 
-function contextPage(ids: string[], nextPage: number | null): ContextSearchPage {
-  return { assets: ids.map(asset), nextPage };
+function contextPage(ids: string[], nextPage: number | null, limitReached = false): ContextSearchPage {
+  return { assets: ids.map(asset), nextPage, limitReached };
 }
 
 function deferred<T>() {
@@ -816,6 +816,21 @@ describe("Context Search", () => {
     expect(search.context.hasNextPage).toBe(false);
   });
 
+  it("reports a Context Search that reached its result limit as truncated, and a new Search resets it", async () => {
+    const searchContextPage = vi.fn()
+      .mockResolvedValueOnce(contextPage(["a"], null, true))
+      .mockResolvedValueOnce(contextPage(["b"], null));
+    const { search } = setupDefaultMode({ searchContextPage });
+    search.text = "dog";
+
+    await search.submit();
+    expect(search.truncated).toBe(true);
+
+    search.text = "cat";
+    await search.submit();
+    expect(search.truncated).toBe(false);
+  });
+
   it("runs a Context Search without text as the chronological filters-only Search", async () => {
     const { adapter, search } = setupDefaultMode();
     search.filters.mediaType = "video";
@@ -901,6 +916,7 @@ describe("Context Search", () => {
     ["search_unavailable", "unavailable"],
     ["search_invalid_response", "error"],
     ["search_context_unavailable", "context_unavailable"],
+    ["search_context_service_unavailable", "context_service_unavailable"],
   ] as const)("classifies the failure %s of the first page as %s", async (code, expected) => {
     const { search } = setupDefaultMode({ searchContextPage: vi.fn().mockRejectedValue(code) });
     search.text = "dog";

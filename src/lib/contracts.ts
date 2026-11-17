@@ -245,8 +245,13 @@ export interface SearchCamera { make?: string; model?: string; lensModel?: strin
  */
 export interface SearchLocation { country?: string; state?: string; city?: string; }
 
-/** The Search Filters as the backend receives them: the same fields, with date bounds as ISO 8601 instants. */
-export type SearchRequestFilters = SearchFilters;
+/** A date range as the backend receives it: the bounds are ISO 8601 instants (UTC), not local days. */
+export interface SearchRequestDateRange { from?: string; to?: string; }
+
+/** The Search Filters as the backend receives them: the same fields, with the date bounds as instants. */
+export interface SearchRequestFilters extends Omit<SearchFilters, "date"> {
+  date?: SearchRequestDateRange;
+}
 
 export interface SearchRequest {
   text: string;
@@ -259,10 +264,15 @@ export interface SearchResults extends AlbumTimeline {
   truncated: boolean;
 }
 
-/** One page of Context Search Results in the order of relevance; `nextPage` is null on the last page. */
+/**
+ * One page of Context Search Results in the order of relevance; `nextPage` is null on the last page.
+ * `limitReached` is set on the last page the limit of 1 000 results allows when Immich filled it, so more
+ * results may exist than are shown.
+ */
 export interface ContextSearchPage {
   assets: TimelineAsset[];
   nextPage: number | null;
+  limitReached: boolean;
 }
 
 /** Which optional Search Modes the connected Immich Server has switched on. */
