@@ -402,4 +402,12 @@
   ,"search_filter_location_country": "देश"
   ,"search_filter_location_state": "राज्य या क्षेत्र"
   ,"search_filter_location_city": "शहर"
+  ,"tags_title": "टैग"
+  ,"tags_loading": "टैग लोड हो रहे हैं…"
+  ,"tags_empty": "अभी कोई टैग नहीं है। Immich में बनाए गए टैग यहाँ दिखाई देंगे।"
+  ,"tags_offline": "टैग ऑफ़लाइन हैं। कैश किए गए टैग दिखाए जा रहे हैं।"
+  ,"tags_error": "टैग लोड नहीं किए जा सके।"
+  ,"tags_unavailable": "टैग उपलब्ध नहीं हैं। अपना कनेक्शन और साइन-इन जाँचें।"
+  ,"tags_permission_denied": "टैग लोड नहीं किए जा सके। API कुंजी को tag.read अनुमति दें।"
+  ,"tags_retry": "फिर कोशिश करें"
 }

@@ -38,6 +38,7 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
     getMemoriesPage: vi.fn().mockResolvedValue({ memories: [], hasNextPage: false }),
     getPeople: vi.fn().mockResolvedValue({ people: [], hasNextPage: false }),
     getPlaces: vi.fn().mockResolvedValue([]),
+    getTags: vi.fn().mockResolvedValue([]),
     getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: true }),
     getSearchSupport: vi.fn().mockResolvedValue({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
     getSearchSuggestions: vi.fn().mockResolvedValue([]),

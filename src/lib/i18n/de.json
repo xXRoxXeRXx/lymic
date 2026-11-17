@@ -402,4 +402,12 @@
   ,"search_filter_location_country": "Land"
   ,"search_filter_location_state": "Bundesland oder Region"
   ,"search_filter_location_city": "Stadt"
+  ,"tags_title": "Tags"
+  ,"tags_loading": "Tags werden geladen…"
+  ,"tags_empty": "Noch keine Tags vorhanden. In Immich erstellte Tags erscheinen hier."
+  ,"tags_offline": "Tags ist offline. Zwischengespeicherte Tags werden angezeigt."
+  ,"tags_error": "Tags konnten nicht geladen werden."
+  ,"tags_unavailable": "Tags ist nicht verfügbar. Prüfen Sie Ihre Verbindung und Anmeldung."
+  ,"tags_permission_denied": "Tags konnten nicht geladen werden. Geben Sie dem API-Schlüssel die Berechtigung tag.read."
+  ,"tags_retry": "Erneut versuchen"
 }

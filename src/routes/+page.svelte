@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
-  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon, Compass, Archive, Trash2 } from "lucide-svelte";
+  import { onMount, tick, untrack } from "svelte";
+  import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon, Compass, Archive, Trash2, Tag as TagIcon } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
@@ -15,6 +15,7 @@
   import SearchResultsView from "#lib/components/SearchResultsView.svelte";
   import PeopleView from "#lib/components/PeopleView.svelte";
   import PlacesView from "#lib/components/PlacesView.svelte";
+  import TagsView from "#lib/components/TagsView.svelte";
   import AlbumCatalogueView from "#lib/components/AlbumCatalogueView.svelte";
   import ActivityLog from "#lib/components/ActivityLog.svelte";
   import SettingsView from "#lib/components/SettingsView.svelte";
@@ -52,6 +53,8 @@
   let exploreScrollTop = 0;
   let allMemoriesScrollTop = 0;
   let albumsScrollTop = 0;
+  /** The Tags view's own scroll position, kept while another view is open. */
+  let tagsScrollTop = 0;
   let content = $state<HTMLElement>();
   /** The view a Search was started from and where it was scrolled to, so Back returns there (even to a sub-view). */
   let searchOrigin = $state<{ view: string; top: number } | null>(null);
@@ -110,6 +113,7 @@
       case "trash": return $t("trash_title");
       case "map": return $t("map_title");
       case "people": return $t("people_title");
+      case "tags": return $t("tags_title");
       case "places": return $t("places_all_title");
       case "all-memories": return $t("memories_all_title");
       case "albums": return $t("albums_title");
@@ -200,6 +204,13 @@
   function openPeople() {
     currentView = "people";
     void people.refresh();
+  }
+
+  function openTags() {
+    if (currentView === "tags") return;
+    currentView = "tags";
+    void tags.refresh();
+    void tick().then(() => { if (content) content.scrollTop = tagsScrollTop; });
   }
 
   function openAlbums() {
@@ -301,6 +312,7 @@
       placeOrigin = "explore";
       placesScrollTop = 0;
       albumsScrollTop = 0;
+      tagsScrollTop = 0;
       closeAlbumTimeline();
       closePersonTimeline();
       closePlaceTimeline();
@@ -311,6 +323,7 @@
       currentView = "photos";
     },
     isExploreActive: () => currentView === "explore",
+    isTagsActive: () => currentView === "tags",
   });
   const {
     feedback,
@@ -324,6 +337,7 @@
     trash,
     people,
     places,
+    tags,
     memories,
     allMemories,
     explore,
@@ -514,6 +528,11 @@
             <span>{$t('people_title')}</span>
           </button>
 
+          <button type="button" class="nav-item {currentView === 'tags' ? 'active' : ''}" onclick={openTags} aria-label={$t('tags_title')}>
+            <TagIcon class="w-4 h-4 shrink-0 {currentView === 'tags' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+            <span>{$t('tags_title')}</span>
+          </button>
+
           <button
             type="button"
             class="nav-item {currentView === 'dashboard' ? 'active' : ''}"
@@ -592,7 +611,7 @@
         <SearchBar {search} {people} onSubmit={submitSearch} onClear={clearSearch} onOpenArchive={openArchive} />
       </div>
 
-      <main bind:this={content} class="flex-1 {currentView === 'map' || timelineScrollViews.has(currentView) ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} onscroll={() => { if (currentView === "tags" && content) tagsScrollTop = content.scrollTop; }} class="flex-1 {currentView === 'map' || timelineScrollViews.has(currentView) ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />
@@ -669,6 +688,8 @@
           </BackBarView>
         {:else if currentView === "people"}
           <PeopleView {people} onSelect={selectPerson} />
+        {:else if currentView === "tags"}
+          <TagsView {tags} />
         {:else if currentView === "albums"}
           <AlbumCatalogueView catalogue={albumCatalogue} onSelect={selectAlbum} />
         {:else if currentView === "album-timeline" && albumTimeline}

@@ -402,4 +402,12 @@
   ,"search_filter_location_country": "País"
   ,"search_filter_location_state": "Estado ou região"
   ,"search_filter_location_city": "Cidade"
+  ,"tags_title": "Etiquetas"
+  ,"tags_loading": "A carregar etiquetas…"
+  ,"tags_empty": "Ainda não há etiquetas. As etiquetas criadas no Immich aparecem aqui."
+  ,"tags_offline": "As etiquetas estão offline. A mostrar as etiquetas em cache."
+  ,"tags_error": "Não foi possível carregar as etiquetas."
+  ,"tags_unavailable": "As etiquetas não estão disponíveis. Verifique a sua ligação e o início de sessão."
+  ,"tags_permission_denied": "Não foi possível carregar as etiquetas. Conceda à chave de API a permissão tag.read."
+  ,"tags_retry": "Tentar novamente"
 }

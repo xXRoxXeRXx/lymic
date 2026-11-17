@@ -95,6 +95,8 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve({ buckets: [], assetsByBucket: {} });
       case "get_places":
         return Promise.resolve([]);
+      case "get_tags":
+        return Promise.resolve([]);
       case "get_memories":
         return Promise.resolve([]);
       // By default Smart Search is off, so a Search starts in Filename mode (Context is tested explicitly).
@@ -2657,6 +2659,320 @@ describe("Explore Overview across sections", () => {
     await screen.findByRole("region", { name: "Places" });
 
     expect(calls("get_places")).toBe(1);
+  });
+});
+
+describe("Tags view", () => {
+  const tags = [
+    { id: "t-travel", name: "Travel", value: "Travel", parentId: null, color: "#ff0000" },
+    { id: "t-italy", name: "Italy", value: "Travel/Italy", parentId: "t-travel", color: null },
+    { id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", parentId: "t-italy", color: "#00FF00" },
+    { id: "t-family", name: "Family", value: "Family", parentId: null, color: "not-a-colour" },
+  ];
+  const calls = (command: string) => tauri.invoke.mock.calls.filter(([name]) => name === command).length;
+  const openTags = async () => fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
+  const names = () => screen.queryAllByRole("treeitem").map((item) => item.textContent?.trim());
+
+  it("opens from the navigation as a tree while Photos stays the view opened after login", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("tree")).not.toBeInTheDocument();
+
+    await openTags();
+
+    expect(await screen.findByRole("heading", { name: "Tags", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("tree", { name: "Tags" })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tags");
+  });
+
+  it("follows the hierarchy with siblings sorted by name, the top level expanded and deeper levels collapsed", async () => {
+    renderAuthenticatedPage({ get_tags: async () => [...tags].reverse() });
+    await openTags();
+
+    await screen.findByRole("treeitem", { name: "Travel" });
+    expect(names()).toEqual(["Family", "Travel", "Italy"]);
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("treeitem", { name: "Italy" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("treeitem", { name: "Family" })).not.toHaveAttribute("aria-expanded");
+    expect(screen.getByRole("treeitem", { name: "Family" })).toHaveAttribute("aria-level", "1");
+    expect(screen.getByRole("treeitem", { name: "Italy" })).toHaveAttribute("aria-level", "2");
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("aria-posinset", "2");
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("aria-setsize", "2");
+  });
+
+  it("shows each Tag's own name only, never its full path", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Italy" });
+    await fireEvent.click(screen.getByRole("treeitem", { name: "Italy" }));
+
+    expect(await screen.findByRole("treeitem", { name: "Rome" })).toBeInTheDocument();
+    expect(screen.queryByText("Travel/Italy/Rome")).not.toBeInTheDocument();
+    expect(screen.queryByText("Travel/Italy")).not.toBeInTheDocument();
+  });
+
+  it("expands and collapses a Tag with children by click and keeps the choice while moving between views", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Italy" }));
+    expect(screen.getByRole("treeitem", { name: "Italy" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("treeitem", { name: "Rome" })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await openTags();
+    expect(await screen.findByRole("treeitem", { name: "Rome" })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("treeitem", { name: "Travel" }));
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("treeitem", { name: "Italy" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: "Rome" })).not.toBeInTheDocument();
+  });
+
+  it("shows a colour dot only for a valid #RRGGBB colour", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Italy" }));
+    await screen.findByRole("treeitem", { name: "Rome" });
+
+    expect(within(screen.getByRole("treeitem", { name: "Travel" })).getByTestId("tag-color-dot")).toHaveStyle({ backgroundColor: "#ff0000" });
+    expect(within(screen.getByRole("treeitem", { name: "Rome" })).getByTestId("tag-color-dot")).toHaveStyle({ backgroundColor: "#00ff00" });
+    expect(within(screen.getByRole("treeitem", { name: "Italy" })).queryByTestId("tag-color-dot")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("treeitem", { name: "Family" })).queryByTestId("tag-color-dot")).not.toBeInTheDocument();
+  });
+
+  it("rejects colours that are not exactly #RRGGBB", async () => {
+    const odd = ["#fff", "#12345", "#1234567", "red", "#GGGGGG", "ff0000", "url(x)", ""].map((color, index) => ({ id: `c-${index}`, name: `Odd ${index}`, value: `Odd ${index}`, parentId: null, color }));
+    renderAuthenticatedPage({ get_tags: async () => odd });
+    await openTags();
+
+    await screen.findByRole("treeitem", { name: "Odd 0" });
+    expect(screen.queryAllByTestId("tag-color-dot")).toHaveLength(0);
+  });
+
+  it("puts a Tag whose parent is missing from the list at the top level", async () => {
+    renderAuthenticatedPage({ get_tags: async () => [
+      { id: "a", name: "Zebra", value: "Gone/Zebra", parentId: "gone", color: null },
+      { id: "b", name: "Apple", value: "Apple", parentId: null, color: null },
+    ] });
+    await openTags();
+
+    await screen.findByRole("treeitem", { name: "Zebra" });
+    expect(names()).toEqual(["Apple", "Zebra"]);
+    expect(screen.getByRole("treeitem", { name: "Zebra" })).toHaveAttribute("aria-level", "1");
+  });
+
+  it("neither hangs nor drops Tags on a self-reference or a cycle", async () => {
+    renderAuthenticatedPage({ get_tags: async () => [
+      { id: "self", name: "Self", value: "Self", parentId: "self", color: null },
+      { id: "a", name: "A", value: "A", parentId: "b", color: null },
+      { id: "b", name: "B", value: "B", parentId: "a", color: null },
+      { id: "c", name: "C", value: "C", parentId: "a", color: null },
+    ] });
+    await openTags();
+
+    await screen.findByRole("treeitem", { name: "Self" });
+    // Every Tag is reachable: expand each node that has children until nothing new appears.
+    for (let round = 0; round < 4; round += 1) {
+      for (const item of screen.queryAllByRole("treeitem", { expanded: false })) await fireEvent.click(item);
+    }
+    expect(screen.getAllByRole("treeitem").map((item) => item.textContent?.trim()).sort()).toEqual(["A", "B", "C", "Self"]);
+  });
+
+  it("is operable with the keyboard through roving focus", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    const family = await screen.findByRole("treeitem", { name: "Family" });
+    expect(family).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("tabindex", "-1");
+
+    family.focus();
+    await fireEvent.keyDown(family, { key: "ArrowDown" });
+    const travel = screen.getByRole("treeitem", { name: "Travel" });
+    expect(travel).toHaveFocus();
+    expect(travel).toHaveAttribute("tabindex", "0");
+
+    await fireEvent.keyDown(travel, { key: "ArrowDown" });
+    const italy = screen.getByRole("treeitem", { name: "Italy" });
+    expect(italy).toHaveFocus();
+
+    await fireEvent.keyDown(italy, { key: "ArrowRight" });
+    expect(italy).toHaveAttribute("aria-expanded", "true");
+    expect(italy).toHaveFocus();
+    await fireEvent.keyDown(italy, { key: "ArrowRight" });
+    expect(screen.getByRole("treeitem", { name: "Rome" })).toHaveFocus();
+
+    await fireEvent.keyDown(screen.getByRole("treeitem", { name: "Rome" }), { key: "ArrowLeft" });
+    expect(italy).toHaveFocus();
+    await fireEvent.keyDown(italy, { key: "ArrowLeft" });
+    expect(italy).toHaveAttribute("aria-expanded", "false");
+    await fireEvent.keyDown(italy, { key: "ArrowLeft" });
+    expect(travel).toHaveFocus();
+
+    await fireEvent.keyDown(travel, { key: "Enter" });
+    expect(travel).toHaveAttribute("aria-expanded", "false");
+    await fireEvent.keyDown(travel, { key: " " });
+    expect(travel).toHaveAttribute("aria-expanded", "true");
+
+    await fireEvent.keyDown(travel, { key: "End" });
+    expect(screen.getByRole("treeitem", { name: "Italy" })).toHaveFocus();
+    await fireEvent.keyDown(screen.getByRole("treeitem", { name: "Italy" }), { key: "Home" });
+    expect(screen.getByRole("treeitem", { name: "Family" })).toHaveFocus();
+  });
+
+  it("shows an informative empty state for a Library without Tags", async () => {
+    renderAuthenticatedPage({ get_tags: async () => [] });
+    await openTags();
+
+    expect(await screen.findByText("No tags yet. Tags created in Immich appear here.")).toBeInTheDocument();
+    expect(screen.queryByRole("tree")).not.toBeInTheDocument();
+  });
+
+  it("shows a loading state while the Tags load", async () => {
+    renderAuthenticatedPage({ get_tags: () => new Promise(() => {}) });
+    await openTags();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading tags…");
+  });
+
+  it("reloads the Tags every time the view opens", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    expect(calls("get_tags")).toBe(1);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await openTags();
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
+  });
+
+  it("names the tag.read permission and offers Retry when the key lacks it", async () => {
+    renderAuthenticatedPage({ get_tags: vi.fn().mockRejectedValueOnce("tags_permission_denied:tag.read").mockResolvedValueOnce(tags) });
+    await openTags();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("tag.read");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("reports authentication-required and unavailable as unavailable and anything else as an error", async () => {
+    const get_tags = vi.fn()
+      .mockRejectedValueOnce("tags_authentication_required")
+      .mockRejectedValueOnce("tags_unavailable")
+      .mockRejectedValueOnce("tags_invalid_response");
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tags is unavailable. Check your connection and sign-in.");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tags is unavailable. Check your connection and sign-in.");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Tags could not be loaded."));
+  });
+
+  it("keeps an already loaded tree visible with an offline note when a reload fails", async () => {
+    renderAuthenticatedPage({ get_tags: vi.fn().mockResolvedValueOnce(tags).mockRejectedValueOnce("tags_unavailable") });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await openTags();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Tags is offline. Showing cached tags.");
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps the rest of Lymic working when the key lacks tag.read", async () => {
+    renderAuthenticatedPage({ get_tags: async () => { throw "tags_permission_denied:tag.read"; }, get_places: async () => [{ city: "Paris", thumbnailAssetId: "a" }] });
+    await openTags();
+    await screen.findByRole("alert");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Explore" }));
+    expect(await screen.findByRole("button", { name: "Paris" })).toBeInTheDocument();
+  });
+
+  it("reloads after Synchronization settles while the Tags view is open", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    expect(calls("get_tags")).toBe(1);
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
+  });
+
+  it("only marks the Tags stale when Synchronization settles elsewhere and reloads once on return", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(calls("get_timeline_buckets")).toBeGreaterThan(1));
+    expect(calls("get_tags")).toBe(1);
+
+    await openTags();
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
+  });
+
+  it("remembers its own scroll position when leaving and returning", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    const main = document.querySelector("main") as HTMLElement;
+    main.scrollTop = 140;
+    await fireEvent.scroll(main);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Explore" }));
+    main.scrollTop = 0;
+    await openTags();
+
+    await waitFor(() => expect(main.scrollTop).toBe(140));
+  });
+
+  async function signOutAndBackIn() {
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+    expect(await screen.findByRole("heading", { name: "Login" })).toBeInTheDocument();
+    await fireEvent.input(screen.getByLabelText("Server URL"), { target: { value: "https://immich.example" } });
+    await fireEvent.input(screen.getByLabelText("API Key"), { target: { value: "secret-key" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Login" }));
+  }
+
+  it("clears the Tags, the expansion state and the scroll position on sign-out", async () => {
+    const get_tags = vi.fn().mockResolvedValueOnce(tags).mockImplementationOnce(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Italy" }));
+    await screen.findByRole("treeitem", { name: "Rome" });
+    const main = document.querySelector("main") as HTMLElement;
+    main.scrollTop = 140;
+    await fireEvent.scroll(main);
+
+    await signOutAndBackIn();
+    await openTags();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading tags…");
+    expect(screen.queryByRole("treeitem")).not.toBeInTheDocument();
+    expect(document.querySelector("main")!.scrollTop).toBe(0);
+  });
+
+  it("starts with the top level expanded again for the next account", async () => {
+    const get_tags = vi.fn().mockResolvedValue(tags);
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Italy" }));
+    await screen.findByRole("treeitem", { name: "Rome" });
+
+    await signOutAndBackIn();
+    await openTags();
+
+    expect(await screen.findByRole("treeitem", { name: "Italy" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("treeitem", { name: "Rome" })).not.toBeInTheDocument();
   });
 });
 

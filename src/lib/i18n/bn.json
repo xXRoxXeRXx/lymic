@@ -402,4 +402,12 @@
   ,"search_filter_location_country": "দেশ"
   ,"search_filter_location_state": "রাজ্য বা অঞ্চল"
   ,"search_filter_location_city": "শহর"
+  ,"tags_title": "ট্যাগ"
+  ,"tags_loading": "ট্যাগ লোড হচ্ছে…"
+  ,"tags_empty": "এখনও কোনো ট্যাগ নেই। Immich-এ তৈরি ট্যাগ এখানে দেখা যাবে।"
+  ,"tags_offline": "ট্যাগ অফলাইনে আছে। ক্যাশ করা ট্যাগ দেখানো হচ্ছে।"
+  ,"tags_error": "ট্যাগ লোড করা যায়নি।"
+  ,"tags_unavailable": "ট্যাগ পাওয়া যাচ্ছে না। আপনার সংযোগ ও সাইন-ইন পরীক্ষা করুন।"
+  ,"tags_permission_denied": "ট্যাগ লোড করা যায়নি। API কী-কে tag.read অনুমতি দিন।"
+  ,"tags_retry": "আবার চেষ্টা করুন"
 }
