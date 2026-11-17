@@ -432,6 +432,47 @@ describe("camera filters", () => {
   });
 });
 
+describe("Location filter", () => {
+  it("runs a Search with the chosen country and state and no text", async () => {
+    const { adapter, search } = setup();
+    search.filters.location = { country: "Italy", state: "Tuscany" };
+
+    expect(search.canSubmit).toBe(true);
+    expect(await search.submit()).toBe(true);
+
+    expect(adapter.searchAssets).toHaveBeenCalledWith({
+      text: "",
+      mode: "filename",
+      filters: { location: { country: "Italy", state: "Tuscany" } },
+    });
+  });
+
+  it("combines the Location with the text and the other filters", async () => {
+    const { adapter, search } = setup();
+    search.text = "dinner";
+    search.filters.camera = { make: "Canon" };
+    search.filters.location = { state: "Bavaria" };
+    await search.submit();
+
+    expect(vi.mocked(adapter.searchAssets).mock.calls[0][0]).toEqual({
+      text: "dinner",
+      mode: "filename",
+      filters: { camera: { make: "Canon" }, location: { state: "Bavaria" } },
+    });
+  });
+
+  it("is no filter when no part is chosen, and is reset by clear", () => {
+    const { search } = setup();
+    search.filters.location = {};
+    expect(search.canSubmit).toBe(false);
+
+    search.filters.location = { country: "Italy" };
+    search.clear();
+
+    expect(search.filters.location).toBeUndefined();
+  });
+});
+
 describe("Search Mode", () => {
   it("starts on Context and sends the chosen mode with the Search", async () => {
     const { adapter, search } = setupDefaultMode();

@@ -4,6 +4,7 @@
   import SearchFilterCamera from "./SearchFilterCamera.svelte";
   import SearchFilterDate from "./SearchFilterDate.svelte";
   import SearchFilterDisplay from "./SearchFilterDisplay.svelte";
+  import SearchFilterLocation from "./SearchFilterLocation.svelte";
   import SearchFilterMediaType from "./SearchFilterMediaType.svelte";
   import SearchFilterPerson from "./SearchFilterPerson.svelte";
   import SearchFilterRating from "./SearchFilterRating.svelte";
@@ -22,6 +23,7 @@
   <SearchFilterDate {search} />
   <SearchFilterMediaType {search} />
   <SearchFilterCamera {search} />
+  <SearchFilterLocation {search} />
   <SearchFilterRating {search} />
   <SearchFilterDisplay {search} {onOpenArchive} />
 </div>

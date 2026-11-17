@@ -396,4 +396,7 @@
   ,"search_suggestions_permission_denied": "Не удалось загрузить подсказки. Для ключа API нужно разрешение asset.read."
   ,"search_suggestions_retry": "Повторить"
   ,"search_suggestions_clear": "Очистить: {filter}"
+  ,"search_filter_location": "Местоположение"
+  ,"search_filter_location_country": "Страна"
+  ,"search_filter_location_state": "Штат или регион"
 }

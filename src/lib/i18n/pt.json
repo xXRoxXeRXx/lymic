@@ -396,4 +396,7 @@
   ,"search_suggestions_permission_denied": "Não foi possível carregar as sugestões. A chave de API precisa da permissão asset.read."
   ,"search_suggestions_retry": "Tentar novamente"
   ,"search_suggestions_clear": "Limpar {filter}"
+  ,"search_filter_location": "Localização"
+  ,"search_filter_location_country": "País"
+  ,"search_filter_location_state": "Estado ou região"
 }

@@ -396,4 +396,7 @@
   ,"search_suggestions_permission_denied": "পরামর্শ লোড করা যায়নি। API কী-এর asset.read অনুমতি প্রয়োজন।"
   ,"search_suggestions_retry": "আবার চেষ্টা করুন"
   ,"search_suggestions_clear": "{filter} মুছুন"
+  ,"search_filter_location": "অবস্থান"
+  ,"search_filter_location_country": "দেশ"
+  ,"search_filter_location_state": "রাজ্য বা অঞ্চল"
 }

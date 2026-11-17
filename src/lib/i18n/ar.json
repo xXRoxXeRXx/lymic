@@ -396,4 +396,7 @@
   ,"search_suggestions_permission_denied": "تعذّر تحميل الاقتراحات. يحتاج مفتاح API إلى إذن asset.read."
   ,"search_suggestions_retry": "إعادة المحاولة"
   ,"search_suggestions_clear": "مسح {filter}"
+  ,"search_filter_location": "الموقع"
+  ,"search_filter_location_country": "البلد"
+  ,"search_filter_location_state": "الولاية أو المنطقة"
 }

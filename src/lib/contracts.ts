@@ -233,10 +233,14 @@ export interface SearchFilters {
   unfiled?: boolean;
   rating?: SearchRating;
   camera?: SearchCamera;
+  location?: SearchLocation;
 }
 
 /** The camera Search Filter: each part is a value Immich suggested (Immich compares them exactly). */
 export interface SearchCamera { make?: string; model?: string; lensModel?: string; }
+
+/** The Location Search Filter: each part is a value Immich suggested (Immich compares them exactly). */
+export interface SearchLocation { country?: string; state?: string; }
 
 /** The Search Filters as the backend receives them: the same fields, with date bounds as ISO 8601 instants. */
 export type SearchRequestFilters = SearchFilters;
