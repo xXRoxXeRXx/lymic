@@ -5,11 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.30.0] - 2026-11-17
 
 ### Added
+- **Explore Overview, Places, and Memories**:
+  - Adds an Explore Overview showing Recognized People, Places, and Memories sections, with dedicated All Places, All Memories, Place Timeline, and Memory Timeline views.
+- **Favorites view**:
+  - Adds a dedicated Favorites view showing favorited assets in the shared timeline with live unfavoriting support.
 - **Tags view and Tag Timeline**:
-  - Adds a Tags entry after People that shows your Immich Tags as a tree following their hierarchy: siblings sorted by name, each row showing the Tag's own name and a colour dot when Immich has a colour, the top level expanded and deeper levels collapsed (your choices are kept for the session). A Tag whose parent cannot be found stays at the top level.
+  - Adds a Tags entry after Albums that shows your Immich Tags as a tree following their hierarchy: siblings sorted by name, each row showing the Tag's own name and a colour dot when Immich has a colour, the top level expanded and deeper levels collapsed (your choices are kept for the session). A Tag whose parent cannot be found stays at the top level.
   - Selecting a Tag opens its Tag Timeline in the shared timeline (masonry, Timeline Scrubber, Lightbox, Thumbnail Cache, Favorite, Download and Add to Album), titled with the Tag's full path, for example `Travel/Italy/Rome`. Lymic shows whatever Immich returns for the Tag and adds no descendant logic of its own.
   - The Lightbox shows the Tags of a photo as read-only chips in the Info panel (nothing is shown when an asset has no Tags or the server does not report them); selecting a chip opens that Tag's Tag Timeline. Back returns to the view you came from at its scroll position, and a chain of chips returns to where it started. The Tags tree keeps its own scroll position.
   - The tree reloads when you open it, when a Synchronization finishes while you are looking at it, and on return if a Synchronization finished elsewhere; an already loaded tree stays visible when Immich cannot be reached. A Tag Timeline that fails to load shows the shared load error.
@@ -25,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Includes unsupported, unauthorized, permission, unavailable, offline and empty states in all supported languages, including a Context-specific message when Immich's machine-learning service cannot be reached (Retry keeps the Search Mode).
   - Verified against a local Immich 3.4.1 server (see the application map): Context as the default Search Mode, the structured `filter`, the date, Rating, case-insensitive "contains" and visibility behaviour, `personIds` "all" (from the server code) and the Archived Assets option. Not yet verified: that the Tag filter's `tagIds` "all" means every chosen Tag on a live server (the test library had no Tags), whether a child Tag counts for its parent, the exact 3.2 cut-off (no 3.2 server was available), case and whitespace of camera and Location values against the suggestions, Rating on rated Remote Assets, Unfiled Assets on filed Remote Assets, matching of literal `%`, `_` and backslash in names, OCR matching, and whether a smart search filters before ranking (read from the server code, not observed).
 - **Archive view**:
-  - Adds an Archive entry after Favorites that shows your archived photos and videos in the shared timeline with scrubber, lightbox, thumbnail cache, favorite, download and add-to-album actions.
+  - Adds an Archive entry after Tags (and before Trash) that shows your archived photos and videos in the shared timeline with scrubber, lightbox, thumbnail cache, favorite, download and add-to-album actions.
   - Read-only: Lymic never archives or unarchives assets. Needs the `asset.read` API key permission.
   - Includes loading, empty, error and offline states in all supported languages.
 - **Trash view and Restore**:
@@ -35,6 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Browsing needs the `asset.read` API key permission; Restore needs `asset.delete`. The trashed filter, the permission and the Restore call were verified against Immich v3.4.1 only; no minimum Immich version is claimed.
   - If one selected item can no longer be restored (for example because Immich already removed it permanently), the others are restored one by one and the failed item stays selected.
   - Includes loading, empty, error, offline and Restore messages and a retention hint in all supported languages.
+
+### Changed
+- **Sidebar navigation order and grouping**:
+  - Reorders the main navigation entries into three spaced sections: library views (Photos, Explore, Map, People, Favorites, Albums, Tags, Archive, Trash), synchronization & logs, and settings & info.
+- **Search filter controls**:
+  - Replaces the stacked search filter panel with a compact filter chip row and a single open filter editor.
+- **Backend architecture and documentation**:
+  - Consolidates the Immich session layer with credential-free error redaction, unifies sync/watched-folder/removable-volume lifecycles, and verifies README API key scopes against Immich v3.4.1.
 
 ### Fixed
 - **Archived items in Photos and Favorites**:

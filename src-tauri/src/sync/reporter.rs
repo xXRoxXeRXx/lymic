@@ -163,14 +163,8 @@ impl<R: tauri::Runtime> DesktopServiceReporter<R> {
 }
 
 type KeyedNotifier<R> = Arc<
-    dyn Fn(
-            &tauri::AppHandle<R>,
-            &str,
-            &str,
-            &str,
-            &str,
-            std::collections::HashMap<String, String>,
-        ) + Send
+    dyn Fn(&tauri::AppHandle<R>, &str, &str, &str, &str, std::collections::HashMap<String, String>)
+        + Send
         + Sync,
 >;
 
@@ -596,8 +590,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn desktop_reporter_failed_after_transfers_started_finishes_stats_without_progress_clear(
-    ) {
+    async fn desktop_reporter_failed_after_transfers_started_finishes_stats_without_progress_clear()
+    {
         let app = tauri::test::mock_app();
         let audit_logger = Arc::new(AuditLogger::initialize(app.handle()).unwrap());
         app.manage(audit_logger.clone());
