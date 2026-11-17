@@ -7,12 +7,12 @@ use crate::{
     media::model::UploadUnit,
     sync::{
         lifecycle::SynchronizationLifecycle,
-        processor::{RunProcessor, SyncSummary},
+        processor::{RunProcessor, SyncRunContext, SyncSummary},
         reporter::{DesktopRunReporter, SyncRunReporter},
-        CurrentFileProgress, JobByteProgress, ProcessingContext, SyncCoordinatorInner, SyncSource,
+        CurrentFileProgress, JobByteProgress, ProcessingContext, SyncRuntime, SyncSource,
     },
 };
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::Arc;
 
 const SYNC_QUEUE_BLOCK_SIZE: i64 = 50;
 
@@ -35,10 +35,8 @@ impl<R: tauri::Runtime> QueueBlockProcessor for RunProcessor<R> {
 }
 
 pub(crate) async fn run_queue_loop<P, R>(
-    pool: &sqlx::SqlitePool,
+    runtime: &SyncRuntime,
     source: SyncSource,
-    coordinator: &Arc<SyncCoordinatorInner>,
-    running: &Arc<std::sync::atomic::AtomicBool>,
     processor: &P,
     reporter: &R,
 ) -> Result<SyncSummary, String>
@@ -46,53 +44,29 @@ where
     P: QueueBlockProcessor,
     R: SyncRunReporter,
 {
+    let pool = runtime.pool();
     let snapshot = db::get_sync_snapshot(pool)
         .await
         .map_err(|error| format!("Could not load sync queue: {error}"))?;
-    let _sync_guard = match coordinator.lock.try_lock() {
-        Ok(guard) => guard,
-        Err(_) => {
+    let _sync_guard = runtime
+        .lock_run(|| {
             if source.is_manual() {
                 reporter.queued_waiting();
             }
-            coordinator.lock.lock().await
-        }
-    };
+        })
+        .await;
     reporter.started(&snapshot);
     let mut totals = SyncSummary {
         failed: snapshot.failed.max(0) as usize,
         ..Default::default()
     };
     loop {
-        while coordinator.paused.load(Ordering::SeqCst) {
-            let notified = coordinator.resume.notified();
-            tokio::pin!(notified);
-            notified.as_mut().enable();
-            if !coordinator.paused.load(Ordering::SeqCst) {
-                break;
-            }
-            let snapshot = db::get_sync_snapshot(pool)
-                .await
-                .map_err(|error| format!("Could not load paused sync: {error}"))?;
-            if !coordinator.paused.load(Ordering::SeqCst) {
-                continue;
-            }
-            reporter.paused(&snapshot);
-            if coordinator.paused.load(Ordering::SeqCst) {
-                notified.await;
-            }
-            if !coordinator.paused.load(Ordering::SeqCst) {
-                let snapshot = db::get_sync_snapshot(pool)
-                    .await
-                    .map_err(|error| format!("Could not load resumed sync: {error}"))?;
-                reporter.resumed(&snapshot);
-            }
-        }
+        runtime.wait_while_paused_reporting(reporter).await?;
         let queued = db::next_queued_upload_units(pool, SYNC_QUEUE_BLOCK_SIZE)
             .await
             .map_err(|error| format!("Could not load sync queue: {error}"))?;
         if queued.is_empty() {
-            let lifecycle = SynchronizationLifecycle::new(pool, running, coordinator.clone());
+            let lifecycle = SynchronizationLifecycle::new(runtime);
             let Some(snapshot) = lifecycle.complete().await? else {
                 continue;
             };
@@ -114,7 +88,7 @@ where
             .into_iter()
             .map(db::QueuedUploadUnit::into_upload_unit)
             .collect::<Vec<_>>();
-        let lease = coordinator.active_work.acquire(&block);
+        let lease = runtime.acquire_active_work(&block);
         let result = processor.process_block(block, lease.context()).await;
         drop(lease);
         let result = result?;
@@ -153,11 +127,9 @@ fn excluded_paths_at_queue_boundary(
 
 pub(crate) async fn run_sync_pipeline(
     app: tauri::AppHandle,
-    pool: sqlx::SqlitePool,
+    runtime: SyncRuntime,
     client: Arc<ImmichClient>,
     source: SyncSource,
-    coordinator: Arc<SyncCoordinatorInner>,
-    running: Arc<std::sync::atomic::AtomicBool>,
     audit_context: SyncAuditContext,
 ) -> Result<SyncSummary, String> {
     // Admission persists producer work before this runner starts. The durable
@@ -171,18 +143,17 @@ pub(crate) async fn run_sync_pipeline(
         progress.clone(),
         current_file_progress.clone(),
     );
-    let processor = RunProcessor::new(
+    let processor = RunProcessor::new(SyncRunContext {
         app,
-        pool.clone(),
+        runtime: runtime.clone(),
         client,
         audit_context,
         progress,
         current_file_progress,
-        coordinator.clone(),
-        SidecarDirectoryCache::new(),
-    )
+        sidecar_cache: SidecarDirectoryCache::new(),
+    })
     .await?;
-    run_queue_loop(&pool, source, &coordinator, &running, &processor, &reporter).await
+    run_queue_loop(&runtime, source, &processor, &reporter).await
 }
 
 fn terminal_queue_results(summary: &SyncSummary) -> Option<&[(String, String)]> {
@@ -342,17 +313,17 @@ mod tests {
 
     #[tokio::test]
     async fn enabled_resume_waiter_observes_a_concurrent_resume() {
-        let coordinator = SyncCoordinatorInner::new(true);
-        let notified = coordinator.resume.notified();
-        tokio::pin!(notified);
-        notified.as_mut().enable();
+        let runtime = SyncRuntime::new(test_pool().await, true);
+        let waiter_runtime = runtime.clone();
+        let waiting = tokio::spawn(async move { waiter_runtime.wait_while_paused().await });
+        tokio::task::yield_now().await;
 
-        coordinator.paused.store(false, Ordering::SeqCst);
-        coordinator.resume.notify_waiters();
+        runtime.resume_work();
 
-        tokio::time::timeout(std::time::Duration::from_millis(50), notified)
+        tokio::time::timeout(std::time::Duration::from_millis(50), waiting)
             .await
-            .expect("an enabled waiter retains a concurrent resume notification");
+            .expect("an enabled waiter retains a concurrent resume notification")
+            .unwrap();
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
@@ -486,9 +457,8 @@ mod tests {
         )
         .await
         .unwrap();
-        let running = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let coordinator = Arc::new(SyncCoordinatorInner::new(false));
-        SynchronizationLifecycle::new(&pool, &running, coordinator.clone())
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        SynchronizationLifecycle::new(&runtime)
             .start_or_join()
             .await
             .unwrap();
@@ -510,22 +480,15 @@ mod tests {
         );
         let reporter = RecordingReporter::default();
 
-        let summary = run_queue_loop(
-            &pool,
-            SyncSource::Manual,
-            &coordinator,
-            &running,
-            &processor,
-            &reporter,
-        )
-        .await
-        .unwrap();
+        let summary = run_queue_loop(&runtime, SyncSource::Manual, &processor, &reporter)
+            .await
+            .unwrap();
 
         assert_eq!(
             (summary.processed, summary.uploaded, summary.failed),
             (2, 2, 0)
         );
-        assert!(!running.load(Ordering::SeqCst));
+        assert!(!runtime.is_running());
         assert_eq!(
             reporter.events(),
             vec![
@@ -563,9 +526,8 @@ mod tests {
         )
         .await
         .unwrap();
-        let running = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let coordinator = Arc::new(SyncCoordinatorInner::new(false));
-        SynchronizationLifecycle::new(&pool, &running, coordinator.clone())
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        SynchronizationLifecycle::new(&runtime)
             .start_or_join()
             .await
             .unwrap();
@@ -577,9 +539,7 @@ mod tests {
         });
 
         struct PauseOnFirstBlockProcessor {
-            pool: sqlx::SqlitePool,
-            running: Arc<std::sync::atomic::AtomicBool>,
-            coordinator: Arc<SyncCoordinatorInner>,
+            runtime: SyncRuntime,
             calls: std::sync::atomic::AtomicUsize,
         }
 
@@ -589,18 +549,14 @@ mod tests {
                 units: Vec<UploadUnit>,
                 _active_work: ProcessingContext,
             ) -> Result<SyncSummary, String> {
-                let call = self.calls.fetch_add(1, Ordering::SeqCst);
+                let call = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 if call == 0 {
                     // Simulate pause requested mid-block: complete only the first item,
                     // leaving the rest pending in the durable queue.
-                    SynchronizationLifecycle::new(
-                        &self.pool,
-                        &self.running,
-                        self.coordinator.clone(),
-                    )
-                    .pause()
-                    .await
-                    .unwrap();
+                    SynchronizationLifecycle::new(&self.runtime)
+                        .pause()
+                        .await
+                        .unwrap();
                     return Ok(SyncSummary {
                         processed: 1,
                         uploaded: 1,
@@ -623,22 +579,16 @@ mod tests {
         }
 
         let processor = PauseOnFirstBlockProcessor {
-            pool: pool.clone(),
-            running: running.clone(),
-            coordinator: coordinator.clone(),
+            runtime: runtime.clone(),
             calls: std::sync::atomic::AtomicUsize::new(0),
         };
 
-        let loop_pool = pool.clone();
-        let loop_coordinator = coordinator.clone();
-        let loop_running = running.clone();
+        let loop_runtime = runtime.clone();
         let loop_reporter = reporter.clone();
         let handle = tokio::spawn(async move {
             run_queue_loop(
-                &loop_pool,
+                &loop_runtime,
                 SyncSource::Manual,
-                &loop_coordinator,
-                &loop_running,
                 &processor,
                 loop_reporter.as_ref(),
             )
@@ -661,7 +611,7 @@ mod tests {
             vec!["C:/photos/second.jpg", "C:/photos/third.jpg"]
         );
 
-        SynchronizationLifecycle::new(&pool, &running, coordinator.clone())
+        SynchronizationLifecycle::new(&runtime)
             .resume()
             .await
             .unwrap();
@@ -680,7 +630,7 @@ mod tests {
             .await
             .unwrap()
             .is_empty());
-        assert!(!running.load(Ordering::SeqCst));
+        assert!(!runtime.is_running());
         assert_eq!(
             reporter.events(),
             vec![
@@ -742,9 +692,8 @@ mod tests {
         .await
         .unwrap();
 
-        let running = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let coordinator = Arc::new(SyncCoordinatorInner::new(false));
-        SynchronizationLifecycle::new(&pool, &running, coordinator.clone())
+        let runtime = SyncRuntime::new(pool, false);
+        SynchronizationLifecycle::new(&runtime)
             .start_or_join()
             .await
             .unwrap();
@@ -766,16 +715,9 @@ mod tests {
         );
         let reporter = RecordingReporter::default();
 
-        let summary = run_queue_loop(
-            &pool,
-            SyncSource::Manual,
-            &coordinator,
-            &running,
-            &processor,
-            &reporter,
-        )
-        .await
-        .unwrap();
+        let summary = run_queue_loop(&runtime, SyncSource::Manual, &processor, &reporter)
+            .await
+            .unwrap();
 
         assert_eq!(
             (summary.processed, summary.uploaded, summary.failed),

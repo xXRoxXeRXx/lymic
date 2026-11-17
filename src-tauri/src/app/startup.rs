@@ -73,18 +73,19 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
         audit::Outcome::Started,
         None,
     );
-    let recovered_sync =
-        tauri::async_runtime::block_on(sync::lifecycle::SynchronizationLifecycle::recover(&pool))
-            .map_err(|error| {
-            let message = format!("Failed to recover sync queue: {error}");
-            record_startup_phase(
-                &handle,
-                "sync_recovery_failed",
-                audit::Outcome::Failure,
-                Some(message.clone()),
-            );
-            message
-        })?;
+    let (sync_runtime, recovered_sync) = tauri::async_runtime::block_on(
+        sync::SyncRuntime::recover(pool.clone()),
+    )
+    .map_err(|error| {
+        let message = format!("Failed to recover sync queue: {error}");
+        record_startup_phase(
+            &handle,
+            "sync_recovery_failed",
+            audit::Outcome::Failure,
+            Some(message.clone()),
+        );
+        message
+    })?;
     record_startup_phase(
         &handle,
         "sync_recovery_complete",
@@ -229,10 +230,7 @@ pub(crate) fn initialize(app: &tauri::App) -> Result<StartupContext, Box<dyn std
 
     handle.manage(pool);
     handle.manage(tokio::sync::Mutex::new(watcher));
-    handle.manage(sync::SyncState(std::sync::Arc::new(AtomicBool::new(false))));
-    handle.manage(sync::SyncCoordinator(std::sync::Arc::new(
-        sync::SyncCoordinatorInner::new(recovered_sync.status == db::SyncJobStatus::Paused),
-    )));
+    handle.manage(sync_runtime);
     handle.manage(crate::app::locale::LocaleState(std::sync::Mutex::new(
         "en".to_string(),
     )));

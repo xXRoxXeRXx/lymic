@@ -12,7 +12,7 @@ use crate::{
         lifecycle::{LifecycleClaim, SynchronizationLifecycle},
         queue_runner::run_sync_pipeline,
         reporter::{DesktopRunReporter, SyncRunReporter},
-        SyncCoordinator,
+        SyncRuntime,
     },
 };
 use std::sync::Arc;
@@ -61,34 +61,24 @@ impl SyncSource {
 /// desktop effects around the durable lifecycle transitions.
 pub(crate) struct Synchronization<'a> {
     app: &'a tauri::AppHandle,
-    pool: &'a sqlx::SqlitePool,
-    running: &'a std::sync::atomic::AtomicBool,
-    coordinator: &'a Arc<crate::sync::SyncCoordinatorInner>,
+    runtime: &'a SyncRuntime,
 }
 
 impl<'a> Synchronization<'a> {
-    pub(crate) fn new(
-        app: &'a tauri::AppHandle,
-        pool: &'a sqlx::SqlitePool,
-        running: &'a std::sync::atomic::AtomicBool,
-        coordinator: &'a Arc<crate::sync::SyncCoordinatorInner>,
-    ) -> Self {
-        Self {
-            app,
-            pool,
-            running,
-            coordinator,
-        }
+    pub(crate) fn new(app: &'a tauri::AppHandle, runtime: &'a SyncRuntime) -> Self {
+        Self { app, runtime }
     }
 
-    pub(crate) fn for_tauri(app: &'a tauri::AppHandle, pool: &'a sqlx::SqlitePool) -> Self {
-        let coordinator = app.state::<SyncCoordinator>().inner();
-        let running = app.state::<crate::sync::SyncState>().inner();
-        Self::new(app, pool, &running.0, &coordinator.0)
+    pub(crate) fn for_tauri(app: &'a tauri::AppHandle) -> Self {
+        Self::new(app, app.state::<SyncRuntime>().inner())
+    }
+
+    fn pool(&self) -> &sqlx::SqlitePool {
+        self.runtime.pool()
     }
 
     fn lifecycle(&self) -> SynchronizationLifecycle<'_> {
-        SynchronizationLifecycle::new(self.pool, self.running, self.coordinator.clone())
+        SynchronizationLifecycle::new(self.runtime)
     }
 
     fn reporter(&self) -> DesktopRunReporter {
@@ -96,7 +86,7 @@ impl<'a> Synchronization<'a> {
     }
 
     pub(crate) async fn start(&self) -> Result<crate::sync::SyncSummary, String> {
-        let folders = db::get_folders(self.pool)
+        let folders = db::get_folders(self.pool())
             .await
             .map_err(|error| error.to_string())?;
         prepare_manual_sync(self.app, &folders)?;
@@ -119,13 +109,13 @@ impl<'a> Synchronization<'a> {
     }
 
     pub(crate) async fn retry(&self) -> Result<crate::sync::SyncSummary, String> {
-        let failed_paths = db::get_failed_syncs(self.pool)
+        let failed_paths = db::get_failed_syncs(self.pool())
             .await
             .map_err(|error| error.to_string())?
             .into_iter()
             .map(|entry| entry.local_path)
             .collect();
-        let folders = db::get_folders(self.pool)
+        let folders = db::get_folders(self.pool())
             .await
             .map_err(|error| error.to_string())?;
         let scan_result = crate::sync::prepare_failed_sync_retry(failed_paths, folders).await?;
@@ -167,11 +157,9 @@ impl<'a> Synchronization<'a> {
         if source.is_manual() {
             let result = run_sync_pipeline(
                 self.app.clone(),
-                self.pool.clone(),
+                self.runtime.clone(),
                 client,
                 source,
-                self.coordinator.clone(),
-                self.app.state::<crate::sync::SyncState>().0.clone(),
                 audit_context,
             )
             .await;
@@ -182,11 +170,9 @@ impl<'a> Synchronization<'a> {
         } else {
             spawn_sync_runner(
                 self.app.clone(),
-                self.pool.clone(),
+                self.runtime.clone(),
                 client,
                 source,
-                self.coordinator.clone(),
-                self.app.state::<crate::sync::SyncState>().0.clone(),
                 audit_context,
             );
             Ok(None)
@@ -217,15 +203,7 @@ impl<'a> Synchronization<'a> {
     }
 
     async fn fail_run<T>(&self, source: SyncSource, error: &str) -> Result<T, String> {
-        fail_sync_run(
-            self.app,
-            self.pool,
-            self.running,
-            self.coordinator.clone(),
-            source,
-            error,
-        )
-        .await;
+        fail_sync_run(self.app, self.runtime, source, error).await;
         Err(error.to_string())
     }
 
@@ -277,11 +255,9 @@ impl<'a> Synchronization<'a> {
         self.reporter().resumed_audit(&audit_context);
         spawn_sync_runner(
             self.app.clone(),
-            self.pool.clone(),
+            self.runtime.clone(),
             client,
             SyncSource::Recovery,
-            self.coordinator.clone(),
-            self.app.state::<crate::sync::SyncState>().0.clone(),
             audit_context,
         );
         Ok(snapshot.clone())
@@ -294,26 +270,16 @@ impl<'a> Synchronization<'a> {
 
 fn spawn_sync_runner(
     app: tauri::AppHandle,
-    pool: sqlx::SqlitePool,
+    runtime: SyncRuntime,
     client: Arc<ImmichClient>,
     source: SyncSource,
-    coordinator: Arc<crate::sync::SyncCoordinatorInner>,
-    running: Arc<std::sync::atomic::AtomicBool>,
     audit_context: SyncAuditContext,
 ) {
     tauri::async_runtime::spawn(async move {
-        let result = run_sync_pipeline(
-            app.clone(),
-            pool.clone(),
-            client,
-            source,
-            coordinator.clone(),
-            running.clone(),
-            audit_context,
-        )
-        .await;
+        let result =
+            run_sync_pipeline(app.clone(), runtime.clone(), client, source, audit_context).await;
         if let Err(error) = result {
-            fail_sync_run(&app, &pool, &running, coordinator, source, &error).await;
+            fail_sync_run(&app, &runtime, source, &error).await;
             DesktopRunReporter::for_service(app).error(&error);
         }
     });
@@ -321,16 +287,11 @@ fn spawn_sync_runner(
 
 async fn fail_sync_run<R: Runtime>(
     app: &tauri::AppHandle<R>,
-    pool: &sqlx::SqlitePool,
-    running: &std::sync::atomic::AtomicBool,
-    coordinator: Arc<crate::sync::SyncCoordinatorInner>,
+    runtime: &SyncRuntime,
     source: SyncSource,
     error: &str,
 ) {
-    let snapshot = SynchronizationLifecycle::new(pool, running, coordinator)
-        .fail()
-        .await
-        .ok();
+    let snapshot = SynchronizationLifecycle::new(runtime).fail().await.ok();
     DesktopRunReporter::for_service(app.clone()).failed(source, snapshot.as_ref(), error);
 }
 
@@ -473,11 +434,10 @@ fn queue_upload_asset(asset: crate::media::model::Asset) -> db::QueueUploadAsset
 /// Producer-facing Synchronization admission-and-run seam.
 pub(crate) async fn admit_and_run(
     app: tauri::AppHandle,
-    pool: sqlx::SqlitePool,
     scan_result: ScanResult,
     source: SyncSource,
 ) {
-    let synchronization = Synchronization::for_tauri(&app, &pool);
+    let synchronization = Synchronization::for_tauri(&app);
     match synchronization.admit_and_run(scan_result, source).await {
         Ok(_) => {}
         Err(error) => {
@@ -493,7 +453,6 @@ pub(crate) async fn admit_and_run(
 mod tests {
     use super::*;
     use crate::media::model::Asset;
-    use std::sync::atomic::Ordering;
     use tauri::Listener;
 
     async fn test_pool() -> sqlx::SqlitePool {
@@ -512,9 +471,8 @@ mod tests {
     #[tokio::test]
     async fn lifecycle_persists_pause_and_resume_without_a_desktop_runtime() {
         let pool = test_pool().await;
-        let running = std::sync::atomic::AtomicBool::new(false);
-        let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator.clone());
+        let runtime = SyncRuntime::new(pool, false);
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
 
         assert!(matches!(
             lifecycle.start_or_join().await.unwrap(),
@@ -524,12 +482,12 @@ mod tests {
             lifecycle.pause().await.unwrap().status,
             db::SyncJobStatus::Paused
         );
-        assert!(coordinator.paused.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(!runtime.can_start_work());
         assert_eq!(
             lifecycle.resume().await.unwrap().status,
             db::SyncJobStatus::Running
         );
-        assert!(!coordinator.paused.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(runtime.can_start_work());
         assert_eq!(
             lifecycle.status().await.unwrap().status,
             db::SyncJobStatus::Running
@@ -540,9 +498,8 @@ mod tests {
     async fn concurrent_manual_admissions_join_one_lifecycle_without_losing_either_result() {
         let pool = test_pool().await;
         db::add_folder(&pool, "C:/photos", None).await.unwrap();
-        let running = std::sync::atomic::AtomicBool::new(false);
-        let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
 
         let result_for = |path: &str| ScanResult {
             files: vec![Asset {
@@ -588,9 +545,9 @@ mod tests {
         )
         .await
         .unwrap();
-        let running = std::sync::atomic::AtomicBool::new(true);
-        let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        runtime.try_claim_run();
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
 
         assert_eq!(
             lifecycle.fail().await.unwrap().status,
@@ -602,9 +559,8 @@ mod tests {
     #[tokio::test]
     async fn lifecycle_keeps_ownership_when_work_arrives_before_completion() {
         let pool = test_pool().await;
-        let running = std::sync::atomic::AtomicBool::new(false);
-        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
         assert!(matches!(
             lifecycle.start_or_join().await.unwrap(),
             LifecycleClaim::Started(_)
@@ -622,7 +578,7 @@ mod tests {
         .await
         .unwrap();
         assert!(lifecycle.complete().await.unwrap().is_none());
-        assert!(running.load(Ordering::SeqCst));
+        assert!(runtime.is_running());
         assert!(matches!(
             lifecycle.start_or_join().await.unwrap(),
             LifecycleClaim::Joined
@@ -632,9 +588,8 @@ mod tests {
     #[tokio::test]
     async fn failed_run_keeps_pending_work_when_new_work_is_admitted() {
         let pool = test_pool().await;
-        let running = std::sync::atomic::AtomicBool::new(false);
-        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
         let first = db::QueueAsset {
             path: "first.jpg",
             size: 1,
@@ -689,16 +644,9 @@ mod tests {
             .connect_with(options)
             .await
             .unwrap();
-        assert_eq!(
-            SynchronizationLifecycle::recover(&pool)
-                .await
-                .unwrap()
-                .status,
-            db::SyncJobStatus::Paused
-        );
-        let running = std::sync::atomic::AtomicBool::new(false);
-        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(true));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let (runtime, recovered) = SyncRuntime::recover(pool.clone()).await.unwrap();
+        assert_eq!(recovered.status, db::SyncJobStatus::Paused);
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
         assert!(matches!(
             lifecycle.start_or_join().await.unwrap(),
             LifecycleClaim::Paused
@@ -727,9 +675,8 @@ mod tests {
             .await
             .unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        let running = std::sync::atomic::AtomicBool::new(false);
-        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
         lifecycle.start_or_join().await.unwrap();
         let (completion, claim) = tokio::join!(lifecycle.complete(), async {
             db::enqueue_sync_assets(
@@ -750,7 +697,7 @@ mod tests {
             Some(_) => assert!(matches!(claim, LifecycleClaim::Started(_))),
             None => assert!(matches!(claim, LifecycleClaim::Joined)),
         }
-        assert!(running.load(Ordering::SeqCst));
+        assert!(runtime.is_running());
         assert_eq!(
             db::next_queued_upload_units(&pool, 10).await.unwrap().len(),
             1
@@ -780,9 +727,9 @@ mod tests {
         db::finalize_queued_block(&pool, &[("photo.jpg".into(), "FAILED".into())])
             .await
             .unwrap();
-        let running = std::sync::atomic::AtomicBool::new(true);
-        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        runtime.try_claim_run();
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
         assert!(lifecycle.complete().await.unwrap().is_some());
         db::enqueue_sync_assets(
             &pool,
@@ -878,9 +825,8 @@ mod tests {
         )
         .await
         .unwrap();
-        let running = std::sync::atomic::AtomicBool::new(false);
-        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
         lifecycle.start_or_join().await.unwrap();
         db::discard_sync_data_in_folder(&pool, "C:/photos")
             .await
@@ -894,7 +840,7 @@ mod tests {
                 .status,
             db::SyncJobStatus::Idle
         );
-        assert!(!running.load(Ordering::SeqCst));
+        assert!(!runtime.is_running());
     }
 
     #[tokio::test]
@@ -912,9 +858,8 @@ mod tests {
         )
         .await
         .unwrap();
-        let running = std::sync::atomic::AtomicBool::new(false);
-        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
         lifecycle.start_or_join().await.unwrap();
         db::finalize_queued_block(&pool, &[("first.jpg".into(), "SYNCED".into())])
             .await
@@ -982,23 +927,22 @@ mod tests {
         db::reset_failed_queue_items_for_folder(&pool, "C:/photos")
             .await
             .unwrap();
-        let running = std::sync::atomic::AtomicBool::new(false);
-        let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(false));
-        let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        let lifecycle = SynchronizationLifecycle::new(&runtime);
         lifecycle.pause().await.unwrap();
         let (_, claim) = lifecycle
             .admit_and_claim(&ScanResult::default())
             .await
             .unwrap();
         assert!(matches!(claim, LifecycleClaim::Paused));
-        assert!(!running.load(Ordering::SeqCst));
+        assert!(!runtime.is_running());
         lifecycle.resume().await.unwrap();
         let (_, claim) = lifecycle
             .admit_and_claim(&ScanResult::default())
             .await
             .unwrap();
         assert!(matches!(claim, LifecycleClaim::Started(_)));
-        assert!(running.load(Ordering::SeqCst));
+        assert!(runtime.is_running());
         assert_eq!(
             db::next_queued_upload_units(&pool, 10).await.unwrap().len(),
             1
@@ -1060,26 +1004,17 @@ mod tests {
                 .unwrap()
                 .push(serde_json::from_str::<serde_json::Value>(event.payload()).unwrap());
         });
-        let running = std::sync::atomic::AtomicBool::new(true);
-        let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
+        let runtime = SyncRuntime::new(pool.clone(), false);
 
         for source in [SyncSource::Manual, SyncSource::Watcher] {
-            running.store(true, Ordering::SeqCst);
-            fail_sync_run(
-                app.handle(),
-                &pool,
-                &running,
-                coordinator.clone(),
-                source,
-                "connection lost",
-            )
-            .await;
+            runtime.try_claim_run();
+            fail_sync_run(app.handle(), &runtime, source, "connection lost").await;
 
             assert_eq!(
                 db::get_sync_snapshot(&pool).await.unwrap().status,
                 db::SyncJobStatus::Failed
             );
-            assert!(!running.load(Ordering::SeqCst));
+            assert!(!runtime.is_running());
         }
 
         let snapshots = snapshots.lock().unwrap();

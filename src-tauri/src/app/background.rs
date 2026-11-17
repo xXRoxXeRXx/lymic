@@ -169,7 +169,7 @@ fn spawn_deferred_watches(handle: tauri::AppHandle) {
                     continue;
                 }
             };
-            let _ = Synchronization::for_tauri(&handle, &pool)
+            let _ = Synchronization::for_tauri(&handle)
                 .scan_and_admit(scan_folders, SyncSource::DeferredFolder)
                 .await;
         }
@@ -203,7 +203,7 @@ fn spawn_startup_sync(handle: tauri::AppHandle) {
                 return;
             }
         };
-        let _ = Synchronization::for_tauri(&handle, &pool)
+        let _ = Synchronization::for_tauri(&handle)
             .scan_and_admit(folders, SyncSource::Startup)
             .await;
     });
@@ -233,13 +233,7 @@ fn spawn_watcher_consumer(
                     move |scan_result| async move {
                         handoff_watcher_scan(scan_result, move |scan_result, source| async move {
                             log_overlapping_folders(&handoff_handle, &scan_result);
-                            admit_and_run(
-                                handoff_handle.clone(),
-                                handoff_handle.state::<sqlx::SqlitePool>().inner().clone(),
-                                scan_result,
-                                source,
-                            )
-                            .await;
+                            admit_and_run(handoff_handle.clone(), scan_result, source).await;
                         })
                         .await;
                         Ok(())
