@@ -46,7 +46,7 @@ describe("Target Album catalogue", () => {
     expect(catalogue.nameFor("pending")).toBeUndefined();
   });
 
-  it("keeps the newest refresh when an older response arrives later", async () => {
+  it("keeps the newest refresh when a response from before a clear arrives later", async () => {
     let resolveFirst: (albums: ReturnType<typeof album>[]) => void;
     const first = new Promise<ReturnType<typeof album>[]>((resolve) => { resolveFirst = resolve; });
     const loadAlbums = vi.fn()
@@ -55,6 +55,7 @@ describe("Target Album catalogue", () => {
     const catalogue = createTargetAlbumCatalogue(createDesktopAdapter({ getAlbums: loadAlbums }));
 
     const olderRefresh = catalogue.refresh();
+    catalogue.clear();
     await catalogue.refresh();
     resolveFirst!([album("old", "Stale catalogue")]);
     await olderRefresh;
@@ -91,7 +92,30 @@ describe("Target Album catalogue", () => {
 
     expect(catalogue.nameFor("known")).toBe("Known album");
     expect(catalogue.nameFor("unavailable")).toBeUndefined();
+    expect(catalogue.error).toBeNull();
+  });
+
+  it("reports the failure when the first load fails with nothing cached", async () => {
+    const catalogue = createTargetAlbumCatalogue(createDesktopAdapter({
+      getAlbums: vi.fn().mockRejectedValue(new Error("Network offline")),
+    }));
+
+    await catalogue.refresh();
+
     expect(catalogue.error).toBe("Network offline");
+    expect(catalogue.isLoading).toBe(false);
+  });
+
+  it("adds a created Target Album in sorted order before the refresh returns it", async () => {
+    const catalogue = createTargetAlbumCatalogue(createDesktopAdapter({
+      getAlbums: vi.fn().mockResolvedValue([album("a", "Alpha"), album("z", "zulu")]),
+      createAlbum: vi.fn().mockResolvedValue(album("m", "Mike")),
+    }));
+
+    await catalogue.refresh();
+    await catalogue.create("Mike");
+
+    expect(catalogue.albums.map((entry) => entry.albumName)).toEqual(["Alpha", "Mike", "zulu"]);
   });
 
   it("selects enriched album-list responses while the read-only catalogue remains a separate adapter method", async () => {

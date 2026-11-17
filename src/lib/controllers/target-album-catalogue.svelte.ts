@@ -1,6 +1,7 @@
 import type { Album } from "../contracts";
 import { formatError } from "./feedback-controller.svelte";
 import type { AlbumsDesktopAdapter } from "../tauri/desktop-adapter";
+import { createRemoteCollection } from "./remote-collection.svelte";
 
 export interface TargetAlbumCatalogue {
   readonly albums: Album[];
@@ -18,55 +19,46 @@ function sorted(albums: Album[]) {
 }
 
 export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): TargetAlbumCatalogue {
-  let albums = $state<Album[]>([]);
-  let isLoading = $state(false);
-  let error = $state<string | null>(null);
   let hasRequested = $state(false);
-  let generation = 0;
-  let pendingCreated = new Map<string, Album>();
+  // Created Target Albums stay listed until a load from Immich contains them.
+  let created = $state<Album[]>([]);
+  let epoch = 0;
 
-  async function refresh() {
-    const request = ++generation;
+  const collection = createRemoteCollection({
+    async load() {
+      const loaded = await adapter.getAlbums();
+      created = created.filter((album) => !loaded.some((known) => known.id === album.id));
+      return loaded;
+    },
+  });
+
+  const albums = $derived(sorted([...collection.items, ...created.filter((album) => !collection.items.some((known) => known.id === album.id))]));
+
+  function refresh() {
     hasRequested = true;
-    isLoading = true;
-    error = null;
-
-    try {
-      const loadedAlbums = await adapter.getAlbums();
-      if (request === generation) {
-        for (const album of loadedAlbums) pendingCreated.delete(album.id);
-        albums = sorted([...loadedAlbums, ...[...pendingCreated.values()].filter((album) => !loadedAlbums.some((loaded) => loaded.id === album.id))]);
-      }
-    } catch (caught) {
-      if (request === generation) error = formatError(caught, "Failed to load albums");
-    } finally {
-      if (request === generation) isLoading = false;
-    }
+    return collection.refresh();
   }
 
   async function create(name: string) {
-    const request = generation;
-    const created = await adapter.createAlbum(name);
-    if (request !== generation) return created;
-    pendingCreated.set(created.id, created);
-    albums = sorted([...albums.filter((album) => album.id !== created.id), created]);
+    const request = epoch;
+    const album = await adapter.createAlbum(name);
+    if (request !== epoch) return album;
+    created = [...created.filter((known) => known.id !== album.id), album];
     await refresh();
-    return created;
+    return album;
   }
 
   function clear() {
-    generation += 1;
-    albums = [];
-    pendingCreated.clear();
-    error = null;
+    epoch += 1;
+    created = [];
     hasRequested = false;
-    isLoading = false;
+    collection.clear();
   }
 
   return {
     get albums() { return albums; },
-    get isLoading() { return isLoading; },
-    get error() { return error; },
+    get isLoading() { return collection.isRefreshing; },
+    get error() { return collection.error ? formatError(collection.error.reason, "Failed to load albums") : null; },
     get hasRequested() { return hasRequested; },
     refresh,
     clear,
