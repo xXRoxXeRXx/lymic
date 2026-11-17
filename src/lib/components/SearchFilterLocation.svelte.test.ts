@@ -2,12 +2,13 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
-import type { SearchSuggestionsRequest } from "../contracts";
+import type { Place, SearchSuggestionsRequest } from "../contracts";
 import { createSearchController } from "../controllers/search-controller.svelte";
 import SearchPanel from "./SearchPanel.svelte";
 
 afterEach(cleanup);
 
+const CITIES = ["Rome", "Florence", "Munich"];
 const STATES: Record<string, string[]> = { Italy: ["Tuscany", "Lazio"], Germany: ["Bavaria", "Hesse"] };
 
 /** The Search panel over a real Search controller whose adapter answers suggestions like Immich. */
@@ -15,13 +16,14 @@ function setup(getSearchSuggestions = vi.fn(async (request: SearchSuggestionsReq
   if (request.type === "country") return Object.keys(STATES);
   if (request.type === "state") return request.country ? STATES[request.country] ?? [] : Object.values(STATES).flat();
   return [];
-})) {
+}), getPlaces = vi.fn(async (): Promise<Place[]> => CITIES.map((city) => ({ city, thumbnailAssetId: `asset-${city}` })))) {
   const adapter = {
     getSearchSupport: vi.fn().mockResolvedValue({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
     getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: true }),
     searchAssets: vi.fn().mockResolvedValue({ buckets: [], assetsByBucket: {}, truncated: false }),
     searchContextPage: vi.fn().mockResolvedValue({ assets: [], nextPage: null }),
     getSearchSuggestions,
+    getPlaces,
   };
   const search = createSearchController(adapter);
   const people = { people: [], isLoading: false, isRefreshing: false, isOffline: false, hasNextPage: false, error: null, refresh: vi.fn(), loadMore: vi.fn(), clear: vi.fn() };
@@ -30,6 +32,7 @@ function setup(getSearchSuggestions = vi.fn(async (request: SearchSuggestionsReq
 }
 
 const country = () => screen.getByRole("combobox", { name: "Country" });
+const city = () => screen.getByRole("combobox", { name: "City" });
 const state = () => screen.getByRole("combobox", { name: "State or region" });
 
 async function choose(box: HTMLElement, option: string) {
@@ -42,7 +45,7 @@ describe("Location Search Filter", () => {
     setup();
 
     const group = screen.getByRole("group", { name: "Location" });
-    expect(within(group).getAllByRole("combobox").map((box) => box.getAttribute("aria-label"))).toEqual(["Country", "State or region"]);
+    expect(within(group).getAllByRole("combobox").map((box) => box.getAttribute("aria-label"))).toEqual(["Country", "State or region", "City"]);
   });
 
   it("offers Immich's country suggestions and applies the one that is clicked", async () => {
@@ -138,5 +141,88 @@ describe("Location Search Filter", () => {
     await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
 
     expect(await screen.findByRole("option", { name: "Italy" })).toBeInTheDocument();
+  });
+
+  describe("city", () => {
+    const options = () => screen.getAllByRole("option").map((option) => option.textContent?.trim());
+
+    it("reads the city listing of the Explore Places only when the city field is first used", async () => {
+      const { adapter } = setup();
+
+      await fireEvent.focus(country());
+      await screen.findAllByRole("option");
+      expect(adapter.getPlaces).not.toHaveBeenCalled();
+      await fireEvent.blur(country());
+      await fireEvent.focus(city());
+
+      expect(await screen.findByRole("option", { name: "Florence" })).toBeInTheDocument();
+      expect(adapter.getPlaces).toHaveBeenCalledTimes(1);
+      expect(options()).toEqual(["Florence", "Munich", "Rome"]);
+      expect(adapter.getSearchSuggestions).not.toHaveBeenCalledWith(expect.objectContaining({ type: "city" }));
+    });
+
+    it("applies the chosen city exactly as Immich returned it and may combine it with country and state", async () => {
+      const { search } = setup(undefined, vi.fn(async () => [{ city: " Saint-Étienne ", thumbnailAssetId: "a" }]));
+      await choose(country(), "Italy");
+      await choose(state(), "Tuscany");
+
+      await choose(city(), "Saint-Étienne");
+
+      expect(search.filters.location).toEqual({ country: "Italy", state: "Tuscany", city: " Saint-Étienne " });
+      expect(search.canSubmit).toBe(true);
+    });
+
+    it("applies a city alone, filters the list as the user types and never applies free text", async () => {
+      const { search } = setup();
+      await fireEvent.focus(city());
+      await screen.findAllByRole("option");
+
+      await fireEvent.input(city(), { target: { value: "flo" } });
+      expect(options()).toEqual(["Florence"]);
+      await fireEvent.input(city(), { target: { value: "Atlantis" } });
+      await fireEvent.keyDown(city(), { key: "Enter" });
+      await fireEvent.blur(city());
+      expect(search.filters.location).toBeUndefined();
+
+      await choose(city(), "Rome");
+      expect(search.filters.location).toEqual({ city: "Rome" });
+    });
+
+    it("keeps the city when the country changes and clears it on its own", async () => {
+      const { search } = setup();
+      await choose(country(), "Italy");
+      await choose(city(), "Rome");
+
+      await fireEvent.click(screen.getByRole("button", { name: "Clear Country" }));
+      expect(search.filters.location).toEqual({ city: "Rome" });
+      await fireEvent.click(screen.getByRole("button", { name: "Clear City" }));
+
+      expect(search.filters.location).toBeUndefined();
+    });
+
+    it("shows a failure to read the city listing inside the Location filter only, with Retry", async () => {
+      const getPlaces = vi.fn().mockRejectedValueOnce("places_unavailable").mockResolvedValue([{ city: "Rome", thumbnailAssetId: "a" }]);
+      const { search } = setup(undefined, getPlaces);
+
+      await fireEvent.focus(city());
+
+      const alert = await screen.findByRole("alert");
+      expect(alert.closest("[role=group]")).toBe(screen.getByRole("group", { name: "Location" }));
+      // Country and state suggestions and the rest of the panel are unaffected.
+      await choose(country(), "Italy");
+      expect(search.filters.location).toEqual({ country: "Italy" });
+      await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+
+      expect(await screen.findByRole("option", { name: "Rome" })).toBeInTheDocument();
+      expect(getPlaces).toHaveBeenCalledTimes(2);
+    });
+
+    it("names the missing API key permission when the city listing is not permitted", async () => {
+      setup(undefined, vi.fn().mockRejectedValue("places_permission_denied:asset.read"));
+
+      await fireEvent.focus(city());
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("asset.read");
+    });
   });
 });

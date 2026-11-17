@@ -399,4 +399,5 @@
   ,"search_filter_location": "Location"
   ,"search_filter_location_country": "Country"
   ,"search_filter_location_state": "State or region"
+  ,"search_filter_location_city": "City"
 }

@@ -22,6 +22,7 @@ function setup(getPeople: (page: number, size: number) => Promise<PeoplePage>) {
     searchAssets: vi.fn(),
     searchContextPage: vi.fn(),
     getSearchSuggestions: vi.fn(),
+    getPlaces: vi.fn(),
   });
   render(SearchFilterPerson, { search, people });
   return { people, peopleAdapter, search };

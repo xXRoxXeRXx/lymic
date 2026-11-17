@@ -5,7 +5,7 @@
   import { setLocationPart } from "../search-filters/location";
   import SearchFilterSuggestion from "./SearchFilterSuggestion.svelte";
 
-  /** The Location Search Filter: country and state or region, each chosen from Immich's suggestions; the state's suggestions are limited by the chosen country. */
+  /** The Location Search Filter: country, state or region and city, each optional. Country and state are chosen from Immich's suggestions (the state's are limited by the chosen country); the city from the city listing of the Explore Places, which Immich's suggestions do not offer. */
   let { search }: { search: SearchController } = $props();
 
   const location = $derived(search.filters.location);
@@ -33,6 +33,14 @@
       request={location?.country ? { type: "state", country: location.country } : { type: "state" }}
       value={location?.state}
       onChange={set("state")}
+    />
+    <SearchFilterSuggestion
+      {search}
+      id="search-filter-location-city"
+      label={$t("search_filter_location_city")}
+      source={search.cities}
+      value={location?.city}
+      onChange={set("city")}
     />
   </div>
 </div>

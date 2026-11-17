@@ -1538,6 +1538,18 @@ mod tests {
         LocationFilter {
             country: country.map(str::to_string),
             state: state.map(str::to_string),
+            city: None,
+        }
+    }
+
+    fn city_location(
+        country: Option<&str>,
+        state: Option<&str>,
+        city: Option<&str>,
+    ) -> LocationFilter {
+        LocationFilter {
+            city: city.map(str::to_string),
+            ..location(country, state)
         }
     }
 
@@ -1614,6 +1626,59 @@ mod tests {
         assert_eq!(
             request.filters.location,
             Some(location(Some("Italy"), None))
+        );
+    }
+
+    #[tokio::test]
+    async fn the_city_becomes_an_exact_condition_with_the_name_exactly_as_immich_returned_it() {
+        let filters = SearchFilters {
+            location: Some(city_location(None, None, Some(" Saint-Étienne "))),
+            ..SearchFilters::default()
+        };
+
+        assert_eq!(
+            filter_sent_for(filters).await,
+            json!({ "city": { "eq": " Saint-Étienne " } })
+        );
+    }
+
+    #[tokio::test]
+    async fn the_city_combines_with_the_country_and_state_and_a_blank_city_is_no_condition() {
+        let all_three = SearchFilters {
+            location: Some(city_location(
+                Some("Italy"),
+                Some("Tuscany"),
+                Some("Florence"),
+            )),
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(all_three).await,
+            json!({
+                "country": { "eq": "Italy" },
+                "state": { "eq": "Tuscany" },
+                "city": { "eq": "Florence" },
+            })
+        );
+        let blank = SearchFilters {
+            location: Some(city_location(Some("Italy"), None, Some(" "))),
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(blank).await,
+            json!({ "country": { "eq": "Italy" } })
+        );
+    }
+
+    #[test]
+    fn the_location_filter_deserializes_a_city_from_the_frontend_shape() {
+        let request: SearchRequest = serde_json::from_str(
+            r#"{"text":"","mode":"filename","filters":{"location":{"city":"Florence"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            request.filters.location,
+            Some(city_location(None, None, Some("Florence")))
         );
     }
 }

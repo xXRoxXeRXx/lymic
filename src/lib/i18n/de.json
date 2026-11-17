@@ -399,4 +399,5 @@
   ,"search_filter_location": "Standort"
   ,"search_filter_location_country": "Land"
   ,"search_filter_location_state": "Bundesland oder Region"
+  ,"search_filter_location_city": "Stadt"
 }
