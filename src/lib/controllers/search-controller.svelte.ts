@@ -28,7 +28,7 @@ const FALLBACK_SEARCH_MODE: SearchMode = "filename";
  * The Search: its text, Search Mode and Search Filters (held in memory for the session, never persisted)
  * and its chronological Search Results, which satisfy the shared timeline contract so the shared timeline
  * view, Scrubber and Lightbox show them (ADR-0009). `refresh()` re-runs the latest submitted Search, which
- * is what Retry does.
+ * is what Retry does. `results` is what a view shows.
  */
 export interface SearchController extends TimelineController {
   /** The text in the search bar, bound to its field. */
@@ -53,6 +53,11 @@ export interface SearchController extends TimelineController {
   readonly presentation: SearchPresentation;
   /** The Context Search Results; empty unless `presentation` is "relevance". */
   readonly context: ContextResults;
+  /**
+   * The results to show: the timeline of the shown `presentation`. When a Search of the other kind could not be
+   * loaded (offline), the earlier results stay here, marked offline, and `refresh()` retries the new Search.
+   */
+  readonly results: TimelineController;
   /** The text of the Search whose results are shown (empty before the first successful Search). */
   readonly submittedText: string;
   /** The suggestions Immich offers for the Search Filters chosen from them (camera, country and state). */
@@ -100,7 +105,12 @@ export function createSearchController(adapter: SearchControllerAdapter): Search
   let features = $state<SearchFeatures | null>(null);
   let featuresFailed = $state(false);
   let featuresRead: Promise<void> | null = null;
+  // The presentation of the results that are shown; it follows `requested` once the requested Search has loaded.
   let presentation = $state<SearchPresentation>("chronological");
+  // The presentation of the latest submitted Search, which Retry repeats.
+  let requested = $state<SearchPresentation>("chronological");
+  // The latest submitted Search is of the other kind and could not be loaded: the earlier results stay, offline.
+  let switchFailed = $state(false);
   let submittedText = $state("");
   let truncated = $state(false);
   let unsupported = $state<{ version: string; requiredVersion: string } | null>(null);
@@ -245,6 +255,8 @@ export function createSearchController(adapter: SearchControllerAdapter): Search
     featuresFailed = false;
     featuresRead = null;
     presentation = "chronological";
+    requested = "chronological";
+    switchFailed = false;
     submittedText = "";
     truncated = false;
     unsupported = null;
@@ -252,6 +264,37 @@ export function createSearchController(adapter: SearchControllerAdapter): Search
     revision = 0;
     timeline.clear();
     context.clear();
+  }
+
+  function presentationResults(kind: SearchPresentation): TimelineController {
+    return kind === "relevance" ? context : timeline;
+  }
+
+  /**
+   * Loads the pending Search as `next`. Results of the other kind are replaced only once the new Search has loaded,
+   * so a Search that fails offline leaves the earlier results visible (marked offline) and Retry repeats it.
+   */
+  async function run(next: SearchPresentation) {
+    requested = next;
+    switchFailed = false;
+    const outgoing = presentationResults(presentation);
+    if (next !== presentation && outgoing.buckets.length === 0) {
+      // Nothing to keep: show the new Search's own loading state.
+      outgoing.clear();
+      presentation = next;
+      failure = null;
+      truncated = false;
+    }
+    const startRevision = revision;
+    await presentationResults(next).refresh();
+    if (requested !== next || next === presentation) return;
+    if (revision !== startRevision) {
+      // The results of the other kind no longer belong to the Search being shown.
+      presentationResults(presentation).clear();
+      presentation = next;
+    } else {
+      switchFailed = true;
+    }
   }
 
   async function submit() {
@@ -266,17 +309,26 @@ export function createSearchController(adapter: SearchControllerAdapter): Search
     }
     if (!isAvailable(request.mode, features)) request = { ...request, mode: FALLBACK_SEARCH_MODE };
     pending = request;
-    const next: SearchPresentation = request.mode === "context" && request.text !== "" ? "relevance" : "chronological";
-    if (next !== presentation) {
-      // The results of the other kind of Search no longer belong to the Search being shown.
-      (next === "relevance" ? timeline : context).clear();
-      presentation = next;
-      failure = null;
-      truncated = false;
-    }
-    await (next === "relevance" ? context : timeline).refresh();
+    await run(request.mode === "context" && request.text !== "" ? "relevance" : "chronological");
     return true;
   }
+
+  function shown() { return presentationResults(presentation); }
+  const shownResults: TimelineController = {
+    get buckets() { return shown().buckets; },
+    get refreshGeneration() { return shown().refreshGeneration; },
+    get isLoading() { return shown().isLoading; },
+    get isRefreshing() { return shown().isRefreshing || presentationResults(requested).isRefreshing; },
+    get isOffline() { return shown().isOffline || switchFailed; },
+    get hasInitialLoadError() { return shown().hasInitialLoadError; },
+    assetsFor: (timeBucket) => shown().assetsFor(timeBucket),
+    activateBucket: (timeBucket) => shown().activateBucket(timeBucket),
+    refresh: () => run(requested),
+    clear: () => clear(),
+    removeAsset: (assetId) => shown().removeAsset(assetId),
+    locateAsset: (assetId) => shown().locateAsset(assetId),
+    stepAsset: (currentId, delta, formerPosition) => shown().stepAsset(currentId, delta, formerPosition),
+  };
 
   return {
     get text() { return text; },
@@ -303,6 +355,7 @@ export function createSearchController(adapter: SearchControllerAdapter): Search
     get unsupported() { return unsupported; },
     get failure() { return failure; },
     get revision() { return revision; },
+    results: shownResults,
     get buckets() { return timeline.buckets; },
     get refreshGeneration() { return timeline.refreshGeneration; },
     get isLoading() { return timeline.isLoading; },
@@ -311,7 +364,7 @@ export function createSearchController(adapter: SearchControllerAdapter): Search
     get hasInitialLoadError() { return timeline.hasInitialLoadError; },
     assetsFor: timeline.assetsFor,
     activateBucket: timeline.activateBucket,
-    refresh: timeline.refresh,
+    refresh: () => run(requested),
     removeAsset: timeline.removeAsset,
     locateAsset: timeline.locateAsset,
     stepAsset: timeline.stepAsset,

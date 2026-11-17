@@ -380,7 +380,7 @@ describe('i18n catalogs', () => {
     expect(de.search_mode_folderPath).toBe('Ordnerpfad');
   });
 
-  it('translates the Person filter strings in every locale', () => {
+  it('translates the Recognized People filter strings in every locale', () => {
     const keys = ['search_filter_person', 'search_filter_person_hint', 'search_filter_person_permission_denied'];
     for (const [localeCode, translations] of Object.entries(catalog)) {
       for (const key of keys) {

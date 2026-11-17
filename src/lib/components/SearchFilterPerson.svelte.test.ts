@@ -30,7 +30,7 @@ function setup(getPeople: (page: number, size: number) => Promise<PeoplePage>) {
 
 const person = (id: string, name: string | null) => ({ id, name, thumbnailPath: `/${id}.jpg` });
 
-describe("Search Person filter", () => {
+describe("Search Recognized People filter", () => {
   it("lists the Recognized People from the people source, named before unnamed", async () => {
     setup(async () => ({ people: [person("u1", null), person("a", "Ada"), person("u2", null), person("b", "Bo")], hasNextPage: false }));
 
@@ -39,7 +39,7 @@ describe("Search Person filter", () => {
     expect(names).toEqual(["Ada", "Bo", "Unnamed person", "Unnamed person"]);
   });
 
-  it("shows each person with a face tile", async () => {
+  it("shows each Recognized Person with a face tile", async () => {
     setup(async () => ({ people: [person("a", "Ada")], hasNextPage: false }));
 
     expect(await screen.findByRole("img", { name: "Ada" })).toHaveAttribute("src", "lymic-thumb://person/a?v=%2Fa.jpg");

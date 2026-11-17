@@ -23,8 +23,8 @@
 
   const numberLocale = $derived(toBcp47Locale($locale));
   const relevance = $derived(search.presentation === "relevance");
-  // The relevance presentation is its own timeline-shaped list; the chronological one is the search itself.
-  const results = $derived(relevance ? search.context : search);
+  // The shown results: the relevance list or the chronological timeline; they stay while a Search of the other kind fails offline.
+  const results = $derived(search.results);
   // A further page is requested only while one can be loaded and the last request did not fail.
   const loadMore = $derived(relevance && search.context.hasNextPage && !search.context.loadMoreFailed ? () => void search.context.loadMore() : undefined);
   // An unusable API key, a missing permission or an unreadable response is an error over cached results too;

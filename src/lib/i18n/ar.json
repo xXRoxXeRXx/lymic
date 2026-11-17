@@ -377,7 +377,7 @@
   ,"search_loading_more": "جارٍ تحميل المزيد من النتائج…"
   ,"search_filter_person": "الأشخاص المعروفون"
   ,"search_filter_person_hint": "يعرض الصور ومقاطع الفيديو التي يظهر فيها جميع الأشخاص المختارين."
-  ,"search_filter_person_permission_denied": "عامل تصفية الأشخاص غير متاح. قم بإعداد مفتاح API بصلاحية person.read. يستمر باقي البحث في العمل."
+  ,"search_filter_person_permission_denied": "عامل تصفية الأشخاص المعروفين غير متاح. قم بإعداد مفتاح API بصلاحية person.read. يستمر باقي البحث في العمل."
   ,"search_filter_display": "العرض"
   ,"search_filter_favorite": "المفضلة"
   ,"search_filter_archived": "المؤرشف"

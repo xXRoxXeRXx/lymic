@@ -21,7 +21,8 @@
   } = $props();
 
   const hasFilters = $derived(Object.values(search.filters).some((value) => value !== undefined));
-  const canClear = $derived(search.text !== "" || hasFilters || search.revision > 0);
+  // The Search can be cleared whenever there is something of it to reset, including a failure or unsupported notice left over from it.
+  const canClear = $derived(search.text !== "" || hasFilters || search.revision > 0 || search.unsupported !== null || search.failure !== null);
   const panelId = "search-panel";
   let panelOpen = $state(false);
   let optionsButton = $state<HTMLButtonElement | null>(null);
