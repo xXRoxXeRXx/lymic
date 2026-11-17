@@ -1,6 +1,4 @@
-use crate::media::paths::{normalize_path_lexical, path_is_within_lexical};
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool, Transaction};
-use std::path::PathBuf;
 
 const DISCARD_PATH_BATCH_SIZE: usize = 500;
 
@@ -207,43 +205,28 @@ async fn update_job_counts(tx: &mut sqlx::Transaction<'_, Sqlite>) -> Result<(),
 }
 
 pub async fn has_sync_work_in_folder(pool: &SqlitePool, folder: &str) -> Result<bool, sqlx::Error> {
-    let folder = folder.trim_end_matches(['/', '\\']);
-    let path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
-    let paths: Vec<String> = sqlx::query_scalar(&format!(
-        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND status = 'PENDING' AND {path_cond}"
-    ))
-    .bind(folder)
+    let paths: Vec<String> = sqlx::query_scalar(
+        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND status = 'PENDING'",
+    )
     .fetch_all(pool)
     .await?;
-    let folder = normalize_path_lexical(&PathBuf::from(folder));
-    Ok(paths
-        .into_iter()
-        .any(|path| path_is_within_lexical(&normalize_path_lexical(&PathBuf::from(path)), &folder)))
+    Ok(!super::filter_paths_within_folder(paths, folder).is_empty())
 }
 
 pub async fn discard_sync_data_in_folder(
     pool: &SqlitePool,
     folder: &str,
 ) -> Result<(), sqlx::Error> {
-    let folder = folder.trim_end_matches(['/', '\\']);
-    let path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
-    let paths: Vec<String> = sqlx::query_scalar(&format!(
-        "SELECT local_path FROM sync_queue WHERE job_id = 1 AND {path_cond} \
-             UNION \
-             SELECT local_path FROM sync_state WHERE status != 'SYNCED' AND {path_cond} \
-             UNION \
-             SELECT local_path FROM album_retry_remote_ids WHERE {path_cond}"
-    ))
-    .bind(folder)
+    let paths: Vec<String> = sqlx::query_scalar(
+        "SELECT local_path FROM sync_queue WHERE job_id = 1 \
+         UNION \
+         SELECT local_path FROM sync_state WHERE status != 'SYNCED' \
+         UNION \
+         SELECT local_path FROM album_retry_remote_ids",
+    )
     .fetch_all(pool)
     .await?;
-    let folder = normalize_path_lexical(&PathBuf::from(folder));
-    let matching: Vec<_> = paths
-        .into_iter()
-        .filter(|path| {
-            path_is_within_lexical(&normalize_path_lexical(&PathBuf::from(path)), &folder)
-        })
-        .collect();
+    let matching = super::filter_paths_within_folder(paths, folder);
     discard_folder_sync_paths(pool, &matching).await
 }
 
