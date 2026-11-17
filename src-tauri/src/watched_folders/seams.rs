@@ -160,35 +160,24 @@ impl FolderWatcher for NotifyFolderWatcher<'_> {
     }
 }
 
-pub(crate) struct CoordinatorSyncWork<'a> {
-    pub(crate) pool: &'a sqlx::SqlitePool,
-    pub(crate) running: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    pub(crate) coordinator: std::sync::Arc<crate::sync::SyncCoordinatorInner>,
+pub(crate) struct CoordinatorSyncWork {
+    pub(crate) runtime: crate::sync::SyncRuntime,
 }
 
-impl FolderSyncWork for CoordinatorSyncWork<'_> {
+impl FolderSyncWork for CoordinatorSyncWork {
     async fn has_work_in_folder(&self, path: &str) -> Result<bool, String> {
-        if self.coordinator.active_work.has_work_in(path) {
-            return Ok(true);
-        }
-        db::has_sync_work_in_folder(self.pool, path)
-            .await
-            .map_err(|error| error.to_string())
+        self.runtime.has_work_in_folder(path).await
     }
 
     fn cancel_work_in_folder(&self, path: &str) {
-        self.coordinator.active_work.cancel_work_in(path);
+        self.runtime.cancel_work_in(path);
     }
 
     async fn discard_folder_queue(&self, path: &str) -> Result<(), String> {
-        crate::sync::lifecycle::SynchronizationLifecycle::new(
-            self.pool,
-            &self.running,
-            self.coordinator.clone(),
-        )
-        .discard_folder(path)
-        .await
-        .map_err(|error| error.to_string())
+        self.runtime
+            .discard_folder(path)
+            .await
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -200,22 +189,19 @@ async fn scan_single_folder(
 
 pub(crate) struct TauriFolderScanTrigger<'a> {
     pub(crate) app: &'a tauri::AppHandle,
-    pub(crate) pool: &'a sqlx::SqlitePool,
 }
 
 impl FolderScanTrigger for TauriFolderScanTrigger<'_> {
     fn trigger_folder_scan(&self, folder: WatchedFolder, source: crate::sync::SyncSource) {
-        spawn_folder_scan(self.app, self.pool, folder, source);
+        spawn_folder_scan(self.app, folder, source);
     }
 }
 
 fn spawn_folder_scan(
     app: &tauri::AppHandle,
-    pool: &sqlx::SqlitePool,
     folder: WatchedFolder,
     source: crate::sync::SyncSource,
 ) {
-    let pool_inner = pool.clone();
     let app_for_scan = app.clone();
     tauri::async_runtime::spawn(async move {
         let scan_result = match scan_single_folder(folder.clone()).await {
@@ -232,18 +218,17 @@ fn spawn_folder_scan(
                 return;
             }
         };
-        crate::sync::admit_and_run(app_for_scan, pool_inner, scan_result, source).await;
+        crate::sync::admit_and_run(app_for_scan, scan_result, source).await;
     });
 }
 
 pub(crate) struct TauriFolderEffects<'a> {
     pub(crate) app: &'a tauri::AppHandle,
-    pub(crate) pool: &'a sqlx::SqlitePool,
 }
 
 impl FolderScanTrigger for TauriFolderEffects<'_> {
     fn trigger_folder_scan(&self, folder: WatchedFolder, source: crate::sync::SyncSource) {
-        spawn_folder_scan(self.app, self.pool, folder, source);
+        spawn_folder_scan(self.app, folder, source);
     }
 }
 
@@ -261,7 +246,7 @@ impl FolderEffects for TauriFolderEffects<'_> {
         folder: WatchedFolder,
         source: crate::sync::SyncSource,
     ) -> Result<(), String> {
-        crate::sync::Synchronization::for_tauri(self.app, self.pool)
+        crate::sync::Synchronization::for_tauri(self.app)
             .scan_and_admit(vec![folder], source)
             .await
             .map(|_| ())

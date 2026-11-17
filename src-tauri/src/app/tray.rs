@@ -3,9 +3,8 @@ use crate::app::state::{TrayMenuState, TraySyncStatus, TrayTransferStatus};
 use crate::sync::progress::TransferStatsEvent;
 use crate::{
     app::events::{emit_sync_error, log_to_ui_error},
-    commands::sync,
     db,
-    sync::{SyncCoordinator, SyncState, Synchronization},
+    sync::{SyncRuntime, Synchronization},
 };
 use tauri::menu::{Menu, MenuItem, MenuItemKind};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -227,24 +226,14 @@ pub(crate) fn setup(
 }
 
 async fn handle_sync_action(app: tauri::AppHandle) {
-    let pool = app.state::<sqlx::SqlitePool>().inner().clone();
-    let running = app.state::<SyncState>().inner().0.clone();
-    let coordinator = app.state::<SyncCoordinator>().inner().0.clone();
+    let runtime = app.state::<SyncRuntime>().inner().clone();
     let result = async {
-        let snapshot = db::get_sync_snapshot(&pool)
-            .await
-            .map_err(|error| error.to_string())?;
+        let snapshot = runtime.status().await.map_err(|error| error.to_string())?;
+        let sync = Synchronization::new(&app, &runtime);
         match decide_sync_action(snapshot.status) {
-            TrayAction::Pause => sync::pause_sync_inner(&app, &pool, &running, &coordinator)
-                .await
-                .map(|_| ()),
-            TrayAction::Resume => sync::resume_sync_inner(&app, &pool, &running, &coordinator)
-                .await
-                .map(|_| ()),
-            TrayAction::Start => Synchronization::new(&app, &pool, &running, &coordinator)
-                .start()
-                .await
-                .map(|_| ()),
+            TrayAction::Pause => sync.pause().await.map(|_| ()),
+            TrayAction::Resume => sync.resume().await.map(|_| ()),
+            TrayAction::Start => sync.start().await.map(|_| ()),
         }
     }
     .await;
@@ -259,7 +248,7 @@ async fn handle_sync_action(app: tauri::AppHandle) {
         );
         emit_sync_error(&app, &error);
     }
-    match db::get_sync_snapshot(&pool).await {
+    match runtime.status().await {
         Ok(snapshot) => update_sync_action(&app, &snapshot),
         Err(error) => log_to_ui_error(
             &app,

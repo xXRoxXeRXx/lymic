@@ -15,8 +15,10 @@ pub(crate) mod reporter;
 pub(crate) mod retry;
 pub(crate) mod service;
 
-pub(crate) use active_work::{ActiveWork, ProcessingContext};
-pub(crate) use coordinator::{SyncCoordinator, SyncCoordinatorInner, SyncState};
+#[cfg(test)]
+pub(crate) use active_work::ActiveWork;
+pub(crate) use active_work::ProcessingContext;
+pub(crate) use coordinator::SyncRuntime;
 pub(crate) use processor::{load_upload_parallelism, SyncSummary};
 pub(crate) use progress::{CurrentFileProgress, JobByteProgress};
 pub(crate) use retry::prepare_failed_sync_retry;

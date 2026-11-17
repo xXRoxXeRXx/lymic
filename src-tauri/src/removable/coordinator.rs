@@ -30,7 +30,7 @@ impl<'a>
             pool.clone(),
             app.clone(),
             NotifyFolderWatcher::for_tauri(app),
-            TauriFolderScanTrigger { app, pool },
+            TauriFolderScanTrigger { app },
         )
     }
 }
