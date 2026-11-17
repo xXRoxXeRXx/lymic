@@ -44,7 +44,7 @@
   {:else if ordered.length === 0}
     <p class="text-sm text-slate-600 dark:text-zinc-300">{$t("people_empty")}</p>
   {:else}
-    <div role="group" aria-labelledby="search-filter-person-label" class="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto p-1 sm:grid-cols-4 lg:grid-cols-6">
+    <div role="group" aria-labelledby="search-filter-person-label" class="grid max-h-44 grid-cols-4 gap-2 overflow-y-auto p-1 sm:grid-cols-6 lg:grid-cols-8">
       {#each ordered as person (person.id)}
         <RecognizedPersonTile {person} compact selected={chosen.includes(person.id)} onSelect={toggle} />
       {/each}

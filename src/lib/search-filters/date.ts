@@ -34,4 +34,12 @@ export const dateFilter: SearchFilterDefinition = {
     const to = date?.to ? endOfLocalDay(date.to) : null;
     if (from || to) request.date = { ...(from && { from }), ...(to && { to }) };
   },
+  summary({ date }, context) {
+    const from = parseDay(date?.from) ? date?.from : undefined;
+    const to = parseDay(date?.to) ? date?.to : undefined;
+    if (from && to) return `${context.formatDay(from)} – ${context.formatDay(to)}`;
+    if (from) return context.t("search_chip_date_from", { date: context.formatDay(from) });
+    if (to) return context.t("search_chip_date_to", { date: context.formatDay(to) });
+    return null;
+  },
 };

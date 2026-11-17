@@ -12,6 +12,11 @@ export const locationFilter: SearchFilterDefinition = {
     const chosen = chosenParts(location, ["country", "state", "city"]);
     if (chosen) request.location = chosen;
   },
+  /** The parts from the finest to the coarsest: "Berlin, Germany". */
+  summary({ location }) {
+    const values = [location?.city, location?.state, location?.country].filter(Boolean);
+    return values.length > 0 ? values.join(", ") : null;
+  },
 };
 
 /**

@@ -1,4 +1,4 @@
-import type { SearchFilterDefinition } from "./types";
+import type { SearchChipContext, SearchFilterDefinition } from "./types";
 
 /**
  * A multi-part Search Filter (camera, Location) with one part set (or cleared, with `undefined`); unset when no
@@ -32,13 +32,26 @@ export function toggleChosenId(chosen: readonly string[] | undefined, id: string
   return next.length > 0 ? next : undefined;
 }
 
+/** The first value and how many more there are: "Anna +2". */
+export function firstAndMore(values: readonly string[]): string {
+  return values.length > 1 ? `${values[0]} +${values.length - 1}` : values[0];
+}
+
+/** The summary of a list of chosen ids: the first known name and how many more, or just the count when no name is known. */
+export function chosenIdsSummary(ids: readonly string[] | undefined, nameOf: (id: string) => string | null, context: SearchChipContext): string | null {
+  if (!ids?.length) return null;
+  const firstName = ids.map(nameOf).find((name): name is string => name !== null);
+  return firstName === undefined ? context.t("search_chip_chosen", { count: ids.length }) : firstAndMore([firstName, ...ids.slice(1)]);
+}
+
 /** A Search Filter that is a list of ids which must all apply (people, Tags); no id adds no condition. */
-export function allIdsFilter(key: "personIds" | "tagIds"): SearchFilterDefinition {
+export function allIdsFilter(key: "personIds" | "tagIds", nameOf: (id: string, context: SearchChipContext) => string | null = () => null): SearchFilterDefinition {
   return {
     key,
     apply(filters, request) {
       const ids = filters[key];
       if (ids?.length) request[key] = [...ids];
     },
+    summary: (filters, context) => chosenIdsSummary(filters[key], (id) => nameOf(id, context), context),
   };
 }

@@ -1,5 +1,5 @@
 import type { SearchCamera } from "../contracts";
-import { chosenParts, setPart } from "./parts";
+import { chosenParts, firstAndMore, setPart } from "./parts";
 import type { SearchFilterDefinition } from "./types";
 
 /** Camera: make, model and lens model, each optional and each chosen from Immich's suggestions. */
@@ -8,6 +8,11 @@ export const cameraFilter: SearchFilterDefinition = {
   apply({ camera }, request) {
     const chosen = chosenParts(camera, ["make", "model", "lensModel"]);
     if (chosen) request.camera = chosen;
+  },
+  summary({ camera }) {
+    const body = [camera?.make, camera?.model].filter(Boolean).join(" ");
+    const values = [body, camera?.lensModel].filter((value): value is string => Boolean(value));
+    return values.length > 0 ? firstAndMore(values) : null;
   },
 };
 

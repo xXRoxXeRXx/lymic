@@ -6,4 +6,5 @@ export const ratingFilter: SearchFilterDefinition = {
   apply({ rating }, request) {
     if (rating) request.rating = rating;
   },
+  summary: ({ rating }) => (rating ? `${rating} ★` : null),
 };

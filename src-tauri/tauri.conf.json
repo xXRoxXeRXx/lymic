@@ -15,7 +15,9 @@
         "title": "Lymic",
         "label": "main",
         "width": 1000,
+        "minWidth": 1000,
         "height": 700,
+        "minHeight": 560,
         "zoomHotkeysEnabled": true,
         "visible": false,
         "resizable": true

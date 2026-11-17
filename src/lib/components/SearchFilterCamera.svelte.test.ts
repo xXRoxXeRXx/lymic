@@ -29,7 +29,7 @@ function setup(getSearchSuggestions = vi.fn(async (request: SearchSuggestionsReq
   const search = createSearchController(adapter);
   const people = { people: [], isLoading: false, isRefreshing: false, isOffline: false, hasNextPage: false, error: null, refresh: vi.fn(), loadMore: vi.fn(), clear: vi.fn() };
   const tags = createTagsController({ getTags: vi.fn().mockResolvedValue([]) } as unknown as TagsDesktopAdapter);
-  render(SearchPanel, { search, people, tags, id: "search-panel" });
+  render(SearchPanel, { search, people, tags, id: "search-panel", editor: "camera" });
   return { adapter, search };
 }
 
@@ -173,11 +173,14 @@ describe("camera Search Filters", () => {
     expect(alert).toHaveTextContent("Suggestions could not be loaded.");
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     expect(alert.closest("[role=group]")).toBe(screen.getByRole("group", { name: "Camera" }));
+    // The failure stays in the camera editor: another editor of the panel keeps working.
+    await fireEvent.click(screen.getByRole("button", { name: "Media type" }));
     await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
     expect(search.filters.mediaType).toBe("video");
     expect(search.filters.camera).toBeUndefined();
+    await fireEvent.click(screen.getByRole("button", { name: "Camera" }));
 
-    await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+    await fireEvent.click(within(await screen.findByRole("alert")).getByRole("button", { name: "Retry" }));
 
     expect(await screen.findByRole("option", { name: "Canon" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();

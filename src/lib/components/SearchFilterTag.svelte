@@ -62,7 +62,7 @@
   {:else if tags.isEmpty}
     <p class="text-sm text-slate-600 dark:text-zinc-300">{$t("tags_empty")}</p>
   {:else}
-    <div class="max-h-64 overflow-y-auto p-1">
+    <div class="max-h-44 overflow-y-auto p-1">
       <TagTree {tags} onSelect={toggle} selected={chosen} labelledBy="search-filter-tag-label" />
     </div>
   {/if}
