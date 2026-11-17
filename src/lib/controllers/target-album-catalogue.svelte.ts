@@ -18,6 +18,10 @@ function sorted(albums: Album[]) {
   return [...albums].sort((a, b) => a.albumName.toLowerCase().localeCompare(b.albumName.toLowerCase()));
 }
 
+function notIn(albums: Album[], loaded: Album[]) {
+  return albums.filter((album) => !loaded.some((known) => known.id === album.id));
+}
+
 export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): TargetAlbumCatalogue {
   let hasRequested = $state(false);
   // Created Target Albums stay listed until a load from Immich contains them.
@@ -27,12 +31,12 @@ export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): Targe
   const collection = createRemoteCollection({
     async load() {
       const loaded = await adapter.getAlbums();
-      created = created.filter((album) => !loaded.some((known) => known.id === album.id));
+      created = notIn(created, loaded);
       return loaded;
     },
   });
 
-  const albums = $derived(sorted([...collection.items, ...created.filter((album) => !collection.items.some((known) => known.id === album.id))]));
+  const albums = $derived(sorted([...collection.items, ...notIn(created, collection.items)]));
 
   function refresh() {
     hasRequested = true;
@@ -57,6 +61,7 @@ export function createTargetAlbumCatalogue(adapter: AlbumsDesktopAdapter): Targe
 
   return {
     get albums() { return albums; },
+    // Views treat any in-flight request, first load or refresh, as loading.
     get isLoading() { return collection.isRefreshing; },
     get error() { return collection.error ? formatError(collection.error.reason, "Failed to load albums") : null; },
     get hasRequested() { return hasRequested; },

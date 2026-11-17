@@ -106,16 +106,21 @@ describe("Target Album catalogue", () => {
     expect(catalogue.isLoading).toBe(false);
   });
 
-  it("adds a created Target Album in sorted order before the refresh returns it", async () => {
+  it("adds a created Target Album in sorted order before the refresh returns it, then lists it once when it does", async () => {
     const catalogue = createTargetAlbumCatalogue(createDesktopAdapter({
-      getAlbums: vi.fn().mockResolvedValue([album("a", "Alpha"), album("z", "zulu")]),
+      getAlbums: vi.fn()
+        .mockResolvedValueOnce([album("a", "Alpha"), album("z", "zulu")])
+        .mockResolvedValueOnce([album("a", "Alpha"), album("z", "zulu")])
+        .mockResolvedValueOnce([album("a", "Alpha"), album("m", "Mike"), album("z", "zulu")]),
       createAlbum: vi.fn().mockResolvedValue(album("m", "Mike")),
     }));
 
     await catalogue.refresh();
     await catalogue.create("Mike");
-
     expect(catalogue.albums.map((entry) => entry.albumName)).toEqual(["Alpha", "Mike", "zulu"]);
+
+    await catalogue.refresh();
+    expect(catalogue.albums.map((entry) => entry.id)).toEqual(["a", "m", "z"]);
   });
 
   it("selects enriched album-list responses while the read-only catalogue remains a separate adapter method", async () => {

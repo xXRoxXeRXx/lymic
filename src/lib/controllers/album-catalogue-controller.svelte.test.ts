@@ -28,4 +28,35 @@ describe("Album catalogue controller", () => {
     expect(catalogue.error).toBe("error");
     expect(catalogue.isLoading).toBe(false);
   });
+  it("ignores a response that arrives after clear", async () => {
+    let resolveLoad!: (albums: never[]) => void;
+    const pending = new Promise<never[]>((resolve) => { resolveLoad = resolve; });
+    const catalogue = createAlbumCatalogueController({ getAlbumCatalogue: vi.fn().mockReturnValue(pending) });
+
+    const refresh = catalogue.refresh();
+    catalogue.clear();
+    resolveLoad([{ id: "previous", albumName: "Previous account", albumThumbnailAssetId: null, assetCount: 0, isShared: false, order: "a" }] as never[]);
+    await refresh;
+
+    expect(catalogue.albums).toEqual([]);
+    expect(catalogue.isLoading).toBe(false);
+    expect(catalogue.error).toBeNull();
+  });
+
+  it("keeps the newest catalogue when an older response arrives after a clear and a newer refresh", async () => {
+    const entry = (id: string) => ({ id, albumName: id, albumThumbnailAssetId: null, assetCount: 0, isShared: false, order: "a" });
+    let resolveOlder!: (albums: ReturnType<typeof entry>[]) => void;
+    const older = new Promise<ReturnType<typeof entry>[]>((resolve) => { resolveOlder = resolve; });
+    const catalogue = createAlbumCatalogueController({
+      getAlbumCatalogue: vi.fn().mockReturnValueOnce(older).mockResolvedValueOnce([entry("new")]),
+    });
+
+    const olderRefresh = catalogue.refresh();
+    catalogue.clear();
+    await catalogue.refresh();
+    resolveOlder([entry("stale")]);
+    await olderRefresh;
+
+    expect(catalogue.albums.map((album) => album.id)).toEqual(["new"]);
+  });
 });
