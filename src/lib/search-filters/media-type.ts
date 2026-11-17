@@ -6,4 +6,5 @@ export const mediaTypeFilter: SearchFilterDefinition = {
   apply({ mediaType }, request) {
     if (mediaType) request.mediaType = mediaType;
   },
+  summary: ({ mediaType }, context) => (mediaType ? context.t(`search_filter_media_${mediaType}`) : null),
 };

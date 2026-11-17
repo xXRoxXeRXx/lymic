@@ -4133,6 +4133,7 @@ describe("Search", () => {
   describe("Search Mode", () => {
     const openOptions = async () => {
       await fireEvent.click(await screen.findByRole("button", { name: "Search options" }));
+      await fireEvent.click(await screen.findByRole("button", { name: /^Search mode/ }));
       return screen.findByRole("group", { name: "Search mode" });
     };
 
@@ -4204,6 +4205,7 @@ describe("Search", () => {
   describe("Context Search", () => {
     const openOptions = async () => {
       await fireEvent.click(await screen.findByRole("button", { name: "Search options" }));
+      await fireEvent.click(await screen.findByRole("button", { name: /^Search mode/ }));
       return screen.findByRole("group", { name: "Search mode" });
     };
     const smartOn = async () => ({ smartSearch: true, ocr: true });
@@ -4358,6 +4360,10 @@ describe("Search filter panel", () => {
     const button = await filtersButton();
     if (button.getAttribute("aria-expanded") !== "true") await fireEvent.click(button);
   }
+  async function openEditor(name: string) {
+    const chip = await within(document.getElementById("search-panel")!).findByRole("button", { name: new RegExp(`^${name}`) });
+    if (chip.getAttribute("aria-expanded") !== "true") await fireEvent.click(chip);
+  }
   const setDate = (label: "From" | "To", value: string) => fireEvent.input(screen.getByLabelText(label), { target: { value } });
 
   it("searches the chosen Tags from the hierarchy in the panel, all of them, without their children", async () => {
@@ -4369,6 +4375,7 @@ describe("Search filter panel", () => {
     ];
     renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, get_tags: async () => libraryTags, search_assets: async () => results("tagged-1") });
     await openPanel();
+    await openEditor("Tags");
 
     await fireEvent.click(await screen.findByRole("treeitem", { name: "Travel" }));
     await fireEvent.click(screen.getByRole("treeitem", { name: "Family" }));
@@ -4381,6 +4388,7 @@ describe("Search filter panel", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, get_tags: async () => { throw "tags_permission_denied:tag.read"; }, search_context_page: async () => ({ assets: [found("found-1")], nextPage: null, limitReached: false }) });
     await openPanel();
+    await openEditor("Tags");
 
     expect(await screen.findByText(/tag\.read/)).toBeInTheDocument();
     await fireEvent.input(await searchBox(), { target: { value: "IMG" } });
@@ -4397,7 +4405,9 @@ describe("Search filter panel", () => {
 
     await openPanel();
     expect(await filtersButton()).toHaveAttribute("aria-expanded", "true");
+    await openEditor("Media type");
     await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
+    await openEditor("Date");
     await setDate("From", "2025-03-01");
     await setDate("To", "2025-03-31");
     await submit();
@@ -4419,6 +4429,7 @@ describe("Search filter panel", () => {
   it("offers All, Images and Videos with All selected by default", async () => {
     renderAuthenticatedPage({ get_search_features: async () => features });
     await openPanel();
+    await openEditor("Media type");
 
     const group = screen.getByRole("radiogroup", { name: "Media type" });
     expect(within(group).getAllByRole("radio").map((radio) => (radio as HTMLInputElement).labels?.[0].textContent?.trim())).toEqual(["All", "Images", "Videos"]);
@@ -4433,6 +4444,7 @@ describe("Search filter panel", () => {
   it("rejects a start date after the end date with a message and does not search", async () => {
     renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features });
     await openPanel();
+    await openEditor("Date");
 
     await setDate("From", "2025-03-31");
     await setDate("To", "2025-03-01");
@@ -4452,6 +4464,7 @@ describe("Search filter panel", () => {
   it("opens the closed panel to show the message when Enter is pressed with a start date after the end date", async () => {
     renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features });
     await openPanel();
+    await openEditor("Date");
     await setDate("From", "2025-03-31");
     await setDate("To", "2025-03-01");
     await fireEvent.click(await filtersButton());
@@ -4469,13 +4482,16 @@ describe("Search filter panel", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("video-1") });
     await openPanel();
+    await openEditor("Media type");
     await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
+    await openEditor("Date");
     await setDate("From", "2025-03-01");
 
     await fireEvent.click(screen.getByRole("button", { name: "Clear date range" }));
 
     expect(screen.getByLabelText("From")).toHaveValue("");
     expect(screen.queryByRole("button", { name: "Clear date range" })).not.toBeInTheDocument();
+    await openEditor("Media type");
     expect(screen.getByRole("radio", { name: "Videos" })).toBeChecked();
     await submit();
     await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "context", filters: { mediaType: "video" } } }));
@@ -4485,7 +4501,9 @@ describe("Search filter panel", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({ get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("video-1") });
     await openPanel();
+    await openEditor("Media type");
     await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
+    await openEditor("Date");
     await setDate("To", "2025-03-31");
     await fireEvent.input(await searchBox(), { target: { value: "IMG" } });
     await submit();
@@ -4493,20 +4511,25 @@ describe("Search filter panel", () => {
 
     expect(await searchBox()).toHaveValue("IMG");
     await openPanel();
+    await openEditor("Media type");
     expect(screen.getByRole("radio", { name: "Videos" })).toBeChecked();
+    await openEditor("Date");
     expect(screen.getByLabelText("To")).toHaveValue("2025-03-31");
 
     await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
 
     expect(await searchBox()).toHaveValue("");
     await openPanel();
+    await openEditor("Media type");
     expect(screen.getByRole("radio", { name: "All" })).toBeChecked();
+    await openEditor("Date");
     expect(screen.getByLabelText("To")).toHaveValue("");
   });
 
   it("offers the clear control as soon as a filter is set, without any text", async () => {
     renderAuthenticatedPage({ get_search_features: async () => features });
     await openPanel();
+    await openEditor("Media type");
     expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("radio", { name: "Images" }));
@@ -4514,11 +4537,18 @@ describe("Search filter panel", () => {
     expect(screen.getByRole("button", { name: "Clear search" })).toBeInTheDocument();
   });
 
-  it("closes the panel with Escape and returns focus to its button", async () => {
+  it("closes the open editor with the first Escape and the panel with the second, returning focus each time", async () => {
     renderAuthenticatedPage({ get_search_features: async () => features });
     await openPanel();
+    await openEditor("Media type");
 
     await fireEvent.keyDown(screen.getByRole("radiogroup", { name: "Media type" }), { key: "Escape" });
+
+    expect(screen.queryByRole("radiogroup", { name: "Media type" })).not.toBeInTheDocument();
+    expect(await filtersButton()).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /^Media type/ })).toHaveFocus();
+
+    await fireEvent.keyDown(screen.getByRole("button", { name: /^Media type/ }), { key: "Escape" });
 
     expect(await filtersButton()).toHaveAttribute("aria-expanded", "false");
     expect(await filtersButton()).toHaveFocus();
@@ -4542,10 +4572,15 @@ describe("Search display options and Rating", () => {
     const button = await screen.findByRole("button", { name: "Search options" });
     if (button.getAttribute("aria-expanded") !== "true") await fireEvent.click(button);
   }
+  async function openEditor(name: string) {
+    const chip = await within(document.getElementById("search-panel")!).findByRole("button", { name: new RegExp(`^${name}`) });
+    if (chip.getAttribute("aria-expanded") !== "true") await fireEvent.click(chip);
+  }
 
   it("titles the group Display and offers Favorite, Archived and Unfiled, all off by default", async () => {
     renderAuthenticatedPage(handlers);
     await openPanel();
+    await openEditor("Display");
 
     const group = display();
     expect(within(group).getAllByRole("checkbox").map((box) => (box as HTMLInputElement).labels?.[0].textContent?.trim())).toEqual(["Favorites", "Archived", "Unfiled"]);
@@ -4557,6 +4592,7 @@ describe("Search display options and Rating", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage(handlers);
     await openPanel();
+    await openEditor("Display");
     await fireEvent.click(within(display()).getByRole("checkbox", { name: "Favorites" }));
     await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
     await fireEvent.click(within(display()).getByRole("checkbox", { name: "Unfiled" }));
@@ -4571,6 +4607,7 @@ describe("Search display options and Rating", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage(handlers);
     await openPanel();
+    await openEditor("Rating");
     const group = screen.getByRole("group", { name: "Rating" });
     expect(within(group).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["1 star", "2 stars", "3 stars", "4 stars", "5 stars"]);
     for (const button of within(group).getAllByRole("button")) expect(button).toHaveAttribute("aria-pressed", "false");
@@ -4585,6 +4622,7 @@ describe("Search display options and Rating", () => {
 
     // Submitting closes the panel; reopened, it still shows the Rating.
     await openPanel();
+    await openEditor("Rating");
     const reopened = screen.getByRole("group", { name: "Rating" });
     expect(within(reopened).getByRole("button", { name: "2 stars" })).toHaveAttribute("aria-pressed", "true");
     await fireEvent.click(within(reopened).getByRole("button", { name: "2 stars" }));
@@ -4600,8 +4638,11 @@ describe("Search display options and Rating", () => {
     });
     await fireEvent.input(await searchBox(), { target: { value: "IMG" } });
     await openPanel();
+    await openEditor("Display");
     await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
+    await openEditor("Rating");
     await fireEvent.click(screen.getByRole("group", { name: "Rating" }).querySelector("button[aria-label='3 stars']")!);
+    await openEditor("Display");
 
     await fireEvent.click(within(display()).getByRole("button", { name: "Open Archive" }));
 
@@ -4614,13 +4655,16 @@ describe("Search display options and Rating", () => {
 
     expect(await searchBox()).toHaveValue("IMG");
     await openPanel();
+    await openEditor("Display");
     expect(within(display()).getByRole("checkbox", { name: "Archived" })).toBeChecked();
+    await openEditor("Rating");
     expect(screen.getByRole("button", { name: "3 stars" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("offers Open Archive whether or not the Archived option is on", async () => {
     renderAuthenticatedPage(handlers);
     await openPanel();
+    await openEditor("Display");
 
     expect(within(display()).getByRole("button", { name: "Open Archive" })).toBeInTheDocument();
     await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));

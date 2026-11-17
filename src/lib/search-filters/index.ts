@@ -7,7 +7,7 @@ import { mediaTypeFilter } from "./media-type";
 import { personFilter } from "./person";
 import { ratingFilter } from "./rating";
 import { tagFilter } from "./tag";
-import type { SearchFilterDefinition } from "./types";
+import type { SearchChipContext, SearchFilterDefinition } from "./types";
 
 /** Every Search Filter. A new Search Filter adds one entry here. */
 const searchFilters: SearchFilterDefinition[] = [dateFilter, mediaTypeFilter, personFilter, tagFilter, cameraFilter, locationFilter, favoriteFilter, archivedFilter, unfiledFilter, ratingFilter];
@@ -27,4 +27,9 @@ export function filterErrors(filters: SearchFilters): Partial<Record<keyof Searc
     if (error) errors[filter.key] = error;
   }
   return errors;
+}
+
+/** What a Filter Chip shows for one Search Filter, or null when the filter is not set. */
+export function filterSummary(key: keyof SearchFilters, filters: SearchFilters, context: SearchChipContext): string | null {
+  return searchFilters.find((filter) => filter.key === key)?.summary?.(filters, context) ?? null;
 }

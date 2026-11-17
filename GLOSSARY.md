@@ -212,6 +212,10 @@ _Avoid_: search type, search scope
 A condition that narrows the Remote Assets a Search returns, such as Recognized Person, date, Location, Tag, media type, camera, Rating or Favorite status. A Remote Asset must satisfy every Search Filter that is set.
 _Avoid_: facet, refinement
 
+**Filter Chip**:
+The small control in the search panel that stands for one Search Filter (or for the Search Mode): it shows the filter's name and, once the filter is set, its value, and opens the editor of that filter. While the panel is closed, the chips of the set filters are shown below the search field. A Filter Chip is only the way into a Search Filter, never a Search Filter itself; the Display chip groups Favorite, Archived and Unfiled.
+_Avoid_: tag (a Tag is something else), badge, pill
+
 **Location**:
 A country, a state or region within it, and a city, each optional, used to narrow a Search. Distinct from a Place, which is identified by city name alone.
 _Avoid_: place (in a Search), geo filter

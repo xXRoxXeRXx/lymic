@@ -30,7 +30,7 @@ function setup(getSearchSuggestions = vi.fn(async (request: SearchSuggestionsReq
   const search = createSearchController(adapter);
   const people = { people: [], isLoading: false, isRefreshing: false, isOffline: false, hasNextPage: false, error: null, refresh: vi.fn(), loadMore: vi.fn(), clear: vi.fn() };
   const tags = createTagsController({ getTags: vi.fn().mockResolvedValue([]) } as unknown as TagsDesktopAdapter);
-  render(SearchPanel, { search, people, tags, id: "search-panel" });
+  render(SearchPanel, { search, people, tags, id: "search-panel", editor: "location" });
   return { adapter, search };
 }
 
@@ -139,9 +139,12 @@ describe("Location Search Filter", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert.closest("[role=group]")).toBe(screen.getByRole("group", { name: "Location" }));
+    // The failure stays in the Location editor: another editor of the panel keeps working.
+    await fireEvent.click(screen.getByRole("button", { name: "Media type" }));
     await fireEvent.click(screen.getByRole("radio", { name: "Videos" }));
     expect(search.filters.mediaType).toBe("video");
-    await fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Location" }));
+    await fireEvent.click(within(await screen.findByRole("alert")).getByRole("button", { name: "Retry" }));
 
     expect(await screen.findByRole("option", { name: "Italy" })).toBeInTheDocument();
   });
