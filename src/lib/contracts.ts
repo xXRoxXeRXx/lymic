@@ -116,6 +116,18 @@ export interface Place {
   thumbnailAssetId: string;
 }
 
+/** A Tag of the Immich Library. Immich returns Tags as a flat list; the hierarchy is `parentId`. */
+export interface Tag {
+  id: string;
+  /** The Tag's own name, without its ancestors. */
+  name: string;
+  /** The Tag's full path, for example `Travel/Italy/Rome`. */
+  value: string;
+  parentId: string | null;
+  /** A colour as Immich returns it; only a valid `#RRGGBB` is shown. */
+  color: string | null;
+}
+
 export type MemoryKind = "onThisDay" | "birthday" | "unknown";
 
 /** An Immich Memory with the Remote Assets it selected, already grouped for the Memory Timeline. */

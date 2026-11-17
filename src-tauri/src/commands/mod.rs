@@ -10,4 +10,5 @@ pub(crate) mod search;
 pub(crate) mod search_suggestions;
 pub(crate) mod settings;
 pub(crate) mod sync;
+pub(crate) mod tags;
 pub(crate) mod timeline;

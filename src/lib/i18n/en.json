@@ -402,4 +402,12 @@
   ,"search_filter_location_country": "Country"
   ,"search_filter_location_state": "State or region"
   ,"search_filter_location_city": "City"
+  ,"tags_title": "Tags"
+  ,"tags_loading": "Loading tags…"
+  ,"tags_empty": "No tags yet. Tags created in Immich appear here."
+  ,"tags_offline": "Tags is offline. Showing cached tags."
+  ,"tags_error": "Tags could not be loaded."
+  ,"tags_unavailable": "Tags is unavailable. Check your connection and sign-in."
+  ,"tags_permission_denied": "Tags could not be loaded. Give the API key the tag.read permission."
+  ,"tags_retry": "Retry"
 }

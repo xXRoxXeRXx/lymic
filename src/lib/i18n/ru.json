@@ -402,4 +402,12 @@
   ,"search_filter_location_country": "Страна"
   ,"search_filter_location_state": "Штат или регион"
   ,"search_filter_location_city": "Город"
+  ,"tags_title": "Теги"
+  ,"tags_loading": "Загрузка тегов…"
+  ,"tags_empty": "Тегов пока нет. Теги, созданные в Immich, появятся здесь."
+  ,"tags_offline": "Теги недоступны офлайн. Показаны сохранённые теги."
+  ,"tags_error": "Не удалось загрузить теги."
+  ,"tags_unavailable": "Теги недоступны. Проверьте подключение и вход в систему."
+  ,"tags_permission_denied": "Не удалось загрузить теги. Предоставьте API-ключу разрешение tag.read."
+  ,"tags_retry": "Повторить"
 }

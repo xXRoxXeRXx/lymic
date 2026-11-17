@@ -402,4 +402,12 @@
   ,"search_filter_location_country": "البلد"
   ,"search_filter_location_state": "الولاية أو المنطقة"
   ,"search_filter_location_city": "المدينة"
+  ,"tags_title": "الوسوم"
+  ,"tags_loading": "جارٍ تحميل الوسوم…"
+  ,"tags_empty": "لا توجد وسوم بعد. تظهر هنا الوسوم التي تُنشأ في Immich."
+  ,"tags_offline": "الوسوم غير متصلة. يتم عرض الوسوم المخزنة مؤقتًا."
+  ,"tags_error": "تعذر تحميل الوسوم."
+  ,"tags_unavailable": "الوسوم غير متاحة. تحقق من اتصالك وتسجيل الدخول."
+  ,"tags_permission_denied": "تعذر تحميل الوسوم. امنح مفتاح API الإذن tag.read."
+  ,"tags_retry": "إعادة المحاولة"
 }

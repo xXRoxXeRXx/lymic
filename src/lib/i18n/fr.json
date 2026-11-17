@@ -402,4 +402,12 @@
   ,"search_filter_location_country": "Pays"
   ,"search_filter_location_state": "État ou région"
   ,"search_filter_location_city": "Ville"
+  ,"tags_title": "Étiquettes"
+  ,"tags_loading": "Chargement des étiquettes…"
+  ,"tags_empty": "Aucune étiquette pour le moment. Les étiquettes créées dans Immich apparaissent ici."
+  ,"tags_offline": "Les étiquettes sont hors ligne. Affichage des étiquettes en cache."
+  ,"tags_error": "Impossible de charger les étiquettes."
+  ,"tags_unavailable": "Les étiquettes sont indisponibles. Vérifiez votre connexion et votre authentification."
+  ,"tags_permission_denied": "Impossible de charger les étiquettes. Accordez à la clé d’API l’autorisation tag.read."
+  ,"tags_retry": "Réessayer"
 }

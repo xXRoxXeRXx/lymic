@@ -33,6 +33,7 @@ import type {
   Memory,
   PeoplePage,
   Place,
+  Tag,
   ContextSearchPage,
   SearchFeatures,
   SearchRequest,
@@ -141,6 +142,11 @@ export interface PlacesDesktopAdapter {
   getPlaces(): Promise<Place[]>;
 }
 
+export interface TagsDesktopAdapter {
+  /** Every Tag of the Immich Library as a flat list; the hierarchy is built from `parentId`. */
+  getTags(): Promise<Tag[]>;
+}
+
 export interface SearchDesktopAdapter {
   /** Reads the server version once to decide whether a Search can be answered (Immich 3.2 or later). */
   getSearchSupport(): Promise<SearchSupport>;
@@ -206,6 +212,7 @@ export interface DesktopAdapter
     PlaceTimelineDesktopAdapter,
     PeopleDesktopAdapter,
     PlacesDesktopAdapter,
+    TagsDesktopAdapter,
     MemoriesDesktopAdapter,
     AllMemoriesDesktopAdapter,
     SearchDesktopAdapter,
@@ -273,6 +280,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getPersonTimelineBuckets: (personId) => invoke<TimelineBucket[]>("get_person_timeline_buckets", { personId }),
   getPersonTimelineBucketAssets: (personId, timeBucket) => invoke<TimelineAsset[]>("get_person_timeline_bucket_assets", { personId, timeBucket }),
   getPlaces: () => invoke<Place[]>("get_places"),
+  getTags: () => invoke<Tag[]>("get_tags"),
   getSearchSupport: () => invoke<SearchSupport>("get_search_support"),
   getSearchFeatures: () => invoke<SearchFeatures>("get_search_features"),
   searchAssets: (request) => invoke<SearchResults>("search_assets", { request }),
