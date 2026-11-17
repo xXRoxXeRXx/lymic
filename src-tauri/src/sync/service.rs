@@ -229,7 +229,7 @@ impl<'a> Synchronization<'a> {
 
     pub(crate) async fn resume(&self) -> Result<db::SyncSnapshot, String> {
         let previous = self.lifecycle().status().await?;
-        if previous.status != "PAUSED" {
+        if previous.status != db::SyncJobStatus::Paused {
             return Ok(previous);
         }
         let snapshot = self.lifecycle().resume().await?;
@@ -242,7 +242,7 @@ impl<'a> Synchronization<'a> {
         &self,
         snapshot: &db::SyncSnapshot,
     ) -> Result<db::SyncSnapshot, String> {
-        if snapshot.status != "RUNNING" {
+        if snapshot.status != db::SyncJobStatus::Running {
             return Ok(snapshot.clone());
         }
         let lifecycle = self.lifecycle();
@@ -486,13 +486,22 @@ mod tests {
 
         assert!(matches!(
             lifecycle.start_or_join().await.unwrap(),
-            LifecycleClaim::Started(snapshot) if snapshot.status == "RUNNING"
+            LifecycleClaim::Started(snapshot) if snapshot.status == db::SyncJobStatus::Running
         ));
-        assert_eq!(lifecycle.pause().await.unwrap().status, "PAUSED");
+        assert_eq!(
+            lifecycle.pause().await.unwrap().status,
+            db::SyncJobStatus::Paused
+        );
         assert!(coordinator.paused.load(std::sync::atomic::Ordering::SeqCst));
-        assert_eq!(lifecycle.resume().await.unwrap().status, "RUNNING");
+        assert_eq!(
+            lifecycle.resume().await.unwrap().status,
+            db::SyncJobStatus::Running
+        );
         assert!(!coordinator.paused.load(std::sync::atomic::Ordering::SeqCst));
-        assert_eq!(lifecycle.status().await.unwrap().status, "RUNNING");
+        assert_eq!(
+            lifecycle.status().await.unwrap().status,
+            db::SyncJobStatus::Running
+        );
     }
 
     #[tokio::test]
@@ -551,7 +560,10 @@ mod tests {
         let coordinator = std::sync::Arc::new(crate::sync::SyncCoordinatorInner::new(false));
         let lifecycle = SynchronizationLifecycle::new(&pool, &running, coordinator);
 
-        assert_eq!(lifecycle.fail().await.unwrap().status, "FAILED");
+        assert_eq!(
+            lifecycle.fail().await.unwrap().status,
+            db::SyncJobStatus::Failed
+        );
         assert!(db::has_pending_sync_queue_items(&pool).await.unwrap());
     }
 
@@ -650,7 +662,7 @@ mod tests {
                 .await
                 .unwrap()
                 .status,
-            "PAUSED"
+            db::SyncJobStatus::Paused
         );
         let running = std::sync::atomic::AtomicBool::new(false);
         let coordinator = Arc::new(crate::sync::SyncCoordinatorInner::new(true));
@@ -848,7 +860,7 @@ mod tests {
                 .unwrap()
                 .expect("runner must finish after its work is discarded")
                 .status,
-            "IDLE"
+            db::SyncJobStatus::Idle
         );
         assert!(!running.load(Ordering::SeqCst));
     }
@@ -913,7 +925,7 @@ mod tests {
                 .await
                 .unwrap()
                 .status,
-            "PAUSED"
+            db::SyncJobStatus::Paused
         );
     }
 
@@ -1031,7 +1043,10 @@ mod tests {
             )
             .await;
 
-            assert_eq!(db::get_sync_snapshot(&pool).await.unwrap().status, "FAILED");
+            assert_eq!(
+                db::get_sync_snapshot(&pool).await.unwrap().status,
+                db::SyncJobStatus::Failed
+            );
             assert!(!running.load(Ordering::SeqCst));
         }
 
