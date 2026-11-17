@@ -275,6 +275,8 @@
   ,"timeline_info_filename": "File name"
   ,"timeline_info_dimensions": "Dimensions"
   ,"timeline_info_size": "File size"
+  ,"timeline_info_tags": "الوسوم"
+  ,"timeline_tag_open": "عرض الصور التي تحمل الوسم {path}"
   ,"timeline_selection_count": "{count} selected"
   ,"timeline_selection_finish": "Done"
   ,"timeline_selection_download": "تنزيل المحدد"

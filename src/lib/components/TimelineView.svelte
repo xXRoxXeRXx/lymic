@@ -6,7 +6,7 @@
   import { toBcp47Locale } from "../i18n";
   import type { TimelineController } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
-  import type { AlbumAssignmentResult, AssetDetails, TimelineAsset, TrashRestoreResult } from "../contracts";
+  import type { AlbumAssignmentResult, AssetDetails, AssetTag, TimelineAsset, TrashRestoreResult } from "../contracts";
   import { calculateMasonryLayout } from "./timeline-masonry";
   import Lightbox from "./Lightbox.svelte";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
@@ -46,6 +46,8 @@
     initialScrollTop?: number;
     /** Reports the scroll position when the view opens and whenever the user scrolls. */
     onScrollPosition?(scrollTop: number): void;
+    /** Opens the Tag Timeline of a Tag chip selected in the Lightbox, which has been closed by then. */
+    onSelectTag?(tag: AssetTag): void;
     /** Shows one ordered list instead of month sections: no month headings and no Scrubber (Context Search Results, ADR-0009). */
     flat?: boolean;
     /** Called while the end of the list is near the viewport, to load a further page. Pass it only while a page can be loaded. */
@@ -79,6 +81,7 @@
     restoreTrashedAssets,
     initialScrollTop = 0,
     onScrollPosition,
+    onSelectTag,
     flat = false,
     onLoadMore,
     footer,
@@ -669,7 +672,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} {addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} {addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} {onSelectTag} />
 {/if}
 {#if targetAlbumCatalogue}
   <AddToAlbumModal

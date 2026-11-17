@@ -275,6 +275,8 @@
   ,"timeline_info_filename": "File name"
   ,"timeline_info_dimensions": "Dimensions"
   ,"timeline_info_size": "File size"
+  ,"timeline_info_tags": "标签"
+  ,"timeline_tag_open": "显示带有标签 {path} 的照片"
   ,"timeline_selection_count": "{count} selected"
   ,"timeline_selection_finish": "Done"
   ,"timeline_selection_download": "下载所选项目"
