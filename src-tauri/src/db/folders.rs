@@ -15,7 +15,7 @@ pub async fn add_folder(
     path: &str,
     target_album_id: Option<&AlbumId>,
 ) -> Result<i64, sqlx::Error> {
-    let path = normalize_windows_drive_letter(path);
+    let path = crate::media::paths::normalize_drive_letter_str(path);
     let result = sqlx::query("INSERT INTO watched_folders (path, target_album_id) VALUES (?, ?)")
         .bind(path)
         .bind(target_album_id.map(|id| id.as_str()))
@@ -31,7 +31,7 @@ pub async fn restore_folder(
     target_album_id: Option<&AlbumId>,
     exclusion_patterns: &[String],
 ) -> Result<i64, sqlx::Error> {
-    let path = normalize_windows_drive_letter(path);
+    let path = crate::media::paths::normalize_drive_letter_str(path);
     let exclusion_patterns =
         serde_json::to_string(exclusion_patterns).expect("exclusion patterns serialize");
     let result = sqlx::query(
@@ -167,8 +167,6 @@ pub async fn remap_watched_folder_path(
         old_prefix: super::sql_folder_prefix(old_path),
         paths: crate::media::paths::PathRemapper::new(old_path, new_path),
     };
-    let local_path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
-    let upload_unit_cond = super::sql_path_is_or_descendant_of("upload_unit_id", "?1");
 
     let mut tx = pool.begin().await?;
 
@@ -178,42 +176,17 @@ pub async fn remap_watched_folder_path(
         .execute(&mut *tx)
         .await?;
 
-    for (table, column, extra_filter) in [
+    for (table, column, row_filter) in [
         ("sync_state", "local_path", ""),
         ("album_retry_remote_ids", "local_path", ""),
-        (
-            "sync_jobs",
-            "current_path",
-            "id = 1 AND current_path IS NOT NULL AND ",
-        ),
+        ("sync_jobs", "current_path", "id = 1 AND "),
     ] {
         remap
-            .remap_column(&mut tx, table, column, extra_filter)
+            .remap_column(&mut tx, table, column, row_filter)
             .await?;
     }
 
-    let queue_rows: Vec<(i64, String, String)> = sqlx::query_as(&format!(
-        "SELECT job_id, local_path, upload_unit_id FROM sync_queue WHERE ({local_path_cond} OR {upload_unit_cond})"
-    ))
-    .bind(&remap.old_prefix)
-    .fetch_all(&mut *tx)
-    .await?;
-    for (job_id, old_local_path, old_upload_unit_id) in queue_rows {
-        let new_local = remap.paths.remap_if_changed(&old_local_path);
-        let new_unit = remap.paths.remap_if_changed(&old_upload_unit_id);
-        if new_local.is_some() || new_unit.is_some() {
-            sqlx::query(
-                "UPDATE sync_queue SET local_path = ?, upload_unit_id = ? \
-                 WHERE job_id = ? AND local_path = ?",
-            )
-            .bind(new_local.as_deref().unwrap_or(&old_local_path))
-            .bind(new_unit.as_deref().unwrap_or(&old_upload_unit_id))
-            .bind(job_id)
-            .bind(&old_local_path)
-            .execute(&mut *tx)
-            .await?;
-        }
-    }
+    remap.remap_sync_queue(&mut tx).await?;
 
     tx.commit().await?;
     Ok(())
@@ -230,20 +203,15 @@ impl FolderRemap {
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         table: &str,
         column: &str,
-        extra_filter: &str,
+        row_filter: &str,
     ) -> Result<(), sqlx::Error> {
         let path_cond = super::sql_path_is_or_descendant_of(column, "?1");
         let paths: Vec<String> = sqlx::query_scalar(&format!(
-            "SELECT {column} FROM {table} WHERE {extra_filter}{path_cond}"
+            "SELECT {column} FROM {table} WHERE {row_filter}{column} IS NOT NULL AND {path_cond}"
         ))
         .bind(&self.old_prefix)
         .fetch_all(&mut **tx)
         .await?;
-        let row_filter = if table == "sync_jobs" {
-            "id = 1 AND "
-        } else {
-            ""
-        };
         for old_row_path in paths {
             if let Some(new_row_path) = self.paths.remap_if_changed(&old_row_path) {
                 sqlx::query(&format!(
@@ -257,13 +225,35 @@ impl FolderRemap {
         }
         Ok(())
     }
-}
 
-fn normalize_windows_drive_letter(path: &str) -> String {
-    let bytes = path.as_bytes();
-    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
-        format!("{}{}", (bytes[0] as char).to_ascii_uppercase(), &path[1..])
-    } else {
-        path.to_string()
+    async fn remap_sync_queue(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<(), sqlx::Error> {
+        let local_path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
+        let upload_unit_cond = super::sql_path_is_or_descendant_of("upload_unit_id", "?1");
+        let queue_rows: Vec<(i64, String, String)> = sqlx::query_as(&format!(
+            "SELECT job_id, local_path, upload_unit_id FROM sync_queue WHERE ({local_path_cond} OR {upload_unit_cond})"
+        ))
+        .bind(&self.old_prefix)
+        .fetch_all(&mut **tx)
+        .await?;
+        for (job_id, old_local_path, old_upload_unit_id) in queue_rows {
+            let new_local = self.paths.remap_if_changed(&old_local_path);
+            let new_unit = self.paths.remap_if_changed(&old_upload_unit_id);
+            if new_local.is_some() || new_unit.is_some() {
+                sqlx::query(
+                    "UPDATE sync_queue SET local_path = ?, upload_unit_id = ? \
+                     WHERE job_id = ? AND local_path = ?",
+                )
+                .bind(new_local.as_deref().unwrap_or(&old_local_path))
+                .bind(new_unit.as_deref().unwrap_or(&old_upload_unit_id))
+                .bind(job_id)
+                .bind(&old_local_path)
+                .execute(&mut **tx)
+                .await?;
+            }
+        }
+        Ok(())
     }
 }

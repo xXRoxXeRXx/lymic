@@ -207,7 +207,7 @@ fn trim_trailing_separators_preserving_root(path: &str) -> &str {
     trimmed
 }
 
-fn normalize_drive_letter_str(path: &str) -> String {
+pub(crate) fn normalize_drive_letter_str(path: &str) -> String {
     let bytes = path.as_bytes();
     if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
         format!("{}{}", (bytes[0] as char).to_ascii_uppercase(), &path[1..])

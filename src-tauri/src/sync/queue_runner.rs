@@ -16,6 +16,10 @@ use std::sync::Arc;
 const SYNC_QUEUE_BLOCK_SIZE: i64 = 50;
 
 pub(crate) trait QueueBlockProcessor {
+    fn prepare(&self) -> impl std::future::Future<Output = Result<(), String>> + Send {
+        async { Ok(()) }
+    }
+
     fn process_block(
         &self,
         units: Vec<UploadUnit>,
@@ -24,6 +28,10 @@ pub(crate) trait QueueBlockProcessor {
 }
 
 impl<R: tauri::Runtime> QueueBlockProcessor for RunProcessor<R> {
+    fn prepare(&self) -> impl std::future::Future<Output = Result<(), String>> + Send {
+        self.prepare()
+    }
+
     fn process_block(
         &self,
         units: Vec<UploadUnit>,
@@ -79,6 +87,8 @@ where
         })
         .await;
     reporter.started(&snapshot);
+    processor.prepare().await?;
+    reporter.transfers_started();
     let mut totals = SyncSummary {
         failed: snapshot.failed.max(0) as usize,
         ..Default::default()
@@ -148,15 +158,17 @@ fn excluded_paths_at_queue_boundary(
 }
 
 /// Shared launch parameters for a Synchronization pipeline run.
-pub(crate) struct SyncPipelineParams {
-    pub(crate) app: tauri::AppHandle,
+pub(crate) struct SyncPipelineParams<R: tauri::Runtime = tauri::Wry> {
+    pub(crate) app: tauri::AppHandle<R>,
     pub(crate) runtime: SyncRuntime,
     pub(crate) client: Arc<ImmichClient>,
     pub(crate) source: SyncSource,
     pub(crate) audit_context: SyncAuditContext,
 }
 
-pub(crate) async fn run_sync_pipeline(params: SyncPipelineParams) -> Result<SyncSummary, String> {
+pub(crate) async fn run_sync_pipeline<R: tauri::Runtime>(
+    params: SyncPipelineParams<R>,
+) -> Result<SyncSummary, String> {
     let SyncPipelineParams {
         app,
         runtime,
@@ -173,22 +185,14 @@ pub(crate) async fn run_sync_pipeline(params: SyncPipelineParams) -> Result<Sync
     );
     let reporter =
         DesktopRunReporter::new(app.clone(), source, audit_context.clone(), progress.clone());
-    let processor = match RunProcessor::new(SyncRunContext {
+    let processor = RunProcessor::with_context(SyncRunContext {
         app,
         runtime: runtime.clone(),
         client,
         audit_context,
         progress,
         sidecar_cache: SidecarDirectoryCache::new(),
-    })
-    .await
-    {
-        Ok(processor) => processor,
-        Err(error) => {
-            fail_and_report(&runtime, &reporter, &error).await;
-            return Err(error);
-        }
-    };
+    });
     run_queue_loop(&runtime, source, &processor, &reporter).await
 }
 
@@ -806,6 +810,51 @@ mod tests {
                 RecordedEvent::Failed {
                     status: Some(db::SyncJobStatus::Failed),
                     error: "immich unreachable".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn queue_loop_reports_started_before_failing_when_processor_prepare_fails() {
+        let pool = test_pool().await;
+        db::enqueue_upload_units(&pool, &[queue_asset("C:/photos/one.jpg")], &[])
+            .await
+            .unwrap();
+        let runtime = SyncRuntime::new(pool.clone(), false);
+        runtime.start_or_join().await.unwrap();
+
+        struct FailingPrepareProcessor;
+        impl QueueBlockProcessor for FailingPrepareProcessor {
+            async fn prepare(&self) -> Result<(), String> {
+                Err("could not load settings".to_string())
+            }
+
+            async fn process_block(
+                &self,
+                _units: Vec<UploadUnit>,
+                _active_work: ProcessingContext,
+            ) -> Result<SyncSummary, String> {
+                unreachable!("process_block must not run when prepare fails")
+            }
+        }
+
+        let reporter = RecordingReporter::default();
+        let err = run_queue_loop(&runtime, SyncSource::Manual, &FailingPrepareProcessor, &reporter)
+            .await
+            .unwrap_err();
+        assert_eq!(err, "could not load settings");
+        assert!(!runtime.is_running());
+        assert_eq!(
+            reporter.events(),
+            vec![
+                RecordedEvent::Started {
+                    status: db::SyncJobStatus::Running,
+                    total: 1,
+                },
+                RecordedEvent::Failed {
+                    status: Some(db::SyncJobStatus::Failed),
+                    error: "could not load settings".to_string(),
                 },
             ]
         );

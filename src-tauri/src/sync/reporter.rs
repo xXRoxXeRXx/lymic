@@ -25,6 +25,7 @@ use tauri::{Emitter, Manager};
 pub(crate) trait SyncRunReporter {
     fn queued_waiting(&self);
     fn started(&self, snapshot: &db::SyncSnapshot);
+    fn transfers_started(&self) {}
     fn paused(&self, snapshot: &db::SyncSnapshot);
     fn resumed(&self, snapshot: &db::SyncSnapshot);
     fn progressed(&self, snapshot: &db::SyncSnapshot);
@@ -174,19 +175,21 @@ struct DesktopRunTelemetry<R: tauri::Runtime> {
 }
 
 impl<R: tauri::Runtime> DesktopRunTelemetry<R> {
-    fn disarm_and_finish_transfer_stats(&self) {
-        self.cleanup_armed.store(false, Ordering::SeqCst);
+    fn finish_transfer_stats(&self) {
         self.transfer_stats.set_active(false);
         emit_transfer_stats(&self.app, &self.transfer_stats);
+    }
+
+    fn finish_transfer_stats_if_armed(&self) {
+        if self.cleanup_armed.swap(false, Ordering::SeqCst) {
+            self.finish_transfer_stats();
+        }
     }
 }
 
 impl<R: tauri::Runtime> Drop for DesktopRunTelemetry<R> {
     fn drop(&mut self) {
-        if self.cleanup_armed.swap(false, Ordering::SeqCst) {
-            self.transfer_stats.set_active(false);
-            emit_transfer_stats(&self.app, &self.transfer_stats);
-        }
+        self.finish_transfer_stats_if_armed();
     }
 }
 
@@ -260,6 +263,9 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
             ),
         );
         self.run.progress.sync_from_snapshot(snapshot);
+    }
+
+    fn transfers_started(&self) {
         self.run.transfer_stats.set_active(true);
         self.run.cleanup_armed.store(true, Ordering::SeqCst);
         spawn_transfer_reporter(self.run.app.clone(), self.run.transfer_stats.clone());
@@ -311,7 +317,8 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
             .transfer_stats
             .sync_queue(total_bytes, completed_bytes);
         self.run.progress.report_current_file("");
-        self.run.disarm_and_finish_transfer_stats();
+        self.run.cleanup_armed.store(false, Ordering::SeqCst);
+        self.run.finish_transfer_stats();
         let is_automatic = !self.run.source.is_manual();
         if is_automatic {
             let _ = self.run.app.emit("sync-idle", ());
@@ -372,11 +379,7 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
     }
 
     fn failed(&self, snapshot: Option<&db::SyncSnapshot>, error: &str) {
-        if self.run.cleanup_armed.swap(false, Ordering::SeqCst) {
-            self.run.progress.report_current_file("");
-            self.run.transfer_stats.set_active(false);
-            emit_transfer_stats(&self.run.app, &self.run.transfer_stats);
-        }
+        self.run.finish_transfer_stats_if_armed();
         self.service.failed(self.run.source, snapshot, error);
     }
 }
@@ -518,6 +521,7 @@ mod tests {
 
         let started = test_snapshot(db::SyncJobStatus::Running, 2, 0, 0);
         reporter.started(&started);
+        reporter.transfers_started();
         progress.report_current_file("one.jpg");
         progress.advance_bytes(100);
         let paused = test_snapshot(db::SyncJobStatus::Paused, 2, 1, 0);
@@ -587,7 +591,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn desktop_reporter_failed_clears_current_file_updates_tray_and_records_abort() {
+    async fn desktop_reporter_failed_after_transfers_started_finishes_stats_without_progress_clear(
+    ) {
         let app = tauri::test::mock_app();
         let audit_logger = Arc::new(AuditLogger::initialize(app.handle()).unwrap());
         app.manage(audit_logger.clone());
@@ -625,13 +630,12 @@ mod tests {
 
         let started = test_snapshot(db::SyncJobStatus::Running, 1, 0, 0);
         reporter.started(&started);
+        reporter.transfers_started();
         let failed = test_snapshot(db::SyncJobStatus::Failed, 1, 0, 1);
         reporter.failed(Some(&failed), "connection lost");
 
         let captured = events.lock().unwrap();
-        assert!(captured
-            .iter()
-            .any(|(name, payload)| name == "sync-progress" && payload == ""));
+        assert!(!captured.iter().any(|(name, _)| name == "sync-progress"));
         assert!(captured.iter().any(
             |(name, payload)| name == "sync-progress-snapshot" && payload["status"] == "FAILED"
         ));
@@ -645,6 +649,56 @@ mod tests {
                 .lock()
                 .unwrap(),
             db::SyncJobStatus::Failed
+        );
+    }
+
+    #[tokio::test]
+    async fn desktop_reporter_setup_failure_after_start_emits_started_without_transfer_events() {
+        let app = tauri::test::mock_app();
+        let audit_logger = Arc::new(AuditLogger::initialize(app.handle()).unwrap());
+        app.manage(audit_logger);
+        app.manage(crate::app::state::TraySyncStatus(Mutex::new(
+            db::SyncJobStatus::Running,
+        )));
+
+        let events = Arc::new(Mutex::new(Vec::<String>::new()));
+        for name in [
+            "sync-started",
+            "sync-progress",
+            "sync-progress-snapshot",
+            "sync-transfer-stats",
+        ] {
+            let captured = events.clone();
+            let event_name = name.to_string();
+            app.handle().listen(name, move |_| {
+                captured.lock().unwrap().push(event_name.clone());
+            });
+        }
+
+        let reporter = DesktopRunReporter::new_with_notifier(
+            app.handle().clone(),
+            SyncSource::Manual,
+            test_audit_context(SyncSource::Manual),
+            DesktopRunProgress::new(
+                app.handle().clone(),
+                JobByteProgress::new(0, 0),
+                CurrentFileProgress::default(),
+            ),
+            Arc::new(|_, _, _| {}),
+        );
+
+        let started = test_snapshot(db::SyncJobStatus::Running, 1, 0, 0);
+        reporter.started(&started);
+        let failed = test_snapshot(db::SyncJobStatus::Failed, 1, 0, 0);
+        reporter.failed(Some(&failed), "config load failed");
+
+        assert_eq!(
+            *events.lock().unwrap(),
+            vec![
+                "sync-started",
+                "sync-progress-snapshot",
+                "sync-progress-snapshot"
+            ]
         );
     }
 

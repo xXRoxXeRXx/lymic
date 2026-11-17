@@ -277,7 +277,7 @@ async fn all_containment_and_sql_cleanup_owners_agree_on_characterization_inputs
         },
         ContainmentCase {
             label: "mixed_doubled_separator",
-            folder: r"C:\Photos",
+            folder: r"C:\Photos\Sub",
             candidate: r"C:/Photos\/Sub/a.jpg",
             expected_win: true,
             expected_nonwin: false,

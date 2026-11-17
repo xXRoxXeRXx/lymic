@@ -4,6 +4,7 @@
 //! the Tauri surface remains separate from queue coordination and processing.
 
 pub(crate) mod active_work;
+pub(crate) mod admission;
 pub(crate) mod album_batch;
 pub(crate) mod completion;
 pub(crate) mod lifecycle;

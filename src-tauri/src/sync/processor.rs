@@ -80,16 +80,33 @@ impl<R: tauri::Runtime> SyncRunContext<R> {
 /// `process` remains the sole block-level entry point for the queue runner.
 pub(crate) struct RunProcessor<R: tauri::Runtime = tauri::Wry> {
     run: SyncRunContext<R>,
-    upload_parallelism: usize,
+    upload_parallelism: tokio::sync::OnceCell<usize>,
 }
 
 impl<R: tauri::Runtime> RunProcessor<R> {
-    pub(crate) async fn new(run: SyncRunContext<R>) -> Result<Self, String> {
-        let upload_parallelism = load_upload_parallelism(run.pool()).await?;
-        Ok(Self {
+    pub(crate) fn with_context(run: SyncRunContext<R>) -> Self {
+        Self {
             run,
-            upload_parallelism,
-        })
+            upload_parallelism: tokio::sync::OnceCell::new(),
+        }
+    }
+
+    pub(crate) async fn prepare(&self) -> Result<(), String> {
+        self.upload_parallelism().await.map(|_| ())
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn new(run: SyncRunContext<R>) -> Result<Self, String> {
+        let processor = Self::with_context(run);
+        processor.prepare().await?;
+        Ok(processor)
+    }
+
+    async fn upload_parallelism(&self) -> Result<usize, String> {
+        self.upload_parallelism
+            .get_or_try_init(|| load_upload_parallelism(self.run.pool()))
+            .await
+            .copied()
     }
 
     pub(crate) async fn process(
@@ -393,9 +410,10 @@ impl<R: tauri::Runtime> RunProcessor<R> {
         queue_results: &mut Vec<(String, String)>,
         uploaded: &mut usize,
     ) -> Result<(), String> {
+        let upload_parallelism = self.upload_parallelism().await?;
         let mut pending = upload_units.into_iter();
         let mut uploads = FuturesUnordered::new();
-        while self.run.runtime.can_start_work() && uploads.len() < self.upload_parallelism {
+        while self.run.runtime.can_start_work() && uploads.len() < upload_parallelism {
             let Some((unit, cancellation)) = next_active_upload_unit(&mut pending, active_work)
             else {
                 break;
@@ -409,7 +427,7 @@ impl<R: tauri::Runtime> RunProcessor<R> {
             if let Some(pending_album) = outcome.pending_album_unit {
                 pending_album_units.push(pending_album);
             }
-            while self.run.runtime.can_start_work() && uploads.len() < self.upload_parallelism {
+            while self.run.runtime.can_start_work() && uploads.len() < upload_parallelism {
                 let Some((unit, cancellation)) = next_active_upload_unit(&mut pending, active_work)
                 else {
                     break;

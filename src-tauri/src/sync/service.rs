@@ -64,17 +64,17 @@ impl SyncSource {
 ///
 /// It is the one entry point for a synchronization run and localizes the
 /// desktop effects around the durable lifecycle transitions.
-pub(crate) struct Synchronization<'a> {
-    app: &'a tauri::AppHandle,
+pub(crate) struct Synchronization<'a, R: Runtime = tauri::Wry> {
+    app: &'a tauri::AppHandle<R>,
     runtime: &'a SyncRuntime,
 }
 
-impl<'a> Synchronization<'a> {
-    pub(crate) fn new(app: &'a tauri::AppHandle, runtime: &'a SyncRuntime) -> Self {
+impl<'a, R: Runtime> Synchronization<'a, R> {
+    pub(crate) fn new(app: &'a tauri::AppHandle<R>, runtime: &'a SyncRuntime) -> Self {
         Self { app, runtime }
     }
 
-    pub(crate) fn for_tauri(app: &'a tauri::AppHandle) -> Self {
+    pub(crate) fn for_tauri(app: &'a tauri::AppHandle<R>) -> Self {
         Self::new(app, app.state::<SyncRuntime>().inner())
     }
 
@@ -82,7 +82,7 @@ impl<'a> Synchronization<'a> {
         self.runtime.pool()
     }
 
-    fn reporter(&self) -> DesktopServiceReporter {
+    fn reporter(&self) -> DesktopServiceReporter<R> {
         DesktopServiceReporter::new(self.app.clone())
     }
 
@@ -163,7 +163,7 @@ impl<'a> Synchronization<'a> {
         }
     }
 
-    async fn pipeline_params(&self, source: SyncSource) -> Result<SyncPipelineParams, String> {
+    async fn pipeline_params(&self, source: SyncSource) -> Result<SyncPipelineParams<R>, String> {
         let session = self.open_session(source).await?;
         let audit_context =
             SyncAuditContext::from_credentials(session.credentials(), source.audit_label());
@@ -253,7 +253,7 @@ impl<'a> Synchronization<'a> {
     }
 }
 
-fn spawn_sync_runner(params: SyncPipelineParams) {
+fn spawn_sync_runner<R: Runtime>(params: SyncPipelineParams<R>) {
     let app = params.app.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(error) = run_sync_pipeline(params).await {
@@ -353,9 +353,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        db::test_pool, media::model::Asset, sync::lifecycle::admit_scan_result,
-    };
+    use crate::{db::test_pool, media::model::Asset, sync::admission::admit_scan_result};
     use tauri::Listener;
 
     #[tokio::test]
@@ -881,15 +879,15 @@ mod tests {
                 .push(serde_json::from_str::<serde_json::Value>(event.payload()).unwrap());
         });
         let runtime = SyncRuntime::new(pool.clone(), false);
+        let service = Synchronization::new(app.handle(), &runtime);
 
         for source in [SyncSource::Manual, SyncSource::Watcher] {
             runtime.try_claim_run();
-            let snapshot = runtime.fail().await.ok();
-            DesktopServiceReporter::new(app.handle().clone()).failed(
-                source,
-                snapshot.as_ref(),
-                "connection lost",
-            );
+            let err = service
+                .fail_run::<()>(source, "connection lost")
+                .await
+                .unwrap_err();
+            assert_eq!(err, "connection lost");
 
             assert_eq!(
                 db::get_sync_snapshot(&pool).await.unwrap().status,
