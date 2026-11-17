@@ -53,12 +53,33 @@ pub(super) async fn bulk_check_response_error(response: Response) -> BulkCheckEr
     }
 }
 
+/// The Remote Asset that Immich recognized a Duplicate as, and whether it is a Trashed Asset
+/// (which makes the Duplicate a Trashed Duplicate, ADR-0010).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DuplicateRemoteAsset {
+    pub id: super::ids::RemoteAssetId,
+    pub is_trashed: bool,
+}
+
+impl DuplicateRemoteAsset {
+    /// The Remote Asset `id`, trashed when the Immich response `item` naming it says
+    /// `isTrashed: true` (absent means false).
+    pub(super) fn new(id: super::ids::RemoteAssetId, item: &serde_json::Value) -> Self {
+        Self {
+            id,
+            is_trashed: item
+                .get("isTrashed")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BulkCheckDuplicate {
     pub hash: String,
-    pub asset_id: Option<super::ids::RemoteAssetId>,
-    /// The Remote Asset is in the Immich trash (Immich's `isTrashed`, absent means false).
-    pub is_trashed: bool,
+    /// Absent when the bulk check named no asset ID; it is then found by checksum.
+    pub remote_asset: Option<DuplicateRemoteAsset>,
 }
 
 pub(super) fn parse_bulk_check_response(
@@ -103,20 +124,17 @@ pub(super) fn parse_bulk_check_response(
         ) {
             ("accept", None) | ("accept", Some(_)) => {}
             ("reject", None) | ("reject", Some("duplicate")) => {
-                let asset_id = result
+                let remote_asset = result
                     .get("assetId")
                     .and_then(serde_json::Value::as_str)
                     .map(str::trim)
                     .filter(|s| !s.is_empty())
-                    .map(super::ids::RemoteAssetId::new);
-                let is_trashed = result
-                    .get("isTrashed")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false);
+                    .map(|asset_id| {
+                        DuplicateRemoteAsset::new(super::ids::RemoteAssetId::new(asset_id), result)
+                    });
                 existing.push(BulkCheckDuplicate {
                     hash: id.to_string(),
-                    asset_id,
-                    is_trashed,
+                    remote_asset,
                 });
             }
             ("reject", Some("unsupported-format")) => {
@@ -144,7 +162,10 @@ pub(super) fn parse_bulk_check_response(
 
 #[cfg(test)]
 mod tests {
-    use super::{bulk_check_status_error, parse_bulk_check_response, BulkCheckDuplicate};
+    use super::{
+        bulk_check_status_error, parse_bulk_check_response, BulkCheckDuplicate,
+        DuplicateRemoteAsset,
+    };
     use crate::immich::RemoteAssetId;
     use reqwest::StatusCode;
     use serde_json::json;
@@ -164,13 +185,14 @@ mod tests {
             vec![
                 BulkCheckDuplicate {
                     hash: "first".to_string(),
-                    asset_id: Some(RemoteAssetId::new("asset-uuid-1")),
-                    is_trashed: false,
+                    remote_asset: Some(DuplicateRemoteAsset {
+                        id: RemoteAssetId::new("asset-uuid-1"),
+                        is_trashed: false,
+                    }),
                 },
                 BulkCheckDuplicate {
                     hash: "second".to_string(),
-                    asset_id: None,
-                    is_trashed: false,
+                    remote_asset: None,
                 }
             ]
         );
@@ -184,8 +206,7 @@ mod tests {
             parse_bulk_check_response(&valid, &hashes).unwrap(),
             vec![BulkCheckDuplicate {
                 hash: "first".to_string(),
-                asset_id: None,
-                is_trashed: false,
+                remote_asset: None,
             }]
         );
         for invalid in [
@@ -236,13 +257,17 @@ mod tests {
             vec![
                 BulkCheckDuplicate {
                     hash: "trashed-hash".to_string(),
-                    asset_id: Some(RemoteAssetId::new("trashed-id")),
-                    is_trashed: true,
+                    remote_asset: Some(DuplicateRemoteAsset {
+                        id: RemoteAssetId::new("trashed-id"),
+                        is_trashed: true,
+                    }),
                 },
                 BulkCheckDuplicate {
                     hash: "live-hash".to_string(),
-                    asset_id: Some(RemoteAssetId::new("live-id")),
-                    is_trashed: false,
+                    remote_asset: Some(DuplicateRemoteAsset {
+                        id: RemoteAssetId::new("live-id"),
+                        is_trashed: false,
+                    }),
                 },
             ]
         );

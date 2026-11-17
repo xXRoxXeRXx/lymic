@@ -1,3 +1,4 @@
+use super::bulk_check::DuplicateRemoteAsset;
 use super::client::ImmichClient;
 use super::response::{
     read_response_body_limited, send_checked, send_checked_as, MAX_SUCCESS_RESPONSE_BYTES,
@@ -36,14 +37,6 @@ pub struct AlbumCatalogueItem {
 pub struct AlbumAssignmentResult {
     pub succeeded: usize,
     pub failed: usize,
-}
-
-/// The Remote Asset that a checksum search found, including one in the Immich trash.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ChecksumMatch {
-    pub asset_id: super::ids::RemoteAssetId,
-    /// Immich's `isTrashed`; absent means false.
-    pub is_trashed: bool,
 }
 
 #[derive(Deserialize)]
@@ -164,7 +157,7 @@ impl ImmichClient {
     pub(crate) async fn search_asset_by_checksum(
         &self,
         checksum: &str,
-    ) -> Result<Option<ChecksumMatch>, String> {
+    ) -> Result<Option<DuplicateRemoteAsset>, String> {
         let response = send_checked_as(
             self.request(Method::POST, "search/metadata")
                 .json(&json!({ "checksum": checksum, "withDeleted": true })),
@@ -191,17 +184,14 @@ impl ImmichClient {
             &[]
         };
 
-        let matches: Vec<ChecksumMatch> = items
+        let matches: Vec<DuplicateRemoteAsset> = items
             .iter()
             .filter_map(|item| {
                 let id = item.get("id").and_then(serde_json::Value::as_str)?;
-                Some(ChecksumMatch {
-                    asset_id: super::ids::RemoteAssetId::new(id),
-                    is_trashed: item
-                        .get("isTrashed")
-                        .and_then(serde_json::Value::as_bool)
-                        .unwrap_or(false),
-                })
+                Some(DuplicateRemoteAsset::new(
+                    super::ids::RemoteAssetId::new(id),
+                    item,
+                ))
             })
             .collect();
 
@@ -609,8 +599,8 @@ mod tests {
         let resolved = client.search_asset_by_checksum("sha1-hash").await.unwrap();
         assert_eq!(
             resolved,
-            Some(ChecksumMatch {
-                asset_id: RemoteAssetId::new("resolved-remote-id"),
+            Some(DuplicateRemoteAsset {
+                id: RemoteAssetId::new("resolved-remote-id"),
                 is_trashed: false,
             })
         );
@@ -669,8 +659,8 @@ mod tests {
         assert!(request.contains(r#""checksum":"sha1-hash""#));
         assert_eq!(
             found,
-            Some(ChecksumMatch {
-                asset_id: RemoteAssetId::new("trashed-id"),
+            Some(DuplicateRemoteAsset {
+                id: RemoteAssetId::new("trashed-id"),
                 is_trashed: true,
             })
         );
@@ -687,8 +677,8 @@ mod tests {
 
         assert_eq!(
             client.search_asset_by_checksum("sha1-hash").await.unwrap(),
-            Some(ChecksumMatch {
-                asset_id: RemoteAssetId::new("live-id"),
+            Some(DuplicateRemoteAsset {
+                id: RemoteAssetId::new("live-id"),
                 is_trashed: false,
             })
         );

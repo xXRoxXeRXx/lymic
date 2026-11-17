@@ -1,8 +1,7 @@
-import { createArchiveTimelineController } from "./archive-timeline-controller.svelte";
 import { createAlbumCatalogueController } from "./album-catalogue-controller.svelte";
 import { createAuthController } from "./auth-controller.svelte";
 import { createExploreController } from "./explore-controller.svelte";
-import { createFavoritesTimelineController } from "./favorites-timeline-controller.svelte";
+import { createFilteredTimelineControllers } from "./filtered-timeline-controller.svelte";
 import { createFeedbackController } from "./feedback-controller.svelte";
 import { createAllMemoriesController } from "./all-memories-controller.svelte";
 import { createMemoriesController } from "./memories-controller.svelte";
@@ -14,16 +13,14 @@ import { createSearchController } from "./search-controller.svelte";
 import { createSyncController } from "./sync-controller.svelte";
 import { createTagsController } from "./tags-controller.svelte";
 import { createTargetAlbumCatalogue } from "./target-album-catalogue.svelte";
-import { createTrashTimelineController } from "./trash-timeline-controller.svelte";
 import { createTimelineController } from "./timeline-controller.svelte";
 import { createWatchedFoldersController } from "./watched-folders-controller.svelte";
 import type {
   AlbumCatalogueDesktopAdapter,
   AllMemoriesDesktopAdapter,
   AlbumsDesktopAdapter,
-  ArchiveTimelineDesktopAdapter,
   AuthDesktopAdapter,
-  FavoritesTimelineDesktopAdapter,
+  FilteredTimelineDesktopAdapter,
   MapDesktopAdapter,
   MemoriesDesktopAdapter,
   PeopleDesktopAdapter,
@@ -33,7 +30,6 @@ import type {
   SyncDesktopAdapter,
   TagsDesktopAdapter,
   TimelineDesktopAdapter,
-  TrashTimelineDesktopAdapter,
   WatchedFoldersDesktopAdapter,
 } from "../tauri/desktop-adapter";
 
@@ -44,9 +40,7 @@ export type SessionDesktopAdapter =
   AlbumsDesktopAdapter &
   AlbumCatalogueDesktopAdapter &
   TimelineDesktopAdapter &
-  FavoritesTimelineDesktopAdapter &
-  ArchiveTimelineDesktopAdapter &
-  TrashTimelineDesktopAdapter &
+  FilteredTimelineDesktopAdapter &
   MapDesktopAdapter &
   PeopleDesktopAdapter &
   PlacesDesktopAdapter &
@@ -95,9 +89,7 @@ export function createSessionController(options: {
     },
   });
   const timeline = createTimelineController(adapter);
-  const favorites = createFavoritesTimelineController(adapter);
-  const archive = createArchiveTimelineController(adapter);
-  const trash = createTrashTimelineController(adapter);
+  const filteredTimelines = createFilteredTimelineControllers(adapter);
   const people = createPeopleController(adapter);
   const places = createPlacesController(adapter);
   const tags = createTagsController(adapter, { isActive: () => options.isTagsActive?.() ?? false });
@@ -115,9 +107,7 @@ export function createSessionController(options: {
     sync,
     watchedFolders,
     timeline,
-    favorites,
-    archive,
-    trash,
+    ...Object.values(filteredTimelines),
     people,
     places,
     tags,
@@ -189,9 +179,7 @@ export function createSessionController(options: {
     watchedFolders,
     sync,
     timeline,
-    favorites,
-    archive,
-    trash,
+    filteredTimelines,
     people,
     places,
     tags,

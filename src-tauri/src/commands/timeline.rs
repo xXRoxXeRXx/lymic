@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::immich::{
-    AlbumTimeline, AssetDetails, ImmichSession, PlaceTimeline, RemoteAssetId, TimelineAsset,
-    TimelineBucket, TrashRestoreResult,
+    AlbumTimeline, AssetDetails, FilteredTimeline, ImmichSession, PlaceTimeline, RemoteAssetId,
+    TimelineAsset, TimelineBucket, TrashRestoreResult,
 };
 
 #[tauri::command]
@@ -134,60 +134,27 @@ pub(crate) async fn get_timeline_bucket_assets(
     .await
 }
 
+/// Timeline buckets of a Filtered Timeline (`timeline`: `"favorites"`, `"archive"` or `"trash"`).
 #[tauri::command]
-pub(crate) async fn get_favorites_timeline_buckets() -> Result<Vec<TimelineBucket>, String> {
+pub(crate) async fn get_filtered_timeline_buckets(
+    timeline: FilteredTimeline,
+) -> Result<Vec<TimelineBucket>, String> {
     ImmichSession::with_stored_credentials(|client| async move {
-        client.get_favorites_timeline_buckets().await
+        client.get_filtered_timeline_buckets(timeline).await
     })
     .await
 }
 
+/// The assets of one bucket of a Filtered Timeline.
 #[tauri::command]
-pub(crate) async fn get_favorites_timeline_bucket_assets(
+pub(crate) async fn get_filtered_timeline_bucket_assets(
+    timeline: FilteredTimeline,
     time_bucket: String,
 ) -> Result<Vec<TimelineAsset>, String> {
     ImmichSession::with_stored_credentials(|client| async move {
         client
-            .get_favorites_timeline_bucket_assets(&time_bucket)
+            .get_filtered_timeline_bucket_assets(timeline, &time_bucket)
             .await
-    })
-    .await
-}
-
-#[tauri::command]
-pub(crate) async fn get_archive_timeline_buckets() -> Result<Vec<TimelineBucket>, String> {
-    ImmichSession::with_stored_credentials(|client| async move {
-        client.get_archive_timeline_buckets().await
-    })
-    .await
-}
-
-#[tauri::command]
-pub(crate) async fn get_archive_timeline_bucket_assets(
-    time_bucket: String,
-) -> Result<Vec<TimelineAsset>, String> {
-    ImmichSession::with_stored_credentials(|client| async move {
-        client
-            .get_archive_timeline_bucket_assets(&time_bucket)
-            .await
-    })
-    .await
-}
-
-#[tauri::command]
-pub(crate) async fn get_trash_timeline_buckets() -> Result<Vec<TimelineBucket>, String> {
-    ImmichSession::with_stored_credentials(|client| async move {
-        client.get_trash_timeline_buckets().await
-    })
-    .await
-}
-
-#[tauri::command]
-pub(crate) async fn get_trash_timeline_bucket_assets(
-    time_bucket: String,
-) -> Result<Vec<TimelineAsset>, String> {
-    ImmichSession::with_stored_credentials(|client| async move {
-        client.get_trash_timeline_bucket_assets(&time_bucket).await
     })
     .await
 }

@@ -35,9 +35,8 @@ import {
   type AlbumTimelineDesktopAdapter,
   type PlaceTimelineDesktopAdapter,
   type AuthDesktopAdapter,
-  type ArchiveTimelineDesktopAdapter,
-  type TrashTimelineDesktopAdapter,
-  type FavoritesTimelineDesktopAdapter,
+  type FilteredTimelineDesktopAdapter,
+  type TrashRestoreDesktopAdapter,
   type PreferencesDesktopAdapter,
   type SearchDesktopAdapter,
   type RemovableVolumeDesktopAdapter,
@@ -55,9 +54,8 @@ describe("tauriDesktopAdapter", () => {
   const albumAssignmentAdapter: AlbumAssignmentDesktopAdapter = tauriDesktopAdapter;
   const albumCatalogueAdapter: AlbumCatalogueDesktopAdapter = tauriDesktopAdapter;
   const timelineAdapter: TimelineDesktopAdapter = tauriDesktopAdapter;
-  const favoritesTimelineAdapter: FavoritesTimelineDesktopAdapter = tauriDesktopAdapter;
-  const archiveTimelineAdapter: ArchiveTimelineDesktopAdapter = tauriDesktopAdapter;
-  const trashTimelineAdapter: TrashTimelineDesktopAdapter = tauriDesktopAdapter;
+  const filteredTimelineAdapter: FilteredTimelineDesktopAdapter = tauriDesktopAdapter;
+  const trashRestoreAdapter: TrashRestoreDesktopAdapter = tauriDesktopAdapter;
   const albumTimelineAdapter: AlbumTimelineDesktopAdapter = tauriDesktopAdapter;
   const placeTimelineAdapter: PlaceTimelineDesktopAdapter = tauriDesktopAdapter;
   const preferencesAdapter: PreferencesDesktopAdapter = tauriDesktopAdapter;
@@ -101,13 +99,13 @@ describe("tauriDesktopAdapter", () => {
     await albumAssignmentAdapter.addAssetsToAlbum(["asset-1", "asset-2"], "album-1");
     await timelineAdapter.getTimelineBuckets();
     await timelineAdapter.getTimelineBucketAssets("2025-03-01T00:00:00.000Z");
-    await favoritesTimelineAdapter.getFavoritesTimelineBuckets();
-    await favoritesTimelineAdapter.getFavoritesTimelineBucketAssets("2025-03-01T00:00:00.000Z");
-    await archiveTimelineAdapter.getArchiveTimelineBuckets();
-    await archiveTimelineAdapter.getArchiveTimelineBucketAssets("2025-03-01T00:00:00.000Z");
-    await trashTimelineAdapter.getTrashTimelineBuckets();
-    await trashTimelineAdapter.getTrashTimelineBucketAssets("2025-03-01T00:00:00.000Z");
-    await trashTimelineAdapter.restoreTrashedAssets(["trash-1", "trash-2"]);
+    await filteredTimelineAdapter.getFilteredTimelineBuckets("favorites");
+    await filteredTimelineAdapter.getFilteredTimelineBucketAssets("favorites", "2025-03-01T00:00:00.000Z");
+    await filteredTimelineAdapter.getFilteredTimelineBuckets("archive");
+    await filteredTimelineAdapter.getFilteredTimelineBucketAssets("archive", "2025-03-01T00:00:00.000Z");
+    await filteredTimelineAdapter.getFilteredTimelineBuckets("trash");
+    await filteredTimelineAdapter.getFilteredTimelineBucketAssets("trash", "2025-03-01T00:00:00.000Z");
+    await trashRestoreAdapter.restoreTrashedAssets(["trash-1", "trash-2"]);
     await tauriDesktopAdapter.getAssetDetails("asset-1");
     await tauriDesktopAdapter.setAssetFavorite("asset-1", true);
     await tauriDesktopAdapter.chooseDownloadDestination("IMG_0001.CR3");
@@ -171,12 +169,12 @@ describe("tauriDesktopAdapter", () => {
       ["add_assets_to_album", { assetIds: ["asset-1", "asset-2"], albumId: "album-1" }],
       ["get_timeline_buckets"],
       ["get_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
-      ["get_favorites_timeline_buckets"],
-      ["get_favorites_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
-      ["get_archive_timeline_buckets"],
-      ["get_archive_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
-      ["get_trash_timeline_buckets"],
-      ["get_trash_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" }],
+      ["get_filtered_timeline_buckets", { timeline: "favorites" }],
+      ["get_filtered_timeline_bucket_assets", { timeline: "favorites", timeBucket: "2025-03-01T00:00:00.000Z" }],
+      ["get_filtered_timeline_buckets", { timeline: "archive" }],
+      ["get_filtered_timeline_bucket_assets", { timeline: "archive", timeBucket: "2025-03-01T00:00:00.000Z" }],
+      ["get_filtered_timeline_buckets", { timeline: "trash" }],
+      ["get_filtered_timeline_bucket_assets", { timeline: "trash", timeBucket: "2025-03-01T00:00:00.000Z" }],
       ["restore_trashed_assets", { assetIds: ["trash-1", "trash-2"] }],
       ["get_asset_details", { assetId: "asset-1" }],
       ["set_asset_favorite", { assetId: "asset-1", isFavorite: true }],

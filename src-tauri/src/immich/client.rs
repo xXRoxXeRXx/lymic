@@ -1180,8 +1180,7 @@ mod tests {
                 .unwrap(),
             vec![BulkCheckDuplicate {
                 hash: "already-there".to_string(),
-                asset_id: None,
-                is_trashed: false,
+                remote_asset: None,
             }]
         );
         let asset_path = temporary_file(b"image data");

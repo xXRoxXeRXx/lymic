@@ -34,8 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Lymic never moves assets to the trash, deletes them permanently or empties the trash.
   - Browsing needs the `asset.read` API key permission; Restore needs `asset.delete`. The trashed filter, the permission and the Restore call were verified against Immich v3.4.1 only; no minimum Immich version is claimed.
   - If one selected item can no longer be restored (for example because Immich already removed it permanently), the others are restored one by one and the failed item stays selected.
-  - Known limitation, to be tracked separately: Synchronization treats a local file whose Remote Asset is in the Immich trash as already synced, so it is not uploaded again and stays in the trash.
   - Includes loading, empty, error, offline and Restore messages and a retention hint in all supported languages.
+
+### Fixed
+- **Archived items in Photos and Favorites**:
+  - The Photos and Favorites views no longer show archived photos and videos, as in Immich's web app; they appear only in the Archive view. Checked against Immich 3.4.1 for Photos; the Favorites filter combination was not observed live.
+- **Files whose copy is in the Immich trash**:
+  - Synchronization still treats a local file whose copy is in the Immich trash as synchronized and never uploads it again or restores it, but the activity log now shows a warning that the file is in the Immich trash, so you can restore it in the Trash view. Such a file is still added to its folder's Target Album where Immich allows it. Checked against Immich v3.4.1 for the bulk check and the checksum lookup; adding a trashed item to an album was not verified live.
 
 ## [0.25.0] - 2026-11-13
 
@@ -55,8 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updates `GLOSSARY.md` with download and favorite definitions, adds Microsoft Store badge to `README.md`, and refreshes OpenWiki docs.
 
 ### Fixed
-- **Archived items in Photos and Favorites**:
-  - The Photos and Favorites views no longer show archived photos and videos, as in Immich's web app; they appear only in the Archive view. Checked against Immich 3.4.1 for Photos; the Favorites filter combination was not observed live.
 - **Map and lightbox resilience**:
   - Handles malformed map coordinates gracefully and improves map viewing and localization.
   - Preserves partial or failed download safety on stream failure and hardens lightbox favorite navigation state and asset details.

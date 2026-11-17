@@ -41,6 +41,13 @@ export interface AlbumAssignmentResult {
   failed: number;
 }
 
+/**
+ * The Filtered Timelines: main views that each show the Immich Library through one fixed filter
+ * (`get_filtered_timeline_buckets` / `get_filtered_timeline_bucket_assets` name them), in navigation order.
+ */
+export const FILTERED_TIMELINES = ["favorites", "archive", "trash"] as const;
+export type FilteredTimeline = (typeof FILTERED_TIMELINES)[number];
+
 /** The requested Trashed Assets a Restore returned to the Immich Library; every other requested asset is still in the trash. */
 export interface TrashRestoreResult {
   restoredAssetIds: string[];
