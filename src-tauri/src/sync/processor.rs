@@ -48,8 +48,8 @@ struct ChunkPartition {
 ///
 /// The run owns the collaborators that must stay consistent across blocks, while
 /// `process` remains the sole block-level entry point for the queue runner.
-pub(crate) struct RunProcessor {
-    app: tauri::AppHandle,
+pub(crate) struct RunProcessor<R: tauri::Runtime = tauri::Wry> {
+    app: tauri::AppHandle<R>,
     pool: sqlx::SqlitePool,
     client: Arc<ImmichClient>,
     audit_context: SyncAuditContext,
@@ -60,10 +60,10 @@ pub(crate) struct RunProcessor {
     upload_parallelism: usize,
 }
 
-impl RunProcessor {
+impl<R: tauri::Runtime> RunProcessor<R> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn new(
-        app: tauri::AppHandle,
+        app: tauri::AppHandle<R>,
         pool: sqlx::SqlitePool,
         client: Arc<ImmichClient>,
         audit_context: SyncAuditContext,
@@ -240,20 +240,21 @@ impl RunProcessor {
                 .iter()
                 .any(|duplicate| &duplicate.hash == image_hash)
             {
-                match album_batch::resolve_duplicate_remote_id(&self.client, &unit, &existing).await
+                match album_batch::resolve_duplicate_remote_asset(&self.client, &unit, &existing)
+                    .await
                 {
-                    Ok(found) => {
-                        if found.is_trashed {
+                    Ok(remote_asset) => {
+                        if remote_asset.is_trashed {
                             album_batch::report_trashed_duplicate(
                                 &self.app,
                                 &self.audit_context,
                                 &unit,
-                                &found.asset_id,
+                                &remote_asset.id,
                             );
                         }
                         self.complete_resolved_unit(
                             unit,
-                            found.asset_id,
+                            remote_asset.id,
                             &mut pending_album_units,
                             queue_results,
                             uploaded,
@@ -507,10 +508,10 @@ struct HashOutcome {
     queue_results: Vec<(String, String)>,
 }
 
-async fn hash_unit_or_cancellation(
+async fn hash_unit_or_cancellation<R: tauri::Runtime>(
     unit: UploadUnit,
     pool: sqlx::SqlitePool,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
     progress: JobByteProgress,
     audit_context: SyncAuditContext,
     cancellation: CancellationToken,
@@ -526,10 +527,10 @@ async fn hash_unit_or_cancellation(
     })
 }
 
-async fn hash_unit(
+async fn hash_unit<R: tauri::Runtime>(
     unit: UploadUnit,
     pool: sqlx::SqlitePool,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
     progress: JobByteProgress,
     audit_context: SyncAuditContext,
 ) -> HashOutcome {
@@ -655,11 +656,11 @@ struct UploadOutcome {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn upload_unit(
+async fn upload_unit<R: tauri::Runtime>(
     unit: HashedUploadUnit,
     client: Arc<ImmichClient>,
     pool: sqlx::SqlitePool,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
     progress: JobByteProgress,
     current_file_progress: CurrentFileProgress,
     audit_context: SyncAuditContext,
@@ -816,9 +817,9 @@ async fn upload_unit(
     })
 }
 
-async fn begin_upload_unit_completion_or_fail(
+async fn begin_upload_unit_completion_or_fail<R: tauri::Runtime>(
     pool: &sqlx::SqlitePool,
-    app: &tauri::AppHandle,
+    app: &tauri::AppHandle<R>,
     audit_context: &SyncAuditContext,
     unit: HashedUploadUnit,
     remote_id: crate::immich::RemoteAssetId,
@@ -1189,6 +1190,117 @@ mod tests {
 
         assert!(lease.context().for_upload_unit(&removed).is_cancelled());
         assert!(!lease.context().for_upload_unit(&kept).is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn a_trashed_duplicate_is_assigned_to_its_target_album_and_synchronized_without_upload() {
+        let directory = std::env::temp_dir().join(format!("lymic-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("photo.jpg").to_string_lossy().into_owned();
+        std::fs::write(&path, b"trashed photo").unwrap();
+        let (checksums, size, mtime) =
+            crate::media::scanner::calculate_stable_checksums(&path).unwrap();
+        let hash = checksums.sha1_base64;
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite:file:lymic_test_{}?mode=memory&cache=private",
+                uuid::Uuid::new_v4()
+            ))
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let album = crate::immich::AlbumId::new("album-1");
+        db::enqueue_sync_assets(
+            &pool,
+            &[db::QueueAsset {
+                path: &path,
+                size: size as i64,
+                mtime,
+                target_album_id: Some(&album),
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+        // Immich v3.4.1 answers the bulk check for a Trashed Asset with its ID and `isTrashed`.
+        let (url, server) = crate::immich::test_support::serve_pages(vec![
+            (
+                "200 OK".to_string(),
+                format!(
+                    r#"{{"results":[{{"id":"{hash}","action":"reject","reason":"duplicate","assetId":"trashed-id","isTrashed":true}}]}}"#
+                ),
+            ),
+            (
+                "200 OK".to_string(),
+                r#"[{"id":"trashed-id","success":true}]"#.to_string(),
+            ),
+        ])
+        .await;
+        let client = Arc::new(crate::immich::test_support::test_client(url, "test-key"));
+        let app = tauri::test::mock_app();
+        let logs = Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let captured = logs.clone();
+        tauri::Listener::listen(app.handle(), "log-message", move |event| {
+            captured
+                .lock()
+                .unwrap()
+                .push(serde_json::from_str(event.payload()).unwrap());
+        });
+        let audit_context = SyncAuditContext::from_credentials(
+            &crate::auth::AuthConfig::test_fixture("http://127.0.0.1"),
+            "manual_sync",
+        );
+        let processor = RunProcessor::new(
+            app.handle().clone(),
+            pool.clone(),
+            client,
+            audit_context,
+            JobByteProgress::new(size, 0),
+            CurrentFileProgress::default(),
+            Arc::new(SyncCoordinatorInner::new(false)),
+            crate::immich::SidecarDirectoryCache::new(),
+        )
+        .await
+        .unwrap();
+        let unit = UploadUnit {
+            image: crate::media::model::Asset {
+                path: path.clone(),
+                size,
+                mtime,
+                target_album_id: Some(album.clone()),
+                remote_id: None,
+            },
+            live_photo_video: None,
+        };
+        let work = Arc::new(crate::sync::ActiveWork::new());
+        let lease = work.acquire(std::slice::from_ref(&unit));
+
+        let summary = processor
+            .process(vec![unit], lease.context())
+            .await
+            .unwrap();
+
+        // Two requests only: the bulk check and the Target Album assignment; no upload.
+        let requests = server.await.unwrap();
+        assert!(requests[0].starts_with("POST /api/assets/bulk-upload-check HTTP/1.1"));
+        assert!(requests[1].starts_with("PUT /api/albums/album-1/assets HTTP/1.1"));
+        assert!(requests[1].contains("trashed-id"));
+        assert_eq!(
+            summary.queue_results,
+            [(path.clone(), "SYNCED".to_string())]
+        );
+        assert_eq!(summary.failed, 0);
+        let reports: Vec<_> = logs
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|log| log["key"] == "log_duplicate_in_trash")
+            .cloned()
+            .collect();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0]["params"]["file"], path.as_str());
+        std::fs::remove_dir_all(&directory).unwrap();
     }
 
     #[test]

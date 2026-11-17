@@ -8,19 +8,20 @@ use std::sync::Arc;
 use crate::{
     app::events::{log_to_ui_file_error, log_to_ui_keyed},
     audit::{self, audit_event, SyncAuditContext},
-    immich::{AlbumId, BulkCheckDuplicate, ChecksumMatch, ImmichClient, RemoteAssetId},
+    immich::{AlbumId, BulkCheckDuplicate, DuplicateRemoteAsset, ImmichClient, RemoteAssetId},
     media::model::HashedUploadUnit,
     sync::completion::{complete_album_assignment, PendingAlbumUnit},
 };
 
-/// Resolves the Remote Asset for a Duplicate Upload Unit, including one in the Immich trash.
+/// Resolves the Remote Asset of a Duplicate Upload Unit, including one in the Immich trash:
+/// the one the bulk check named, otherwise the one a checksum search finds.
 ///
 /// Completion persists the returned ID before it can report the Upload Unit as synchronized.
-pub(crate) async fn resolve_duplicate_remote_id(
+pub(crate) async fn resolve_duplicate_remote_asset(
     client: &ImmichClient,
     unit: &HashedUploadUnit,
     existing: &[BulkCheckDuplicate],
-) -> Result<ChecksumMatch, String> {
+) -> Result<DuplicateRemoteAsset, String> {
     let image_hash = &unit
         .image
         .checksums
@@ -31,12 +32,8 @@ pub(crate) async fn resolve_duplicate_remote_id(
     let resolved = match existing
         .iter()
         .find(|d| &d.hash == image_hash)
-        .and_then(|d| {
-            d.asset_id.clone().map(|asset_id| ChecksumMatch {
-                asset_id,
-                is_trashed: d.is_trashed,
-            })
-        }) {
+        .and_then(|d| d.remote_asset.clone())
+    {
         Some(found) => Ok(Some(found)),
         None => client.search_asset_by_checksum(image_hash).await,
     };
@@ -468,19 +465,24 @@ mod tests {
         .unwrap();
         let existing = [BulkCheckDuplicate {
             hash: "photo-hash".to_string(),
-            asset_id: Some(RemoteAssetId::new("trashed-id")),
-            is_trashed: true,
+            remote_asset: Some(DuplicateRemoteAsset {
+                id: RemoteAssetId::new("trashed-id"),
+                is_trashed: true,
+            }),
         }];
 
-        let resolved =
-            resolve_duplicate_remote_id(&client, &upload_unit(AlbumId::new("album-1")), &existing)
-                .await
-                .unwrap();
+        let resolved = resolve_duplicate_remote_asset(
+            &client,
+            &upload_unit(AlbumId::new("album-1")),
+            &existing,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             resolved,
-            ChecksumMatch {
-                asset_id: RemoteAssetId::new("trashed-id"),
+            DuplicateRemoteAsset {
+                id: RemoteAssetId::new("trashed-id"),
                 is_trashed: true,
             }
         );
@@ -496,20 +498,22 @@ mod tests {
         let client = crate::immich::test_support::test_client(url, "test-key");
         let existing = [BulkCheckDuplicate {
             hash: "photo-hash".to_string(),
-            asset_id: None,
-            is_trashed: true,
+            remote_asset: None,
         }];
 
-        let resolved =
-            resolve_duplicate_remote_id(&client, &upload_unit(AlbumId::new("album-1")), &existing)
-                .await
-                .unwrap();
+        let resolved = resolve_duplicate_remote_asset(
+            &client,
+            &upload_unit(AlbumId::new("album-1")),
+            &existing,
+        )
+        .await
+        .unwrap();
 
         assert!(request.await.unwrap().contains(r#""withDeleted":true"#));
         assert_eq!(
             resolved,
-            ChecksumMatch {
-                asset_id: RemoteAssetId::new("trashed-id"),
+            DuplicateRemoteAsset {
+                id: RemoteAssetId::new("trashed-id"),
                 is_trashed: true,
             }
         );

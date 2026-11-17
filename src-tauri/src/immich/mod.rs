@@ -16,8 +16,8 @@ mod timeline;
 mod trash;
 mod upload;
 
-pub(crate) use album::{Album, AlbumAssignmentResult, AlbumCatalogueItem, ChecksumMatch};
-pub(crate) use bulk_check::BulkCheckDuplicate;
+pub(crate) use album::{Album, AlbumAssignmentResult, AlbumCatalogueItem};
+pub(crate) use bulk_check::{BulkCheckDuplicate, DuplicateRemoteAsset};
 pub(crate) use client::{AssetDetails, AssetResponse, ImmichClient};
 pub(crate) use ids::{AlbumId, RemoteAssetId};
 pub(crate) use people::PeoplePage;
