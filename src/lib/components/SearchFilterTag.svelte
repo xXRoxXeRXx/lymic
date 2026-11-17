@@ -30,7 +30,7 @@
   });
 
   $effect(() => {
-    if (requested || !tags.isEmpty || tags.isLoading || tags.error) return;
+    if (requested || tags.knownIds !== null || tags.isLoading || tags.error) return;
     requested = true;
     void tags.refresh();
   });

@@ -38,6 +38,27 @@ function setup(getTags: () => Promise<Tag[]> = async () => TAGS) {
   return { adapter, search, tags };
 }
 
+describe("Search Tag filter on a library without Tags", () => {
+  it("does not read the Tags again when they were already loaded and there are none", async () => {
+    const adapter = { getTags: vi.fn(async (): Promise<Tag[]> => []) };
+    const tags = createTagsController(adapter as unknown as TagsDesktopAdapter);
+    await tags.refresh();
+    const search = createSearchController({
+      getSearchSupport: vi.fn().mockResolvedValue(SUPPORTED),
+      getSearchFeatures: vi.fn().mockResolvedValue(FEATURES),
+      searchAssets: vi.fn(),
+      searchContextPage: vi.fn(),
+      getSearchSuggestions: vi.fn(),
+      getPlaces: vi.fn(),
+    });
+
+    render(SearchFilterTag, { search, tags });
+    await Promise.resolve();
+
+    expect(adapter.getTags).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("Search Tag filter", () => {
   it("shows the Tags as a hierarchy, the top level expanded and deeper levels collapsed", async () => {
     setup();
