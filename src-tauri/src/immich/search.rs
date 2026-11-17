@@ -8,7 +8,7 @@
 use super::client::ImmichClient;
 use super::response::{read_response_body_limited, request_failure_code};
 use super::search_filters::{
-    apply_favorite, apply_unfiled, apply_visibility, DateRange, MediaType, Rating,
+    apply_favorite, apply_unfiled, apply_visibility, CameraFilter, DateRange, MediaType, Rating,
 };
 use super::timeline::{
     group_album_timeline_assets, timeline_asset_from_response, AlbumTimeline, TimelineAssetResponse,
@@ -46,6 +46,8 @@ struct ServerFeaturesResponse {
     ocr: bool,
 }
 
+/// Suggestion lists are short strings, well within this limit.
+pub(super) const SUGGESTIONS_MAX_BYTES: usize = 4 * 1024 * 1024;
 /// What the frontend shows as the required version.
 const MINIMUM_VERSION_LABEL: &str = "3.2";
 /// The API key permission a Search needs, named in the permission-denied error.
@@ -77,6 +79,7 @@ pub(crate) struct SearchFilters {
     /// Display option: only Unfiled Assets (in no Album).
     pub unfiled: bool,
     pub rating: Option<Rating>,
+    pub camera: Option<CameraFilter>,
 }
 
 impl SearchFilters {
@@ -98,6 +101,9 @@ impl SearchFilters {
             rating.apply(filter);
         }
         apply_visibility(self.archived, filter);
+        if let Some(camera) = &self.camera {
+            camera.apply(filter);
+        }
     }
 }
 
@@ -195,7 +201,7 @@ fn invalid_response() -> String {
 
 /// Sends one Search request and parses its JSON response. Errors carry a stable `search_*`
 /// code and never the response body.
-async fn send_json<T: serde::de::DeserializeOwned>(
+pub(super) async fn send_json<T: serde::de::DeserializeOwned>(
     request: reqwest::RequestBuilder,
     max_bytes: usize,
 ) -> Result<T, String> {
@@ -308,7 +314,7 @@ mod tests {
     use super::{
         SearchFeatures, SearchFilters, SearchMode, SearchRequest, SearchResults, SearchSupport,
     };
-    use crate::immich::search_filters::{DateRange, MediaType, Rating};
+    use crate::immich::search_filters::{CameraFilter, DateRange, MediaType, Rating};
     use crate::immich::test_support::{serve_once, serve_pages, test_client};
     use serde_json::{json, Value};
     use std::time::Duration;
@@ -1105,6 +1111,68 @@ mod tests {
                 media_type: Some(MediaType::Image),
                 ..SearchFilters::default()
             }
+        );
+    }
+
+    fn camera(make: Option<&str>, model: Option<&str>, lens_model: Option<&str>) -> CameraFilter {
+        CameraFilter {
+            make: make.map(str::to_string),
+            model: model.map(str::to_string),
+            lens_model: lens_model.map(str::to_string),
+        }
+    }
+
+    #[tokio::test]
+    async fn the_camera_make_model_and_lens_become_exact_conditions() {
+        let filters = SearchFilters {
+            camera: Some(camera(Some("FUJIFILM"), Some("X100V"), Some("23mm F2"))),
+            ..SearchFilters::default()
+        };
+
+        assert_eq!(
+            filter_sent_for(filters).await,
+            json!({
+                "make": { "eq": "FUJIFILM" },
+                "model": { "eq": "X100V" },
+                "lensModel": { "eq": "23mm F2" },
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn each_camera_part_is_optional_and_a_blank_part_is_no_condition() {
+        let make_only = SearchFilters {
+            camera: Some(camera(Some("Canon"), None, None)),
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(make_only).await,
+            json!({ "make": { "eq": "Canon" } })
+        );
+        let lens_only = SearchFilters {
+            camera: Some(camera(None, None, Some("RF 50mm"))),
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(lens_only).await,
+            json!({ "lensModel": { "eq": "RF 50mm" } })
+        );
+        let blank = SearchFilters {
+            camera: Some(camera(Some(" "), Some(""), None)),
+            ..SearchFilters::default()
+        };
+        assert_eq!(filter_sent_for(blank).await, json!({}));
+    }
+
+    #[test]
+    fn the_camera_filter_deserializes_from_the_frontend_shape() {
+        let request: SearchRequest = serde_json::from_str(
+            r#"{"text":"","mode":"filename","filters":{"camera":{"make":"Canon","lensModel":"RF 50mm"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            request.filters.camera,
+            Some(camera(Some("Canon"), None, Some("RF 50mm")))
         );
     }
 }

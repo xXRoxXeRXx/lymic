@@ -2,6 +2,7 @@ import type { SearchFeatures, SearchFilters, SearchMode, SearchRating, SearchReq
 import { buildRequestFilters, filterErrors as validateFilters } from "../search-filters";
 import type { SearchDesktopAdapter } from "../tauri/desktop-adapter";
 import { classifyRequestFailure, failureMessage } from "./request-failure";
+import { createSearchSuggestions, type SearchSuggestions } from "./search-suggestions.svelte";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
 
 /** Why the latest Search could not be answered. */
@@ -35,6 +36,8 @@ export interface SearchController extends TimelineController {
   readonly featuresFailed: boolean;
   /** The text of the Search whose results are shown (empty before the first successful Search). */
   readonly submittedText: string;
+  /** The suggestions Immich offers for the Search Filters chosen from them (camera, later Location). */
+  readonly suggestions: SearchSuggestions;
   /** The number of Remote Assets in the results. */
   readonly resultCount: number;
   /** True when the Search was cut at the result limit and only the newest results are shown. */
@@ -83,6 +86,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
   // Bumped by clear(), so features that arrive late are not kept for the next session.
   let featuresGeneration = 0;
 
+  const suggestions = createSearchSuggestions(adapter);
   const ocrAvailable = $derived(features === null || features.ocr);
 
   function loadFeatures(): Promise<void> {
@@ -163,6 +167,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     mode = DEFAULT_SEARCH_MODE;
     filters = {};
     featuresGeneration += 1;
+    suggestions.clear();
     features = null;
     featuresFailed = false;
     featuresRead = null;
@@ -192,6 +197,7 @@ export function createSearchController(adapter: SearchDesktopAdapter): SearchCon
     get filters() { return filters; },
     get filterErrors() { return validateFilters(filters); },
     get canSubmit() { return isSearchable(currentRequest()); },
+    suggestions,
     get submittedText() { return submittedText; },
     get resultCount() { return timeline.buckets.reduce((total, bucket) => total + bucket.count, 0); },
     get truncated() { return truncated; },

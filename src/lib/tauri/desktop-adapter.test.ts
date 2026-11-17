@@ -218,12 +218,16 @@ describe("tauriDesktopAdapter", () => {
     await searchAdapter.getSearchFeatures();
     await searchAdapter.searchAssets({ text: "IMG", mode: "filename", filters: {} });
     await searchAdapter.searchAssets({ text: "scan", mode: "folderPath", filters: {} });
+    await searchAdapter.getSearchSuggestions({ type: "cameraMake" });
+    await searchAdapter.getSearchSuggestions({ type: "cameraModel", make: "Canon" });
 
     expect(invoke.mock.calls).toEqual([
       ["get_search_support"],
       ["get_search_features"],
       ["search_assets", { request: { text: "IMG", mode: "filename", filters: {} } }],
       ["search_assets", { request: { text: "scan", mode: "folderPath", filters: {} } }],
+      ["get_search_suggestions", { request: { type: "cameraMake" } }],
+      ["get_search_suggestions", { request: { type: "cameraModel", make: "Canon" } }],
     ]);
   });
 });
