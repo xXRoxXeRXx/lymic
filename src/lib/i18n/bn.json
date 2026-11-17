@@ -227,6 +227,7 @@
   "show_secret": "গোপন তথ্য দেখান",
   "hide_secret": "গোপন তথ্য লুকান",
   "log_duplicate_resolve_failed": "ডুপ্লিকেট {file} সমাধান করা যায়নি: {error}",
+  "log_duplicate_in_trash": "{file} ইতিমধ্যে Immich-এ আছে, তবে Immich-এর ট্র্যাশে; এটি আবার আপলোড করা হয়নি। Immich-এ দেখতে ট্র্যাশ থেকে এটি পুনরুদ্ধার করুন।",
   "log_upload_completion_persist_failed": "{file} এর সিঙ্ক সম্পন্ন করা যায়নি: {error}",
   "log_removable_volume_error": "অপসারণযোগ্য ভলিউম ইভেন্ট পরিচালনায় ত্রুটি: {error}"
   ,"hero_landscape": "প্রধান দৃশ্যের প্রাকৃতিক দৃশ্য"

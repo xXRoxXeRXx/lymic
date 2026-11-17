@@ -54,6 +54,75 @@ const ARCHIVE_PERMISSION_CODE: PermissionCode = PermissionCode {
     hint: "asset.read",
 };
 
+/// One library timeline view (Photos, Favorites, Archive, Trash): the filter parameters both
+/// timeline endpoints send after `size` (and `timeBucket`), and how the view reads responses
+/// and failures.
+#[derive(Clone, Copy)]
+struct TimelineFilter {
+    /// Names the view in failure messages (`Failed to fetch {name} buckets`).
+    name: &'static str,
+    query: &'static [(&'static str, &'static str)],
+    /// Whether a bucket asset without `isFavorite` in the response is a favorite.
+    default_favorite: bool,
+    permission: Option<PermissionCode>,
+}
+
+/// The Photo Timeline. `visibility=timeline` hides Archived Assets, as Immich Web does; without
+/// it Immich v3.4.1 includes them (#242).
+const PHOTO_TIMELINE: TimelineFilter = TimelineFilter {
+    name: "timeline",
+    query: &[("visibility", "timeline")],
+    default_favorite: false,
+    permission: None,
+};
+
+/// The Favorites Timeline; like the Photo Timeline it hides Archived Assets with
+/// `visibility=timeline` (#242).
+const FAVORITES_TIMELINE: TimelineFilter = TimelineFilter {
+    name: "favorites timeline",
+    query: &[("isFavorite", "true"), ("visibility", "timeline")],
+    default_favorite: true,
+    permission: None,
+};
+
+/// The user's Archived Assets (visibility filter `archive`).
+const ARCHIVE_TIMELINE: TimelineFilter = TimelineFilter {
+    name: "archive timeline",
+    query: &[("visibility", "archive")],
+    default_favorite: false,
+    permission: Some(ARCHIVE_PERMISSION_CODE),
+};
+
+/// The user's Trashed Assets (filter `isTrashed=true`). Observed on Immich v3.4.1 (one server
+/// version only): the parameter is accepted and `asset.read` suffices.
+const TRASH_TIMELINE: TimelineFilter = TimelineFilter {
+    name: "trash timeline",
+    query: &[("isTrashed", "true")],
+    default_favorite: false,
+    permission: None,
+};
+
+/// A Filtered Timeline: a main view that shows the user's Immich Library through one fixed
+/// filter. The frontend names it in the filtered timeline commands (`"favorites"`, `"archive"`,
+/// `"trash"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum FilteredTimeline {
+    Favorites,
+    Archive,
+    Trash,
+}
+
+impl FilteredTimeline {
+    fn filter(self) -> TimelineFilter {
+        match self {
+            Self::Favorites => FAVORITES_TIMELINE,
+            Self::Archive => ARCHIVE_TIMELINE,
+            Self::Trash => TRASH_TIMELINE,
+        }
+    }
+}
+
 /// Like `send_checked`, except that a 403 becomes the credential-free permission code when
 /// `permission` is given. Every other failure keeps `send_checked`'s message.
 async fn send_timeline_request(
@@ -440,103 +509,67 @@ impl ImmichClient {
         )
     }
 
+    /// Timeline buckets of one library timeline view: `size=MONTH` followed by the view's filter.
+    async fn timeline_buckets_with_filter(
+        &self,
+        filter: TimelineFilter,
+    ) -> Result<Vec<TimelineBucket>, String> {
+        let mut query = vec![("size", "MONTH")];
+        query.extend_from_slice(filter.query);
+        self.fetch_timeline_buckets_with_query(
+            &query,
+            &format!("{} buckets", filter.name),
+            filter.permission,
+        )
+        .await
+    }
+
+    /// The assets of one bucket of a library timeline view: `size=MONTH` and `timeBucket`
+    /// followed by the view's filter.
+    async fn timeline_bucket_assets_with_filter(
+        &self,
+        filter: TimelineFilter,
+        time_bucket: &str,
+    ) -> Result<Vec<TimelineAsset>, String> {
+        let mut query = vec![("size", "MONTH"), ("timeBucket", time_bucket)];
+        query.extend_from_slice(filter.query);
+        self.fetch_timeline_bucket_assets_with_query(
+            &query,
+            &format!("{} bucket", filter.name),
+            filter.default_favorite,
+            filter.permission,
+        )
+        .await
+    }
+
     pub async fn get_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
-        self.fetch_timeline_buckets_with_query(&[("size", "MONTH")], "timeline buckets", None)
-            .await
+        self.timeline_buckets_with_filter(PHOTO_TIMELINE).await
     }
 
     pub async fn get_timeline_bucket_assets(
         &self,
         time_bucket: &str,
     ) -> Result<Vec<TimelineAsset>, String> {
-        self.fetch_timeline_bucket_assets_with_query(
-            &[("size", "MONTH"), ("timeBucket", time_bucket)],
-            "timeline bucket",
-            false,
-            None,
-        )
-        .await
+        self.timeline_bucket_assets_with_filter(PHOTO_TIMELINE, time_bucket)
+            .await
     }
 
-    pub async fn get_favorites_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
-        self.fetch_timeline_buckets_with_query(
-            &[("size", "MONTH"), ("isFavorite", "true")],
-            "favorites timeline buckets",
-            None,
-        )
-        .await
-    }
-
-    pub async fn get_favorites_timeline_bucket_assets(
+    /// Timeline buckets of a Filtered Timeline.
+    pub(crate) async fn get_filtered_timeline_buckets(
         &self,
+        timeline: FilteredTimeline,
+    ) -> Result<Vec<TimelineBucket>, String> {
+        self.timeline_buckets_with_filter(timeline.filter()).await
+    }
+
+    /// The assets of one bucket of a Filtered Timeline.
+    pub(crate) async fn get_filtered_timeline_bucket_assets(
+        &self,
+        timeline: FilteredTimeline,
         time_bucket: &str,
     ) -> Result<Vec<TimelineAsset>, String> {
-        self.fetch_timeline_bucket_assets_with_query(
-            &[
-                ("size", "MONTH"),
-                ("timeBucket", time_bucket),
-                ("isFavorite", "true"),
-            ],
-            "favorites timeline bucket",
-            true,
-            None,
-        )
-        .await
-    }
-
-    /// Timeline buckets of the user's Archived Assets (visibility filter `archive`).
-    pub async fn get_archive_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
-        self.fetch_timeline_buckets_with_query(
-            &[("size", "MONTH"), ("visibility", "archive")],
-            "archive timeline buckets",
-            Some(ARCHIVE_PERMISSION_CODE),
-        )
-        .await
-    }
-
-    pub async fn get_archive_timeline_bucket_assets(
-        &self,
-        time_bucket: &str,
-    ) -> Result<Vec<TimelineAsset>, String> {
-        self.fetch_timeline_bucket_assets_with_query(
-            &[
-                ("size", "MONTH"),
-                ("timeBucket", time_bucket),
-                ("visibility", "archive"),
-            ],
-            "archive timeline bucket",
-            false,
-            Some(ARCHIVE_PERMISSION_CODE),
-        )
-        .await
-    }
-
-    /// Timeline buckets of the user's Trashed Assets (filter `isTrashed=true`). Observed on
-    /// Immich v3.4.1 (one server version only): the parameter is accepted and `asset.read` suffices.
-    pub async fn get_trash_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
-        self.fetch_timeline_buckets_with_query(
-            &[("size", "MONTH"), ("isTrashed", "true")],
-            "trash timeline buckets",
-            None,
-        )
-        .await
-    }
-
-    pub async fn get_trash_timeline_bucket_assets(
-        &self,
-        time_bucket: &str,
-    ) -> Result<Vec<TimelineAsset>, String> {
-        self.fetch_timeline_bucket_assets_with_query(
-            &[
-                ("size", "MONTH"),
-                ("timeBucket", time_bucket),
-                ("isTrashed", "true"),
-            ],
-            "trash timeline bucket",
-            false,
-            None,
-        )
-        .await
+        self.timeline_bucket_assets_with_filter(timeline.filter(), time_bucket)
+            .await
     }
 }
 
@@ -665,7 +698,7 @@ pub(super) fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTi
 
 #[cfg(test)]
 mod tests {
-    use super::{group_album_timeline_assets, ImmichClient, TimelineAsset};
+    use super::{group_album_timeline_assets, FilteredTimeline, ImmichClient, TimelineAsset};
     use crate::immich::tags::AssetTag;
     use crate::immich::test_support::{serve_pages, test_client};
     use crate::immich::AssetDetails;
@@ -727,7 +760,7 @@ mod tests {
             let read = stream.read(&mut request).await.unwrap();
             let request = String::from_utf8_lossy(&request[..read]);
             assert!(request.starts_with(
-                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z HTTP/1.1"
+                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&visibility=timeline HTTP/1.1"
             ));
             assert!(request.contains("x-api-key: test-key"));
             let body =
@@ -995,7 +1028,9 @@ mod tests {
                 let mut request = [0_u8; 2048];
                 let read = stream.read(&mut request).await.unwrap();
                 let request = String::from_utf8_lossy(&request[..read]);
-                assert!(request.starts_with("GET /api/timeline/buckets?size=MONTH HTTP/1.1"));
+                assert!(request.starts_with(
+                    "GET /api/timeline/buckets?size=MONTH&visibility=timeline HTTP/1.1"
+                ));
                 assert!(request.contains("x-api-key: test-key"));
                 let buckets_body = b"[{\"timeBucket\":\"2026-11-01\",\"count\":2}]";
                 stream
@@ -1015,8 +1050,10 @@ mod tests {
             let mut request = [0_u8; 2048];
             let read = stream.read(&mut request).await.unwrap();
             let request = String::from_utf8_lossy(&request[..read]);
-            assert!(request
-                .starts_with("GET /api/timeline/bucket?size=MONTH&timeBucket=2026-11-01 HTTP/1.1"));
+            assert!(request.starts_with(
+                "GET /api/timeline/bucket?size=MONTH&timeBucket=2026-11-01&visibility=timeline HTTP/1.1"
+            ));
+            assert!(!request.contains("isArchived"));
             assert!(request.contains("x-api-key: test-key"));
             let assets_body = br#"{"id":["photo-1","video-1","video-2","video-3"],"isImage":[true,false,false,false],"isFavorite":[false,true,false,false],"ratio":[0.67,1.7778,1.7778,1.7778],"duration":[null,"0:01:05.000",2205,"5231"],"fileCreatedAt":["2026-11-04T19:47:41.29","2026-11-03T10:00:00.000Z","2026-11-02T10:00:00.000Z","2026-11-01T10:00:00.000Z"]}"#;
             stream
@@ -1395,8 +1432,10 @@ mod tests {
             let mut request = [0_u8; 4096];
             let read = stream.read(&mut request).await.unwrap();
             let request_text = String::from_utf8_lossy(&request[..read]);
-            assert!(request_text
-                .starts_with("GET /api/timeline/buckets?size=MONTH&isFavorite=true HTTP/1.1"));
+            assert!(request_text.starts_with(
+                "GET /api/timeline/buckets?size=MONTH&isFavorite=true&visibility=timeline HTTP/1.1"
+            ));
+            assert!(!request_text.contains("isArchived"));
             assert!(request_text.contains("x-api-key: test-key"));
             assert!(!request_text.contains("withPartners"));
             let buckets = br#"[{"timeBucket":"2025-02-01T00:00:00.000Z","count":1},{"timeBucket":"2025-03-01T00:00:00.000Z","count":2}]"#;
@@ -1416,7 +1455,7 @@ mod tests {
             let read = stream.read(&mut request).await.unwrap();
             let request_text = String::from_utf8_lossy(&request[..read]);
             assert!(request_text.starts_with(
-                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&isFavorite=true HTTP/1.1"
+                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&isFavorite=true&visibility=timeline HTTP/1.1"
             ));
             assert!(request_text.contains("x-api-key: test-key"));
             let assets = br#"{"id":["fav-photo","fav-video"],"isImage":[true,false],"isFavorite":[null],"ratio":[1.5,1.7778],"duration":[null,"0:00:42.000"],"fileCreatedAt":["2025-03-10T10:00:00.000Z","2025-03-05T10:00:00.000Z"]}"#;
@@ -1436,7 +1475,7 @@ mod tests {
             let read = stream.read(&mut request).await.unwrap();
             let request_text = String::from_utf8_lossy(&request[..read]);
             assert!(request_text.starts_with(
-                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-02-01T00%3A00%3A00.000Z&isFavorite=true HTTP/1.1"
+                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-02-01T00%3A00%3A00.000Z&isFavorite=true&visibility=timeline HTTP/1.1"
             ));
             let legacy_assets = br#"[{"id":"legacy-fav","type":"IMAGE","fileCreatedAt":"2025-02-14T10:00:00.000Z"}]"#;
             stream
@@ -1460,7 +1499,10 @@ mod tests {
         )
         .unwrap();
 
-        let buckets = client.get_favorites_timeline_buckets().await.unwrap();
+        let buckets = client
+            .get_filtered_timeline_buckets(FilteredTimeline::Favorites)
+            .await
+            .unwrap();
         assert_eq!(
             buckets,
             vec![
@@ -1476,7 +1518,10 @@ mod tests {
         );
 
         let march_assets = client
-            .get_favorites_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .get_filtered_timeline_bucket_assets(
+                FilteredTimeline::Favorites,
+                "2025-03-01T00:00:00.000Z",
+            )
             .await
             .unwrap();
         assert_eq!(march_assets.len(), 2);
@@ -1489,7 +1534,10 @@ mod tests {
         assert!(march_assets[1].is_favorite);
 
         let feb_assets = client
-            .get_favorites_timeline_bucket_assets("2025-02-01T00:00:00.000Z")
+            .get_filtered_timeline_bucket_assets(
+                FilteredTimeline::Favorites,
+                "2025-02-01T00:00:00.000Z",
+            )
             .await
             .unwrap();
         assert_eq!(feb_assets.len(), 1);
@@ -1508,7 +1556,7 @@ mod tests {
         .await;
 
         let error = test_client(url, "fav-secret-key")
-            .get_favorites_timeline_buckets()
+            .get_filtered_timeline_buckets(FilteredTimeline::Favorites)
             .await
             .unwrap_err();
         assert!(error.starts_with("Failed to fetch favorites timeline buckets:"));
@@ -1536,7 +1584,10 @@ mod tests {
         .await;
         let client = test_client(url, "test-key");
 
-        let buckets = client.get_archive_timeline_buckets().await.unwrap();
+        let buckets = client
+            .get_filtered_timeline_buckets(FilteredTimeline::Archive)
+            .await
+            .unwrap();
         assert_eq!(
             buckets,
             vec![
@@ -1551,7 +1602,10 @@ mod tests {
             ]
         );
         let march = client
-            .get_archive_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .get_filtered_timeline_bucket_assets(
+                FilteredTimeline::Archive,
+                "2025-03-01T00:00:00.000Z",
+            )
             .await
             .unwrap();
         assert_eq!(march.len(), 2);
@@ -1563,7 +1617,10 @@ mod tests {
         assert_eq!(march[1].duration, Some(42));
         assert!(march[1].is_favorite);
         let february = client
-            .get_archive_timeline_bucket_assets("2025-02-01T00:00:00.000Z")
+            .get_filtered_timeline_bucket_assets(
+                FilteredTimeline::Archive,
+                "2025-02-01T00:00:00.000Z",
+            )
             .await
             .unwrap();
         assert_eq!(february.len(), 1);
@@ -1588,12 +1645,75 @@ mod tests {
         }
     }
 
+    #[test]
+    fn filtered_timelines_are_named_as_the_frontend_names_them() {
+        for (name, timeline) in [
+            ("favorites", FilteredTimeline::Favorites),
+            ("archive", FilteredTimeline::Archive),
+            ("trash", FilteredTimeline::Trash),
+        ] {
+            assert_eq!(
+                serde_json::from_value::<FilteredTimeline>(serde_json::json!(name)).unwrap(),
+                timeline
+            );
+        }
+        assert!(serde_json::from_value::<FilteredTimeline>(serde_json::json!("photos")).is_err());
+    }
+
+    #[tokio::test]
+    async fn a_timeline_filter_follows_size_and_time_bucket_and_sets_the_favorite_default_and_failure_name(
+    ) {
+        const FILTER: super::TimelineFilter = super::TimelineFilter {
+            name: "example timeline",
+            query: &[("isOffline", "true"), ("visibility", "hidden")],
+            default_favorite: true,
+            permission: None,
+        };
+        let (url, server) = serve_pages(vec![
+            (
+                "200 OK",
+                r#"[{"timeBucket":"2025-02-01T00:00:00.000Z","count":1},{"timeBucket":"2025-03-01T00:00:00.000Z","count":1}]"#,
+            ),
+            (
+                "200 OK",
+                r#"[{"id":"legacy","type":"IMAGE","fileCreatedAt":"2025-03-14T10:00:00.000Z"}]"#,
+            ),
+            ("500 Internal Server Error", "internal secret stacktrace"),
+        ])
+        .await;
+        let client = test_client(url, "test-key");
+
+        let buckets = client.timeline_buckets_with_filter(FILTER).await.unwrap();
+        assert_eq!(buckets[0].time_bucket, "2025-03-01T00:00:00.000Z");
+        let assets = client
+            .timeline_bucket_assets_with_filter(FILTER, "2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap();
+        assert!(assets[0].is_favorite);
+        let error = client
+            .timeline_bucket_assets_with_filter(FILTER, "2025-02-01T00:00:00.000Z")
+            .await
+            .unwrap_err();
+        assert!(
+            error.starts_with("Failed to fetch example timeline bucket:"),
+            "{error}"
+        );
+
+        let requests = server.await.unwrap();
+        assert!(requests[0].starts_with(
+            "GET /api/timeline/buckets?size=MONTH&isOffline=true&visibility=hidden HTTP/1.1"
+        ));
+        assert!(requests[1].starts_with(
+            "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&isOffline=true&visibility=hidden HTTP/1.1"
+        ));
+    }
+
     #[tokio::test]
     async fn classifies_archive_timeline_failures_without_leaking_body_or_api_key() {
         for status in ["401 Unauthorized", "500 Internal Server Error"] {
             let (url, server) = serve_pages(vec![(status, "internal secret stacktrace")]).await;
             let error = test_client(url, "arch-secret-key")
-                .get_archive_timeline_buckets()
+                .get_filtered_timeline_buckets(FilteredTimeline::Archive)
                 .await
                 .unwrap_err();
             server.await.unwrap();
@@ -1604,7 +1724,10 @@ mod tests {
 
             let (url, server) = serve_pages(vec![(status, "internal secret stacktrace")]).await;
             let error = test_client(url, "arch-secret-key")
-                .get_archive_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+                .get_filtered_timeline_bucket_assets(
+                    FilteredTimeline::Archive,
+                    "2025-03-01T00:00:00.000Z",
+                )
                 .await
                 .unwrap_err();
             server.await.unwrap();
@@ -1618,7 +1741,7 @@ mod tests {
         let (url, server) =
             serve_pages(vec![("403 Forbidden", "internal secret stacktrace")]).await;
         let error = test_client(url, "arch-secret-key")
-            .get_archive_timeline_buckets()
+            .get_filtered_timeline_buckets(FilteredTimeline::Archive)
             .await
             .unwrap_err();
         server.await.unwrap();
@@ -1627,7 +1750,10 @@ mod tests {
         let (url, server) =
             serve_pages(vec![("403 Forbidden", "internal secret stacktrace")]).await;
         let error = test_client(url, "arch-secret-key")
-            .get_archive_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .get_filtered_timeline_bucket_assets(
+                FilteredTimeline::Archive,
+                "2025-03-01T00:00:00.000Z",
+            )
             .await
             .unwrap_err();
         server.await.unwrap();
@@ -1635,7 +1761,7 @@ mod tests {
 
         let (url, server) = serve_pages(vec![("200 OK", "{not-json")]).await;
         let error = test_client(url, "arch-secret-key")
-            .get_archive_timeline_buckets()
+            .get_filtered_timeline_buckets(FilteredTimeline::Archive)
             .await
             .unwrap_err();
         server.await.unwrap();
@@ -1644,7 +1770,10 @@ mod tests {
 
         let (url, server) = serve_pages(vec![("200 OK", "{not-json")]).await;
         let error = test_client(url, "arch-secret-key")
-            .get_archive_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .get_filtered_timeline_bucket_assets(
+                FilteredTimeline::Archive,
+                "2025-03-01T00:00:00.000Z",
+            )
             .await
             .unwrap_err();
         server.await.unwrap();
@@ -1671,7 +1800,10 @@ mod tests {
         .await;
         let client = test_client(url, "test-key");
 
-        let buckets = client.get_trash_timeline_buckets().await.unwrap();
+        let buckets = client
+            .get_filtered_timeline_buckets(FilteredTimeline::Trash)
+            .await
+            .unwrap();
         assert_eq!(
             buckets,
             vec![
@@ -1686,7 +1818,10 @@ mod tests {
             ]
         );
         let march = client
-            .get_trash_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .get_filtered_timeline_bucket_assets(
+                FilteredTimeline::Trash,
+                "2025-03-01T00:00:00.000Z",
+            )
             .await
             .unwrap();
         assert_eq!(march.len(), 2);
@@ -1698,7 +1833,10 @@ mod tests {
         assert_eq!(march[1].duration, Some(42));
         assert!(march[1].is_favorite);
         let february = client
-            .get_trash_timeline_bucket_assets("2025-02-01T00:00:00.000Z")
+            .get_filtered_timeline_bucket_assets(
+                FilteredTimeline::Trash,
+                "2025-02-01T00:00:00.000Z",
+            )
             .await
             .unwrap();
         assert_eq!(february.len(), 1);
@@ -1733,7 +1871,7 @@ mod tests {
         ] {
             let (url, server) = serve_pages(vec![(status, "internal secret stacktrace")]).await;
             let error = test_client(url, "trash-secret-key")
-                .get_trash_timeline_buckets()
+                .get_filtered_timeline_buckets(FilteredTimeline::Trash)
                 .await
                 .unwrap_err();
             server.await.unwrap();
@@ -1744,7 +1882,10 @@ mod tests {
 
             let (url, server) = serve_pages(vec![(status, "internal secret stacktrace")]).await;
             let error = test_client(url, "trash-secret-key")
-                .get_trash_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+                .get_filtered_timeline_bucket_assets(
+                    FilteredTimeline::Trash,
+                    "2025-03-01T00:00:00.000Z",
+                )
                 .await
                 .unwrap_err();
             server.await.unwrap();
@@ -1756,7 +1897,7 @@ mod tests {
 
         let (url, server) = serve_pages(vec![("200 OK", "{not-json")]).await;
         let error = test_client(url, "trash-secret-key")
-            .get_trash_timeline_buckets()
+            .get_filtered_timeline_buckets(FilteredTimeline::Trash)
             .await
             .unwrap_err();
         server.await.unwrap();
@@ -1765,7 +1906,10 @@ mod tests {
 
         let (url, server) = serve_pages(vec![("200 OK", "{not-json")]).await;
         let error = test_client(url, "trash-secret-key")
-            .get_trash_timeline_bucket_assets("2025-03-01T00:00:00.000Z")
+            .get_filtered_timeline_bucket_assets(
+                FilteredTimeline::Trash,
+                "2025-03-01T00:00:00.000Z",
+            )
             .await
             .unwrap_err();
         server.await.unwrap();

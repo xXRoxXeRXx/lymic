@@ -62,6 +62,10 @@ _Avoid_: uploaded file, server file, remote file
 A locally discovered Media Asset that Immich recognizes as an existing Remote Asset. A Duplicate is not uploaded again.
 _Avoid_: duplicate file, already-uploaded file
 
+**Trashed Duplicate**:
+A Duplicate whose Remote Asset is a Trashed Asset. Synchronization treats it as synchronized and leaves the Remote Asset in the Immich trash: Lymic never uploads it again and never restores it. It still receives Album Assignment where Immich allows, and the activity log reports the file as in the Immich trash so the user can restore it in the Trash Timeline (ADR-0010).
+_Avoid_: deleted duplicate, re-upload candidate
+
 ## Synchronization
 
 **Synchronization**:
@@ -109,7 +113,7 @@ An identity group created by Immich that has an optional assigned name and assoc
 _Avoid_: person, face, face group
 
 **Photo Timeline**:
-The chronological presentation of Remote Assets in the Immich Library grouped into time buckets.
+The chronological presentation of Remote Assets in the Immich Library grouped into time buckets. Archived Assets are not part of it, as in Immich Web; they appear in the Archive Timeline.
 _Avoid_: gallery, photo feed, media stream
 
 **Timeline Bucket**:
@@ -133,7 +137,7 @@ The chronological presentation of the Remote Assets belonging to one Album, grou
 _Avoid_: album grid, album gallery
 
 **Favorites Timeline**:
-The chronological presentation of Remote Assets marked as Favorites in the authenticated user's Immich Library.
+The chronological presentation of Remote Assets marked as Favorites in the authenticated user's Immich Library. Like the Photo Timeline it leaves out Archived Assets.
 _Avoid_: favorites album, favorites folder
 
 **Archive Timeline**:
@@ -147,6 +151,10 @@ _Avoid_: deleted asset, recycle bin item, bin item
 **Trash Timeline**:
 The chronological presentation of the authenticated user's Trashed Assets, grouped into time buckets like the Photo Timeline. Restoring a Trashed Asset returns it to the Immich Library; it does not touch local files, Watched Folders or Synchronization state.
 _Avoid_: recycle bin, trash folder, deleted gallery
+
+**Filtered Timeline**:
+A main view that presents the authenticated user's Immich Library through one fixed filter, in the Photo Timeline presentation, and reloads every time it opens: the Favorites Timeline, the Archive Timeline and the Trash Timeline. The Photo Timeline, which keeps its cache, and the timelines of one Album, Person, Place, Memory or Tag are not Filtered Timelines.
+_Avoid_: filtered main view, filtered view, smart album
 
 **Restore**:
 Returning a Trashed Asset to the authenticated user's Immich Library, from the Trash Timeline Lightbox or a multi-selection. It is the only Immich write the Trash Timeline performs; Lymic never moves a Remote Asset into the trash and never deletes one permanently. Trashed Assets that could not be restored stay visible and selected in the Trash Timeline so the user can retry.

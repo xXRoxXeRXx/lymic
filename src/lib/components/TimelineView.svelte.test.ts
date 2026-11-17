@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import "../i18n";
 import TimelineView from "./TimelineView.svelte";
 import type { TimelineController } from "../controllers/timeline-controller.svelte";
-import { createFavoritesTimelineController } from "../controllers/favorites-timeline-controller.svelte";
+import { createFilteredTimelineController } from "../controllers/filtered-timeline-controller.svelte";
 import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 import type { AssetDetails, TimelineAsset } from "../contracts";
 
@@ -97,10 +97,10 @@ describe("TimelineView scrubber", () => {
       const first = "2025-03-01T00:00:00.000Z";
       const second = "2025-02-01T00:00:00.000Z";
       const asset = (id: string): TimelineAsset => ({ id, width: 1, height: 1, type: "IMAGE", takenAt: null, fileSize: null, duration: null, isFavorite: true });
-      const favorites = createFavoritesTimelineController({
-        getFavoritesTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: first, count: 1 }, { timeBucket: second, count: 1 }]),
-        getFavoritesTimelineBucketAssets: vi.fn(async (month: string) => [asset(month === first ? "first" : "second")]),
-      });
+      const favorites = createFilteredTimelineController({
+        getFilteredTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: first, count: 1 }, { timeBucket: second, count: 1 }]),
+        getFilteredTimelineBucketAssets: vi.fn(async (_timeline: string, month: string) => [asset(month === first ? "first" : "second")]),
+      }, "favorites");
       await favorites.refresh();
       await favorites.activateBucket(first);
       render(TimelineView, { timeline: favorites, removeUnfavoritedAssets: true, setAssetFavorite: vi.fn().mockResolvedValue(undefined) });
@@ -1028,14 +1028,14 @@ describe("Favorites removal in TimelineView", () => {
       getAssetDetails?: (assetId: string) => Promise<AssetDetails | null>;
     } = {},
   ) {
-    const favorites = createFavoritesTimelineController({
-      getFavoritesTimelineBuckets: vi.fn().mockResolvedValue(
+    const favorites = createFilteredTimelineController({
+      getFilteredTimelineBuckets: vi.fn().mockResolvedValue(
         buckets.map((entry) => ({ timeBucket: entry.timeBucket, count: entry.assets.length })),
       ),
-      getFavoritesTimelineBucketAssets: vi.fn((timeBucket: string) =>
+      getFilteredTimelineBucketAssets: vi.fn((_timeline: string, timeBucket: string) =>
         Promise.resolve(buckets.find((entry) => entry.timeBucket === timeBucket)?.assets ?? []),
       ),
-    });
+    }, "favorites");
     await favorites.refresh();
     const view = render(TimelineView, {
       timeline: favorites,
@@ -1264,21 +1264,22 @@ describe("Favorites removal in TimelineView", () => {
     await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
     expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
 
-    // Safeguard: Photo Timeline (default removeUnfavoritedAssets=false) retains unfavorited items
+    // Safeguard: without removeUnfavoritedAssets (the default, as in the Photo Timeline)
+    // the view keeps an unfavorited item, even when the timeline came from Favorites.
     view.unmount();
-    const photoController = createFavoritesTimelineController({
-      getFavoritesTimelineBuckets: vi.fn().mockResolvedValue([
+    const keepingController = createFilteredTimelineController({
+      getFilteredTimelineBuckets: vi.fn().mockResolvedValue([
         { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
       ]),
-      getFavoritesTimelineBucketAssets: vi.fn().mockResolvedValue([
+      getFilteredTimelineBucketAssets: vi.fn().mockResolvedValue([
         favoriteAsset("photo-1", "2025-03-05T12:00:00.000Z"),
         favoriteAsset("photo-2", "2025-03-04T12:00:00.000Z"),
       ]),
-    });
-    await photoController.refresh();
+    }, "favorites");
+    await keepingController.refresh();
 
     render(TimelineView, {
-      timeline: photoController,
+      timeline: keepingController,
       getAssetDetails: vi.fn().mockResolvedValue(assetDetails({ isFavorite: true })),
       setAssetFavorite: vi.fn().mockResolvedValue(undefined),
     });

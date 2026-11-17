@@ -1,3 +1,4 @@
+use super::bulk_check::DuplicateRemoteAsset;
 use super::client::ImmichClient;
 use super::response::{
     read_response_body_limited, send_checked, send_checked_as, MAX_SUCCESS_RESPONSE_BYTES,
@@ -151,13 +152,15 @@ impl ImmichClient {
         })
     }
 
-    pub async fn search_asset_by_checksum(
+    /// Finds the user's Remote Asset with this checksum. `withDeleted: true` makes Immich
+    /// include a Trashed Asset, which it otherwise omits (observed on v3.4.1).
+    pub(crate) async fn search_asset_by_checksum(
         &self,
         checksum: &str,
-    ) -> Result<Option<super::ids::RemoteAssetId>, String> {
+    ) -> Result<Option<DuplicateRemoteAsset>, String> {
         let response = send_checked_as(
             self.request(Method::POST, "search/metadata")
-                .json(&json!({ "checksum": checksum })),
+                .json(&json!({ "checksum": checksum, "withDeleted": true })),
             "Checksum search request failed",
             "Checksum search failed",
         )
@@ -181,14 +184,20 @@ impl ImmichClient {
             &[]
         };
 
-        let ids: Vec<&str> = items
+        let matches: Vec<DuplicateRemoteAsset> = items
             .iter()
-            .filter_map(|item| item.get("id").and_then(serde_json::Value::as_str))
+            .filter_map(|item| {
+                let id = item.get("id").and_then(serde_json::Value::as_str)?;
+                Some(DuplicateRemoteAsset::new(
+                    super::ids::RemoteAssetId::new(id),
+                    item,
+                ))
+            })
             .collect();
 
-        match ids.len() {
+        match matches.len() {
             0 => Ok(None),
-            1 => Ok(Some(super::ids::RemoteAssetId::new(ids[0]))),
+            1 => Ok(matches.into_iter().next()),
             count => Err(format!(
                 "Checksum '{}' matched {} assets remotely; cannot unambiguously resolve target album asset",
                 checksum, count
@@ -566,7 +575,7 @@ mod tests {
             let (mut stream, _) = listener.accept().await.unwrap();
             let req = read_http_request(&mut stream).await;
             assert!(req.starts_with("POST /api/search/metadata HTTP/1.1"));
-            assert!(req.contains(r#"{"checksum":"sha1-hash"}"#));
+            assert!(req.contains(r#""checksum":"sha1-hash""#));
             let response = r#"{"assets":{"items":[{"id":"resolved-remote-id"}]}}"#;
             stream
                 .write_all(
@@ -588,7 +597,13 @@ mod tests {
         };
 
         let resolved = client.search_asset_by_checksum("sha1-hash").await.unwrap();
-        assert_eq!(resolved, Some(RemoteAssetId::new("resolved-remote-id")));
+        assert_eq!(
+            resolved,
+            Some(DuplicateRemoteAsset {
+                id: RemoteAssetId::new("resolved-remote-id"),
+                is_trashed: false,
+            })
+        );
     }
 
     #[tokio::test]
@@ -623,5 +638,49 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("cannot unambiguously resolve target album asset"));
+    }
+
+    #[tokio::test]
+    async fn checksum_search_includes_and_reports_a_remote_asset_in_the_trash() {
+        // Observed on Immich v3.4.1: a checksum search finds a trashed asset only with
+        // `withDeleted: true`, and the item carries `isTrashed: true`.
+        let (url, request) = crate::immich::test_support::serve_once(
+            "200 OK",
+            r#"{"assets":{"items":[{"id":"trashed-id","isTrashed":true}]}}"#,
+        )
+        .await;
+        let client = crate::immich::test_support::test_client(url, "test-key");
+
+        let found = client.search_asset_by_checksum("sha1-hash").await.unwrap();
+
+        let request = request.await.unwrap();
+        assert!(request.starts_with("POST /api/search/metadata HTTP/1.1"));
+        assert!(request.contains(r#""withDeleted":true"#));
+        assert!(request.contains(r#""checksum":"sha1-hash""#));
+        assert_eq!(
+            found,
+            Some(DuplicateRemoteAsset {
+                id: RemoteAssetId::new("trashed-id"),
+                is_trashed: true,
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn checksum_search_reports_a_live_remote_asset_as_not_trashed() {
+        let (url, _request) = crate::immich::test_support::serve_once(
+            "200 OK",
+            r#"{"assets":{"items":[{"id":"live-id","isTrashed":false}]}}"#,
+        )
+        .await;
+        let client = crate::immich::test_support::test_client(url, "test-key");
+
+        assert_eq!(
+            client.search_asset_by_checksum("sha1-hash").await.unwrap(),
+            Some(DuplicateRemoteAsset {
+                id: RemoteAssetId::new("live-id"),
+                is_trashed: false,
+            })
+        );
     }
 }

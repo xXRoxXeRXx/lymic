@@ -26,13 +26,8 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
     getAlbumCatalogue: vi.fn().mockResolvedValue([]),
     getTimelineBuckets: vi.fn().mockResolvedValue([]),
     getTimelineBucketAssets: vi.fn().mockResolvedValue([]),
-    getFavoritesTimelineBuckets: vi.fn().mockResolvedValue([]),
-    getFavoritesTimelineBucketAssets: vi.fn().mockResolvedValue([]),
-    getArchiveTimelineBuckets: vi.fn().mockResolvedValue([]),
-    getArchiveTimelineBucketAssets: vi.fn().mockResolvedValue([]),
-    getTrashTimelineBuckets: vi.fn().mockResolvedValue([]),
-    getTrashTimelineBucketAssets: vi.fn().mockResolvedValue([]),
-    restoreTrashedAssets: vi.fn().mockResolvedValue({ restoredAssetIds: [] }),
+    getFilteredTimelineBuckets: vi.fn().mockResolvedValue([]),
+    getFilteredTimelineBucketAssets: vi.fn().mockResolvedValue([]),
     getMapMarkers: vi.fn().mockResolvedValue([]),
     getMemories: vi.fn().mockResolvedValue([]),
     getMemoriesPage: vi.fn().mockResolvedValue({ memories: [], hasNextPage: false }),
@@ -104,9 +99,7 @@ describe("authenticated session", () => {
         .mockResolvedValueOnce([{ id: 2, path: "C:/Bob", recursive: true, target_album_id: null }]),
       getAlbums: vi.fn().mockResolvedValue([{ id: "album-1", albumName: "Trips" }]),
       getAlbumCatalogue: vi.fn().mockResolvedValue([{ id: "album-1", albumName: "Trips", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null }]),
-      getFavoritesTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]),
-      getArchiveTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]),
-      getTrashTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]),
+      getFilteredTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]),
       getPeople: vi.fn().mockResolvedValue({ people: [{ id: "person-1", name: "Alice", thumbnailPath: "" }], hasNextPage: false }),
       getPlaces: vi.fn().mockResolvedValue([{ city: "Paris", thumbnailAssetId: "asset-1" }]),
       getMapMarkers: vi.fn().mockResolvedValue([{ id: "asset-1", lat: 48.8, lon: 2.3 }]),
@@ -129,9 +122,9 @@ describe("authenticated session", () => {
     await Promise.all([
       session.targetAlbumCatalogue.refresh(),
       session.albumCatalogue.refresh(),
-      session.favorites.refresh(),
-      session.archive.refresh(),
-      session.trash.refresh(),
+      session.filteredTimelines.favorites.refresh(),
+      session.filteredTimelines.archive.refresh(),
+      session.filteredTimelines.trash.refresh(),
       session.people.refresh(),
       session.places.refresh(),
       session.map.refresh(),
@@ -139,9 +132,9 @@ describe("authenticated session", () => {
     session.feedback.report("Stale error");
     expect(session.targetAlbumCatalogue.albums).toHaveLength(1);
     expect(session.albumCatalogue.albums).toHaveLength(1);
-    expect(session.favorites.buckets).toHaveLength(1);
-    expect(session.archive.buckets).toHaveLength(1);
-    expect(session.trash.buckets).toHaveLength(1);
+    expect(session.filteredTimelines.favorites.buckets).toHaveLength(1);
+    expect(session.filteredTimelines.archive.buckets).toHaveLength(1);
+    expect(session.filteredTimelines.trash.buckets).toHaveLength(1);
     expect(session.people.people).toHaveLength(1);
     expect(session.places.places).toHaveLength(1);
     expect(session.map.markers).toHaveLength(1);
@@ -156,9 +149,9 @@ describe("authenticated session", () => {
     expect(session.watchedFolders.folders.watchedFolders).toEqual([{ id: 2, path: "C:/Bob", recursive: true, target_album_id: null }]);
     expect(session.targetAlbumCatalogue.albums).toEqual([]);
     expect(session.albumCatalogue.albums).toEqual([]);
-    expect(session.favorites.buckets).toEqual([]);
-    expect(session.archive.buckets).toEqual([]);
-    expect(session.trash.buckets).toEqual([]);
+    expect(session.filteredTimelines.favorites.buckets).toEqual([]);
+    expect(session.filteredTimelines.archive.buckets).toEqual([]);
+    expect(session.filteredTimelines.trash.buckets).toEqual([]);
     expect(session.people.people).toEqual([]);
     expect(session.places.places).toEqual([]);
     expect(session.map.markers).toEqual([]);

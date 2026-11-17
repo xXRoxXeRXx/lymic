@@ -11,13 +11,13 @@ mod search_suggestions;
 mod session;
 mod tags;
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 mod timeline;
 mod trash;
 mod upload;
 
 pub(crate) use album::{Album, AlbumAssignmentResult, AlbumCatalogueItem};
-pub(crate) use bulk_check::BulkCheckDuplicate;
+pub(crate) use bulk_check::{BulkCheckDuplicate, DuplicateRemoteAsset};
 pub(crate) use client::{AssetDetails, AssetResponse, ImmichClient};
 pub(crate) use ids::{AlbumId, RemoteAssetId};
 pub(crate) use people::PeoplePage;
@@ -28,7 +28,9 @@ pub(crate) use search::{
 pub(crate) use search_suggestions::SuggestionRequest;
 pub(crate) use session::ImmichSession;
 pub(crate) use tags::Tag;
-pub(crate) use timeline::{AlbumTimeline, PlaceTimeline, TimelineAsset, TimelineBucket};
+pub(crate) use timeline::{
+    AlbumTimeline, FilteredTimeline, PlaceTimeline, TimelineAsset, TimelineBucket,
+};
 pub(crate) use trash::TrashRestoreResult;
 pub(crate) use upload::SidecarDirectoryCache;
 

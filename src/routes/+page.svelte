@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from "svelte";
+  import { onMount, tick, untrack, type ComponentProps } from "svelte";
   import { Settings as SettingsIcon, Info as InfoIcon, AlertCircle, X, FolderSync, ScrollText, User, Images, Heart, Users, Album, Map as MapIcon, Compass, Archive, Trash2, Tag as TagIcon } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
   import hero from "#lib/assets/hero.png";
@@ -34,10 +34,14 @@
   import { defaultTagOrigin, recordTagOrigin } from "#lib/controllers/tag-origin.ts";
   import { TAG_TIMELINE_VIEW, TAGS_VIEW, type ViewPosition } from "#lib/controllers/view-position.ts";
   import { localizedMemoryTitle } from "#lib/memory-title.ts";
-  import type { AlbumCatalogueItem, AssetTag, Memory, Place, RecognizedPerson } from "#lib/contracts.ts";
+  import { FILTERED_TIMELINES, type AlbumCatalogueItem, type AssetTag, type FilteredTimeline, type Memory, type Place, type RecognizedPerson } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   let currentView = $state("photos");
+  /** Whether `view` is a Filtered Timeline: a main view that shows its own filtered timeline and reloads it every time it opens. */
+  function isFilteredTimeline(view: string): view is FilteredTimeline {
+    return (FILTERED_TIMELINES as readonly string[]).includes(view);
+  }
   const desktop = tauriDesktopAdapter;
   let mapCreated = $state(false);
   let selectedAlbum = $state<AlbumCatalogueItem | null>(null);
@@ -70,7 +74,7 @@
   /** Where the timeline view of `view` opens, set only while returning from a Search. */
   let scrollRestore = $state<ViewPosition | null>(null);
   /** Views that show the shared timeline view, which scrolls inside itself. */
-  const timelineScrollViews = new Set(["photos", "favorites", "archive", "trash", "person-timeline", "album-timeline", "place-timeline", "memory-timeline", TAG_TIMELINE_VIEW, "search"]);
+  const timelineScrollViews = new Set<string>(["photos", ...FILTERED_TIMELINES, "person-timeline", "album-timeline", "place-timeline", "memory-timeline", TAG_TIMELINE_VIEW, "search"]);
 
   function selectPerson(person: RecognizedPerson) {
     personOrigin = currentView === "explore" ? "explore" : "people";
@@ -126,27 +130,18 @@
   }
 
   function viewTitle(view: string) {
+    // A main view's title is its navigation label.
+    const mainView = navigationEntries.find((entry) => entry.view === view);
+    if (mainView) return $t(mainView.label);
     switch (view) {
       case "search": return $t("search_title");
-      case "photos": return $t("timeline_title");
-      case "explore": return $t("explore_title");
-      case "favorites": return $t("favorites_title");
-      case "archive": return $t("archive_title");
-      case "trash": return $t("trash_title");
-      case "map": return $t("map_title");
-      case "people": return $t("people_title");
-      case TAGS_VIEW: return $t("tags_title");
       case "places": return $t("places_all_title");
       case "all-memories": return $t("memories_all_title");
-      case "albums": return $t("albums_title");
       case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
       case "place-timeline": return selectedPlace?.city ?? $t("places_title");
       case TAG_TIMELINE_VIEW: return selectedTag?.value ?? $t("tags_title");
       case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
       case "memory-timeline": return selectedMemory ? localizedMemoryTitle(selectedMemory, $t, $locale) : $t("memories_title");
-      case "dashboard": return $t("dashboard");
-      case "logs": return $t("logs");
-      case "settings": return $t("settings");
       default: return $t("info");
     }
   }
@@ -200,22 +195,10 @@
     return result;
   }
 
-  function openFavorites() {
-    if (currentView === "favorites") return;
-    currentView = "favorites";
-    void favorites.refresh();
-  }
-
-  function openArchive() {
-    if (currentView === "archive") return;
-    currentView = "archive";
-    void archive.refresh();
-  }
-
-  function openTrash() {
-    if (currentView === "trash") return;
-    currentView = "trash";
-    void trash.refresh();
+  function openFilteredTimeline(view: FilteredTimeline) {
+    if (currentView === view) return;
+    currentView = view;
+    void filteredTimelines[view].refresh();
   }
 
   function openMap() {
@@ -314,7 +297,7 @@
     if (timelineScrollViews.has(origin.view)) scrollRestore = { view: origin.view, top: origin.top };
     else queueMicrotask(() => { if (content) content.scrollTop = origin.top; });
     // The Trash Timeline is dropped when it is left, and Explore and Tags may have gone stale.
-    if (origin.view === "trash") void trash.refresh();
+    if (origin.view === "trash") void filteredTimelines.trash.refresh();
     if (origin.view === "explore") void explore.refreshIfStale();
     if (origin.view === TAGS_VIEW) void tags.refreshIfStale();
   }
@@ -370,9 +353,7 @@
     watchedFolders,
     sync,
     timeline,
-    favorites,
-    archive,
-    trash,
+    filteredTimelines,
     people,
     places,
     tags,
@@ -383,6 +364,30 @@
     albumCatalogue,
     search,
   } = auth;
+  /**
+   * What each Filtered Timeline adds to the shared timeline: its navigation icon and its own TimelineView options.
+   * Its texts are the `<timeline>_title`, `_loading`, `_empty`, `_error` and `_offline` locale keys, plus
+   * `_permission_error` when its controller reports a missing permission (only Archive does).
+   */
+  const filteredTimelineViews: Record<FilteredTimeline, { icon: typeof Heart; options(): Partial<ComponentProps<typeof TimelineView>> }> = {
+    favorites: { icon: Heart, options: () => ({ removeUnfavoritedAssets: true, showRefreshButton: false }) },
+    archive: { icon: Archive, options: () => ({}) },
+    trash: { icon: Trash2, options: () => ({ allowFavoriteAndAlbum: false, restoreTrashedAssets, hintMessage: $t("trash_hint") }) },
+  };
+  /** The main views, in navigation order. A main view's navigation label is also its page title. */
+  const navigationEntries = [
+    { view: "photos", icon: Images, label: "timeline_title", open: openPhotos },
+    { view: "explore", icon: Compass, label: "explore_title", open: openExplore },
+    ...FILTERED_TIMELINES.map((view) => ({ view, icon: filteredTimelineViews[view].icon, label: `${view}_title`, open: () => openFilteredTimeline(view) })),
+    { view: "map", icon: MapIcon, label: "map_title", open: openMap },
+    { view: "albums", icon: Album, label: "albums_title", open: openAlbums },
+    { view: "people", icon: Users, label: "people_title", open: openPeople },
+    { view: TAGS_VIEW, icon: TagIcon, label: "tags_title", open: openTags },
+    { view: "dashboard", icon: FolderSync, label: "dashboard", open: () => currentView = "dashboard" },
+    { view: "logs", icon: ScrollText, label: "logs", open: () => currentView = "logs" },
+    { view: "settings", icon: SettingsIcon, label: "settings", open: () => currentView = "settings" },
+    { view: "info", icon: InfoIcon, label: "info", open: () => currentView = "info" },
+  ];
   const preferences = createPreferencesController({
     adapter: desktop,
     reportError: feedback.report,
@@ -397,7 +402,7 @@
   let trashWasOpen = false;
   $effect(() => {
     const trashIsOpen = currentView === "trash";
-    if (trashWasOpen && !trashIsOpen) untrack(() => trash.clear());
+    if (trashWasOpen && !trashIsOpen) untrack(() => filteredTimelines.trash.clear());
     trashWasOpen = trashIsOpen;
   });
 
@@ -504,113 +509,13 @@
 
         <!-- Navigation items -->
         <nav class="space-y-1" aria-label={$t('main_navigation')}>
-          <button
-            type="button"
-            class="nav-item {currentView === 'photos' ? 'active' : ''}"
-            onclick={openPhotos}
-            aria-label={$t('timeline_title')}
-          >
-            <Images class="w-4 h-4 shrink-0 {currentView === 'photos' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('timeline_title')}</span>
-          </button>
-          <button
-            type="button"
-            class="nav-item {currentView === 'explore' ? 'active' : ''}"
-            onclick={openExplore}
-            aria-label={$t('explore_title')}
-          >
-            <Compass class="w-4 h-4 shrink-0 {currentView === 'explore' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('explore_title')}</span>
-          </button>
-          <button
-            type="button"
-            class="nav-item {currentView === 'favorites' ? 'active' : ''}"
-            onclick={openFavorites}
-            aria-label={$t('favorites_title')}
-          >
-            <Heart class="w-4 h-4 shrink-0 {currentView === 'favorites' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('favorites_title')}</span>
-          </button>
-          <button
-            type="button"
-            class="nav-item {currentView === 'archive' ? 'active' : ''}"
-            onclick={openArchive}
-            aria-label={$t('archive_title')}
-          >
-            <Archive class="w-4 h-4 shrink-0 {currentView === 'archive' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('archive_title')}</span>
-          </button>
-          <button
-            type="button"
-            class="nav-item {currentView === 'trash' ? 'active' : ''}"
-            onclick={openTrash}
-            aria-label={$t('trash_title')}
-          >
-            <Trash2 class="w-4 h-4 shrink-0 {currentView === 'trash' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('trash_title')}</span>
-          </button>
-          <button type="button" class="nav-item {currentView === 'map' ? 'active' : ''}" onclick={openMap} aria-label={$t('map_title')}>
-            <MapIcon class="w-4 h-4 shrink-0 {currentView === 'map' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('map_title')}</span>
-          </button>
-          <button type="button" class="nav-item {currentView === 'albums' ? 'active' : ''}" onclick={openAlbums} aria-label={$t('albums_title')}>
-            <Album class="w-4 h-4 shrink-0 {currentView === 'albums' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('albums_title')}</span>
-          </button>
-          <button
-            type="button"
-            class="nav-item {currentView === 'people' ? 'active' : ''}"
-            onclick={openPeople}
-            aria-label={$t('people_title')}
-          >
-            <Users class="w-4 h-4 shrink-0 {currentView === 'people' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('people_title')}</span>
-          </button>
-
-          <button type="button" class="nav-item {currentView === TAGS_VIEW ? 'active' : ''}" onclick={openTags} aria-label={$t('tags_title')}>
-            <TagIcon class="w-4 h-4 shrink-0 {currentView === TAGS_VIEW ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('tags_title')}</span>
-          </button>
-
-          <button
-            type="button"
-            class="nav-item {currentView === 'dashboard' ? 'active' : ''}"
-            onclick={() => currentView = "dashboard"}
-            aria-label={$t('dashboard')}
-          >
-            <FolderSync class="w-4 h-4 shrink-0 {currentView === 'dashboard' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('dashboard')}</span>
-          </button>
-
-          <button
-            type="button"
-            class="nav-item {currentView === 'logs' ? 'active' : ''}"
-            onclick={() => currentView = "logs"}
-            aria-label={$t('logs')}
-          >
-            <ScrollText class="w-4 h-4 shrink-0 {currentView === 'logs' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('logs')}</span>
-          </button>
-
-          <button
-            type="button"
-            class="nav-item {currentView === 'settings' ? 'active' : ''}"
-            onclick={() => currentView = "settings"}
-            aria-label={$t('settings')}
-          >
-            <SettingsIcon class="w-4 h-4 shrink-0 {currentView === 'settings' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('settings')}</span>
-          </button>
-
-          <button
-            type="button"
-            class="nav-item {currentView === 'info' ? 'active' : ''}"
-            onclick={() => currentView = "info"}
-            aria-label={$t('info')}
-          >
-            <InfoIcon class="w-4 h-4 shrink-0 {currentView === 'info' ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
-            <span>{$t('info')}</span>
-          </button>
+          {#each navigationEntries as entry (entry.view)}
+            {@const active = currentView === entry.view}
+            <button type="button" class="nav-item {active ? 'active' : ''}" onclick={entry.open} aria-label={$t(entry.label)}>
+              <entry.icon class="w-4 h-4 shrink-0 {active ? 'text-blue-600 dark:text-sky-400' : 'text-slate-400 dark:text-zinc-500'}" />
+              <span>{$t(entry.label)}</span>
+            </button>
+          {/each}
         </nav>
       </div>
 
@@ -647,7 +552,7 @@
       </header>
 
       <div class="shrink-0 px-8 pb-2">
-        <SearchBar {search} {people} {tags} onSubmit={submitSearch} onClear={clearSearch} onOpenArchive={openArchive} />
+        <SearchBar {search} {people} {tags} onSubmit={submitSearch} onClear={clearSearch} onOpenArchive={() => openFilteredTimeline("archive")} />
       </div>
 
       <main bind:this={content} onscroll={() => { if (currentView === TAGS_VIEW && content) tagsScrollTop = content.scrollTop; }} class="flex-1 {currentView === 'map' || timelineScrollViews.has(currentView) ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
@@ -679,42 +584,23 @@
         {#if mapCreated}<MapView mapState={map} active={currentView === "map"} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} />{/if}
         {#if currentView === "photos"}
           <TimelineView {timeline} {...sharedTimelineProps} />
-        {:else if currentView === "favorites"}
-          <TimelineView
-            timeline={favorites}
-            {...sharedTimelineProps}
-            removeUnfavoritedAssets={true}
-            showRefreshButton={false}
-            ariaLabel={$t("favorites_title")}
-            loadingMessage={$t("favorites_loading")}
-            emptyMessage={$t("favorites_empty")}
-            loadErrorMessage={$t("favorites_error")}
-            offlineMessage={$t("favorites_offline")}
-          />
-        {:else if currentView === "archive"}
-          <TimelineView
-            timeline={archive}
-            {...sharedTimelineProps}
-            ariaLabel={$t("archive_title")}
-            loadingMessage={$t("archive_loading")}
-            emptyMessage={$t("archive_empty")}
-            loadErrorMessage={archive.permissionDenied ? $t("archive_permission_error") : $t("archive_error")}
-            offlineMessage={$t("archive_offline")}
-            failureIsError={archive.permissionDenied}
-          />
-        {:else if currentView === "trash"}
-          <TimelineView
-            timeline={trash}
-            {...sharedTimelineProps}
-            allowFavoriteAndAlbum={false}
-            {restoreTrashedAssets}
-            ariaLabel={$t("trash_title")}
-            loadingMessage={$t("trash_loading")}
-            emptyMessage={$t("trash_empty")}
-            loadErrorMessage={$t("trash_error")}
-            offlineMessage={$t("trash_offline")}
-            hintMessage={$t("trash_hint")}
-          />
+        {:else if isFilteredTimeline(currentView)}
+          {@const view = currentView}
+          {@const filtered = filteredTimelines[view]}
+          <!-- Keyed so switching between Filtered Timelines mounts a fresh TimelineView, as separate views would. -->
+          {#key view}
+            <TimelineView
+              timeline={filtered}
+              {...sharedTimelineProps}
+              {...filteredTimelineViews[view].options()}
+              ariaLabel={$t(`${view}_title`)}
+              loadingMessage={$t(`${view}_loading`)}
+              emptyMessage={$t(`${view}_empty`)}
+              loadErrorMessage={filtered.permissionDenied ? $t(`${view}_permission_error`) : $t(`${view}_error`)}
+              offlineMessage={$t(`${view}_offline`)}
+              failureIsError={filtered.permissionDenied}
+            />
+          {/key}
         {:else if currentView === "explore"}
           <ExploreView {explore} {people} {places} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} onViewAllMemories={openAllMemories} onSelectMemory={selectMemory} />
         {:else if currentView === "all-memories"}

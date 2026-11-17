@@ -227,6 +227,7 @@
   "show_secret": "إظهار السر",
   "hide_secret": "إخفاء السر",
   "log_duplicate_resolve_failed": "تعذر حل النسخة المكررة {file}: {error}",
+  "log_duplicate_in_trash": "{file} موجود بالفعل في Immich لكنه في سلة مهملات Immich؛ لم تتم إعادة رفعه. استعِده من سلة المهملات لرؤيته في Immich.",
   "log_upload_completion_persist_failed": "تعذر إكمال مزامنة {file}: {error}",
   "log_removable_volume_error": "خطأ في معالجة حدث وحدة التخزين القابلة للإزالة: {error}"
   ,"hero_landscape": "منظر رئيسي"

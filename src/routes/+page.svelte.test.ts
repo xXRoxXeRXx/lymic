@@ -56,10 +56,20 @@ vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: tauri.relaunch }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
 
+/**
+ * A handler key is the command name; a Filtered Timeline request is keyed by command and timeline,
+ * for example `get_filtered_timeline_buckets:archive`.
+ */
+function handlerKey(command: string, args?: unknown) {
+  const timeline = (args as { timeline?: string } | undefined)?.timeline;
+  return command.startsWith("get_filtered_timeline_") && timeline ? `${command}:${timeline}` : command;
+}
+
 function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) => Promise<unknown>> = {}) {
   tauri.invoke.mockImplementation((command: string, args?: unknown) => {
-    if (command in handlers) {
-      return handlers[command](args);
+    const key = handlerKey(command, args);
+    if (key in handlers) {
+      return handlers[key](args);
     }
     switch (command) {
       case "get_auth_status":
@@ -80,17 +90,9 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
         return Promise.resolve([]);
       case "get_timeline_bucket_assets":
         return Promise.resolve([]);
-      case "get_favorites_timeline_buckets":
+      case "get_filtered_timeline_buckets":
         return Promise.resolve([]);
-      case "get_favorites_timeline_bucket_assets":
-        return Promise.resolve([]);
-      case "get_archive_timeline_buckets":
-        return Promise.resolve([]);
-      case "get_archive_timeline_bucket_assets":
-        return Promise.resolve([]);
-      case "get_trash_timeline_buckets":
-        return Promise.resolve([]);
-      case "get_trash_timeline_bucket_assets":
+      case "get_filtered_timeline_bucket_assets":
         return Promise.resolve([]);
       case "get_album_timeline":
         return Promise.resolve({ buckets: [], assetsByBucket: {} });
@@ -1484,11 +1486,11 @@ describe("Favorites Timeline", () => {
   it("opens Favorites from navigation, loads month buckets and media with scrubber, hides refresh controls, and preserves timeline actions", async () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
-      get_favorites_timeline_buckets: async () => [
+      "get_filtered_timeline_buckets:favorites": async () => [
         { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
         { timeBucket: "2024-12-01T00:00:00.000Z", count: 1 },
       ],
-      get_favorites_timeline_bucket_assets: async (args) => {
+      "get_filtered_timeline_bucket_assets:favorites": async (args) => {
         const { timeBucket } = args as { timeBucket: string };
         if (timeBucket === "2025-03-01T00:00:00.000Z") {
           return [
@@ -1526,7 +1528,7 @@ describe("Favorites Timeline", () => {
     });
 
     expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();
-    expect(tauri.invoke).not.toHaveBeenCalledWith("get_favorites_timeline_buckets");
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_filtered_timeline_buckets", { timeline: "favorites" });
 
     await fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
 
@@ -1537,9 +1539,9 @@ describe("Favorites Timeline", () => {
     expect(screen.getByText("December 2024")).toBeInTheDocument();
     expect(screen.getByText("1 assets")).toBeInTheDocument();
 
-    expect(tauri.invoke).toHaveBeenCalledWith("get_favorites_timeline_buckets");
-    expect(tauri.invoke).toHaveBeenCalledWith("get_favorites_timeline_bucket_assets", { timeBucket: "2025-03-01T00:00:00.000Z" });
-    expect(tauri.invoke).toHaveBeenCalledWith("get_favorites_timeline_bucket_assets", { timeBucket: "2024-12-01T00:00:00.000Z" });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_filtered_timeline_buckets", { timeline: "favorites" });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_filtered_timeline_bucket_assets", { timeline: "favorites", timeBucket: "2025-03-01T00:00:00.000Z" });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_filtered_timeline_bucket_assets", { timeline: "favorites", timeBucket: "2024-12-01T00:00:00.000Z" });
 
     expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
@@ -1576,7 +1578,7 @@ describe("Favorites Timeline", () => {
       ]);
 
     renderAuthenticatedPage({
-      get_favorites_timeline_buckets: getFavoritesBuckets,
+      "get_filtered_timeline_buckets:favorites": getFavoritesBuckets,
     });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
@@ -1611,7 +1613,7 @@ describe("Favorites Timeline", () => {
     });
 
     renderAuthenticatedPage({
-      get_favorites_timeline_buckets: () => pendingBuckets,
+      "get_filtered_timeline_buckets:favorites": () => pendingBuckets,
     });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
@@ -1628,7 +1630,7 @@ describe("Favorites Timeline", () => {
     cleanup();
 
     renderAuthenticatedPage({
-      get_favorites_timeline_buckets: () => Promise.reject(new Error("offline")),
+      "get_filtered_timeline_buckets:favorites": () => Promise.reject(new Error("offline")),
     });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
@@ -1643,7 +1645,7 @@ describe("Favorites Timeline", () => {
       .mockRejectedValueOnce(new Error("offline"));
 
     renderAuthenticatedPage({
-      get_favorites_timeline_buckets: getFavoritesBuckets,
+      "get_filtered_timeline_buckets:favorites": getFavoritesBuckets,
     });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
@@ -1666,7 +1668,7 @@ describe("Favorites Timeline", () => {
       .mockImplementationOnce(() => new Promise(() => {}));
 
     renderAuthenticatedPage({
-      get_favorites_timeline_buckets: getFavoritesBuckets,
+      "get_filtered_timeline_buckets:favorites": getFavoritesBuckets,
     });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
@@ -1691,11 +1693,11 @@ describe("Favorites Timeline", () => {
     let favoritingCall = 0;
 
     renderAuthenticatedPage({
-      get_favorites_timeline_buckets: async () => [
+      "get_filtered_timeline_buckets:favorites": async () => [
         { timeBucket: "2025-03-01T00:00:00.000Z", count: 2 },
         { timeBucket: "2024-12-01T00:00:00.000Z", count: 1 },
       ],
-      get_favorites_timeline_bucket_assets: async (args) => {
+      "get_filtered_timeline_bucket_assets:favorites": async (args) => {
         const { timeBucket } = args as { timeBucket: string };
         if (timeBucket === "2025-03-01T00:00:00.000Z") {
           return [
@@ -1781,10 +1783,10 @@ describe("Favorites Timeline", () => {
     let callCount = 0;
 
     renderAuthenticatedPage({
-      get_favorites_timeline_buckets: async () => [
+      "get_filtered_timeline_buckets:favorites": async () => [
         { timeBucket: "2025-03-01T00:00:00.000Z", count: 3 },
       ],
-      get_favorites_timeline_bucket_assets: async () => [
+      "get_filtered_timeline_bucket_assets:favorites": async () => [
         { id: "fav-1", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
         { id: "fav-2", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-04T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
         { id: "fav-3", width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-03T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: true },
@@ -1892,11 +1894,11 @@ describe("Favorites Timeline", () => {
     let rejectPendingRemoval!: (error: Error) => void;
 
     renderAuthenticatedPage({
-      get_favorites_timeline_buckets: async () => [
+      "get_filtered_timeline_buckets:favorites": async () => [
         { timeBucket: "2025-03-01T00:00:00.000Z", count: 1 },
         { timeBucket: "2025-02-01T00:00:00.000Z", count: 1 },
       ],
-      get_favorites_timeline_bucket_assets: async (args) => {
+      "get_filtered_timeline_bucket_assets:favorites": async (args) => {
         const { timeBucket } = args as { timeBucket: string };
         if (timeBucket === "2025-03-01T00:00:00.000Z") {
           return [
@@ -3269,8 +3271,8 @@ describe("Archive Timeline", () => {
   it("opens the Archive Timeline with buckets, scrubber and thumbnails, and offers no archive or unarchive action", async () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
-      get_archive_timeline_buckets: async () => [{ timeBucket: march, count: 2 }, { timeBucket: december, count: 1 }],
-      get_archive_timeline_bucket_assets: async (args) => {
+      "get_filtered_timeline_buckets:archive": async () => [{ timeBucket: march, count: 2 }, { timeBucket: december, count: 1 }],
+      "get_filtered_timeline_bucket_assets:archive": async (args) => {
         const { timeBucket } = args as { timeBucket: string };
         return timeBucket === march ? [archivedAsset("arch-photo"), archivedAsset("arch-video", "VIDEO")] : [archivedAsset("arch-photo-2")];
       },
@@ -3283,10 +3285,10 @@ describe("Archive Timeline", () => {
     expect(await screen.findByRole("heading", { name: "Archive" })).toBeInTheDocument();
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
     expect(screen.getByText("December 2024")).toBeInTheDocument();
-    expect(tauri.invoke).toHaveBeenCalledWith("get_archive_timeline_buckets");
-    expect(tauri.invoke).toHaveBeenCalledWith("get_archive_timeline_bucket_assets", { timeBucket: march });
-    expect(tauri.invoke).toHaveBeenCalledWith("get_archive_timeline_bucket_assets", { timeBucket: december });
-    expect(tauri.invoke).not.toHaveBeenCalledWith("get_favorites_timeline_buckets");
+    expect(tauri.invoke).toHaveBeenCalledWith("get_filtered_timeline_buckets", { timeline: "archive" });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_filtered_timeline_bucket_assets", { timeline: "archive", timeBucket: march });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_filtered_timeline_bucket_assets", { timeline: "archive", timeBucket: december });
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_filtered_timeline_buckets", { timeline: "favorites" });
     expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
@@ -3297,8 +3299,8 @@ describe("Archive Timeline", () => {
   it("offers Favorite, Download and Add to album from the Lightbox and from multi-selection, without any archive action", async () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
-      get_archive_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
-      get_archive_timeline_bucket_assets: async () => [archivedAsset("arch-1"), archivedAsset("arch-2")],
+      "get_filtered_timeline_buckets:archive": async () => [{ timeBucket: march, count: 2 }],
+      "get_filtered_timeline_bucket_assets:archive": async () => [archivedAsset("arch-1"), archivedAsset("arch-2")],
       get_albums: async () => [{ id: "album-1", albumName: "Holiday" }],
       get_asset_details: async () => assetDetails,
       set_asset_favorite: async () => undefined,
@@ -3329,7 +3331,7 @@ describe("Archive Timeline", () => {
     const getArchiveBuckets = vi.fn()
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }, { timeBucket: december, count: 1 }])
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
-    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:archive": getArchiveBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
     expect(await screen.findByText("December 2024")).toBeInTheDocument();
@@ -3346,7 +3348,7 @@ describe("Archive Timeline", () => {
 
   it("shows loading, then the empty state when nothing is archived", async () => {
     let resolveBuckets!: (value: unknown) => void;
-    renderAuthenticatedPage({ get_archive_timeline_buckets: () => new Promise((resolve) => { resolveBuckets = resolve; }) });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:archive": () => new Promise((resolve) => { resolveBuckets = resolve; }) });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Loading archive…");
@@ -3361,7 +3363,7 @@ describe("Archive Timeline", () => {
     const getArchiveBuckets = vi.fn()
       .mockRejectedValueOnce(new Error("rejected visibility"))
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
-    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:archive": getArchiveBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The archive could not be loaded.");
@@ -3377,7 +3379,7 @@ describe("Archive Timeline", () => {
     const getArchiveBuckets = vi.fn()
       .mockRejectedValueOnce("archive_permission_denied:asset.read")
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
-    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:archive": getArchiveBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
     const alert = await screen.findByRole("alert");
@@ -3391,7 +3393,7 @@ describe("Archive Timeline", () => {
   });
 
   it("keeps the generic archive error for failures that are not permission denials", async () => {
-    renderAuthenticatedPage({ get_archive_timeline_buckets: () => Promise.reject("archive_unavailable") });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:archive": () => Promise.reject("archive_unavailable") });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The archive could not be loaded.");
@@ -3401,7 +3403,7 @@ describe("Archive Timeline", () => {
     const getArchiveBuckets = vi.fn()
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
       .mockRejectedValueOnce(new Error("offline"));
-    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:archive": getArchiveBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
@@ -3417,7 +3419,7 @@ describe("Archive Timeline", () => {
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
       .mockRejectedValueOnce("archive_permission_denied:asset.read")
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
-    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:archive": getArchiveBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
@@ -3438,8 +3440,8 @@ describe("Archive Timeline", () => {
   it("shows a permission denial while loading bucket assets as an alert, not as offline", async () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
-      get_archive_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
-      get_archive_timeline_bucket_assets: () => Promise.reject("archive_permission_denied:asset.read"),
+      "get_filtered_timeline_buckets:archive": async () => [{ timeBucket: march, count: 1 }],
+      "get_filtered_timeline_bucket_assets:archive": () => Promise.reject("archive_permission_denied:asset.read"),
     });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
@@ -3452,7 +3454,7 @@ describe("Archive Timeline", () => {
     const getArchiveBuckets = vi.fn()
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
       .mockImplementationOnce(() => new Promise(() => {}));
-    renderAuthenticatedPage({ get_archive_timeline_buckets: getArchiveBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:archive": getArchiveBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
@@ -3496,8 +3498,8 @@ describe("Trash Timeline", () => {
   it("opens the Trash Timeline with buckets, scrubber, thumbnails and the retention hint, and offers no deletion action", async () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
-      get_trash_timeline_buckets: async () => [{ timeBucket: march, count: 2 }, { timeBucket: december, count: 1 }],
-      get_trash_timeline_bucket_assets: async (args) => {
+      "get_filtered_timeline_buckets:trash": async () => [{ timeBucket: march, count: 2 }, { timeBucket: december, count: 1 }],
+      "get_filtered_timeline_bucket_assets:trash": async (args) => {
         const { timeBucket } = args as { timeBucket: string };
         return timeBucket === march ? [trashedAsset("trash-photo"), trashedAsset("trash-video", "VIDEO")] : [trashedAsset("trash-photo-2")];
       },
@@ -3508,11 +3510,11 @@ describe("Trash Timeline", () => {
     expect(await screen.findByRole("heading", { name: "Trash" })).toBeInTheDocument();
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
     expect(screen.getByText("December 2024")).toBeInTheDocument();
-    expect(tauri.invoke).toHaveBeenCalledWith("get_trash_timeline_buckets");
-    expect(tauri.invoke).toHaveBeenCalledWith("get_trash_timeline_bucket_assets", { timeBucket: march });
-    expect(tauri.invoke).toHaveBeenCalledWith("get_trash_timeline_bucket_assets", { timeBucket: december });
-    expect(tauri.invoke).not.toHaveBeenCalledWith("get_archive_timeline_buckets");
-    expect(tauri.invoke).not.toHaveBeenCalledWith("get_favorites_timeline_buckets");
+    expect(tauri.invoke).toHaveBeenCalledWith("get_filtered_timeline_buckets", { timeline: "trash" });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_filtered_timeline_bucket_assets", { timeline: "trash", timeBucket: march });
+    expect(tauri.invoke).toHaveBeenCalledWith("get_filtered_timeline_bucket_assets", { timeline: "trash", timeBucket: december });
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_filtered_timeline_buckets", { timeline: "archive" });
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_filtered_timeline_buckets", { timeline: "favorites" });
     expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Open video" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
@@ -3525,8 +3527,8 @@ describe("Trash Timeline", () => {
   it("offers only Restore and Download from the Lightbox and from multi-selection, without Favorite, Add to album or any deletion", async () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
-      get_trash_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
-      get_trash_timeline_bucket_assets: async () => [trashedAsset("trash-1"), trashedAsset("trash-2")],
+      "get_filtered_timeline_buckets:trash": async () => [{ timeBucket: march, count: 2 }],
+      "get_filtered_timeline_bucket_assets:trash": async () => [trashedAsset("trash-1"), trashedAsset("trash-2")],
       get_albums: async () => [{ id: "album-1", albumName: "Holiday" }],
       get_asset_details: async () => assetDetails,
     });
@@ -3555,7 +3557,7 @@ describe("Trash Timeline", () => {
     const getTrashBuckets = vi.fn()
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }, { timeBucket: december, count: 1 }])
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
-    renderAuthenticatedPage({ get_trash_timeline_buckets: getTrashBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:trash": getTrashBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
     expect(await screen.findByText("December 2024")).toBeInTheDocument();
@@ -3572,7 +3574,7 @@ describe("Trash Timeline", () => {
 
   it("shows loading, then the empty state when the trash is empty", async () => {
     let resolveBuckets!: (value: unknown) => void;
-    renderAuthenticatedPage({ get_trash_timeline_buckets: () => new Promise((resolve) => { resolveBuckets = resolve; }) });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:trash": () => new Promise((resolve) => { resolveBuckets = resolve; }) });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Loading trash…");
@@ -3587,7 +3589,7 @@ describe("Trash Timeline", () => {
     const getTrashBuckets = vi.fn()
       .mockRejectedValueOnce("Failed to fetch trash timeline buckets: 400 Bad Request")
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }]);
-    renderAuthenticatedPage({ get_trash_timeline_buckets: getTrashBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:trash": getTrashBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The trash could not be loaded.");
@@ -3603,7 +3605,7 @@ describe("Trash Timeline", () => {
     const getTrashBuckets = vi.fn()
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
       .mockRejectedValueOnce(new Error("offline"));
-    renderAuthenticatedPage({ get_trash_timeline_buckets: getTrashBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:trash": getTrashBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
@@ -3617,7 +3619,7 @@ describe("Trash Timeline", () => {
     const getTrashBuckets = vi.fn()
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
       .mockImplementationOnce(() => new Promise(() => {}));
-    renderAuthenticatedPage({ get_trash_timeline_buckets: getTrashBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:trash": getTrashBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
@@ -3632,7 +3634,7 @@ describe("Trash Timeline", () => {
     const getTrashBuckets = vi.fn()
       .mockResolvedValueOnce([{ timeBucket: march, count: 1 }])
       .mockImplementationOnce(() => new Promise(() => {}));
-    renderAuthenticatedPage({ get_trash_timeline_buckets: getTrashBuckets });
+    renderAuthenticatedPage({ "get_filtered_timeline_buckets:trash": getTrashBuckets });
 
     await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
@@ -3665,8 +3667,8 @@ describe("Trash Timeline Restore", () => {
 
   function renderTrash(restore: (args?: unknown) => Promise<unknown>, assetIds = ["trash-1", "trash-2", "trash-3"]) {
     renderAuthenticatedPage({
-      get_trash_timeline_buckets: async () => [{ timeBucket: march, count: assetIds.length }],
-      get_trash_timeline_bucket_assets: async () => assetIds.map(trashed),
+      "get_filtered_timeline_buckets:trash": async () => [{ timeBucket: march, count: assetIds.length }],
+      "get_filtered_timeline_bucket_assets:trash": async () => assetIds.map(trashed),
       get_asset_details: async () => details,
       restore_trashed_assets: restore,
     });
@@ -3817,8 +3819,8 @@ describe("Trash Timeline Restore", () => {
       renderAuthenticatedPage({
         get_timeline_buckets: photosBuckets,
         get_timeline_bucket_assets: async () => [trashed("trash-1")],
-        get_trash_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
-        get_trash_timeline_bucket_assets: async () => ["trash-1", "trash-2"].map(trashed),
+        "get_filtered_timeline_buckets:trash": async () => [{ timeBucket: march, count: 2 }],
+        "get_filtered_timeline_bucket_assets:trash": async () => ["trash-1", "trash-2"].map(trashed),
         get_asset_details: async () => details,
         restore_trashed_assets: restore,
       });
@@ -4572,8 +4574,8 @@ describe("Search display options and Rating", () => {
     stubImmediateIntersectionObserver();
     renderAuthenticatedPage({
       ...handlers,
-      get_archive_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
-      get_archive_timeline_bucket_assets: async () => [found("archived-1")],
+      "get_filtered_timeline_buckets:archive": async () => [{ timeBucket: march, count: 1 }],
+      "get_filtered_timeline_bucket_assets:archive": async () => [found("archived-1")],
     });
     await fireEvent.input(await searchBox(), { target: { value: "IMG" } });
     await openPanel();
@@ -4584,7 +4586,7 @@ describe("Search display options and Rating", () => {
 
     expect(await screen.findByRole("heading", { name: "Archive", level: 1 })).toBeInTheDocument();
     expect(await screen.findByText("March 2025")).toBeInTheDocument();
-    expect(tauri.invoke).toHaveBeenCalledWith("get_archive_timeline_buckets");
+    expect(tauri.invoke).toHaveBeenCalledWith("get_filtered_timeline_buckets", { timeline: "archive" });
     expect(screen.queryByRole("button", { name: /^Back to/ })).not.toBeInTheDocument();
     expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
     expect(screen.getByRole("button", { name: "Archive" })).toHaveClass("active");
@@ -4623,8 +4625,8 @@ describe("Lightbox Tag chips", () => {
     get_tag_timeline_bucket_assets: async () => [photo("tagged-1")],
     get_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
     get_timeline_bucket_assets: async () => [photo("photo-1")],
-    get_favorites_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
-    get_favorites_timeline_bucket_assets: async () => [photo("favorite-1")],
+    "get_filtered_timeline_buckets:favorites": async () => [{ timeBucket: march, count: 1 }],
+    "get_filtered_timeline_bucket_assets:favorites": async () => [photo("favorite-1")],
     get_album_catalogue: async () => [{ id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null }],
     get_album_timeline: async () => timelineOf("album-asset"),
     get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),

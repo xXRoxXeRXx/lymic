@@ -53,10 +53,33 @@ pub(super) async fn bulk_check_response_error(response: Response) -> BulkCheckEr
     }
 }
 
+/// The Remote Asset that Immich recognized a Duplicate as, and whether it is a Trashed Asset
+/// (which makes the Duplicate a Trashed Duplicate, ADR-0010).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DuplicateRemoteAsset {
+    pub id: super::ids::RemoteAssetId,
+    pub is_trashed: bool,
+}
+
+impl DuplicateRemoteAsset {
+    /// The Remote Asset `id`, trashed when the Immich response `item` naming it says
+    /// `isTrashed: true` (absent means false).
+    pub(super) fn new(id: super::ids::RemoteAssetId, item: &serde_json::Value) -> Self {
+        Self {
+            id,
+            is_trashed: item
+                .get("isTrashed")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BulkCheckDuplicate {
     pub hash: String,
-    pub asset_id: Option<super::ids::RemoteAssetId>,
+    /// Absent when the bulk check named no asset ID; it is then found by checksum.
+    pub remote_asset: Option<DuplicateRemoteAsset>,
 }
 
 pub(super) fn parse_bulk_check_response(
@@ -101,15 +124,17 @@ pub(super) fn parse_bulk_check_response(
         ) {
             ("accept", None) | ("accept", Some(_)) => {}
             ("reject", None) | ("reject", Some("duplicate")) => {
-                let asset_id = result
+                let remote_asset = result
                     .get("assetId")
                     .and_then(serde_json::Value::as_str)
                     .map(str::trim)
                     .filter(|s| !s.is_empty())
-                    .map(super::ids::RemoteAssetId::new);
+                    .map(|asset_id| {
+                        DuplicateRemoteAsset::new(super::ids::RemoteAssetId::new(asset_id), result)
+                    });
                 existing.push(BulkCheckDuplicate {
                     hash: id.to_string(),
-                    asset_id,
+                    remote_asset,
                 });
             }
             ("reject", Some("unsupported-format")) => {
@@ -137,7 +162,10 @@ pub(super) fn parse_bulk_check_response(
 
 #[cfg(test)]
 mod tests {
-    use super::{bulk_check_status_error, parse_bulk_check_response, BulkCheckDuplicate};
+    use super::{
+        bulk_check_status_error, parse_bulk_check_response, BulkCheckDuplicate,
+        DuplicateRemoteAsset,
+    };
     use crate::immich::RemoteAssetId;
     use reqwest::StatusCode;
     use serde_json::json;
@@ -157,11 +185,14 @@ mod tests {
             vec![
                 BulkCheckDuplicate {
                     hash: "first".to_string(),
-                    asset_id: Some(RemoteAssetId::new("asset-uuid-1")),
+                    remote_asset: Some(DuplicateRemoteAsset {
+                        id: RemoteAssetId::new("asset-uuid-1"),
+                        is_trashed: false,
+                    }),
                 },
                 BulkCheckDuplicate {
                     hash: "second".to_string(),
-                    asset_id: None,
+                    remote_asset: None,
                 }
             ]
         );
@@ -175,7 +206,7 @@ mod tests {
             parse_bulk_check_response(&valid, &hashes).unwrap(),
             vec![BulkCheckDuplicate {
                 hash: "first".to_string(),
-                asset_id: None,
+                remote_asset: None,
             }]
         );
         for invalid in [
@@ -191,6 +222,55 @@ mod tests {
         assert!(parse_bulk_check_response(&unsupported, &hashes)
             .unwrap_err()
             .contains("unsupported format"));
+    }
+
+    #[tokio::test]
+    async fn bulk_check_reports_a_duplicate_whose_remote_asset_is_in_the_trash() {
+        // Shape observed on Immich v3.4.1: a trashed Remote Asset is still a duplicate,
+        // with an extra `isTrashed: true`.
+        let (url, request) = crate::immich::test_support::serve_once(
+            "200 OK",
+            r#"{"results":[
+                {"id":"trashed-hash","action":"reject","reason":"duplicate","assetId":"trashed-id","isTrashed":true},
+                {"id":"live-hash","action":"reject","reason":"duplicate","assetId":"live-id","isTrashed":false},
+                {"id":"new-hash","action":"accept"}
+            ]}"#,
+        )
+        .await;
+        let client = crate::immich::test_support::test_client(url, "test-key");
+
+        let duplicates = client
+            .check_assets_exist(vec![
+                "trashed-hash".to_string(),
+                "live-hash".to_string(),
+                "new-hash".to_string(),
+            ])
+            .await
+            .unwrap();
+
+        assert!(request
+            .await
+            .unwrap()
+            .starts_with("POST /api/assets/bulk-upload-check HTTP/1.1"));
+        assert_eq!(
+            duplicates,
+            vec![
+                BulkCheckDuplicate {
+                    hash: "trashed-hash".to_string(),
+                    remote_asset: Some(DuplicateRemoteAsset {
+                        id: RemoteAssetId::new("trashed-id"),
+                        is_trashed: true,
+                    }),
+                },
+                BulkCheckDuplicate {
+                    hash: "live-hash".to_string(),
+                    remote_asset: Some(DuplicateRemoteAsset {
+                        id: RemoteAssetId::new("live-id"),
+                        is_trashed: false,
+                    }),
+                },
+            ]
+        );
     }
 
     #[test]

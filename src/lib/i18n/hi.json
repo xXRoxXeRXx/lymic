@@ -227,6 +227,7 @@
   "show_secret": "गुप्त कुंजी दिखाएँ",
   "hide_secret": "गुप्त कुंजी छिपाएँ",
   "log_duplicate_resolve_failed": "डुप्लिकेट {file} हल नहीं किया जा सका: {error}",
+  "log_duplicate_in_trash": "{file} पहले से Immich में है, लेकिन Immich के ट्रैश में है; इसे दोबारा अपलोड नहीं किया गया। Immich में देखने के लिए इसे ट्रैश से पुनर्स्थापित करें।",
   "log_upload_completion_persist_failed": "{file} का सिंक्रनाइज़ेशन पूरा नहीं किया जा सका: {error}",
   "log_removable_volume_error": "हटाने योग्य वॉल्यूम ईवेंट को संभालने में त्रुटि: {error}"
   ,"hero_landscape": "मुख्य परिदृश्य"
