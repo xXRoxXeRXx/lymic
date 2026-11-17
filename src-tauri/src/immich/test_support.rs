@@ -22,16 +22,20 @@ where
             let mut request = [0_u8; 4096];
             let read = stream.read(&mut request).await.unwrap();
             requests.push(String::from_utf8_lossy(&request[..read]).into_owned());
-            stream
-                .write_all(
-                    format!(
-                        "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                        body.len()
-                    )
-                    .as_bytes(),
-                )
-                .await
-                .unwrap();
+            let headers = format!(
+                "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                body.len()
+            );
+            stream.write_all(headers.as_bytes()).await.unwrap();
+            // Clients enforcing response-size limits may close the socket as soon as headers arrive.
+            if let Err(err) = stream.write_all(body.as_bytes()).await {
+                if !matches!(
+                    err.kind(),
+                    std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                ) {
+                    panic!("failed to write response body: {err}");
+                }
+            }
         }
         requests
     });

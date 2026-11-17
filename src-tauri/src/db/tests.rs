@@ -2148,6 +2148,8 @@ mod database_tests {
         );
     }
 
+    // Backslashes are path separators on Windows only; on POSIX they are literal filename characters.
+    #[cfg(windows)]
     #[tokio::test]
     async fn folder_sync_queries_match_backslash_descendants_without_matching_siblings() {
         let pool = test_pool().await;
