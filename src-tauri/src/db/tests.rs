@@ -2075,7 +2075,7 @@ mod database_tests {
 
         #[cfg(not(windows))]
         {
-            assert!(has_sync_work_in_folder(&pool, "/Photos/Sub").await == Ok(false));
+            assert!(!has_sync_work_in_folder(&pool, "/Photos/Sub").await.unwrap());
             discard_sync_data_in_folder(&pool, "C:/Photos/Sub/")
                 .await
                 .unwrap();
