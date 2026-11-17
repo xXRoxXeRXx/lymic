@@ -1,13 +1,12 @@
 import type { FavoritesTimelineDesktopAdapter } from "../tauri/desktop-adapter";
-import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
+import { createFilteredTimelineController, type FilteredTimelineController } from "./filtered-timeline-controller.svelte";
 
-/** Creates a TimelineController backed by the user's Immich favorite timeline endpoints. */
+/** The Favorites Timeline over the user's Immich favorite timeline requests. */
 export function createFavoritesTimelineController(
   adapter: Pick<FavoritesTimelineDesktopAdapter, "getFavoritesTimelineBuckets" | "getFavoritesTimelineBucketAssets">,
-): TimelineController {
-  return createTimelineController({
-    getTimelineBuckets: () => adapter.getFavoritesTimelineBuckets(),
-    getTimelineBucketAssets: (timeBucket) => adapter.getFavoritesTimelineBucketAssets(timeBucket),
+): FilteredTimelineController {
+  return createFilteredTimelineController({
+    getBuckets: () => adapter.getFavoritesTimelineBuckets(),
+    getBucketAssets: (timeBucket) => adapter.getFavoritesTimelineBucketAssets(timeBucket),
   });
 }
-

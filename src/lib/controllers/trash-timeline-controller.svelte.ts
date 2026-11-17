@@ -1,12 +1,12 @@
 import type { TrashTimelineDesktopAdapter } from "../tauri/desktop-adapter";
-import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
+import { createFilteredTimelineController, type FilteredTimelineController } from "./filtered-timeline-controller.svelte";
 
-/** Creates a TimelineController backed by the user's Immich Trashed Asset timeline endpoints. */
+/** The Trash Timeline over the user's Immich Trashed Asset timeline requests; any failure, 403 included, is a load error. */
 export function createTrashTimelineController(
   adapter: Pick<TrashTimelineDesktopAdapter, "getTrashTimelineBuckets" | "getTrashTimelineBucketAssets">,
-): TimelineController {
-  return createTimelineController({
-    getTimelineBuckets: () => adapter.getTrashTimelineBuckets(),
-    getTimelineBucketAssets: (timeBucket) => adapter.getTrashTimelineBucketAssets(timeBucket),
+): FilteredTimelineController {
+  return createFilteredTimelineController({
+    getBuckets: () => adapter.getTrashTimelineBuckets(),
+    getBucketAssets: (timeBucket) => adapter.getTrashTimelineBucketAssets(timeBucket),
   });
 }
