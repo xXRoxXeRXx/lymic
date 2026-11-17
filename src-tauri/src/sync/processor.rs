@@ -242,10 +242,18 @@ impl RunProcessor {
             {
                 match album_batch::resolve_duplicate_remote_id(&self.client, &unit, &existing).await
                 {
-                    Ok(remote_id) => {
+                    Ok(found) => {
+                        if found.is_trashed {
+                            album_batch::report_trashed_duplicate(
+                                &self.app,
+                                &self.audit_context,
+                                &unit,
+                                &found.asset_id,
+                            );
+                        }
                         self.complete_resolved_unit(
                             unit,
-                            remote_id,
+                            found.asset_id,
                             &mut pending_album_units,
                             queue_results,
                             uploaded,
