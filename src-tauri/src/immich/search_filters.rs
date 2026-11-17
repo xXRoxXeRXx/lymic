@@ -5,8 +5,9 @@
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
-/// A date range as instants. The frontend turns the chosen local days into the start of the
-/// first day and the end of the last day (inclusive), so no time zone is needed here.
+/// A date range as instants, sent as Immich's `takenAt` filter (a `DateFilter`, whose bounds
+/// are UTC instants). The frontend turns the chosen local days into the instant the first day
+/// starts and the instant the last day ends (inclusive), so no time zone is needed here.
 /// Either bound is optional.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
@@ -27,7 +28,7 @@ impl DateRange {
             bounds.insert("lte".to_string(), json!(to));
         }
         if !bounds.is_empty() {
-            filter.insert("localDateTime".to_string(), Value::Object(bounds));
+            filter.insert("takenAt".to_string(), Value::Object(bounds));
         }
     }
 }
@@ -47,6 +48,15 @@ impl MediaType {
             MediaType::Video => "VIDEO",
         };
         filter.insert("type".to_string(), json!({ "eq": immich_type }));
+    }
+}
+
+/// Restricts a Search to Remote Assets in which every one of the Recognized People appears
+/// (`all`, not `any`). No chosen person adds no condition. Whether `all` means every person
+/// on the same Remote Asset is unverified against a live server.
+pub(super) fn apply_person_ids(person_ids: &[String], filter: &mut Map<String, Value>) {
+    if !person_ids.is_empty() {
+        filter.insert("personIds".to_string(), json!({ "all": person_ids }));
     }
 }
 

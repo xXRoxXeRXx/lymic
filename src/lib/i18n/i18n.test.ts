@@ -354,4 +354,15 @@ describe('i18n catalogs', () => {
     expect(de.search_mode_filename).toBe('Dateiname');
     expect(de.search_mode_folderPath).toBe('Ordnerpfad');
   });
+
+  it('translates the Person filter strings in every locale', () => {
+    const keys = ['search_filter_person', 'search_filter_person_hint', 'search_filter_person_permission_denied'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect((translations as Record<string, string>)[key], `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+      }
+      expect((translations as Record<string, string>).search_filter_person_permission_denied, `Locale ${localeCode} must name the permission`).toContain('person.read');
+    }
+    expect(de.search_filter_person).toBe('Person');
+  });
 });
