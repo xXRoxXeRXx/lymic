@@ -11,8 +11,8 @@
   import SearchModeSelector from "./SearchModeSelector.svelte";
 
   /**
-   * The panel below the search field. Each Search option is one section here: the Search Mode choice now,
-   * the Search Filters as they are added.
+   * The panel below the search field. Each Search option is one section here: the Search Mode choice and
+   * every Search Filter.
    */
   let { search, people, id, onOpenArchive = () => {} }: { search: SearchController; people: PeopleViewState; id: string; onOpenArchive?: () => void } = $props();
 </script>

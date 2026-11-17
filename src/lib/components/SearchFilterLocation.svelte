@@ -4,6 +4,7 @@
   import type { SearchController } from "../controllers/search-controller.svelte";
   import { setLocationPart } from "../search-filters/location";
   import SearchFilterSuggestion from "./SearchFilterSuggestion.svelte";
+  import SearchFilterHeading from "./SearchFilterHeading.svelte";
 
   /** The Location Search Filter: country, state or region and city, each optional. Country and state are chosen from Immich's suggestions (the state's are limited by the chosen country); the city from the city listing of the Explore Places, which Immich's suggestions do not offer. */
   let { search }: { search: SearchController } = $props();
@@ -16,7 +17,7 @@
 </script>
 
 <div role="group" aria-labelledby="search-filter-location-label" class="space-y-2">
-  <span id="search-filter-location-label" class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{$t("search_filter_location")}</span>
+  <SearchFilterHeading id="search-filter-location-label" text={$t("search_filter_location")} />
   <div class="grid gap-2 sm:grid-cols-2">
     <SearchFilterSuggestion
       {search}

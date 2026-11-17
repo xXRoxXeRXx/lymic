@@ -1,6 +1,5 @@
 import type { PlacesDesktopAdapter } from "../tauri/desktop-adapter";
-import { classifyRequestFailure } from "./request-failure";
-import type { SuggestionsState } from "./search-suggestions.svelte";
+import { createSuggestionsCache, type SuggestionsState } from "./suggestions-cache.svelte";
 
 /**
  * The cities a Search can be limited to. Immich's suggestions have no city type, so they come from the
@@ -17,44 +16,20 @@ export interface SearchCities {
   clear(): void;
 }
 
-const IDLE: SuggestionsState = { status: "idle", items: [], failure: null };
-
 export function createSearchCities(adapter: Pick<PlacesDesktopAdapter, "getPlaces">): SearchCities {
-  let state = $state<SuggestionsState>(IDLE);
-  let inFlight: Promise<void> | null = null;
-  // Bumped by clear(), so an answer that arrives late is not kept for the next session.
-  let generation = 0;
-
-  function load(): Promise<void> {
-    if (state.status === "ready") return Promise.resolve();
-    if (inFlight) return inFlight;
-
-    const thisGeneration = generation;
-    state = { status: "loading", items: [], failure: null };
-    const read = (async () => {
-      try {
-        const places = await adapter.getPlaces();
-        if (thisGeneration === generation) {
-          const names = [...new Set(places.map((place) => place.city))];
-          state = { status: "ready", items: names.sort((a, b) => a.localeCompare(b)), failure: null };
-        }
-      } catch (error) {
-        if (thisGeneration === generation) state = { status: "error", items: [], failure: classifyRequestFailure(error, "places") };
-      } finally {
-        if (thisGeneration === generation) inFlight = null;
-      }
-    })();
-    inFlight = read;
-    return read;
-  }
+  // The listing is one request, so the shared cache holds a single entry.
+  const cache = createSuggestionsCache<void>({
+    keyOf: () => "cities",
+    read: async () => {
+      const places = await adapter.getPlaces();
+      return [...new Set(places.map((place) => place.city))].sort((a, b) => a.localeCompare(b));
+    },
+    prefix: "places",
+  });
 
   return {
-    get state() { return state; },
-    load,
-    clear() {
-      generation += 1;
-      state = IDLE;
-      inFlight = null;
-    },
+    get state() { return cache.stateFor(); },
+    load: () => cache.load(),
+    clear: () => cache.clear(),
   };
 }

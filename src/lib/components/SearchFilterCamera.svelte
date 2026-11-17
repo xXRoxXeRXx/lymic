@@ -4,6 +4,7 @@
   import type { SearchController } from "../controllers/search-controller.svelte";
   import { setCameraPart } from "../search-filters/camera";
   import SearchFilterSuggestion from "./SearchFilterSuggestion.svelte";
+  import SearchFilterHeading from "./SearchFilterHeading.svelte";
 
   /** The camera Search Filter: make, model and lens model, each chosen from Immich's suggestions; the model's suggestions are limited by the chosen make. */
   let { search }: { search: SearchController } = $props();
@@ -16,7 +17,7 @@
 </script>
 
 <div role="group" aria-labelledby="search-filter-camera-label" class="space-y-2">
-  <span id="search-filter-camera-label" class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{$t("search_filter_camera")}</span>
+  <SearchFilterHeading id="search-filter-camera-label" text={$t("search_filter_camera")} />
   <div class="grid gap-2 sm:grid-cols-3">
     <SearchFilterSuggestion
       {search}

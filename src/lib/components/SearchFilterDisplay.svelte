@@ -2,6 +2,7 @@
   import { Archive } from "lucide-svelte";
   import { t } from "svelte-i18n";
   import type { SearchController } from "../controllers/search-controller.svelte";
+  import SearchFilterHeading from "./SearchFilterHeading.svelte";
 
   /**
    * The Display group: Favorite, Archived and Unfiled. A switched-off option is unset, not false, so it adds
@@ -18,7 +19,7 @@
 </script>
 
 <div role="group" aria-labelledby="search-filter-display-label" class="space-y-2">
-  <span id="search-filter-display-label" class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{$t("search_filter_display")}</span>
+  <SearchFilterHeading id="search-filter-display-label" text={$t("search_filter_display")} />
   <div class="flex flex-wrap gap-x-4 gap-y-2">
     {#each options as option (option.key)}
       <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-zinc-300">
