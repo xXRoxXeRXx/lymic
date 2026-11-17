@@ -1,5 +1,6 @@
 import type { RecognizedPerson } from "../contracts";
 import type { PeopleDesktopAdapter } from "../tauri/desktop-adapter";
+import { createRemoteCollection } from "./remote-collection.svelte";
 import { classifyRequestFailure, type RequestFailure } from "./request-failure";
 
 export interface PeopleViewState {
@@ -16,78 +17,22 @@ export interface PeopleViewState {
 
 const PAGE_SIZE = 50;
 export function createPeopleController(adapter: PeopleDesktopAdapter): PeopleViewState {
-  let people = $state<RecognizedPerson[]>([]);
-  let isLoading = $state(false);
-  let isRefreshing = $state(false);
-  let isOffline = $state(false);
-  let hasNextPage = $state(false);
-  let error = $state<RequestFailure | null>(null);
-  let page = 0;
-  let generation = 0;
-  let pending: Promise<void> | null = null;
-
-  async function load(nextPage: number, replace: boolean) {
-    if (pending) return pending;
-    const requestGeneration = generation;
-    isLoading = people.length === 0;
-    isRefreshing = replace;
-    const request = adapter
-      .getPeople(nextPage, PAGE_SIZE)
-      .then((result) => {
-        if (requestGeneration !== generation) return;
-        people = replace ? result.people : [...people, ...result.people];
-        page = nextPage;
-        hasNextPage = result.hasNextPage;
-        error = null;
-        isOffline = false;
-      })
-      .catch((reason: unknown) => {
-        if (requestGeneration !== generation) return;
-        error = people.length === 0 ? classifyRequestFailure(reason, "recognized_people") : null;
-        isOffline = people.length > 0;
-      })
-      .finally(() => {
-        if (pending === request) pending = null;
-        if (requestGeneration === generation) {
-          isLoading = false;
-          isRefreshing = false;
-        }
-      });
-    pending = request;
-    return request;
-  }
-
-  function refresh() {
-    generation += 1;
-    pending = null;
-    return load(1, true);
-  }
-
-  function loadMore() {
-    return hasNextPage ? load(page + 1, false) : Promise.resolve();
-  }
-
-  function clear() {
-    generation += 1;
-    pending = null;
-    people = [];
-    page = 0;
-    hasNextPage = false;
-    isLoading = false;
-    isRefreshing = false;
-    isOffline = false;
-    error = null;
-  }
+  const collection = createRemoteCollection({
+    async load(page) {
+      const result = await adapter.getPeople(page, PAGE_SIZE);
+      return { items: result.people, hasNextPage: result.hasNextPage };
+    },
+  });
 
   return {
-    get people() { return people; },
-    get isLoading() { return isLoading; },
-    get isRefreshing() { return isRefreshing; },
-    get isOffline() { return isOffline; },
-    get hasNextPage() { return hasNextPage; },
-    get error() { return error; },
-    refresh,
-    loadMore,
-    clear,
+    get people() { return collection.items; },
+    get isLoading() { return collection.isLoading; },
+    get isRefreshing() { return collection.isRefreshing; },
+    get isOffline() { return collection.isOffline; },
+    get hasNextPage() { return collection.hasNextPage; },
+    get error() { return collection.error ? classifyRequestFailure(collection.error.reason, "recognized_people") : null; },
+    refresh: collection.refresh,
+    loadMore: collection.loadMore,
+    clear: collection.clear,
   };
 }

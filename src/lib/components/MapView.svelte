@@ -187,7 +187,7 @@
       void source.setData(event.data.data).catch(() => { providerError = true; }).finally(() => {
         if (generation === workerGeneration) sourceUpdating = false;
       });
-      if (!initialized && mapState.loaded) {
+      if (!initialized && mapState.hasLoaded) {
         if (mapState.markers.length) {
           map.fitBounds(event.data.bounds as [number, number, number, number], { padding: 60, maxZoom: 12, duration: 0 });
         }
@@ -238,14 +238,14 @@
   });
   $effect(() => {
     if (active) { queueMicrotask(() => { map?.resize(); updatePins(); }); }
-    else { mapState.leave(); removePins(); }
+    else { mapState.abandon(); removePins(); }
   });
 </script>
 
 <div class="relative h-full min-h-0 flex-col" style:display={active ? "flex" : "none"}>
-  {#if mapState.loading && !mapState.loaded}<p role="status">{$t("map_loading")}</p>{/if}
-  {#if mapState.error}<p role="alert">{mapState.error === "permission" ? $t("map_permission") : $t("map_error")}{mapState.stale ? ` ${$t("map_stale")}` : ""}</p>{/if}
-  {#if mapState.loaded && !mapState.markers.length}<p role="status">{$t("map_empty")}</p>{/if}
+  {#if mapState.isLoading && !mapState.hasLoaded}<p role="status">{$t("map_loading")}</p>{/if}
+  {#if mapState.error}<p role="alert">{mapState.error === "permission_denied" ? $t("map_permission") : $t("map_error")}{mapState.isOffline ? ` ${$t("map_stale")}` : ""}</p>{/if}
+  {#if mapState.hasLoaded && !mapState.markers.length}<p role="status">{$t("map_empty")}</p>{/if}
   {#if providerError}<p role="alert">{$t("map_provider_error")}</p>{/if}
   <div bind:this={container} class="min-h-0 flex-1 rounded-xl" aria-label={$t("map_title")}></div>
   {#if collection}

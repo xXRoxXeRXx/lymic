@@ -197,4 +197,237 @@ describe("Remote collection", () => {
     expect(runs).toBe(1);
     stop();
   });
+  it("hands out the loaded items without wrapping them", async () => {
+    const loaded = [{ id: "a" }];
+    const collection = createRemoteCollection({ load: vi.fn().mockResolvedValue(loaded) });
+
+    await collection.refresh();
+
+    expect(collection.items).toBe(loaded);
+  });
+
+  describe("paging", () => {
+    it("loads the next page, appends it and stops when there is no further page", async () => {
+      const load = vi.fn()
+        .mockResolvedValueOnce({ items: ["a"], hasNextPage: true })
+        .mockResolvedValueOnce({ items: ["b"], hasNextPage: false });
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      expect(collection.hasNextPage).toBe(true);
+      await collection.loadMore();
+      expect(collection.items).toEqual(["a", "b"]);
+      expect(collection.hasNextPage).toBe(false);
+      await collection.loadMore();
+
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(load).toHaveBeenNthCalledWith(1, 1);
+      expect(load).toHaveBeenNthCalledWith(2, 2);
+    });
+
+    it("has no next page for a list that loads as one array", async () => {
+      const load = vi.fn().mockResolvedValue(["a"]);
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      await collection.loadMore();
+
+      expect(collection.hasNextPage).toBe(false);
+      expect(load).toHaveBeenCalledOnce();
+    });
+
+    it("restarts at the first page and replaces the items on refresh", async () => {
+      const load = vi.fn()
+        .mockResolvedValueOnce({ items: ["a"], hasNextPage: true })
+        .mockResolvedValueOnce({ items: ["b"], hasNextPage: true })
+        .mockResolvedValueOnce({ items: ["a2"], hasNextPage: false });
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      await collection.loadMore();
+      await collection.refresh();
+
+      expect(load).toHaveBeenNthCalledWith(3, 1);
+      expect(collection.items).toEqual(["a2"]);
+      expect(collection.hasNextPage).toBe(false);
+    });
+
+    it("does not show loading or refreshing while a further page loads", async () => {
+      const next = deferred<{ items: string[]; hasNextPage: boolean }>();
+      const load = vi.fn().mockResolvedValueOnce({ items: ["a"], hasNextPage: true }).mockReturnValueOnce(next.promise);
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      const more = collection.loadMore();
+      expect(collection.isLoading).toBe(false);
+      expect(collection.isRefreshing).toBe(false);
+      next.resolve({ items: ["b"], hasNextPage: false });
+      await more;
+    });
+
+    it("shares one request between a further page and a concurrent loadMore", async () => {
+      const next = deferred<{ items: string[]; hasNextPage: boolean }>();
+      const load = vi.fn().mockResolvedValueOnce({ items: ["a"], hasNextPage: true }).mockReturnValueOnce(next.promise);
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      const first = collection.loadMore();
+      const second = collection.loadMore();
+      next.resolve({ items: ["b"], hasNextPage: false });
+      await Promise.all([first, second]);
+
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(collection.items).toEqual(["a", "b"]);
+    });
+
+    it("lets a refresh supersede a further page that is still loading", async () => {
+      const next = deferred<{ items: string[]; hasNextPage: boolean }>();
+      const load = vi.fn()
+        .mockResolvedValueOnce({ items: ["a"], hasNextPage: true })
+        .mockReturnValueOnce(next.promise)
+        .mockResolvedValueOnce({ items: ["fresh"], hasNextPage: false });
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      const more = collection.loadMore();
+      await collection.refresh();
+      next.resolve({ items: ["late"], hasNextPage: true });
+      await more;
+
+      expect(collection.items).toEqual(["fresh"]);
+      expect(collection.hasNextPage).toBe(false);
+    });
+
+    it("keeps the loaded pages and reports offline when a further page fails, then retries that page", async () => {
+      const load = vi.fn()
+        .mockResolvedValueOnce({ items: ["a"], hasNextPage: true })
+        .mockRejectedValueOnce("down")
+        .mockResolvedValueOnce({ items: ["b"], hasNextPage: false });
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      await collection.loadMore();
+      expect(collection.items).toEqual(["a"]);
+      expect(collection.isOffline).toBe(true);
+      expect(collection.hasNextPage).toBe(true);
+      await collection.loadMore();
+
+      expect(load).toHaveBeenNthCalledWith(3, 2);
+      expect(collection.items).toEqual(["a", "b"]);
+      expect(collection.isOffline).toBe(false);
+    });
+
+    it("forgets the pages on clear", async () => {
+      const load = vi.fn().mockResolvedValue({ items: ["a"], hasNextPage: true });
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      collection.clear();
+      expect(collection.hasNextPage).toBe(false);
+      await collection.refresh();
+
+      expect(load).toHaveBeenLastCalledWith(1);
+    });
+  });
+
+  describe("abandoning", () => {
+    it("keeps the cached items and ignores a response that arrives after abandon", async () => {
+      const older = deferred<string[]>();
+      const load = vi.fn().mockResolvedValueOnce(["saved"]).mockReturnValueOnce(older.promise).mockResolvedValueOnce(["fresh"]);
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      const abandoned = collection.refresh();
+      collection.abandon();
+      older.resolve(["obsolete"]);
+      await abandoned;
+
+      expect(collection.items).toEqual(["saved"]);
+      expect(collection.isRefreshing).toBe(false);
+      expect(collection.isLoading).toBe(false);
+      await collection.refresh();
+      expect(collection.items).toEqual(["fresh"]);
+    });
+
+    it("ignores a failure that arrives after abandon", async () => {
+      const older = deferred<string[]>();
+      const collection = createRemoteCollection({ load: vi.fn().mockResolvedValueOnce(["saved"]).mockReturnValueOnce(older.promise) });
+
+      await collection.refresh();
+      const abandoned = collection.refresh();
+      collection.abandon();
+      older.reject("boom");
+      await abandoned;
+
+      expect(collection.isOffline).toBe(false);
+      expect(collection.failure).toBeNull();
+    });
+
+    it("abandons a further page that is still loading", async () => {
+      const next = deferred<{ items: string[]; hasNextPage: boolean }>();
+      const load = vi.fn().mockResolvedValueOnce({ items: ["a"], hasNextPage: true }).mockReturnValueOnce(next.promise);
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      const more = collection.loadMore();
+      collection.abandon();
+      next.resolve({ items: ["b"], hasNextPage: false });
+      await more;
+
+      expect(collection.items).toEqual(["a"]);
+      expect(collection.hasNextPage).toBe(true);
+    });
+  });
+
+  describe("failure reason", () => {
+    it("keeps the reason of a failed refresh while cached items stay visible", async () => {
+      const reason = new Error("denied");
+      const collection = createRemoteCollection({ load: vi.fn().mockResolvedValueOnce(["a"]).mockRejectedValueOnce(reason) });
+
+      await collection.refresh();
+      expect(collection.failure).toBeNull();
+      await collection.refresh();
+
+      expect(collection.error).toBeNull();
+      expect(collection.failure).toEqual({ reason });
+    });
+
+    it("reports the reason as the error when nothing is cached", async () => {
+      const reason = new Error("down");
+      const collection = createRemoteCollection({ load: vi.fn().mockRejectedValue(reason) });
+
+      await collection.refresh();
+
+      expect(collection.failure).toEqual({ reason });
+      expect(collection.error).toEqual({ reason });
+    });
+
+    it("drops the reason on the next successful refresh and on clear", async () => {
+      const load = vi.fn().mockRejectedValueOnce("down").mockResolvedValueOnce(["a"]).mockRejectedValueOnce("down");
+      const collection = createRemoteCollection({ load });
+
+      await collection.refresh();
+      await collection.refresh();
+      expect(collection.failure).toBeNull();
+      await collection.refresh();
+      expect(collection.failure).not.toBeNull();
+      collection.clear();
+      expect(collection.failure).toBeNull();
+    });
+  });
+
+  describe("has loaded", () => {
+    it("is true once a load succeeded, even with an empty list, until clear", async () => {
+      const load = vi.fn().mockRejectedValueOnce("down").mockResolvedValueOnce([]);
+      const collection = createRemoteCollection<string>({ load });
+
+      expect(collection.hasLoaded).toBe(false);
+      await collection.refresh();
+      expect(collection.hasLoaded).toBe(false);
+      await collection.refresh();
+      expect(collection.hasLoaded).toBe(true);
+      collection.clear();
+      expect(collection.hasLoaded).toBe(false);
+    });
+  });
 });

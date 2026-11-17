@@ -1,49 +1,36 @@
 import type { MapMarker } from "../contracts";
 import type { MapDesktopAdapter } from "../tauri/desktop-adapter";
+import { createRemoteCollection } from "./remote-collection.svelte";
+import { classifyRequestFailure, type RequestFailure } from "./request-failure";
 
-export function createMapController(adapter: MapDesktopAdapter) {
-  let markers = $state.raw<MapMarker[]>([]);
-  let loading = $state(false);
-  let loaded = $state(false);
-  let stale = $state(false);
-  let error = $state<"permission" | "server" | null>(null);
-  let generation = 0;
-  async function refresh() {
-    const current = ++generation;
-    loading = true;
-    try {
-      const result = await adapter.getMapMarkers();
-      if (current !== generation) return;
-      markers = result;
-      loaded = true;
-      stale = false;
-      error = null;
-    } catch (reason) {
-      if (current !== generation) return;
-      stale = loaded;
-      error = String(reason).startsWith("map_permission_denied") ? "permission" : "server";
-    } finally {
-      if (current === generation) loading = false;
-    }
-  }
-  function leave() {
-    generation++;
-    loading = false;
-  }
-  function clear() {
-    leave();
-    markers = [];
-    loaded = false;
-    stale = false;
-    error = null;
-  }
+export interface MapViewState {
+  readonly markers: MapMarker[];
+  readonly isLoading: boolean;
+  readonly isRefreshing: boolean;
+  /** A load has succeeded, so an empty marker list means no assets have locations. */
+  readonly hasLoaded: boolean;
+  /** The last refresh failed and the previous markers stay shown. */
+  readonly isOffline: boolean;
+  /** Why the last refresh failed, also while previous markers stay shown. */
+  readonly error: RequestFailure | null;
+  refresh(): Promise<void>;
+  /** Stops waiting for a marker load in flight, for when the view is left. */
+  abandon(): void;
+  clear(): void;
+}
+
+export function createMapController(adapter: MapDesktopAdapter): MapViewState {
+  const collection = createRemoteCollection({ load: () => adapter.getMapMarkers() });
+
   return {
-    get markers() { return markers; },
-    get loading() { return loading; },
-    get loaded() { return loaded; },
-    get stale() { return stale; },
-    get error() { return error; },
-    refresh, leave, clear,
+    get markers() { return collection.items; },
+    get isLoading() { return collection.isLoading; },
+    get isRefreshing() { return collection.isRefreshing; },
+    get hasLoaded() { return collection.hasLoaded; },
+    get isOffline() { return collection.isOffline; },
+    get error() { return collection.failure ? classifyRequestFailure(collection.failure.reason, "map") : null; },
+    refresh: collection.refresh,
+    abandon: collection.abandon,
+    clear: collection.clear,
   };
 }
-export type MapViewState = ReturnType<typeof createMapController>;

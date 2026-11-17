@@ -49,4 +49,32 @@ describe("People controller", () => {
     await people.refresh();
     expect(people.error).toBe("error");
   });
+
+  it("stops loading further pages when Immich reports no next page", async () => {
+    const getPeople = vi.fn()
+      .mockResolvedValueOnce({ people: [{ id: "one", name: "Ada", thumbnailPath: null }], hasNextPage: true })
+      .mockResolvedValueOnce({ people: [{ id: "two", name: null, thumbnailPath: null }], hasNextPage: false });
+    const people = createPeopleController({ getPeople, getPersonTimelineBuckets: vi.fn(), getPersonTimelineBucketAssets: vi.fn() });
+
+    await people.refresh();
+    expect(people.hasNextPage).toBe(true);
+    await people.loadMore();
+    expect(people.hasNextPage).toBe(false);
+    await people.loadMore();
+
+    expect(getPeople).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the unavailable state only while nothing is cached", async () => {
+    const getPeople = vi.fn()
+      .mockResolvedValueOnce({ people: [{ id: "one", name: "Ada", thumbnailPath: null }], hasNextPage: false })
+      .mockRejectedValueOnce("recognized_people_unavailable:people");
+    const people = createPeopleController({ getPeople, getPersonTimelineBuckets: vi.fn(), getPersonTimelineBucketAssets: vi.fn() });
+
+    await people.refresh();
+    await people.refresh();
+
+    expect(people.error).toBeNull();
+    expect(people.isOffline).toBe(true);
+  });
 });
