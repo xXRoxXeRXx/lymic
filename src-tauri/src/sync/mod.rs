@@ -11,6 +11,7 @@ pub(crate) mod lifecycle;
 pub(crate) mod processor;
 pub(crate) mod progress;
 pub(crate) mod queue_runner;
+pub(crate) mod reporter;
 pub(crate) mod retry;
 pub(crate) mod service;
 

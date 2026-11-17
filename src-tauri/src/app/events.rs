@@ -22,15 +22,17 @@ fn params_from(pairs: &[(&str, &str)]) -> LogParams {
         .collect()
 }
 
-pub(crate) fn send_notification_keyed(
-    app: &AppHandle,
+pub(crate) fn send_notification_keyed<R: Runtime>(
+    app: &AppHandle<R>,
     title: &str,
     body: &str,
     level: &str,
     key: &str,
     params: LogParams,
 ) {
-    let _ = app.notification().builder().title(title).body(body).show();
+    if cfg!(not(test)) {
+        let _ = app.notification().builder().title(title).body(body).show();
+    }
     log_to_ui_keyed(app, level, body, key, params);
 }
 
@@ -155,6 +157,6 @@ impl CapturedUiLogs {
     }
 }
 
-pub(crate) fn emit_sync_error(app: &AppHandle, error: &str) {
+pub(crate) fn emit_sync_error<R: Runtime>(app: &AppHandle<R>, error: &str) {
     let _ = app.emit("sync-error", error);
 }
