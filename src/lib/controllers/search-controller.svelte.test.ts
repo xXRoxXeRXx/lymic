@@ -26,7 +26,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function setup(overrides: Partial<Parameters<typeof createSearchController>[0]> = {}) {
+function setupDefaultMode(overrides: Partial<Parameters<typeof createSearchController>[0]> = {}) {
   const adapter = {
     getSearchSupport: vi.fn().mockResolvedValue(SUPPORTED),
     getSearchFeatures: vi.fn().mockResolvedValue(FEATURES),
@@ -38,16 +38,16 @@ function setup(overrides: Partial<Parameters<typeof createSearchController>[0]> 
   return { adapter, search: createSearchController(adapter) };
 }
 
-/** A Search that has left the default Context Search Mode, as the chronological tests below expect. */
-function setupFilename(overrides: Partial<Parameters<typeof createSearchController>[0]> = {}) {
-  const made = setup(overrides);
+/** A Search on the Filename mode, as most tests below expect; `setupDefaultMode` keeps the default Context mode. */
+function setup(overrides: Partial<Parameters<typeof createSearchController>[0]> = {}) {
+  const made = setupDefaultMode(overrides);
   made.search.mode = "filename";
   return made;
 }
 
 describe("Search controller", () => {
   it("runs a Filename Search with the trimmed text and shows the results chronologically", async () => {
-    const { adapter, search } = setupFilename();
+    const { adapter, search } = setup();
     search.text = "  IMG_  ";
 
     expect(search.canSubmit).toBe(true);
@@ -62,7 +62,7 @@ describe("Search controller", () => {
   });
 
   it("does nothing for an empty text", async () => {
-    const { adapter, search } = setupFilename();
+    const { adapter, search } = setup();
     search.text = "   ";
 
     expect(search.canSubmit).toBe(false);
@@ -73,7 +73,7 @@ describe("Search controller", () => {
   });
 
   it("reads the server support once and reuses it for later searches", async () => {
-    const { adapter, search } = setupFilename();
+    const { adapter, search } = setup();
     search.text = "a";
     await search.submit();
     search.text = "b";
@@ -84,7 +84,7 @@ describe("Search controller", () => {
   });
 
   it("reports an unsupported server without searching, and checks again on the next Search", async () => {
-    const { adapter, search } = setupFilename({ getSearchSupport: vi.fn().mockResolvedValueOnce(UNSUPPORTED).mockResolvedValue(SUPPORTED) });
+    const { adapter, search } = setup({ getSearchSupport: vi.fn().mockResolvedValueOnce(UNSUPPORTED).mockResolvedValue(SUPPORTED) });
     search.text = "a";
 
     await search.submit();
@@ -100,7 +100,7 @@ describe("Search controller", () => {
   });
 
   it("flags a Search that was cut at the result limit and clears the flag for the next one", async () => {
-    const { search } = setupFilename({ searchAssets: vi.fn().mockResolvedValueOnce(results(["a"], true)).mockResolvedValue(results(["b"])) });
+    const { search } = setup({ searchAssets: vi.fn().mockResolvedValueOnce(results(["a"], true)).mockResolvedValue(results(["b"])) });
     search.text = "a";
 
     await search.submit();
@@ -116,7 +116,7 @@ describe("Search controller", () => {
     ["search_unavailable", "unavailable"],
     ["search_invalid_response", "error"],
   ] as const)("classifies the failure %s as %s", async (code, expected) => {
-    const { search } = setupFilename({ searchAssets: vi.fn().mockRejectedValue(code) });
+    const { search } = setup({ searchAssets: vi.fn().mockRejectedValue(code) });
     search.text = "a";
 
     await search.submit();
@@ -127,7 +127,7 @@ describe("Search controller", () => {
   });
 
   it("classifies a failure to read the server version like a failed Search", async () => {
-    const { search } = setupFilename({ getSearchSupport: vi.fn().mockRejectedValue("search_unavailable") });
+    const { search } = setup({ getSearchSupport: vi.fn().mockRejectedValue("search_unavailable") });
     search.text = "a";
 
     await search.submit();
@@ -140,7 +140,7 @@ describe("Search controller", () => {
       .mockResolvedValueOnce(results(["old"]))
       .mockRejectedValueOnce("search_unavailable")
       .mockResolvedValueOnce(results(["new"]));
-    const { search } = setupFilename({ searchAssets });
+    const { search } = setup({ searchAssets });
     search.text = "first";
     await search.submit();
 
@@ -166,7 +166,7 @@ describe("Search controller", () => {
   });
 
   it("keeps text and mode in memory and resets everything on clear", async () => {
-    const { search } = setupFilename();
+    const { search } = setup();
     search.text = "IMG";
     await search.submit();
 
@@ -183,7 +183,7 @@ describe("Search controller", () => {
 
   it("ignores a Search that resolves after clear so the next account does not inherit it", async () => {
     const inFlight = deferred<SearchResults>();
-    const { adapter, search } = setupFilename({ searchAssets: vi.fn().mockReturnValue(inFlight.promise) });
+    const { adapter, search } = setup({ searchAssets: vi.fn().mockReturnValue(inFlight.promise) });
     search.text = "IMG";
 
     const running = search.submit();
@@ -199,7 +199,7 @@ describe("Search controller", () => {
 
   it("ignores a failure that rejects after clear", async () => {
     const inFlight = deferred<SearchResults>();
-    const { adapter, search } = setupFilename({ searchAssets: vi.fn().mockReturnValue(inFlight.promise) });
+    const { adapter, search } = setup({ searchAssets: vi.fn().mockReturnValue(inFlight.promise) });
     search.text = "IMG";
 
     const running = search.submit();
@@ -232,7 +232,7 @@ describe("Search controller: Search Filters", () => {
     expect(search.canSubmit).toBe(true);
     expect(await search.submit()).toBe(true);
 
-    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "context", filters: { mediaType: "video" } });
+    expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "filename", filters: { mediaType: "video" } });
     expect(search.resultCount).toBe(2);
   });
 
@@ -244,7 +244,7 @@ describe("Search controller: Search Filters", () => {
 
     expect(adapter.searchAssets).toHaveBeenCalledWith({
       text: "",
-      mode: "context",
+      mode: "filename",
       filters: { date: { from: "2025-02-28T23:00:00.000Z", to: "2025-03-31T21:59:59.999Z" } },
     });
   });
@@ -327,7 +327,7 @@ describe("Search controller: Search Filters", () => {
   });
 
   it("combines the text with every set filter", async () => {
-    const { adapter, search } = setupFilename();
+    const { adapter, search } = setup();
     search.text = "IMG";
     search.filters.mediaType = "image";
     search.filters.date = { to: "2025-03-01" };
@@ -434,7 +434,7 @@ describe("camera filters", () => {
 
 describe("Search Mode", () => {
   it("starts on Context and sends the chosen mode with the Search", async () => {
-    const { adapter, search } = setup();
+    const { adapter, search } = setupDefaultMode();
     expect(search.mode).toBe("context");
 
     for (const mode of ["description", "folderPath", "ocr", "filename"] as const) {
@@ -446,7 +446,7 @@ describe("Search Mode", () => {
   });
 
   it("keeps the chosen mode for later Searches in the session", async () => {
-    const { adapter, search } = setupFilename();
+    const { adapter, search } = setup();
     search.mode = "folderPath";
     search.text = "a";
     await search.submit();
@@ -458,7 +458,7 @@ describe("Search Mode", () => {
   });
 
   it("resets the mode and the held features on clear", async () => {
-    const { adapter, search } = setupFilename({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: false }) });
+    const { adapter, search } = setup({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: false }) });
     await search.loadFeatures();
     search.mode = "description";
     expect(search.ocrAvailable).toBe(false);
@@ -475,7 +475,7 @@ describe("Search Mode", () => {
 describe("Search server features", () => {
   it("reads the features once, before the first Search, and holds them in memory", async () => {
     const calls: string[] = [];
-    const { adapter, search } = setupFilename({
+    const { adapter, search } = setup({
       getSearchFeatures: vi.fn().mockImplementation(async () => { calls.push("features"); return FEATURES; }),
       searchAssets: vi.fn().mockImplementation(async () => { calls.push("search"); return results(["a"]); }),
     });
@@ -491,7 +491,7 @@ describe("Search server features", () => {
 
   it("shares one read between concurrent callers", async () => {
     const inFlight = deferred<SearchFeatures>();
-    const { adapter, search } = setupFilename({ getSearchFeatures: vi.fn().mockReturnValue(inFlight.promise) });
+    const { adapter, search } = setup({ getSearchFeatures: vi.fn().mockReturnValue(inFlight.promise) });
 
     const first = search.loadFeatures();
     const second = search.loadFeatures();
@@ -502,7 +502,7 @@ describe("Search server features", () => {
   });
 
   it("enables OCR while the server has it on, and while the features are not known yet", async () => {
-    const { search } = setupFilename();
+    const { search } = setup();
     expect(search.ocrAvailable).toBe(true);
 
     await search.loadFeatures();
@@ -513,7 +513,7 @@ describe("Search server features", () => {
   });
 
   it("disables OCR when the server has it off, and refuses to select it", async () => {
-    const { search } = setupFilename({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: false }) });
+    const { search } = setup({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: false }) });
     await search.loadFeatures();
 
     expect(search.ocrAvailable).toBe(false);
@@ -523,7 +523,7 @@ describe("Search server features", () => {
   });
 
   it("falls back to Filename when the features show OCR is off after it was chosen", async () => {
-    const { adapter, search } = setupFilename({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: false }) });
+    const { adapter, search } = setup({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: false }) });
     search.mode = "ocr";
     search.text = "invoice";
 
@@ -535,7 +535,7 @@ describe("Search server features", () => {
 
   it("does not block a Search when the features cannot be read, and reads them again next time", async () => {
     const getSearchFeatures = vi.fn().mockRejectedValueOnce("search_unavailable").mockResolvedValue({ smartSearch: true, ocr: false });
-    const { adapter, search } = setupFilename({ getSearchFeatures });
+    const { adapter, search } = setup({ getSearchFeatures });
     search.text = "IMG";
 
     await search.submit();
@@ -553,7 +553,7 @@ describe("Search server features", () => {
   });
 
   it("still reports an unsupported server when the features cannot be read", async () => {
-    const { search } = setupFilename({
+    const { search } = setup({
       getSearchSupport: vi.fn().mockResolvedValue(UNSUPPORTED),
       getSearchFeatures: vi.fn().mockRejectedValue("search_unavailable"),
     });
@@ -566,7 +566,7 @@ describe("Search server features", () => {
 
   it("ignores features that arrive after clear", async () => {
     const inFlight = deferred<SearchFeatures>();
-    const { search } = setupFilename({ getSearchFeatures: vi.fn().mockReturnValue(inFlight.promise) });
+    const { search } = setup({ getSearchFeatures: vi.fn().mockReturnValue(inFlight.promise) });
 
     const loading = search.loadFeatures();
     search.clear();
@@ -575,11 +575,95 @@ describe("Search server features", () => {
 
     expect(search.ocrAvailable).toBe(true);
   });
+
+  describe("display options and Rating", () => {
+    it("sends no display option and no Rating by default, so Archived Assets are not asked for", async () => {
+      const { adapter, search } = setup();
+      search.text = "IMG";
+      expect(search.filters.favorite).toBeUndefined();
+      expect(search.filters.archived).toBeUndefined();
+      expect(search.filters.unfiled).toBeUndefined();
+      expect(search.filters.rating).toBeUndefined();
+
+      await search.submit();
+
+      expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "IMG", mode: "filename", filters: {} });
+    });
+
+    it("sends each display option on its own and runs a Search with no text", async () => {
+      for (const option of ["favorite", "archived", "unfiled"] as const) {
+        const { adapter, search } = setup();
+        search.filters[option] = true;
+
+        expect(search.canSubmit).toBe(true);
+        await search.submit();
+
+        expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "", mode: "filename", filters: { [option]: true } });
+      }
+    });
+
+    it("treats a switched-off display option as no filter", async () => {
+      const { adapter, search } = setup();
+      search.filters.favorite = false;
+      search.filters.archived = false;
+      search.filters.unfiled = false;
+
+      expect(search.canSubmit).toBe(false);
+      expect(await search.submit()).toBe(false);
+      expect(adapter.searchAssets).not.toHaveBeenCalled();
+
+      search.text = "IMG";
+      await search.submit();
+      expect(adapter.searchAssets).toHaveBeenCalledWith({ text: "IMG", mode: "filename", filters: {} });
+    });
+
+    it("sends exactly one Rating level", async () => {
+      const { adapter, search } = setup();
+      for (const stars of [1, 2, 3, 4, 5] as const) {
+        search.filters.rating = stars;
+        await search.submit();
+        expect(adapter.searchAssets).toHaveBeenLastCalledWith({ text: "", mode: "filename", filters: { rating: stars } });
+      }
+    });
+
+    it("selecting the Rating again clears it, and selecting another level replaces it", () => {
+      const { search } = setup();
+
+      search.toggleRating(4);
+      expect(search.filters.rating).toBe(4);
+      search.toggleRating(2);
+      expect(search.filters.rating).toBe(2);
+      search.toggleRating(2);
+      expect(search.filters.rating).toBeUndefined();
+      expect(search.canSubmit).toBe(false);
+    });
+
+    it("combines display options and Rating with the text and the other filters, and clear resets them", async () => {
+      const { adapter, search } = setup();
+      search.text = "IMG";
+      search.filters.mediaType = "image";
+      search.filters.favorite = true;
+      search.filters.archived = true;
+      search.filters.unfiled = true;
+      search.toggleRating(5);
+
+      await search.submit();
+
+      expect(adapter.searchAssets).toHaveBeenCalledWith({
+        text: "IMG",
+        mode: "filename",
+        filters: { mediaType: "image", favorite: true, archived: true, unfiled: true, rating: 5 },
+      });
+
+      search.clear();
+      expect(search.filters).toEqual({});
+    });
+  });
 });
 
 describe("Context Search", () => {
   it("is the default Search Mode while the server has Smart Search on, and can be chosen", async () => {
-    const { search } = setup();
+    const { search } = setupDefaultMode();
     expect(search.mode).toBe("context");
     expect(search.smartSearchAvailable).toBe(true);
 
@@ -592,7 +676,7 @@ describe("Context Search", () => {
   });
 
   it("falls back to Filename and disables Context when the server has Smart Search off", async () => {
-    const { search } = setup({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: false, ocr: true }) });
+    const { search } = setupDefaultMode({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: false, ocr: true }) });
 
     await search.loadFeatures();
 
@@ -603,7 +687,7 @@ describe("Context Search", () => {
   });
 
   it("does not override another mode the user chose when Smart Search turns out to be off", async () => {
-    const { search } = setup({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: false, ocr: true }) });
+    const { search } = setupDefaultMode({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: false, ocr: true }) });
     search.mode = "folderPath";
 
     await search.loadFeatures();
@@ -612,7 +696,7 @@ describe("Context Search", () => {
   });
 
   it("runs a Filename Search for the first Search when the features show Smart Search is off", async () => {
-    const { adapter, search } = setup({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: false, ocr: true }) });
+    const { adapter, search } = setupDefaultMode({ getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: false, ocr: true }) });
     search.text = "beach";
 
     await search.submit();
@@ -624,7 +708,7 @@ describe("Context Search", () => {
   });
 
   it("shows a Context text as a flat, relevance-ordered result", async () => {
-    const { adapter, search } = setup({ searchContextPage: vi.fn().mockResolvedValue(contextPage(["best", "next", "last"], null)) });
+    const { adapter, search } = setupDefaultMode({ searchContextPage: vi.fn().mockResolvedValue(contextPage(["best", "next", "last"], null)) });
     search.text = "  dog on a beach ";
 
     expect(await search.submit()).toBe(true);
@@ -643,7 +727,7 @@ describe("Context Search", () => {
   });
 
   it("runs a Context Search without text as the chronological filters-only Search", async () => {
-    const { adapter, search } = setup();
+    const { adapter, search } = setupDefaultMode();
     search.filters.mediaType = "video";
 
     expect(await search.submit()).toBe(true);
@@ -659,7 +743,7 @@ describe("Context Search", () => {
       .mockResolvedValueOnce(contextPage(["a", "b"], 2))
       .mockResolvedValueOnce(contextPage(["b", "c"], 3))
       .mockResolvedValueOnce(contextPage(["d"], null));
-    const { search } = setup({ searchContextPage });
+    const { search } = setupDefaultMode({ searchContextPage });
     search.text = "dog";
     await search.submit();
     expect(search.context.hasNextPage).toBe(true);
@@ -683,7 +767,7 @@ describe("Context Search", () => {
   it("does not request the same further page twice at once", async () => {
     const inFlight = deferred<ContextSearchPage>();
     const searchContextPage = vi.fn().mockResolvedValueOnce(contextPage(["a"], 2)).mockReturnValueOnce(inFlight.promise);
-    const { search } = setup({ searchContextPage });
+    const { search } = setupDefaultMode({ searchContextPage });
     search.text = "dog";
     await search.submit();
 
@@ -702,7 +786,7 @@ describe("Context Search", () => {
       .mockResolvedValueOnce(contextPage(["a", "b"], 2))
       .mockRejectedValueOnce("search_unavailable")
       .mockResolvedValueOnce(contextPage(["c"], null));
-    const { search } = setup({ searchContextPage });
+    const { search } = setupDefaultMode({ searchContextPage });
     search.text = "dog";
     await search.submit();
     const bucket = search.context.buckets[0].timeBucket;
@@ -728,7 +812,7 @@ describe("Context Search", () => {
     ["search_invalid_response", "error"],
     ["search_context_unavailable", "context_unavailable"],
   ] as const)("classifies the failure %s of the first page as %s", async (code, expected) => {
-    const { search } = setup({ searchContextPage: vi.fn().mockRejectedValue(code) });
+    const { search } = setupDefaultMode({ searchContextPage: vi.fn().mockRejectedValue(code) });
     search.text = "dog";
 
     await search.submit();
@@ -745,7 +829,7 @@ describe("Context Search", () => {
       .mockResolvedValueOnce(contextPage(["old"], null))
       .mockRejectedValueOnce("search_unavailable")
       .mockResolvedValueOnce(contextPage(["new"], null));
-    const { search } = setup({ searchContextPage });
+    const { search } = setupDefaultMode({ searchContextPage });
     search.text = "dog";
     await search.submit();
     const bucket = search.context.buckets[0].timeBucket;
@@ -772,7 +856,7 @@ describe("Context Search", () => {
       .mockResolvedValueOnce(contextPage(["a"], 2))
       .mockRejectedValueOnce("search_unavailable")
       .mockResolvedValueOnce(contextPage(["b"], null));
-    const { search } = setup({ searchContextPage });
+    const { search } = setupDefaultMode({ searchContextPage });
     search.text = "dog";
     await search.submit();
     search.text = "cat";
@@ -784,7 +868,7 @@ describe("Context Search", () => {
   });
 
   it("reports an unsupported server for a Context Search without searching", async () => {
-    const { adapter, search } = setup({ getSearchSupport: vi.fn().mockResolvedValue(UNSUPPORTED) });
+    const { adapter, search } = setupDefaultMode({ getSearchSupport: vi.fn().mockResolvedValue(UNSUPPORTED) });
     search.text = "dog";
 
     await search.submit();
@@ -795,7 +879,7 @@ describe("Context Search", () => {
   });
 
   it("replaces the results of the other presentation when the kind of Search changes", async () => {
-    const { search } = setup({ searchAssets: vi.fn().mockResolvedValue(results(["chrono"], true)) });
+    const { search } = setupDefaultMode({ searchAssets: vi.fn().mockResolvedValue(results(["chrono"], true)) });
     search.text = "dog";
     await search.submit();
     expect(search.presentation).toBe("relevance");
@@ -818,7 +902,7 @@ describe("Context Search", () => {
   });
 
   it("clears the Context Search Results, the text and the mode on clear", async () => {
-    const { search } = setup();
+    const { search } = setupDefaultMode();
     search.text = "dog";
     await search.submit();
 
@@ -834,7 +918,7 @@ describe("Context Search", () => {
 
   it("ignores a page that resolves after clear so the next account does not inherit it", async () => {
     const inFlight = deferred<ContextSearchPage>();
-    const { adapter, search } = setup({ searchContextPage: vi.fn().mockReturnValue(inFlight.promise) });
+    const { adapter, search } = setupDefaultMode({ searchContextPage: vi.fn().mockReturnValue(inFlight.promise) });
     search.text = "dog";
 
     const running = search.submit();
@@ -849,7 +933,7 @@ describe("Context Search", () => {
   });
 
   it("steps through the loaded results in relevance order, wrapping at the ends", async () => {
-    const { search } = setup({ searchContextPage: vi.fn().mockResolvedValue(contextPage(["a", "b", "c"], null)) });
+    const { search } = setupDefaultMode({ searchContextPage: vi.fn().mockResolvedValue(contextPage(["a", "b", "c"], null)) });
     search.text = "dog";
     await search.submit();
 
@@ -859,7 +943,7 @@ describe("Context Search", () => {
   });
 
   it("removes an asset from the results and keeps the rest in order", async () => {
-    const { search } = setup({ searchContextPage: vi.fn().mockResolvedValue(contextPage(["a", "b", "c"], null)) });
+    const { search } = setupDefaultMode({ searchContextPage: vi.fn().mockResolvedValue(contextPage(["a", "b", "c"], null)) });
     search.text = "dog";
     await search.submit();
     const bucket = search.context.buckets[0].timeBucket;

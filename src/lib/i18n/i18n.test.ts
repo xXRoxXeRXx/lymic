@@ -312,6 +312,20 @@ describe('i18n catalogs', () => {
     expect(de.search_filter_camera_make).toBe('Kamerahersteller');
   });
 
+  it('translates the Search display option and Rating strings in every locale', () => {
+    const keys = [
+      'search_filter_display', 'search_filter_favorite', 'search_filter_archived', 'search_filter_archived_hint', 'search_filter_unfiled',
+      'search_filter_open_archive', 'search_filter_rating', 'search_filter_rating_one', 'search_filter_rating_other',
+    ];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect((translations as Record<string, string>)[key], `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+      }
+    }
+    expect(en.search_filter_display).toBe('Display');
+    expect(de.search_filter_display).toBe('Anzeige');
+  });
+
   it('translates the Context Search strings in every locale', () => {
     const keys = [
       'search_mode_context', 'search_placeholder_context', 'search_mode_context_unavailable',

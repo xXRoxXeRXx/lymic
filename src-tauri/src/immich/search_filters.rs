@@ -50,6 +50,46 @@ impl MediaType {
     }
 }
 
+/// One exact star level, one to five. A value outside that range is rejected when the
+/// request is deserialized, so it never reaches Immich.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "u8")]
+pub(crate) struct Rating(u8);
+
+impl TryFrom<u8> for Rating {
+    type Error = String;
+
+    fn try_from(stars: u8) -> Result<Self, Self::Error> {
+        if (1..=5).contains(&stars) {
+            Ok(Rating(stars))
+        } else {
+            Err(format!("a Rating is one to five stars, not {stars}"))
+        }
+    }
+}
+
+impl Rating {
+    pub(super) fn apply(self, filter: &mut Map<String, Value>) {
+        filter.insert("rating".to_string(), json!({ "eq": self.0 }));
+    }
+}
+
+/// Favorite: only Favorites.
+pub(super) fn apply_favorite(filter: &mut Map<String, Value>) {
+    filter.insert("isFavorite".to_string(), json!({ "eq": true }));
+}
+
+/// Unfiled Asset: only Remote Assets that are in no Album.
+pub(super) fn apply_unfiled(filter: &mut Map<String, Value>) {
+    filter.insert("hasAlbums".to_string(), json!({ "eq": false }));
+}
+
+/// Visibility is always sent, so the result never depends on Immich's own default: Archived
+/// Assets are left out, unless the Archived option is on, which shows only Archived Assets.
+pub(super) fn apply_visibility(archived: bool, filter: &mut Map<String, Value>) {
+    let visibility = if archived { "archive" } else { "timeline" };
+    filter.insert("visibility".to_string(), json!({ "eq": visibility }));
+}
 /// Camera make, model and lens model, each optional. The frontend only sends values Immich
 /// suggested, because Immich compares them exactly.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]

@@ -3828,3 +3828,106 @@ describe("Search filter panel", () => {
     expect(await filtersButton()).toHaveFocus();
   });
 });
+
+describe("Search display options and Rating", () => {
+  const march = "2025-03-01T00:00:00.000Z";
+  const found = (id: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE", takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false,
+  });
+  const results = (...ids: string[]) => ({ buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(found) }, truncated: false });
+  const supported = { supported: true, version: "3.4.1", requiredVersion: "3.2" };
+  const features = { smartSearch: true, ocr: true };
+  const searchBox = () => screen.findByRole("searchbox", { name: "Search your Immich library" });
+  const submit = () => fireEvent.click(screen.getByRole("button", { name: "Search" }));
+  const handlers = { get_search_support: async () => supported, get_search_features: async () => features, search_assets: async () => results("photo-1") };
+  const display = () => screen.getByRole("group", { name: "Display" });
+
+  async function openPanel() {
+    const button = await screen.findByRole("button", { name: "Search options" });
+    if (button.getAttribute("aria-expanded") !== "true") await fireEvent.click(button);
+  }
+
+  it("titles the group Display and offers Favorite, Archived and Unfiled, all off by default", async () => {
+    renderAuthenticatedPage(handlers);
+    await openPanel();
+
+    const group = display();
+    expect(within(group).getAllByRole("checkbox").map((box) => (box as HTMLInputElement).labels?.[0].textContent?.trim())).toEqual(["Favorites", "Archived", "Unfiled"]);
+    for (const box of within(group).getAllByRole("checkbox")) expect(box).not.toBeChecked();
+    expect(screen.queryByText("Library")).not.toBeInTheDocument();
+  });
+
+  it("restricts the Search to Favorites, Archived and Unfiled Assets and sends nothing for options that are off", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers);
+    await openPanel();
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Favorites" }));
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Unfiled" }));
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
+    await submit();
+
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "context", filters: { favorite: true, unfiled: true } } });
+  });
+
+  it("selects one Rating level, replaces it with another, and clears it by selecting it again", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers);
+    await openPanel();
+    const group = screen.getByRole("group", { name: "Rating" });
+    expect(within(group).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["1 star", "2 stars", "3 stars", "4 stars", "5 stars"]);
+    for (const button of within(group).getAllByRole("button")) expect(button).toHaveAttribute("aria-pressed", "false");
+
+    await fireEvent.click(within(group).getByRole("button", { name: "4 stars" }));
+    expect(within(group).getByRole("button", { name: "4 stars" })).toHaveAttribute("aria-pressed", "true");
+    await fireEvent.click(within(group).getByRole("button", { name: "2 stars" }));
+    expect(within(group).getByRole("button", { name: "4 stars" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(group).getByRole("button", { name: "2 stars" })).toHaveAttribute("aria-pressed", "true");
+    await submit();
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("search_assets", { request: { text: "", mode: "context", filters: { rating: 2 } } }));
+
+    // Submitting closes the panel; reopened, it still shows the Rating.
+    await openPanel();
+    const reopened = screen.getByRole("group", { name: "Rating" });
+    expect(within(reopened).getByRole("button", { name: "2 stars" })).toHaveAttribute("aria-pressed", "true");
+    await fireEvent.click(within(reopened).getByRole("button", { name: "2 stars" }));
+    expect(within(reopened).getByRole("button", { name: "2 stars" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("opens the Archive from the Archived option like its navigation entry, with no Back origin, and keeps the Search session", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      ...handlers,
+      get_archive_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+      get_archive_timeline_bucket_assets: async () => [found("archived-1")],
+    });
+    await fireEvent.input(await searchBox(), { target: { value: "IMG" } });
+    await openPanel();
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
+    await fireEvent.click(screen.getByRole("group", { name: "Rating" }).querySelector("button[aria-label='3 stars']")!);
+
+    await fireEvent.click(within(display()).getByRole("button", { name: "Open Archive" }));
+
+    expect(await screen.findByRole("heading", { name: "Archive", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_archive_timeline_buckets");
+    expect(screen.queryByRole("button", { name: /^Back to/ })).not.toBeInTheDocument();
+    expect(tauri.invoke).not.toHaveBeenCalledWith("search_assets", expect.anything());
+    expect(screen.getByRole("button", { name: "Archive" })).toHaveClass("active");
+
+    expect(await searchBox()).toHaveValue("IMG");
+    await openPanel();
+    expect(within(display()).getByRole("checkbox", { name: "Archived" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "3 stars" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("offers Open Archive whether or not the Archived option is on", async () => {
+    renderAuthenticatedPage(handlers);
+    await openPanel();
+
+    expect(within(display()).getByRole("button", { name: "Open Archive" })).toBeInTheDocument();
+    await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
+    expect(within(display()).getByRole("button", { name: "Open Archive" })).toBeInTheDocument();
+  });
+});
