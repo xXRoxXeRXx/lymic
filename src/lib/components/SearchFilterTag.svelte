@@ -4,6 +4,7 @@
   import { messageForFailure } from "../controllers/request-failure";
   import type { SearchController } from "../controllers/search-controller.svelte";
   import type { TagsViewState } from "../controllers/tags-controller.svelte";
+  import { toggleChosenId } from "../search-filters/parts";
   import SearchFilterHeading from "./SearchFilterHeading.svelte";
   import TagTree from "./TagTree.svelte";
 
@@ -35,8 +36,7 @@
   });
 
   function toggle(tag: Tag) {
-    const next = chosen.includes(tag.id) ? chosen.filter((id) => id !== tag.id) : [...chosen, tag.id];
-    search.filters.tagIds = next.length > 0 ? next : undefined;
+    search.filters.tagIds = toggleChosenId(search.filters.tagIds, tag.id);
   }
 </script>
 
