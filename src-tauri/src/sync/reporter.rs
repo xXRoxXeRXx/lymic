@@ -175,14 +175,10 @@ struct DesktopRunTelemetry<R: tauri::Runtime> {
 }
 
 impl<R: tauri::Runtime> DesktopRunTelemetry<R> {
-    fn finish_transfer_stats(&self) {
-        self.transfer_stats.set_active(false);
-        emit_transfer_stats(&self.app, &self.transfer_stats);
-    }
-
     fn finish_transfer_stats_if_armed(&self) {
         if self.cleanup_armed.swap(false, Ordering::SeqCst) {
-            self.finish_transfer_stats();
+            self.transfer_stats.set_active(false);
+            emit_transfer_stats(&self.app, &self.transfer_stats);
         }
     }
 }
@@ -317,8 +313,7 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
             .transfer_stats
             .sync_queue(total_bytes, completed_bytes);
         self.run.progress.report_current_file("");
-        self.run.cleanup_armed.store(false, Ordering::SeqCst);
-        self.run.finish_transfer_stats();
+        self.run.finish_transfer_stats_if_armed();
         let is_automatic = !self.run.source.is_manual();
         if is_automatic {
             let _ = self.run.app.emit("sync-idle", ());

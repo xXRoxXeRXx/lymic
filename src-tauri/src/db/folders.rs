@@ -177,9 +177,9 @@ pub async fn remap_watched_folder_path(
         .await?;
 
     for (table, column, row_filter) in [
-        ("sync_state", "local_path", ""),
-        ("album_retry_remote_ids", "local_path", ""),
-        ("sync_jobs", "current_path", "id = 1 AND "),
+        ("sync_state", "local_path", None),
+        ("album_retry_remote_ids", "local_path", None),
+        ("sync_jobs", "current_path", Some("id = 1")),
     ] {
         remap
             .remap_column(&mut tx, table, column, row_filter)
@@ -203,11 +203,12 @@ impl FolderRemap {
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         table: &str,
         column: &str,
-        row_filter: &str,
+        row_filter: Option<&str>,
     ) -> Result<(), sqlx::Error> {
+        let filter_prefix = row_filter.map(|f| format!("{f} AND ")).unwrap_or_default();
         let path_cond = super::sql_path_is_or_descendant_of(column, "?1");
         let paths: Vec<String> = sqlx::query_scalar(&format!(
-            "SELECT {column} FROM {table} WHERE {row_filter}{column} IS NOT NULL AND {path_cond}"
+            "SELECT {column} FROM {table} WHERE {filter_prefix}{column} IS NOT NULL AND {path_cond}"
         ))
         .bind(&self.old_prefix)
         .fetch_all(&mut **tx)
@@ -215,7 +216,7 @@ impl FolderRemap {
         for old_row_path in paths {
             if let Some(new_row_path) = self.paths.remap_if_changed(&old_row_path) {
                 sqlx::query(&format!(
-                    "UPDATE {table} SET {column} = ? WHERE {row_filter}{column} = ?"
+                    "UPDATE {table} SET {column} = ? WHERE {filter_prefix}{column} = ?"
                 ))
                 .bind(&new_row_path)
                 .bind(&old_row_path)

@@ -16,10 +16,6 @@ use std::sync::Arc;
 const SYNC_QUEUE_BLOCK_SIZE: i64 = 50;
 
 pub(crate) trait QueueBlockProcessor {
-    fn prepare(&self) -> impl std::future::Future<Output = Result<(), String>> + Send {
-        async { Ok(()) }
-    }
-
     fn process_block(
         &self,
         units: Vec<UploadUnit>,
@@ -28,10 +24,6 @@ pub(crate) trait QueueBlockProcessor {
 }
 
 impl<R: tauri::Runtime> QueueBlockProcessor for RunProcessor<R> {
-    fn prepare(&self) -> impl std::future::Future<Output = Result<(), String>> + Send {
-        self.prepare()
-    }
-
     fn process_block(
         &self,
         units: Vec<UploadUnit>,
@@ -41,17 +33,19 @@ impl<R: tauri::Runtime> QueueBlockProcessor for RunProcessor<R> {
     }
 }
 
-pub(crate) async fn run_queue_loop<P, R>(
+pub(crate) async fn run_queue_loop<P, F, Fut, R>(
     runtime: &SyncRuntime,
     source: SyncSource,
-    processor: &P,
+    make_processor: F,
     reporter: &R,
 ) -> Result<SyncSummary, String>
 where
     P: QueueBlockProcessor,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<P, String>>,
     R: SyncRunReporter,
 {
-    match run_queue_loop_inner(runtime, source, processor, reporter).await {
+    match run_queue_loop_inner(runtime, source, make_processor, reporter).await {
         Ok(summary) => Ok(summary),
         Err(error) => {
             fail_and_report(runtime, reporter, &error).await;
@@ -65,14 +59,16 @@ async fn fail_and_report<R: SyncRunReporter>(runtime: &SyncRuntime, reporter: &R
     reporter.failed(snapshot.as_ref(), error);
 }
 
-async fn run_queue_loop_inner<P, R>(
+async fn run_queue_loop_inner<P, F, Fut, R>(
     runtime: &SyncRuntime,
     source: SyncSource,
-    processor: &P,
+    make_processor: F,
     reporter: &R,
 ) -> Result<SyncSummary, String>
 where
     P: QueueBlockProcessor,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<P, String>>,
     R: SyncRunReporter,
 {
     let pool = runtime.pool();
@@ -87,7 +83,7 @@ where
         })
         .await;
     reporter.started(&snapshot);
-    processor.prepare().await?;
+    let processor = make_processor().await?;
     reporter.transfers_started();
     let mut totals = SyncSummary {
         failed: snapshot.failed.max(0) as usize,
@@ -185,15 +181,21 @@ pub(crate) async fn run_sync_pipeline<R: tauri::Runtime>(
     );
     let reporter =
         DesktopRunReporter::new(app.clone(), source, audit_context.clone(), progress.clone());
-    let processor = RunProcessor::with_context(SyncRunContext {
+    let processor_context = SyncRunContext {
         app,
         runtime: runtime.clone(),
         client,
         audit_context,
         progress,
         sidecar_cache: SidecarDirectoryCache::new(),
-    });
-    run_queue_loop(&runtime, source, &processor, &reporter).await
+    };
+    run_queue_loop(
+        &runtime,
+        source,
+        || RunProcessor::new(processor_context),
+        &reporter,
+    )
+    .await
 }
 
 fn terminal_queue_results(summary: &SyncSummary) -> Option<&[(String, String)]> {
@@ -514,9 +516,14 @@ mod tests {
         );
         let reporter = RecordingReporter::default();
 
-        let summary = run_queue_loop(&runtime, SyncSource::Manual, &processor, &reporter)
-            .await
-            .unwrap();
+        let summary = run_queue_loop(
+            &runtime,
+            SyncSource::Manual,
+            || async { Ok(processor) },
+            &reporter,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             (summary.processed, summary.uploaded, summary.failed),
@@ -617,7 +624,7 @@ mod tests {
             run_queue_loop(
                 &loop_runtime,
                 SyncSource::Manual,
-                &processor,
+                || async { Ok(processor) },
                 loop_reporter.as_ref(),
             )
             .await
@@ -737,9 +744,14 @@ mod tests {
         );
         let reporter = RecordingReporter::default();
 
-        let summary = run_queue_loop(&runtime, SyncSource::Manual, &processor, &reporter)
-            .await
-            .unwrap();
+        let summary = run_queue_loop(
+            &runtime,
+            SyncSource::Manual,
+            || async { Ok(processor) },
+            &reporter,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             (summary.processed, summary.uploaded, summary.failed),
@@ -791,9 +803,14 @@ mod tests {
         );
         let reporter = RecordingReporter::default();
 
-        let err = run_queue_loop(&runtime, SyncSource::Manual, &processor, &reporter)
-            .await
-            .unwrap_err();
+        let err = run_queue_loop(
+            &runtime,
+            SyncSource::Manual,
+            || async { Ok(processor) },
+            &reporter,
+        )
+        .await
+        .unwrap_err();
         assert_eq!(err, "immich unreachable");
         assert!(!runtime.is_running());
         assert_eq!(
@@ -816,7 +833,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn queue_loop_reports_started_before_failing_when_processor_prepare_fails() {
+    async fn queue_loop_reports_started_before_failing_when_processor_setup_fails() {
         let pool = test_pool().await;
         db::enqueue_upload_units(&pool, &[queue_asset("C:/photos/one.jpg")], &[])
             .await
@@ -824,25 +841,26 @@ mod tests {
         let runtime = SyncRuntime::new(pool.clone(), false);
         runtime.start_or_join().await.unwrap();
 
-        struct FailingPrepareProcessor;
-        impl QueueBlockProcessor for FailingPrepareProcessor {
-            async fn prepare(&self) -> Result<(), String> {
-                Err("could not load settings".to_string())
-            }
-
+        struct UnreachableProcessor;
+        impl QueueBlockProcessor for UnreachableProcessor {
             async fn process_block(
                 &self,
                 _units: Vec<UploadUnit>,
                 _active_work: ProcessingContext,
             ) -> Result<SyncSummary, String> {
-                unreachable!("process_block must not run when prepare fails")
+                unreachable!("process_block must not run when setup fails")
             }
         }
 
         let reporter = RecordingReporter::default();
-        let err = run_queue_loop(&runtime, SyncSource::Manual, &FailingPrepareProcessor, &reporter)
-            .await
-            .unwrap_err();
+        let err = run_queue_loop(
+            &runtime,
+            SyncSource::Manual,
+            || async { Err::<UnreachableProcessor, _>("could not load settings".to_string()) },
+            &reporter,
+        )
+        .await
+        .unwrap_err();
         assert_eq!(err, "could not load settings");
         assert!(!runtime.is_running());
         assert_eq!(
