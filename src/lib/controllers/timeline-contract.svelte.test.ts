@@ -6,6 +6,7 @@ import { createArchiveTimelineController } from "./archive-timeline-controller.s
 import { createTrashTimelineController } from "./trash-timeline-controller.svelte";
 import { createFavoritesTimelineController } from "./favorites-timeline-controller.svelte";
 import { createPersonTimelineController } from "./person-timeline-controller.svelte";
+import { createTagTimelineController } from "./tag-timeline-controller.svelte";
 import { createSearchController } from "./search-controller.svelte";
 import { createTimelineController, type TimelineController } from "./timeline-controller.svelte";
 
@@ -68,6 +69,10 @@ const timelines: Array<[string, () => TimelineController]> = [
     getPersonTimelineBuckets: bucketSource.getBuckets,
     getPersonTimelineBucketAssets: (_personId, timeBucket) => bucketSource.getBucketAssets(timeBucket),
   }, "person-1")],
+  ["Tag Timeline", () => createTagTimelineController({
+    getTagTimelineBuckets: bucketSource.getBuckets,
+    getTagTimelineBucketAssets: (_tagId, timeBucket) => bucketSource.getBucketAssets(timeBucket),
+  }, "tag-1")],
 ];
 
 for (const [name, create] of timelines) describe(`${name} removal and navigation contract`, () => {

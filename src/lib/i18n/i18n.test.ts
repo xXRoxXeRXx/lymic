@@ -76,6 +76,18 @@ describe('i18n catalogs', () => {
     }
   });
 
+  it('translates the Tag Timeline strings in every locale', () => {
+    const keys = ['tags_timeline_empty', 'tags_timeline_error', 'tags_timeline_return'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+      expect((translations as Record<string, string>).tags_timeline_return, localeCode).toContain('{view}');
+      if (localeCode !== 'en') expect((translations as Record<string, string>).tags_timeline_empty, localeCode).not.toBe(en.tags_timeline_empty);
+    }
+  });
+
   it('translates the Memories strings in every locale', () => {
     const keys = ['memories_title', 'memories_loading', 'memories_offline', 'memories_error', 'memories_unavailable', 'memories_permission_denied', 'memory_year_ago', 'memory_years_ago', 'memory_birthday', 'memory_untitled', 'memories_timeline_empty'];
     for (const [localeCode, translations] of Object.entries(catalog)) {
