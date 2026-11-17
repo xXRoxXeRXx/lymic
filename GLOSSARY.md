@@ -109,7 +109,7 @@ An identity group created by Immich that has an optional assigned name and assoc
 _Avoid_: person, face, face group
 
 **Photo Timeline**:
-The chronological presentation of Remote Assets in the Immich Library grouped into time buckets.
+The chronological presentation of Remote Assets in the Immich Library grouped into time buckets. Archived Assets are not part of it, as in Immich Web; they appear in the Archive Timeline.
 _Avoid_: gallery, photo feed, media stream
 
 **Timeline Bucket**:
@@ -133,7 +133,7 @@ The chronological presentation of the Remote Assets belonging to one Album, grou
 _Avoid_: album grid, album gallery
 
 **Favorites Timeline**:
-The chronological presentation of Remote Assets marked as Favorites in the authenticated user's Immich Library.
+The chronological presentation of Remote Assets marked as Favorites in the authenticated user's Immich Library. Like the Photo Timeline it leaves out Archived Assets.
 _Avoid_: favorites album, favorites folder
 
 **Archive Timeline**:

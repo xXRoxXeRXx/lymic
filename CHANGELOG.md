@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updates `GLOSSARY.md` with download and favorite definitions, adds Microsoft Store badge to `README.md`, and refreshes OpenWiki docs.
 
 ### Fixed
+- **Archived items in Photos and Favorites**:
+  - The Photos and Favorites views no longer show archived photos and videos, as in Immich's web app; they appear only in the Archive view. Checked against Immich 3.4.1 for Photos; the Favorites filter combination was not observed live.
 - **Map and lightbox resilience**:
   - Handles malformed map coordinates gracefully and improves map viewing and localization.
   - Preserves partial or failed download safety on stream failure and hardens lightbox favorite navigation state and asset details.

@@ -440,9 +440,15 @@ impl ImmichClient {
         )
     }
 
+    /// Timeline buckets of the Photo Timeline. `visibility=timeline` hides Archived Assets, as
+    /// Immich Web does; without it Immich v3.4.1 includes them (#242).
     pub async fn get_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
-        self.fetch_timeline_buckets_with_query(&[("size", "MONTH")], "timeline buckets", None)
-            .await
+        self.fetch_timeline_buckets_with_query(
+            &[("size", "MONTH"), ("visibility", "timeline")],
+            "timeline buckets",
+            None,
+        )
+        .await
     }
 
     pub async fn get_timeline_bucket_assets(
@@ -450,7 +456,11 @@ impl ImmichClient {
         time_bucket: &str,
     ) -> Result<Vec<TimelineAsset>, String> {
         self.fetch_timeline_bucket_assets_with_query(
-            &[("size", "MONTH"), ("timeBucket", time_bucket)],
+            &[
+                ("size", "MONTH"),
+                ("timeBucket", time_bucket),
+                ("visibility", "timeline"),
+            ],
             "timeline bucket",
             false,
             None,
@@ -458,9 +468,15 @@ impl ImmichClient {
         .await
     }
 
+    /// Timeline buckets of the Favorites Timeline; like the Photo Timeline it hides Archived
+    /// Assets with `visibility=timeline` (#242).
     pub async fn get_favorites_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
         self.fetch_timeline_buckets_with_query(
-            &[("size", "MONTH"), ("isFavorite", "true")],
+            &[
+                ("size", "MONTH"),
+                ("isFavorite", "true"),
+                ("visibility", "timeline"),
+            ],
             "favorites timeline buckets",
             None,
         )
@@ -476,6 +492,7 @@ impl ImmichClient {
                 ("size", "MONTH"),
                 ("timeBucket", time_bucket),
                 ("isFavorite", "true"),
+                ("visibility", "timeline"),
             ],
             "favorites timeline bucket",
             true,
@@ -727,7 +744,7 @@ mod tests {
             let read = stream.read(&mut request).await.unwrap();
             let request = String::from_utf8_lossy(&request[..read]);
             assert!(request.starts_with(
-                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z HTTP/1.1"
+                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&visibility=timeline HTTP/1.1"
             ));
             assert!(request.contains("x-api-key: test-key"));
             let body =
@@ -995,7 +1012,9 @@ mod tests {
                 let mut request = [0_u8; 2048];
                 let read = stream.read(&mut request).await.unwrap();
                 let request = String::from_utf8_lossy(&request[..read]);
-                assert!(request.starts_with("GET /api/timeline/buckets?size=MONTH HTTP/1.1"));
+                assert!(request.starts_with(
+                    "GET /api/timeline/buckets?size=MONTH&visibility=timeline HTTP/1.1"
+                ));
                 assert!(request.contains("x-api-key: test-key"));
                 let buckets_body = b"[{\"timeBucket\":\"2026-11-01\",\"count\":2}]";
                 stream
@@ -1015,8 +1034,10 @@ mod tests {
             let mut request = [0_u8; 2048];
             let read = stream.read(&mut request).await.unwrap();
             let request = String::from_utf8_lossy(&request[..read]);
-            assert!(request
-                .starts_with("GET /api/timeline/bucket?size=MONTH&timeBucket=2026-11-01 HTTP/1.1"));
+            assert!(request.starts_with(
+                "GET /api/timeline/bucket?size=MONTH&timeBucket=2026-11-01&visibility=timeline HTTP/1.1"
+            ));
+            assert!(!request.contains("isArchived"));
             assert!(request.contains("x-api-key: test-key"));
             let assets_body = br#"{"id":["photo-1","video-1","video-2","video-3"],"isImage":[true,false,false,false],"isFavorite":[false,true,false,false],"ratio":[0.67,1.7778,1.7778,1.7778],"duration":[null,"0:01:05.000",2205,"5231"],"fileCreatedAt":["2026-11-04T19:47:41.29","2026-11-03T10:00:00.000Z","2026-11-02T10:00:00.000Z","2026-11-01T10:00:00.000Z"]}"#;
             stream
@@ -1395,8 +1416,10 @@ mod tests {
             let mut request = [0_u8; 4096];
             let read = stream.read(&mut request).await.unwrap();
             let request_text = String::from_utf8_lossy(&request[..read]);
-            assert!(request_text
-                .starts_with("GET /api/timeline/buckets?size=MONTH&isFavorite=true HTTP/1.1"));
+            assert!(request_text.starts_with(
+                "GET /api/timeline/buckets?size=MONTH&isFavorite=true&visibility=timeline HTTP/1.1"
+            ));
+            assert!(!request_text.contains("isArchived"));
             assert!(request_text.contains("x-api-key: test-key"));
             assert!(!request_text.contains("withPartners"));
             let buckets = br#"[{"timeBucket":"2025-02-01T00:00:00.000Z","count":1},{"timeBucket":"2025-03-01T00:00:00.000Z","count":2}]"#;
@@ -1416,7 +1439,7 @@ mod tests {
             let read = stream.read(&mut request).await.unwrap();
             let request_text = String::from_utf8_lossy(&request[..read]);
             assert!(request_text.starts_with(
-                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&isFavorite=true HTTP/1.1"
+                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&isFavorite=true&visibility=timeline HTTP/1.1"
             ));
             assert!(request_text.contains("x-api-key: test-key"));
             let assets = br#"{"id":["fav-photo","fav-video"],"isImage":[true,false],"isFavorite":[null],"ratio":[1.5,1.7778],"duration":[null,"0:00:42.000"],"fileCreatedAt":["2025-03-10T10:00:00.000Z","2025-03-05T10:00:00.000Z"]}"#;
@@ -1436,7 +1459,7 @@ mod tests {
             let read = stream.read(&mut request).await.unwrap();
             let request_text = String::from_utf8_lossy(&request[..read]);
             assert!(request_text.starts_with(
-                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-02-01T00%3A00%3A00.000Z&isFavorite=true HTTP/1.1"
+                "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-02-01T00%3A00%3A00.000Z&isFavorite=true&visibility=timeline HTTP/1.1"
             ));
             let legacy_assets = br#"[{"id":"legacy-fav","type":"IMAGE","fileCreatedAt":"2025-02-14T10:00:00.000Z"}]"#;
             stream
