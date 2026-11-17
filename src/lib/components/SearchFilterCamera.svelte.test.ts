@@ -23,7 +23,8 @@ function setup(getSearchSuggestions = vi.fn(async (request: SearchSuggestionsReq
     getSearchSuggestions,
   };
   const search = createSearchController(adapter);
-  render(SearchPanel, { search, id: "search-panel" });
+  const people = { people: [], isLoading: false, isRefreshing: false, isOffline: false, hasNextPage: false, error: null, refresh: vi.fn(), loadMore: vi.fn(), clear: vi.fn() };
+  render(SearchPanel, { search, people, id: "search-panel" });
   return { adapter, search };
 }
 

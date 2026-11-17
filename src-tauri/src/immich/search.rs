@@ -8,7 +8,8 @@
 use super::client::ImmichClient;
 use super::response::{read_response_body_limited, request_failure_code};
 use super::search_filters::{
-    apply_favorite, apply_unfiled, apply_visibility, CameraFilter, DateRange, MediaType, Rating,
+    apply_favorite, apply_person_ids, apply_unfiled, apply_visibility, CameraFilter, DateRange,
+    MediaType, Rating,
 };
 use super::timeline::{
     group_album_timeline_assets, timeline_asset_from_response, AlbumTimeline, TimelineAssetResponse,
@@ -72,6 +73,8 @@ pub(crate) enum SearchMode {
 pub(crate) struct SearchFilters {
     pub date: Option<DateRange>,
     pub media_type: Option<MediaType>,
+    /// Recognized People that must all appear in a Remote Asset.
+    pub person_ids: Option<Vec<String>>,
     /// Display option: only Favorites.
     pub favorite: bool,
     /// Display option: only Archived Assets. Off means Archived Assets are left out.
@@ -90,6 +93,9 @@ impl SearchFilters {
         }
         if let Some(media_type) = self.media_type {
             media_type.apply(filter);
+        }
+        if let Some(person_ids) = &self.person_ids {
+            apply_person_ids(person_ids, filter);
         }
         if self.favorite {
             apply_favorite(filter);
@@ -1074,11 +1080,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn chosen_people_must_all_appear_in_the_remote_asset() {
+        let filters = SearchFilters {
+            person_ids: Some(vec!["person-1".to_string(), "person-2".to_string()]),
+            ..SearchFilters::default()
+        };
+        assert_eq!(
+            filter_sent_for(filters).await,
+            json!({ "personIds": { "all": ["person-1", "person-2"] } })
+        );
+    }
+
+    #[tokio::test]
+    async fn no_chosen_person_adds_no_person_condition() {
+        for person_ids in [None, Some(vec![])] {
+            let filters = SearchFilters {
+                person_ids,
+                ..SearchFilters::default()
+            };
+            assert_eq!(filter_sent_for(filters).await, json!({}));
+        }
+    }
+
+    #[tokio::test]
     async fn text_and_every_set_filter_combine_in_one_structured_filter() {
         let request = SearchRequest {
             filters: SearchFilters {
                 date: Some(day_range(Some("2025-02-28T23:00:00.000Z"), None)),
                 media_type: Some(MediaType::Video),
+                person_ids: Some(vec!["person-1".to_string()]),
                 ..SearchFilters::default()
             },
             ..filename_request("IMG")
@@ -1092,6 +1122,7 @@ mod tests {
                 "originalFileName": { "like": "%IMG%" },
                 "localDateTime": { "gte": "2025-02-28T23:00:00.000Z" },
                 "type": { "eq": "VIDEO" },
+                "personIds": { "all": ["person-1"] },
                 "visibility": { "eq": "timeline" },
             })
         );
@@ -1101,7 +1132,7 @@ mod tests {
     #[test]
     fn filters_deserialize_from_the_frontend_shape() {
         let request: SearchRequest = serde_json::from_str(
-            r#"{"text":"","mode":"filename","filters":{"date":{"from":"2025-01-01T00:00:00.000Z"},"mediaType":"image"}}"#,
+            r#"{"text":"","mode":"filename","filters":{"date":{"from":"2025-01-01T00:00:00.000Z"},"mediaType":"image","personIds":["person-1"]}}"#,
         )
         .unwrap();
         assert_eq!(
@@ -1109,6 +1140,7 @@ mod tests {
             SearchFilters {
                 date: Some(day_range(Some("2025-01-01T00:00:00.000Z"), None)),
                 media_type: Some(MediaType::Image),
+                person_ids: Some(vec!["person-1".to_string()]),
                 ..SearchFilters::default()
             }
         );

@@ -224,6 +224,8 @@ export interface SearchDateRange { from?: string; to?: string; }
 export interface SearchFilters {
   date?: SearchDateRange;
   mediaType?: SearchMediaType;
+  /** Recognized People who must all appear in a Remote Asset; unset or empty means no restriction. */
+  personIds?: string[];
   /** Display options: each is set only while switched on; unset (or off) adds no condition. */
   favorite?: boolean;
   /** On shows only Archived Assets; Archived Assets are left out otherwise. */

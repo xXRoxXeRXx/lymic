@@ -3,7 +3,8 @@
   import { t } from "svelte-i18n";
   import type { RecognizedPerson } from "../contracts";
 
-  let { person, onSelect }: { person: RecognizedPerson; onSelect: (person: RecognizedPerson) => void } = $props();
+  /** `selected` makes the tile a toggle (for choosing people); `compact` is the smaller tile of a picker. */
+  let { person, onSelect, selected, compact = false }: { person: RecognizedPerson; onSelect: (person: RecognizedPerson) => void; selected?: boolean; compact?: boolean } = $props();
   let thumbnailFailed = $state(false);
 
   const thumbnailSrc = $derived.by(() => {
@@ -21,8 +22,8 @@
   });
 </script>
 
-<button type="button" class="rounded-xl border border-slate-200 p-4 text-left dark:border-zinc-700" aria-label={person.name ?? $t("people_unnamed")} onclick={() => onSelect(person)}>
-  <div class="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-zinc-800">
+<button type="button" class="rounded-xl border text-left {compact ? 'p-2 text-sm' : 'p-4'} {selected ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-600 dark:border-sky-400 dark:bg-sky-950/40 dark:ring-sky-400' : 'border-slate-200 dark:border-zinc-700'}" aria-pressed={selected} aria-label={person.name ?? $t("people_unnamed")} onclick={() => onSelect(person)}>
+  <div class="{compact ? 'mb-2' : 'mb-3'} flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-zinc-800">
     {#if person.thumbnailPath && !thumbnailFailed}
       <img class="h-full w-full object-cover" src={thumbnailSrc} alt={person.name ?? $t("people_unnamed")} onerror={() => thumbnailFailed = true} />
     {:else}
