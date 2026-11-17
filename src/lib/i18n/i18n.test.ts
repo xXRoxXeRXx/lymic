@@ -294,6 +294,24 @@ describe('i18n catalogs', () => {
     expect(de.search_filter_media_type).toBe('Medientyp');
   });
 
+  it('translates the camera filter and suggestion strings in every locale', () => {
+    const keys = [
+      'search_filter_camera', 'search_filter_camera_make', 'search_filter_camera_model', 'search_filter_camera_lens',
+      'search_suggestions_loading', 'search_suggestions_empty', 'search_suggestions_no_match', 'search_suggestions_failed',
+      'search_suggestions_permission_denied', 'search_suggestions_retry', 'search_suggestions_clear',
+    ];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect((translations as Record<string, string>)[key], `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+      }
+      // A missing suggestion permission names the permission to grant; clearing names the filter.
+      expect((translations as Record<string, string>).search_suggestions_permission_denied, localeCode).toContain('asset.read');
+      expect((translations as Record<string, string>).search_suggestions_clear, localeCode).toContain('{filter}');
+    }
+    expect(en.search_filter_camera_lens).toBe('Lens model');
+    expect(de.search_filter_camera_make).toBe('Kamerahersteller');
+  });
+
   it('translates the Context Search strings in every locale', () => {
     const keys = [
       'search_mode_context', 'search_placeholder_context', 'search_mode_context_unavailable',

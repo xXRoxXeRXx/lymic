@@ -32,6 +32,7 @@ function setup(overrides: Partial<Parameters<typeof createSearchController>[0]> 
     getSearchFeatures: vi.fn().mockResolvedValue(FEATURES),
     searchAssets: vi.fn().mockResolvedValue(results(["a", "b"])),
     searchContextPage: vi.fn().mockResolvedValue(contextPage(["a", "b"], null)),
+    getSearchSuggestions: vi.fn().mockResolvedValue(["Canon", "FUJIFILM"]),
     ...overrides,
   };
   return { adapter, search: createSearchController(adapter) };
@@ -367,6 +368,67 @@ describe("Search controller: Search Filters", () => {
     expect(search.filters).toEqual({});
     expect(search.canSubmit).toBe(false);
     expect(search.filterErrors).toEqual({});
+  });
+});
+
+describe("camera filters", () => {
+  it("runs a Search with the chosen camera and no text", async () => {
+    const { adapter, search } = setup();
+    search.filters.camera = { make: "FUJIFILM", model: "X100V", lensModel: "23mm F2" };
+
+    expect(search.canSubmit).toBe(true);
+    expect(await search.submit()).toBe(true);
+
+    expect(adapter.searchAssets).toHaveBeenCalledWith({
+      text: "",
+      mode: "filename",
+      filters: { camera: { make: "FUJIFILM", model: "X100V", lensModel: "23mm F2" } },
+    });
+  });
+
+  it("combines the camera with the text and the other filters", async () => {
+    const { adapter, search } = setup();
+    search.text = "IMG";
+    search.filters.mediaType = "image";
+    search.filters.camera = { make: "Canon" };
+    await search.submit();
+
+    expect(vi.mocked(adapter.searchAssets).mock.calls[0][0]).toEqual({
+      text: "IMG",
+      mode: "filename",
+      filters: { mediaType: "image", camera: { make: "Canon" } },
+    });
+  });
+
+  it("is no filter when no part is chosen", () => {
+    const { search } = setup();
+    search.filters.camera = {};
+
+    expect(search.canSubmit).toBe(false);
+  });
+
+  it("offers the suggestions of the adapter and forgets them, with the camera, on clear", async () => {
+    const { adapter, search } = setup();
+    search.filters.camera = { make: "Canon" };
+    await search.suggestions.load({ type: "cameraMake" });
+    expect(search.suggestions.stateFor({ type: "cameraMake" }).items).toEqual(["Canon", "FUJIFILM"]);
+
+    search.clear();
+
+    expect(search.filters.camera).toBeUndefined();
+    expect(search.suggestions.stateFor({ type: "cameraMake" }).status).toBe("idle");
+    await search.suggestions.load({ type: "cameraMake" });
+    expect(adapter.getSearchSuggestions).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps Search working when the suggestions fail", async () => {
+    const { search } = setup({ getSearchSuggestions: vi.fn().mockRejectedValue("search_unavailable") });
+    await search.suggestions.load({ type: "cameraMake" });
+    search.text = "IMG";
+
+    expect(search.suggestions.stateFor({ type: "cameraMake" }).failure).toBe("unavailable");
+    expect(await search.submit()).toBe(true);
+    expect(search.failure).toBeNull();
   });
 });
 

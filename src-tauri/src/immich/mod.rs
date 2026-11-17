@@ -7,6 +7,7 @@ mod places;
 mod response;
 mod search;
 mod search_filters;
+mod search_suggestions;
 mod session;
 #[cfg(test)]
 mod test_support;
@@ -23,6 +24,7 @@ pub(crate) use places::Place;
 pub(crate) use search::{
     ContextSearchPage, SearchFeatures, SearchRequest, SearchResults, SearchSupport,
 };
+pub(crate) use search_suggestions::SuggestionRequest;
 pub(crate) use session::ImmichSession;
 pub(crate) use timeline::{AlbumTimeline, PlaceTimeline, TimelineAsset, TimelineBucket};
 pub(crate) use trash::TrashRestoreResult;

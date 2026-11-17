@@ -7,6 +7,7 @@ pub(crate) mod people;
 pub(crate) mod places;
 pub(crate) mod profile_cache;
 pub(crate) mod search;
+pub(crate) mod search_suggestions;
 pub(crate) mod settings;
 pub(crate) mod sync;
 pub(crate) mod timeline;

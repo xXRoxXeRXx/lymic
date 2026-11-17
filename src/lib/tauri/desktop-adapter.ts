@@ -36,6 +36,7 @@ import type {
   ContextSearchPage,
   SearchFeatures,
   SearchRequest,
+  SearchSuggestionsRequest,
   SearchSupport,
   SearchResults,
 } from "../contracts";
@@ -148,6 +149,8 @@ export interface SearchDesktopAdapter {
   searchAssets(request: SearchRequest): Promise<SearchResults>;
   /** One page of a Context Search (Immich smart search), in the order of relevance. */
   searchContextPage(request: SearchRequest, page: number): Promise<ContextSearchPage>;
+  /** The values Immich suggests for a Search Filter, optionally narrowed (for example the models of one make). */
+  getSearchSuggestions(request: SearchSuggestionsRequest): Promise<string[]>;
 }
 
 export interface PreferencesDesktopAdapter {
@@ -274,6 +277,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getSearchFeatures: () => invoke<SearchFeatures>("get_search_features"),
   searchAssets: (request) => invoke<SearchResults>("search_assets", { request }),
   searchContextPage: (request, page) => invoke<ContextSearchPage>("search_context_page", { request, page }),
+  getSearchSuggestions: (request) => invoke<string[]>("get_search_suggestions", { request }),
 
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),

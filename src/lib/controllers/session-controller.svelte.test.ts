@@ -40,6 +40,7 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
     getPlaces: vi.fn().mockResolvedValue([]),
     getSearchFeatures: vi.fn().mockResolvedValue({ smartSearch: true, ocr: true }),
     getSearchSupport: vi.fn().mockResolvedValue({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
+    getSearchSuggestions: vi.fn().mockResolvedValue([]),
     searchAssets: vi.fn().mockResolvedValue({ buckets: [{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }], assetsByBucket: {}, truncated: false }),
     searchContextPage: vi.fn().mockResolvedValue({ assets: [], nextPage: null }),
     getPersonTimelineBuckets: vi.fn().mockResolvedValue([]),
