@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { t } from "svelte-i18n";
+  import { messageForFailure } from "../controllers/request-failure";
   import { isExploreSectionVisible, type ExploreSectionState } from "../controllers/explore-controller.svelte";
 
   /**
@@ -45,7 +46,7 @@
     </div>
     {#if section.error}
       <div role="alert" class="flex items-center gap-3 text-sm text-red-600 dark:text-red-300">
-        <p>{section.error === "permission_denied" ? permissionDeniedMessage : section.error === "unavailable" ? unavailableMessage : errorMessage}</p>
+        <p>{messageForFailure(section.error, { permission_denied: permissionDeniedMessage, unavailable: unavailableMessage, error: errorMessage })}</p>
         <button type="button" class="rounded-lg px-2 py-1 font-medium hover:bg-slate-200 dark:hover:bg-zinc-800" onclick={() => void section.refresh()}>{$t("explore_retry")}</button>
       </div>
     {:else if section.isLoading}

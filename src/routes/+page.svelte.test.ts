@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { tick } from "svelte";
 import Page from "./+page.svelte";
 
 const tauri = vi.hoisted(() => ({
@@ -94,6 +95,8 @@ function mockAuthenticatedDashboard(handlers: Record<string, (args?: unknown) =>
       case "get_album_timeline":
         return Promise.resolve({ buckets: [], assetsByBucket: {} });
       case "get_places":
+        return Promise.resolve([]);
+      case "get_tags":
         return Promise.resolve([]);
       case "get_memories":
         return Promise.resolve([]);
@@ -2297,6 +2300,142 @@ describe("Place Timelines", () => {
   });
 });
 
+describe("Tag Timelines", () => {
+  const march = "2025-03-01T00:00:00.000Z";
+  const tags = [
+    { id: "t-travel", name: "Travel", value: "Travel", parentId: null, color: null },
+    { id: "t-italy", name: "Italy", value: "Travel/Italy", parentId: "t-travel", color: null },
+    { id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", parentId: "t-italy", color: null },
+    { id: "t-family", name: "Family", value: "Family", parentId: null, color: null },
+  ];
+  const taggedAsset = (id: string) => ({ id, width: 640, height: 480, type: "IMAGE", takenAt: "2025-03-02T00:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false });
+  const handlers = {
+    get_tags: async () => tags,
+    get_tag_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+    get_tag_timeline_bucket_assets: async () => [taggedAsset("asset-1")],
+  };
+  const openTags = async () => fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
+
+  it("opens the Tag Timeline of a selected Tag, titled with its full path, and loads buckets before assets", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({ ...handlers, get_tag_timeline_bucket_assets: () => new Promise(() => {}) });
+    await openTags();
+    await fireEvent.click(within(await screen.findByRole("treeitem", { name: "Italy" })).getByTestId("tag-toggle"));
+
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Rome" }));
+
+    expect(await screen.findByRole("heading", { name: "Travel/Italy/Rome", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_buckets", { tagId: "t-rome" });
+    // The scrubber and month labels appear while the first bucket's assets are still loading.
+    expect(await screen.findByText("March 2025")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Timeline scrubber" })).toBeInTheDocument();
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_bucket_assets", { tagId: "t-rome", timeBucket: march }));
+    expect(screen.queryByRole("tree")).not.toBeInTheDocument();
+  });
+
+  it("opens a Tag with Enter or Space, and expanding a Tag does not open it", async () => {
+    renderAuthenticatedPage(handlers);
+    await openTags();
+    const travel = await screen.findByRole("treeitem", { name: "Travel" });
+
+    await fireEvent.click(within(travel).getByTestId("tag-toggle"));
+    expect(screen.getByRole("tree")).toBeInTheDocument();
+    expect(tauri.invoke).not.toHaveBeenCalledWith("get_tag_timeline_buckets", expect.anything());
+
+    await fireEvent.keyDown(travel, { key: "Enter" });
+    expect(await screen.findByRole("heading", { name: "Travel", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_buckets", { tagId: "t-travel" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Tags" }));
+    await fireEvent.keyDown(await screen.findByRole("treeitem", { name: "Family" }), { key: " " });
+    expect(await screen.findByRole("heading", { name: "Family", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_buckets", { tagId: "t-family" });
+  });
+
+  it("shows the shared timeline empty state for a Tag without assets", async () => {
+    renderAuthenticatedPage({ ...handlers, get_tag_timeline_buckets: async () => [] });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Family" }));
+
+    expect(await screen.findByText("This tag has no photos yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows the shared timeline load error, never an empty Tag, when the load fails", async () => {
+    renderAuthenticatedPage({ ...handlers, get_tag_timeline_buckets: async () => { throw new Error("tags_permission_denied:tag.read"); } });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Family" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("This tag could not be loaded.");
+    expect(screen.queryByText("This tag has no photos yet.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Timeline scrubber" })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Tags" }));
+    expect(await screen.findByRole("tree", { name: "Tags" })).toBeInTheDocument();
+  });
+
+  it("offers Favorite, Download and Add to album from the Lightbox of a Tag Timeline", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      ...handlers,
+      get_albums: async () => [{ id: "album-1", albumName: "Holiday" }],
+      get_asset_details: async () => ({ id: "asset-1", originalFileName: "IMG_0001.jpg", fileSize: 1024, width: 640, height: 480, isFavorite: false }),
+      set_asset_favorite: async () => undefined,
+    });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Family" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Open photo" }));
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+
+    expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Add to album" })).toBeInTheDocument();
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Add to favorites" }));
+    expect(tauri.invoke).toHaveBeenCalledWith("set_asset_favorite", { assetId: "asset-1", isFavorite: true });
+  });
+
+  it("returns to the Tags tree with its scroll position restored", async () => {
+    renderAuthenticatedPage(handlers);
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Family" });
+    const main = document.querySelector("main") as HTMLElement;
+    main.scrollTop = 180;
+    await fireEvent.scroll(main);
+
+    await fireEvent.click(screen.getByRole("treeitem", { name: "Family" }));
+    await screen.findByRole("heading", { name: "Family", level: 1 });
+    main.scrollTop = 0;
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Tags" }));
+
+    expect(await screen.findByRole("heading", { name: "Tags", level: 1 })).toBeInTheDocument();
+    await waitFor(() => expect(main.scrollTop).toBe(180));
+    expect(screen.getByRole("treeitem", { name: "Family" })).toBeInTheDocument();
+  });
+
+  it("starts at the top of the Tags tree again after signing out from a Tag Timeline", async () => {
+    renderAuthenticatedPage(handlers);
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Family" });
+    const main = document.querySelector("main") as HTMLElement;
+    main.scrollTop = 180;
+    await fireEvent.scroll(main);
+    await fireEvent.click(screen.getByRole("treeitem", { name: "Family" }));
+    await screen.findByRole("heading", { name: "Family", level: 1 });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+    expect(await screen.findByRole("heading", { name: "Login" })).toBeInTheDocument();
+    await fireEvent.input(screen.getByLabelText("Server URL"), { target: { value: "https://immich.example" } });
+    await fireEvent.input(screen.getByLabelText("API Key"), { target: { value: "secret-key" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Login" }));
+
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Tags" })).not.toBeInTheDocument();
+    await openTags();
+    expect(await screen.findByRole("tree", { name: "Tags" })).toBeInTheDocument();
+    expect(document.querySelector("main")!.scrollTop).toBe(0);
+  });
+});
+
 describe("Explore Memories", () => {
   const asset = (id: string, takenAt: string) => ({ id, width: 1600, height: 1200, type: "IMAGE", takenAt, cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false });
   const timelineOf = (...assets: ReturnType<typeof asset>[]) => {
@@ -2657,6 +2796,452 @@ describe("Explore Overview across sections", () => {
     await screen.findByRole("region", { name: "Places" });
 
     expect(calls("get_places")).toBe(1);
+  });
+});
+
+describe("Tags view", () => {
+  const tags = [
+    { id: "t-travel", name: "Travel", value: "Travel", parentId: null, color: "#ff0000" },
+    { id: "t-italy", name: "Italy", value: "Travel/Italy", parentId: "t-travel", color: null },
+    { id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", parentId: "t-italy", color: "#00FF00" },
+    { id: "t-family", name: "Family", value: "Family", parentId: null, color: "not-a-colour" },
+  ];
+  const calls = (command: string) => tauri.invoke.mock.calls.filter(([name]) => name === command).length;
+  const openTags = async () => fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
+  const names = () => screen.queryAllByRole("treeitem").map((item) => item.textContent?.trim());
+  /** The chevron of a Tag with children; expanding is separate from selecting the Tag. */
+  const tagToggle = async (name: string) => within(await screen.findByRole("treeitem", { name })).getByTestId("tag-toggle");
+
+  it("opens from the navigation as a tree while Photos stays the view opened after login", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("tree")).not.toBeInTheDocument();
+
+    await openTags();
+
+    expect(await screen.findByRole("heading", { name: "Tags", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("tree", { name: "Tags" })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tags");
+  });
+
+  it("follows the hierarchy with siblings sorted by name, the top level expanded and deeper levels collapsed", async () => {
+    renderAuthenticatedPage({ get_tags: async () => [...tags].reverse() });
+    await openTags();
+
+    await screen.findByRole("treeitem", { name: "Travel" });
+    expect(names()).toEqual(["Family", "Travel", "Italy"]);
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("treeitem", { name: "Italy" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("treeitem", { name: "Family" })).not.toHaveAttribute("aria-expanded");
+    expect(screen.getByRole("treeitem", { name: "Family" })).toHaveAttribute("aria-level", "1");
+    expect(screen.getByRole("treeitem", { name: "Italy" })).toHaveAttribute("aria-level", "2");
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("aria-posinset", "2");
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("aria-setsize", "2");
+  });
+
+  it("shows each Tag's own name only, never its full path", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Italy" });
+    await fireEvent.click(await tagToggle("Italy"));
+
+    expect(await screen.findByRole("treeitem", { name: "Rome" })).toBeInTheDocument();
+    expect(screen.queryByText("Travel/Italy/Rome")).not.toBeInTheDocument();
+    expect(screen.queryByText("Travel/Italy")).not.toBeInTheDocument();
+  });
+
+  it("expands and collapses a Tag with children by click and keeps the choice while moving between views", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await fireEvent.click(await tagToggle("Italy"));
+    expect(screen.getByRole("treeitem", { name: "Italy" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("treeitem", { name: "Rome" })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await openTags();
+    expect(await screen.findByRole("treeitem", { name: "Rome" })).toBeInTheDocument();
+
+    await fireEvent.click(await tagToggle("Travel"));
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("treeitem", { name: "Italy" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: "Rome" })).not.toBeInTheDocument();
+  });
+
+  it("shows a colour dot only for a valid #RRGGBB colour", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await fireEvent.click(await tagToggle("Italy"));
+    await screen.findByRole("treeitem", { name: "Rome" });
+
+    expect(within(screen.getByRole("treeitem", { name: "Travel" })).getByTestId("tag-color-dot")).toHaveStyle({ backgroundColor: "#ff0000" });
+    expect(within(screen.getByRole("treeitem", { name: "Rome" })).getByTestId("tag-color-dot")).toHaveStyle({ backgroundColor: "#00ff00" });
+    expect(within(screen.getByRole("treeitem", { name: "Italy" })).queryByTestId("tag-color-dot")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("treeitem", { name: "Family" })).queryByTestId("tag-color-dot")).not.toBeInTheDocument();
+  });
+
+  it("rejects colours that are not exactly #RRGGBB", async () => {
+    const odd = ["#fff", "#12345", "#1234567", "red", "#GGGGGG", "ff0000", "url(x)", ""].map((color, index) => ({ id: `c-${index}`, name: `Odd ${index}`, value: `Odd ${index}`, parentId: null, color }));
+    renderAuthenticatedPage({ get_tags: async () => odd });
+    await openTags();
+
+    await screen.findByRole("treeitem", { name: "Odd 0" });
+    expect(screen.queryAllByTestId("tag-color-dot")).toHaveLength(0);
+  });
+
+  it("puts a Tag whose parent is missing from the list at the top level", async () => {
+    renderAuthenticatedPage({ get_tags: async () => [
+      { id: "a", name: "Zebra", value: "Gone/Zebra", parentId: "gone", color: null },
+      { id: "b", name: "Apple", value: "Apple", parentId: null, color: null },
+    ] });
+    await openTags();
+
+    await screen.findByRole("treeitem", { name: "Zebra" });
+    expect(names()).toEqual(["Apple", "Zebra"]);
+    expect(screen.getByRole("treeitem", { name: "Zebra" })).toHaveAttribute("aria-level", "1");
+  });
+
+  it("neither hangs nor drops Tags on a self-reference or a cycle", async () => {
+    renderAuthenticatedPage({ get_tags: async () => [
+      { id: "self", name: "Self", value: "Self", parentId: "self", color: null },
+      { id: "a", name: "A", value: "A", parentId: "b", color: null },
+      { id: "b", name: "B", value: "B", parentId: "a", color: null },
+      { id: "c", name: "C", value: "C", parentId: "a", color: null },
+    ] });
+    await openTags();
+
+    await screen.findByRole("treeitem", { name: "Self" });
+    // Every Tag is reachable: expand each node that has children until nothing new appears.
+    for (let round = 0; round < 4; round += 1) {
+      for (const item of screen.queryAllByRole("treeitem", { expanded: false })) await fireEvent.click(within(item).getByTestId("tag-toggle"));
+    }
+    expect(screen.getAllByRole("treeitem").map((item) => item.textContent?.trim()).sort()).toEqual(["A", "B", "C", "Self"]);
+  });
+
+  it("is operable with the keyboard through roving focus", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    const family = await screen.findByRole("treeitem", { name: "Family" });
+    expect(family).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toHaveAttribute("tabindex", "-1");
+
+    family.focus();
+    await fireEvent.keyDown(family, { key: "ArrowDown" });
+    const travel = screen.getByRole("treeitem", { name: "Travel" });
+    expect(travel).toHaveFocus();
+    expect(travel).toHaveAttribute("tabindex", "0");
+
+    await fireEvent.keyDown(travel, { key: "ArrowDown" });
+    const italy = screen.getByRole("treeitem", { name: "Italy" });
+    expect(italy).toHaveFocus();
+
+    await fireEvent.keyDown(italy, { key: "ArrowRight" });
+    expect(italy).toHaveAttribute("aria-expanded", "true");
+    expect(italy).toHaveFocus();
+    await fireEvent.keyDown(italy, { key: "ArrowRight" });
+    expect(screen.getByRole("treeitem", { name: "Rome" })).toHaveFocus();
+
+    await fireEvent.keyDown(screen.getByRole("treeitem", { name: "Rome" }), { key: "ArrowLeft" });
+    expect(italy).toHaveFocus();
+    await fireEvent.keyDown(italy, { key: "ArrowLeft" });
+    expect(italy).toHaveAttribute("aria-expanded", "false");
+    await fireEvent.keyDown(italy, { key: "ArrowLeft" });
+    expect(travel).toHaveFocus();
+
+    await fireEvent.keyDown(travel, { key: "End" });
+    expect(screen.getByRole("treeitem", { name: "Italy" })).toHaveFocus();
+    await fireEvent.keyDown(screen.getByRole("treeitem", { name: "Italy" }), { key: "Home" });
+    expect(screen.getByRole("treeitem", { name: "Family" })).toHaveFocus();
+  });
+
+  it("shows an informative empty state for a Library without Tags", async () => {
+    renderAuthenticatedPage({ get_tags: async () => [] });
+    await openTags();
+
+    expect(await screen.findByText("No tags yet. Tags created in Immich appear here.")).toBeInTheDocument();
+    expect(screen.queryByRole("tree")).not.toBeInTheDocument();
+  });
+
+  it("shows a loading state while the Tags load", async () => {
+    renderAuthenticatedPage({ get_tags: () => new Promise(() => {}) });
+    await openTags();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading tags…");
+  });
+
+  it("reloads the Tags every time the view opens", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    expect(calls("get_tags")).toBe(1);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await openTags();
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
+  });
+
+  it("names the tag.read permission and offers Retry when the key lacks it", async () => {
+    renderAuthenticatedPage({ get_tags: vi.fn().mockRejectedValueOnce("tags_permission_denied:tag.read").mockResolvedValueOnce(tags) });
+    await openTags();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("tag.read");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("reports authentication-required and unavailable as unavailable and anything else as an error", async () => {
+    const get_tags = vi.fn()
+      .mockRejectedValueOnce("tags_authentication_required")
+      .mockRejectedValueOnce("tags_unavailable")
+      .mockRejectedValueOnce("tags_invalid_response");
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tags is unavailable. Check your connection and sign-in.");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tags is unavailable. Check your connection and sign-in.");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Tags could not be loaded."));
+  });
+
+  it("keeps an already loaded tree visible with an offline note when a reload fails", async () => {
+    renderAuthenticatedPage({ get_tags: vi.fn().mockResolvedValueOnce(tags).mockRejectedValueOnce("tags_unavailable") });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await openTags();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Tags is offline. Showing cached tags.");
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("ignores a late response of an older request once a newer one has answered", async () => {
+    let answerOlder!: (value: unknown) => void;
+    const older = new Promise((resolve) => { answerOlder = resolve; });
+    const get_tags = vi.fn().mockImplementationOnce(() => older).mockResolvedValueOnce(tags);
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading tags…");
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+
+    answerOlder([{ id: "t-old", name: "Outdated", value: "Outdated", parentId: null, color: null }]);
+    await Promise.resolve();
+    await tick();
+
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: "Outdated" })).not.toBeInTheDocument();
+  });
+
+  it("ignores a late failure of an older request once a newer one has answered", async () => {
+    let failOlder!: (reason: unknown) => void;
+    const older = new Promise((_, reject) => { failOlder = reject; });
+    const get_tags = vi.fn().mockImplementationOnce(() => older).mockResolvedValueOnce(tags);
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    await fireEvent.click(await screen.findByRole("button", { name: "Photos" }));
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+
+    failOlder("tags_unavailable");
+    await Promise.resolve();
+    await tick();
+
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tags is offline. Showing cached tags.")).not.toBeInTheDocument();
+  });
+
+  it("keeps the loaded tree and the offline note when a Synchronization reload fails", async () => {
+    renderAuthenticatedPage({ get_tags: vi.fn().mockResolvedValueOnce(tags).mockRejectedValueOnce("tags_unavailable") });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Tags is offline. Showing cached tags.");
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("recovers from a failed first load through Retry without a restart", async () => {
+    const get_tags = vi.fn().mockRejectedValueOnce("tags_invalid_response").mockResolvedValueOnce(tags);
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tags could not be loaded.");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not show a response that arrives after sign-out to the next account", async () => {
+    let answer!: (value: unknown) => void;
+    const slow = new Promise((resolve) => { answer = resolve; });
+    const get_tags = vi.fn().mockImplementationOnce(() => slow).mockImplementationOnce(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    await screen.findByRole("status");
+
+    await signOutAndBackIn();
+    answer(tags);
+    await Promise.resolve();
+    await tick();
+    await openTags();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading tags…");
+    expect(screen.queryByRole("treeitem")).not.toBeInTheDocument();
+  });
+
+  it("keeps the rest of Lymic working when the key lacks tag.read", async () => {
+    renderAuthenticatedPage({ get_tags: async () => { throw "tags_permission_denied:tag.read"; }, get_places: async () => [{ city: "Paris", thumbnailAssetId: "a" }] });
+    await openTags();
+    await screen.findByRole("alert");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Explore" }));
+    expect(await screen.findByRole("button", { name: "Paris" })).toBeInTheDocument();
+  });
+
+  it("reloads after Synchronization settles while the Tags view is open", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    expect(calls("get_tags")).toBe(1);
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
+  });
+
+  it("only marks the Tags stale when Synchronization settles elsewhere and reloads once on return", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    await waitFor(() => expect(calls("get_timeline_buckets")).toBeGreaterThan(1));
+    expect(calls("get_tags")).toBe(1);
+
+    await openTags();
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
+  });
+
+  it("remembers its own scroll position when leaving and returning", async () => {
+    renderAuthenticatedPage({ get_tags: async () => tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    const main = document.querySelector("main") as HTMLElement;
+    main.scrollTop = 140;
+    await fireEvent.scroll(main);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Explore" }));
+    main.scrollTop = 0;
+    await openTags();
+
+    await waitFor(() => expect(main.scrollTop).toBe(140));
+  });
+
+  /** Gives `main` a real layout: its scroll height is what the rendered tree gives it, and a scroll position beyond that is clamped, as in a browser. */
+  function layOut(main: HTMLElement) {
+    let top = 0;
+    Object.defineProperty(main, "clientHeight", { configurable: true, get: () => 100 });
+    Object.defineProperty(main, "scrollHeight", { configurable: true, get: () => 100 + main.querySelectorAll('[role="treeitem"]').length * 100 });
+    Object.defineProperty(main, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (value: number) => { top = Math.max(0, Math.min(value, main.scrollHeight - main.clientHeight)); },
+    });
+  }
+
+  it("restores its scroll position on reopening while the tree reloads after a Synchronization settled elsewhere", async () => {
+    const get_tags = vi.fn().mockResolvedValueOnce(tags).mockImplementation(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    const main = document.querySelector("main") as HTMLElement;
+    layOut(main);
+    main.scrollTop = 140;
+    await fireEvent.scroll(main);
+    await fireEvent.click(screen.getByRole("button", { name: "Explore" }));
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    main.scrollTop = 0;
+
+    await openTags();
+
+    await waitFor(() => expect(calls("get_tags")).toBeGreaterThanOrEqual(2));
+    expect(screen.getAllByRole("treeitem").length).toBeGreaterThan(1);
+    await waitFor(() => expect(main.scrollTop).toBe(140));
+  });
+
+  it("restores its scroll position on returning from a Tag Timeline while the tree reloads", async () => {
+    const get_tags = vi.fn().mockResolvedValueOnce(tags).mockImplementation(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_tags, get_tag_timeline_buckets: async () => [], get_tag_timeline_bucket_assets: async () => [] });
+    await openTags();
+    await screen.findByRole("treeitem", { name: "Travel" });
+    const main = document.querySelector("main") as HTMLElement;
+    layOut(main);
+    main.scrollTop = 140;
+    await fireEvent.scroll(main);
+    await fireEvent.click(screen.getByRole("treeitem", { name: "Family" }));
+    await screen.findByRole("heading", { name: "Family", level: 1 });
+    await waitFor(() => expect(syncIdle).toBeTypeOf("function"));
+    syncIdle!();
+    main.scrollTop = 0;
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Tags" }));
+
+    await waitFor(() => expect(calls("get_tags")).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(main.scrollTop).toBe(140));
+  });
+
+  async function signOutAndBackIn() {
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+    expect(await screen.findByRole("heading", { name: "Login" })).toBeInTheDocument();
+    await fireEvent.input(screen.getByLabelText("Server URL"), { target: { value: "https://immich.example" } });
+    await fireEvent.input(screen.getByLabelText("API Key"), { target: { value: "secret-key" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Login" }));
+  }
+
+  it("clears the Tags, the expansion state and the scroll position on sign-out", async () => {
+    const get_tags = vi.fn().mockResolvedValueOnce(tags).mockImplementationOnce(() => new Promise(() => {}));
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    await fireEvent.click(await tagToggle("Italy"));
+    await screen.findByRole("treeitem", { name: "Rome" });
+    const main = document.querySelector("main") as HTMLElement;
+    main.scrollTop = 140;
+    await fireEvent.scroll(main);
+
+    await signOutAndBackIn();
+    await openTags();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading tags…");
+    expect(screen.queryByRole("treeitem")).not.toBeInTheDocument();
+    expect(document.querySelector("main")!.scrollTop).toBe(0);
+  });
+
+  it("starts with the top level expanded again for the next account", async () => {
+    const get_tags = vi.fn().mockResolvedValue(tags);
+    renderAuthenticatedPage({ get_tags });
+    await openTags();
+    await fireEvent.click(await tagToggle("Italy"));
+    await screen.findByRole("treeitem", { name: "Rome" });
+
+    await signOutAndBackIn();
+    await openTags();
+
+    expect(await screen.findByRole("treeitem", { name: "Italy" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("treeitem", { name: "Rome" })).not.toBeInTheDocument();
   });
 });
 
@@ -3988,5 +4573,169 @@ describe("Search display options and Rating", () => {
     expect(within(display()).getByRole("button", { name: "Open Archive" })).toBeInTheDocument();
     await fireEvent.click(within(display()).getByRole("checkbox", { name: "Archived" }));
     expect(within(display()).getByRole("button", { name: "Open Archive" })).toBeInTheDocument();
+  });
+});
+
+describe("Lightbox Tag chips", () => {
+  const march = "2025-03-01T00:00:00.000Z";
+  const photo = (id: string) => ({ id, width: 640, height: 480, type: "IMAGE", takenAt: "2025-03-02T00:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false });
+  const timelineOf = (id: string) => ({ buckets: [{ timeBucket: march, count: 1 }], assetsByBucket: { [march]: [photo(id)] } });
+  const rome = { id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", color: "#336699" };
+  const food = { id: "t-food", name: "Food", value: "Food" };
+  const detailsWith = (tags?: unknown[]) => ({
+    originalFileName: "IMG_0001.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 640, imageHeight: 480, fileSize: 1024,
+    ...(tags ? { tags } : {}),
+  });
+  const handlers = (tags?: unknown[]) => ({
+    get_asset_details: async () => detailsWith(tags),
+    get_tags: async () => [{ id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", parentId: null, color: null }],
+    get_tag_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+    get_tag_timeline_bucket_assets: async () => [photo("tagged-1")],
+    get_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+    get_timeline_bucket_assets: async () => [photo("photo-1")],
+    get_favorites_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+    get_favorites_timeline_bucket_assets: async () => [photo("favorite-1")],
+    get_album_catalogue: async () => [{ id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null }],
+    get_album_timeline: async () => timelineOf("album-asset"),
+    get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+    get_person_timeline_buckets: async () => [{ timeBucket: march, count: 1 }],
+    get_person_timeline_bucket_assets: async () => [photo("person-asset")],
+    get_places: async () => [{ city: "Paris", thumbnailAssetId: "place-asset" }],
+    get_place_timeline: async () => timelineOf("place-asset"),
+    get_memories: async () => [{ id: "m-1", kind: "onThisDay", memoryAt: "2019-01-02T00:00:00.000Z", year: 2019, personName: null, coverAssetId: "memory-asset", timeline: timelineOf("memory-asset") }],
+  });
+  const openLightbox = async () => {
+    await fireEvent.click((await screen.findAllByRole("button", { name: "Open photo" }))[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Info" }));
+    return lightbox;
+  };
+  const clickChip = async (lightbox: HTMLElement, path = "Travel/Italy/Rome") =>
+    fireEvent.click(await within(lightbox).findByRole("button", { name: `Show photos tagged ${path}` }));
+  const nav = async (name: string) => fireEvent.click(await screen.findByRole("button", { name }));
+
+  const origins: Array<[string, string, () => Promise<void>]> = [
+    ["Photos", "Photos", async () => {}],
+    ["Favorites", "Favorites", async () => { await nav("Favorites"); }],
+    ["an Album", "Holiday", async () => { await nav("Albums"); await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ })); }],
+    ["a Person", "Ada", async () => { await nav("Explore"); await fireEvent.click(await screen.findByRole("button", { name: "Ada" })); }],
+    ["a Place", "Paris", async () => { await nav("Explore"); await fireEvent.click(await screen.findByRole("button", { name: "Paris" })); }],
+    ["a Memory", "Jan 2, 2019", async () => { await nav("Explore"); await fireEvent.click(await screen.findByRole("button", { name: "Jan 2, 2019" })); }],
+  ];
+
+  it.each(origins)("opens the Tag Timeline from a chip in %s, closes the Lightbox and Back returns there", async (_name, backTo, openOrigin) => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers([rome, food]));
+    await openOrigin();
+    const lightbox = await openLightbox();
+
+    await clickChip(lightbox);
+
+    expect(await screen.findByRole("heading", { name: "Travel/Italy/Rome", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_buckets", { tagId: "t-rome" });
+
+    await fireEvent.click(screen.getByRole("button", { name: `Back to ${backTo}` }));
+
+    expect(await screen.findByRole("heading", { name: backTo, level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Travel/Italy/Rome" })).not.toBeInTheDocument();
+  });
+
+  it("shows each Tag as a read-only chip with its name, its full path for assistive technology and its colour", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers([rome, food]));
+    const lightbox = await openLightbox();
+
+    const chip = await within(lightbox).findByRole("button", { name: "Show photos tagged Travel/Italy/Rome" });
+    expect(chip).toHaveTextContent("Rome");
+    expect(chip).toHaveAttribute("title", "Travel/Italy/Rome");
+    expect(chip.querySelector("[data-testid='tag-color-dot']")).toHaveStyle({ backgroundColor: "#336699" });
+    const second = within(lightbox).getByRole("button", { name: "Show photos tagged Food" });
+    expect(second.querySelector("[data-testid='tag-color-dot']")).toBeNull();
+    expect(within(lightbox).getByRole("heading", { name: "Tags" })).toBeInTheDocument();
+    // Read-only: nothing offers to add, rename or remove a Tag.
+    expect(within(lightbox).queryByRole("button", { name: /add tag|remove tag|rename/i })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["the server does not report Tags", undefined],
+    ["the asset has no Tags", []],
+  ])("shows no chips and no error when %s", async (_name, tags) => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers(tags as unknown[] | undefined));
+    const lightbox = await openLightbox();
+
+    await within(lightbox).findByText("IMG_0001.jpg");
+    expect(within(lightbox).queryByRole("heading", { name: "Tags" })).not.toBeInTheDocument();
+    expect(within(lightbox).queryByRole("button", { name: /Show photos tagged/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("opens the Tag Timeline from the Lightbox of a Tag Timeline and Back returns to the origin of the chain, not to the first Tag", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers([rome, { id: "t-italy", name: "Italy", value: "Travel/Italy" }]));
+    const viewportOf = async () => (await screen.findByRole("button", { name: "Open photo" })).closest(".overflow-y-auto") as HTMLElement;
+    const viewport = await viewportOf();
+    viewport.scrollTop = 300;
+    await fireEvent.scroll(viewport);
+    await clickChip(await openLightbox());
+    await screen.findByRole("heading", { name: "Travel/Italy/Rome", level: 1 });
+    const tagViewport = await viewportOf();
+    tagViewport.scrollTop = 50;
+    await fireEvent.scroll(tagViewport);
+
+    await clickChip(await openLightbox(), "Travel/Italy");
+
+    expect(await screen.findByRole("heading", { name: "Travel/Italy", level: 1 })).toBeInTheDocument();
+    expect(tauri.invoke).toHaveBeenCalledWith("get_tag_timeline_buckets", { tagId: "t-italy" });
+    expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
+    // The new Tag Timeline starts at its top, not at the previous Tag's scroll position.
+    await waitFor(async () => expect((await viewportOf()).scrollTop).toBe(0));
+    expect(screen.getByRole("button", { name: "Back to Photos" })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Photos" }));
+
+    expect(await screen.findByRole("heading", { name: "Photos", level: 1 })).toBeInTheDocument();
+    await waitFor(async () => expect((await viewportOf()).scrollTop).toBe(300));
+    expect(screen.queryByRole("button", { name: /Back to Travel/ })).not.toBeInTheDocument();
+  });
+
+  it("restores the scroll position of a sub-view the chip was selected in", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage(handlers([rome]));
+    await nav("Albums");
+    await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+    const viewportOf = async () => (await screen.findByRole("button", { name: "Open photo" })).closest(".overflow-y-auto") as HTMLElement;
+    const viewport = await viewportOf();
+    viewport.scrollTop = 220;
+    await fireEvent.scroll(viewport);
+
+    await clickChip(await openLightbox());
+    await screen.findByRole("heading", { name: "Travel/Italy/Rome", level: 1 });
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Holiday" }));
+
+    await waitFor(async () => expect((await viewportOf()).scrollTop).toBe(220));
+    expect(screen.getByRole("button", { name: "Back to Albums" })).toBeInTheDocument();
+  });
+
+  it("opens the Tag Timeline from a chip in the Lightbox of Search results and Back returns to the Search", async () => {
+    stubImmediateIntersectionObserver();
+    renderAuthenticatedPage({
+      ...handlers([rome]),
+      get_search_support: async () => ({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
+      search_assets: async () => ({ ...timelineOf("found-1"), truncated: false }),
+    });
+    await fireEvent.input(await screen.findByRole("searchbox", { name: "Search your Immich library" }), { target: { value: "IMG" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await screen.findByRole("heading", { name: "Search", level: 1 });
+
+    await clickChip(await openLightbox());
+
+    expect(await screen.findByRole("heading", { name: "Travel/Italy/Rome", level: 1 })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Search" }));
+    expect(await screen.findByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
+    expect(await screen.findAllByRole("button", { name: "Open photo" })).toHaveLength(1);
   });
 });

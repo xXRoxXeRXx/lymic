@@ -2,8 +2,10 @@ use super::bulk_check::{
     bulk_check_response_error, parse_bulk_check_response, BulkCheckDuplicate, BulkCheckError,
 };
 use super::response::{
-    read_response_body_limited, send_checked, send_checked_as, MAX_SUCCESS_RESPONSE_BYTES,
+    non_empty, read_response_body_limited, send_checked, send_checked_as,
+    MAX_SUCCESS_RESPONSE_BYTES,
 };
+use super::tags::{asset_tags_from_value, AssetTag};
 use super::upload::{parse_upload_response, upload_form, SidecarDirectoryCache};
 use crate::sync::progress::TransferStatsTracker;
 use reqwest::{
@@ -89,6 +91,9 @@ pub(crate) struct AssetDetails {
     pub image_width: Option<u32>,
     pub image_height: Option<u32>,
     pub file_size: Option<u64>,
+    /// The Tags of the Remote Asset. `None` when the server does not report them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<AssetTag>>,
 }
 
 #[derive(Deserialize)]
@@ -103,6 +108,9 @@ struct AssetDetailsResponse {
     is_favorite: bool,
     #[serde(rename = "exifInfo", default)]
     exif: Option<AssetDetailsExif>,
+    /// Kept raw so a malformed field or entry is skipped instead of failing the request.
+    #[serde(default)]
+    tags: Option<serde_json::Value>,
 }
 
 #[derive(Default, Deserialize)]
@@ -135,10 +143,6 @@ struct AssetDetailsExif {
     image_height: Option<u32>,
     #[serde(rename = "fileSizeInByte", default)]
     file_size: Option<u64>,
-}
-
-fn non_empty(value: Option<String>) -> Option<String> {
-    value.and_then(|value| (!value.trim().is_empty()).then_some(value))
 }
 
 fn original_file_name(value: Option<String>) -> Option<String> {
@@ -229,6 +233,7 @@ impl From<AssetDetailsResponse> for AssetDetails {
             image_width: exif.image_width,
             image_height: exif.image_height,
             file_size: exif.file_size,
+            tags: response.tags.and_then(asset_tags_from_value),
         }
     }
 }

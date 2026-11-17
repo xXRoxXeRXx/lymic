@@ -12,6 +12,7 @@ import { createPlacesController } from "./places-controller.svelte";
 import { createRemovableVolumeController } from "./removable-volume-controller.svelte";
 import { createSearchController } from "./search-controller.svelte";
 import { createSyncController } from "./sync-controller.svelte";
+import { createTagsController } from "./tags-controller.svelte";
 import { createTargetAlbumCatalogue } from "./target-album-catalogue.svelte";
 import { createTrashTimelineController } from "./trash-timeline-controller.svelte";
 import { createTimelineController } from "./timeline-controller.svelte";
@@ -30,6 +31,7 @@ import type {
   RemovableVolumeDesktopAdapter,
   SearchDesktopAdapter,
   SyncDesktopAdapter,
+  TagsDesktopAdapter,
   TimelineDesktopAdapter,
   TrashTimelineDesktopAdapter,
   WatchedFoldersDesktopAdapter,
@@ -48,6 +50,7 @@ export type SessionDesktopAdapter =
   MapDesktopAdapter &
   PeopleDesktopAdapter &
   PlacesDesktopAdapter &
+  TagsDesktopAdapter &
   MemoriesDesktopAdapter &
   AllMemoriesDesktopAdapter &
   SearchDesktopAdapter &
@@ -60,6 +63,8 @@ export function createSessionController(options: {
   resetView?(): void;
   /** Whether the Explore Overview is the open view; it refreshes after Synchronization settles only then. */
   isExploreActive?(): boolean;
+  /** Whether the Tags view is the open view; it reloads after Synchronization settles only then. */
+  isTagsActive?(): boolean;
 }) {
   const { adapter, t } = options;
   const feedback = createFeedbackController(() => t("unknown_error"));
@@ -85,6 +90,7 @@ export function createSessionController(options: {
     onSyncSettled: () => {
       void timeline.refresh();
       void explore.refreshIfActive();
+      void tags.refreshIfActive();
       return watchedFolders.refresh();
     },
   });
@@ -94,6 +100,7 @@ export function createSessionController(options: {
   const trash = createTrashTimelineController(adapter);
   const people = createPeopleController(adapter);
   const places = createPlacesController(adapter);
+  const tags = createTagsController(adapter, { isActive: () => options.isTagsActive?.() ?? false });
   const memories = createMemoriesController(adapter);
   const allMemories = createAllMemoriesController(adapter);
   const explore = createExploreController({ people, places, memories, isActive: () => options.isExploreActive?.() ?? false });
@@ -113,6 +120,7 @@ export function createSessionController(options: {
     trash,
     people,
     places,
+    tags,
     memories,
     allMemories,
     map,
@@ -186,6 +194,7 @@ export function createSessionController(options: {
     trash,
     people,
     places,
+    tags,
     memories,
     allMemories,
     explore,

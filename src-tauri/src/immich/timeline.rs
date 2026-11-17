@@ -367,6 +367,38 @@ impl ImmichClient {
         )
     }
 
+    pub async fn get_tag_timeline_buckets(
+        &self,
+        tag_id: &str,
+    ) -> Result<Vec<TimelineBucket>, String> {
+        Self::validate_path_segment(tag_id, "tag ID")?;
+        self.fetch_timeline_buckets_with_query(
+            &[("size", "MONTH"), ("tagId", tag_id)],
+            "tag timeline buckets",
+            None,
+        )
+        .await
+    }
+
+    pub async fn get_tag_timeline_bucket_assets(
+        &self,
+        tag_id: &str,
+        time_bucket: &str,
+    ) -> Result<Vec<TimelineAsset>, String> {
+        Self::validate_path_segment(tag_id, "tag ID")?;
+        self.fetch_timeline_bucket_assets_with_query(
+            &[
+                ("size", "MONTH"),
+                ("timeBucket", time_bucket),
+                ("tagId", tag_id),
+            ],
+            "tag timeline bucket",
+            false,
+            None,
+        )
+        .await
+    }
+
     async fn fetch_timeline_buckets_with_query(
         &self,
         query: &[(&str, &str)],
@@ -634,6 +666,7 @@ pub(super) fn group_album_timeline_assets(assets: Vec<TimelineAsset>) -> AlbumTi
 #[cfg(test)]
 mod tests {
     use super::{group_album_timeline_assets, ImmichClient, TimelineAsset};
+    use crate::immich::tags::AssetTag;
     use crate::immich::test_support::{serve_pages, test_client};
     use crate::immich::AssetDetails;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -829,10 +862,70 @@ mod tests {
                     image_width: None,
                     image_height: None,
                     file_size: None,
+                    tags: None,
                 }
             );
         }
         server.await.unwrap();
+    }
+
+    async fn tags_of(body: &'static str) -> Option<Vec<AssetTag>> {
+        let (url, server) = serve_pages(vec![("200 OK", body)]).await;
+        let details = test_client(url, "test-key")
+            .get_asset_details("asset-1")
+            .await
+            .unwrap();
+        assert!(server.await.unwrap()[0].starts_with("GET /api/assets/asset-1 HTTP/1.1"));
+        details.tags
+    }
+
+    fn tag(id: &str, name: &str, value: &str, color: Option<&str>) -> AssetTag {
+        AssetTag {
+            id: id.to_string(),
+            name: name.to_string(),
+            value: value.to_string(),
+            color: color.map(str::to_string),
+        }
+    }
+
+    #[tokio::test]
+    async fn reads_the_tags_of_asset_details() {
+        let tags = tags_of(
+            r##"{"tags":[{"id":"t1","name":"Rome","value":"Travel/Italy/Rome","color":"#336699","parentId":"t0","createdAt":"x"},{"id":"t2","name":"Food","value":"Food"}]}"##,
+        )
+        .await;
+
+        assert_eq!(
+            tags,
+            Some(vec![
+                tag("t1", "Rome", "Travel/Italy/Rome", Some("#336699")),
+                tag("t2", "Food", "Food", None),
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn reports_no_tags_when_the_server_omits_them() {
+        assert_eq!(tags_of(r#"{"originalFileName":"a.jpg"}"#).await, None);
+        assert_eq!(tags_of(r#"{"tags":null}"#).await, None);
+        assert_eq!(tags_of(r#"{"tags":[]}"#).await, Some(Vec::new()));
+    }
+
+    #[tokio::test]
+    async fn tolerates_partial_tag_entries_in_asset_details() {
+        let tags = tags_of(
+            r##"{"tags":[{"id":"t1","value":"Travel/Italy"},{"id":"t2","name":"Solo"},{"id":"t3","name":"Blank","value":"","color":""},{"name":"No id","value":"No id"},{"id":""},42,{"id":"t4"}]}"##,
+        )
+        .await;
+
+        assert_eq!(
+            tags,
+            Some(vec![
+                tag("t1", "Italy", "Travel/Italy", None),
+                tag("t2", "Solo", "Solo", None),
+                tag("t3", "Blank", "Blank", None),
+            ])
+        );
     }
 
     #[tokio::test]
@@ -1034,6 +1127,64 @@ mod tests {
             assets[0].taken_at.as_deref(),
             Some("2025-03-01T12:30:00.000Z")
         );
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetches_timeline_buckets_and_assets_filtered_to_a_tag() {
+        let (url, server) = serve_pages(vec![
+            (
+                "200 OK",
+                r#"[{"timeBucket":"2025-02-01T00:00:00.000Z","count":1},{"timeBucket":"2025-03-01T00:00:00.000Z","count":1}]"#,
+            ),
+            (
+                "200 OK",
+                r#"[{"id":"asset-1","type":"IMAGE","exifInfo":{"imageWidth":640,"imageHeight":480,"dateTimeOriginal":"2025-03-01T12:30:00.000Z"}}]"#,
+            ),
+        ])
+        .await;
+        let client = test_client(url, "test-key");
+
+        let buckets = client.get_tag_timeline_buckets("tag-1").await.unwrap();
+        let assets = client
+            .get_tag_timeline_bucket_assets("tag-1", "2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap();
+
+        assert_eq!(buckets.len(), 2);
+        assert_eq!(buckets[0].time_bucket, "2025-03-01T00:00:00.000Z");
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].id, "asset-1");
+        let requests = server.await.unwrap();
+        assert!(
+            requests[0].starts_with("GET /api/timeline/buckets?size=MONTH&tagId=tag-1 HTTP/1.1")
+        );
+        assert!(requests[1].starts_with("GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&tagId=tag-1 HTTP/1.1"));
+        for request in &requests {
+            assert!(request.contains("x-api-key: test-key"));
+            assert!(!request.contains("tagIds"));
+        }
+    }
+
+    #[tokio::test]
+    async fn a_failed_tag_timeline_request_never_names_a_permission_or_leaks_the_key() {
+        let (url, server) = serve_pages(vec![
+            ("403 Forbidden", ""),
+            ("500 Internal Server Error", ""),
+        ])
+        .await;
+        let client = test_client(url, "test-key");
+
+        let forbidden = client.get_tag_timeline_buckets("tag-1").await.unwrap_err();
+        let failed = client
+            .get_tag_timeline_bucket_assets("tag-1", "2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap_err();
+
+        for error in [forbidden, failed] {
+            assert!(!error.contains("permission_denied"), "{error}");
+            assert!(!error.contains("test-key"), "{error}");
+        }
         server.await.unwrap();
     }
 

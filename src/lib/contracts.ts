@@ -89,6 +89,19 @@ export interface AssetDetails {
   imageWidth: number | null;
   imageHeight: number | null;
   fileSize: number | null;
+  /** The Tags of the Remote Asset. Absent when the server does not report them: no chips, never an error. */
+  tags?: AssetTag[];
+}
+
+/** A Tag of one Remote Asset, as the Lightbox shows it. */
+export interface AssetTag {
+  id: string;
+  /** The Tag's own name, without its ancestors. */
+  name: string;
+  /** The Tag's full path, for example `Travel/Italy/Rome`. */
+  value: string;
+  /** A colour as Immich returns it; only a valid `#RRGGBB` is shown. */
+  color: string | null;
 }
 
 export interface AlbumTimeline {
@@ -114,6 +127,11 @@ export interface PeoplePage {
 export interface Place {
   city: string;
   thumbnailAssetId: string;
+}
+
+/** A Tag of the Immich Library. Immich returns Tags as a flat list; the hierarchy is `parentId`. */
+export interface Tag extends AssetTag {
+  parentId: string | null;
 }
 
 export type MemoryKind = "onThisDay" | "birthday" | "unknown";

@@ -183,11 +183,11 @@ _Avoid_: memory slideshow, memory player
 ## Tags
 
 **Tag**:
-A named, optionally hierarchical label that Immich attaches to Remote Assets. A Tag's name is its full path, so a Tag can have a parent Tag and child Tags. Lymic only reads Tags; it never creates, edits, assigns or deletes them.
+A named, optionally hierarchical label that Immich attaches to Remote Assets. A Tag is identified by its full path (for example `Travel/Italy/Rome`), so a Tag can have a parent Tag and child Tags; its own name is the last part of that path. Lymic only reads Tags, to browse them and to show them on a Remote Asset; it never creates, edits, assigns or deletes them.
 _Avoid_: label, keyword, category
 
 **Tag Timeline**:
-The chronological presentation of the Remote Assets belonging to one Tag, grouped into time buckets like the Photo Timeline. Assets without a usable capture time are omitted.
+The chronological presentation of the Remote Assets belonging to one Tag, grouped into time buckets like the Photo Timeline. It shows what Immich returns for that Tag; Lymic adds no rule of its own about the assets of its child Tags.
 _Avoid_: tag gallery, tag feed
 
 ## Search

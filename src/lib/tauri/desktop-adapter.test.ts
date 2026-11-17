@@ -117,6 +117,8 @@ describe("tauriDesktopAdapter", () => {
     await placeTimelineAdapter.getPlaceTimeline("Paris");
     await tauriDesktopAdapter.getPersonTimelineBuckets("person-1");
     await tauriDesktopAdapter.getPersonTimelineBucketAssets("person-1", "2025-03-01T00:00:00.000Z");
+    await tauriDesktopAdapter.getTagTimelineBuckets("tag-1");
+    await tauriDesktopAdapter.getTagTimelineBucketAssets("tag-1", "2025-03-01T00:00:00.000Z");
     await preferencesAdapter.getLocaleCatalog();
     await preferencesAdapter.updateLocale("de");
     await preferencesAdapter.getDatabaseRecoveryNotice();
@@ -184,6 +186,8 @@ describe("tauriDesktopAdapter", () => {
       ["get_place_timeline", { city: "Paris" }],
       ["get_person_timeline_buckets", { personId: "person-1" }],
       ["get_person_timeline_bucket_assets", { personId: "person-1", timeBucket: "2025-03-01T00:00:00.000Z" }],
+      ["get_tag_timeline_buckets", { tagId: "tag-1" }],
+      ["get_tag_timeline_bucket_assets", { tagId: "tag-1", timeBucket: "2025-03-01T00:00:00.000Z" }],
       ["get_locale_catalog"],
       ["update_locale", { locale: "de" }],
       ["get_database_recovery_notice"],

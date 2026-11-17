@@ -1,6 +1,7 @@
 import type { MemoriesViewState } from "./memories-controller.svelte";
 import type { PeopleViewState } from "./people-controller.svelte";
 import type { PlacesViewState } from "./places-controller.svelte";
+import { createRefreshWhenActive } from "./refresh-when-active";
 import type { RequestFailure } from "./request-failure";
 
 /**
@@ -76,24 +77,18 @@ export function createExploreController(options: {
   };
   const sections = [people, places, memories] as const;
 
-  let stale = false;
-
-  function refresh() {
-    stale = false;
-    return Promise.all(sections.map((section) => section.refresh())).then(() => undefined);
-  }
+  const refreshing = createRefreshWhenActive({
+    isActive: options.isActive,
+    refresh: () => Promise.all(sections.map((section) => section.refresh())).then(() => undefined),
+  });
 
   return {
     people,
     places,
     memories,
     get isAllEmpty() { return !sections.some(isExploreSectionVisible); },
-    refresh,
-    refreshIfActive() {
-      if (options.isActive()) return refresh();
-      stale = true;
-      return Promise.resolve();
-    },
-    refreshIfStale: () => (stale ? refresh() : Promise.resolve()),
+    refresh: refreshing.refresh,
+    refreshIfActive: refreshing.refreshIfActive,
+    refreshIfStale: refreshing.refreshIfStale,
   };
 }

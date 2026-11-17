@@ -215,6 +215,29 @@ pub(crate) async fn get_person_timeline_bucket_assets(
     .await
 }
 
+#[tauri::command]
+pub(crate) async fn get_tag_timeline_buckets(
+    tag_id: String,
+) -> Result<Vec<TimelineBucket>, String> {
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.get_tag_timeline_buckets(&tag_id).await
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_tag_timeline_bucket_assets(
+    tag_id: String,
+    time_bucket: String,
+) -> Result<Vec<TimelineAsset>, String> {
+    ImmichSession::with_stored_credentials(|client| async move {
+        client
+            .get_tag_timeline_bucket_assets(&tag_id, &time_bucket)
+            .await
+    })
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
