@@ -83,8 +83,6 @@ Create the API key in Immich under **Account Settings → API Keys**. The simple
 | `map.read` | Map. Immich releases before 2.5 do not check it. |
 | `userProfileImage.read` | Optional: your profile picture. Without it no avatar is shown. |
 
-Lymic does not need `album.update`.
-
 These permissions were checked against the Immich v3.4.1 source. Which behavior was and was not confirmed on a live server is recorded in the [application map](docs/agents/application-map.md).
 
 ---
@@ -93,14 +91,27 @@ These permissions were checked against the Immich v3.4.1 source. Which behavior 
 
 ### Download
 
-Download the latest installer from the [Lymic releases](https://github.com/xXRoxXeRXx/lymic/releases) page, or use a package manager:
+Download the latest installer from the [Lymic releases](https://github.com/xXRoxXeRXx/lymic/releases) page, or install from a store or package manager:
 
-| Platform | Install |
-|---|---|
-| **Windows** | [Microsoft Store](https://apps.microsoft.com/store/detail/9NLQWHTHR1FZ?cid=DevShareMCLPCS) or `winget install 9NLQWHTHR1FZ` |
-| **Linux (Snap)** | [Snap Store](https://snapcraft.io/lymic) or `sudo snap install lymic` |
-| **Arch Linux (AUR)** | `paru -S lymic-bin` or `yay -S lymic-bin` |
-| **macOS (Homebrew)** | `brew tap xXRoxXeRXx/tap && brew install --cask lymic` ([guide](docs/homebrew-cask.md)) |
+**Windows (Microsoft Store)**
+
+[![Download from Microsoft Store](https://get.microsoft.com/images/en-us%20dark.svg)](https://apps.microsoft.com/store/detail/9NLQWHTHR1FZ?cid=DevShareMCLPCS)
+
+```powershell
+winget install 9NLQWHTHR1FZ
+```
+
+**Linux (Snap)**
+
+[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/lymic)
+
+```bash
+sudo snap install lymic
+```
+
+**Arch Linux (AUR)** — `paru -S lymic-bin` or `yay -S lymic-bin`
+
+**macOS (Homebrew)** — `brew tap xXRoxXeRXx/tap && brew install --cask lymic` ([guide](docs/homebrew-cask.md))
 
 > [!IMPORTANT]
 > **macOS:** Lymic has no paid Apple Developer certificate, so macOS may block it as "unidentified" or "damaged". Drag it into **Applications**, then right-click it and choose **Open**. If it is still reported as damaged, run `xattr -cr /Applications/Lymic.app`.
