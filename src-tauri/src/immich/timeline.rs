@@ -54,6 +54,54 @@ const ARCHIVE_PERMISSION_CODE: PermissionCode = PermissionCode {
     hint: "asset.read",
 };
 
+/// One library timeline view (Photos, Favorites, Archive, Trash): the filter parameters both
+/// timeline endpoints send after `size` (and `timeBucket`), and how the view reads responses
+/// and failures.
+#[derive(Clone, Copy)]
+struct TimelineFilter {
+    /// Names the view in failure messages (`Failed to fetch {name} buckets`).
+    name: &'static str,
+    query: &'static [(&'static str, &'static str)],
+    /// Whether a bucket asset without `isFavorite` in the response is a favorite.
+    default_favorite: bool,
+    permission: Option<PermissionCode>,
+}
+
+/// The Photo Timeline. `visibility=timeline` hides Archived Assets, as Immich Web does; without
+/// it Immich v3.4.1 includes them (#242).
+const PHOTO_TIMELINE: TimelineFilter = TimelineFilter {
+    name: "timeline",
+    query: &[("visibility", "timeline")],
+    default_favorite: false,
+    permission: None,
+};
+
+/// The Favorites Timeline; like the Photo Timeline it hides Archived Assets with
+/// `visibility=timeline` (#242).
+const FAVORITES_TIMELINE: TimelineFilter = TimelineFilter {
+    name: "favorites timeline",
+    query: &[("isFavorite", "true"), ("visibility", "timeline")],
+    default_favorite: true,
+    permission: None,
+};
+
+/// The user's Archived Assets (visibility filter `archive`).
+const ARCHIVE_TIMELINE: TimelineFilter = TimelineFilter {
+    name: "archive timeline",
+    query: &[("visibility", "archive")],
+    default_favorite: false,
+    permission: Some(ARCHIVE_PERMISSION_CODE),
+};
+
+/// The user's Trashed Assets (filter `isTrashed=true`). Observed on Immich v3.4.1 (one server
+/// version only): the parameter is accepted and `asset.read` suffices.
+const TRASH_TIMELINE: TimelineFilter = TimelineFilter {
+    name: "trash timeline",
+    query: &[("isTrashed", "true")],
+    default_favorite: false,
+    permission: None,
+};
+
 /// Like `send_checked`, except that a 403 becomes the credential-free permission code when
 /// `permission` is given. Every other failure keeps `send_checked`'s message.
 async fn send_timeline_request(
@@ -440,120 +488,85 @@ impl ImmichClient {
         )
     }
 
-    /// Timeline buckets of the Photo Timeline. `visibility=timeline` hides Archived Assets, as
-    /// Immich Web does; without it Immich v3.4.1 includes them (#242).
-    pub async fn get_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
+    /// Timeline buckets of one library timeline view: `size=MONTH` followed by the view's filter.
+    async fn get_filtered_timeline_buckets(
+        &self,
+        filter: TimelineFilter,
+    ) -> Result<Vec<TimelineBucket>, String> {
+        let mut query = vec![("size", "MONTH")];
+        query.extend_from_slice(filter.query);
         self.fetch_timeline_buckets_with_query(
-            &[("size", "MONTH"), ("visibility", "timeline")],
-            "timeline buckets",
-            None,
+            &query,
+            &format!("{} buckets", filter.name),
+            filter.permission,
         )
         .await
+    }
+
+    /// The assets of one bucket of a library timeline view: `size=MONTH` and `timeBucket`
+    /// followed by the view's filter.
+    async fn get_filtered_timeline_bucket_assets(
+        &self,
+        filter: TimelineFilter,
+        time_bucket: &str,
+    ) -> Result<Vec<TimelineAsset>, String> {
+        let mut query = vec![("size", "MONTH"), ("timeBucket", time_bucket)];
+        query.extend_from_slice(filter.query);
+        self.fetch_timeline_bucket_assets_with_query(
+            &query,
+            &format!("{} bucket", filter.name),
+            filter.default_favorite,
+            filter.permission,
+        )
+        .await
+    }
+
+    pub async fn get_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
+        self.get_filtered_timeline_buckets(PHOTO_TIMELINE).await
     }
 
     pub async fn get_timeline_bucket_assets(
         &self,
         time_bucket: &str,
     ) -> Result<Vec<TimelineAsset>, String> {
-        self.fetch_timeline_bucket_assets_with_query(
-            &[
-                ("size", "MONTH"),
-                ("timeBucket", time_bucket),
-                ("visibility", "timeline"),
-            ],
-            "timeline bucket",
-            false,
-            None,
-        )
-        .await
+        self.get_filtered_timeline_bucket_assets(PHOTO_TIMELINE, time_bucket)
+            .await
     }
 
-    /// Timeline buckets of the Favorites Timeline; like the Photo Timeline it hides Archived
-    /// Assets with `visibility=timeline` (#242).
     pub async fn get_favorites_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
-        self.fetch_timeline_buckets_with_query(
-            &[
-                ("size", "MONTH"),
-                ("isFavorite", "true"),
-                ("visibility", "timeline"),
-            ],
-            "favorites timeline buckets",
-            None,
-        )
-        .await
+        self.get_filtered_timeline_buckets(FAVORITES_TIMELINE).await
     }
 
     pub async fn get_favorites_timeline_bucket_assets(
         &self,
         time_bucket: &str,
     ) -> Result<Vec<TimelineAsset>, String> {
-        self.fetch_timeline_bucket_assets_with_query(
-            &[
-                ("size", "MONTH"),
-                ("timeBucket", time_bucket),
-                ("isFavorite", "true"),
-                ("visibility", "timeline"),
-            ],
-            "favorites timeline bucket",
-            true,
-            None,
-        )
-        .await
+        self.get_filtered_timeline_bucket_assets(FAVORITES_TIMELINE, time_bucket)
+            .await
     }
 
-    /// Timeline buckets of the user's Archived Assets (visibility filter `archive`).
     pub async fn get_archive_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
-        self.fetch_timeline_buckets_with_query(
-            &[("size", "MONTH"), ("visibility", "archive")],
-            "archive timeline buckets",
-            Some(ARCHIVE_PERMISSION_CODE),
-        )
-        .await
+        self.get_filtered_timeline_buckets(ARCHIVE_TIMELINE).await
     }
 
     pub async fn get_archive_timeline_bucket_assets(
         &self,
         time_bucket: &str,
     ) -> Result<Vec<TimelineAsset>, String> {
-        self.fetch_timeline_bucket_assets_with_query(
-            &[
-                ("size", "MONTH"),
-                ("timeBucket", time_bucket),
-                ("visibility", "archive"),
-            ],
-            "archive timeline bucket",
-            false,
-            Some(ARCHIVE_PERMISSION_CODE),
-        )
-        .await
+        self.get_filtered_timeline_bucket_assets(ARCHIVE_TIMELINE, time_bucket)
+            .await
     }
 
-    /// Timeline buckets of the user's Trashed Assets (filter `isTrashed=true`). Observed on
-    /// Immich v3.4.1 (one server version only): the parameter is accepted and `asset.read` suffices.
     pub async fn get_trash_timeline_buckets(&self) -> Result<Vec<TimelineBucket>, String> {
-        self.fetch_timeline_buckets_with_query(
-            &[("size", "MONTH"), ("isTrashed", "true")],
-            "trash timeline buckets",
-            None,
-        )
-        .await
+        self.get_filtered_timeline_buckets(TRASH_TIMELINE).await
     }
 
     pub async fn get_trash_timeline_bucket_assets(
         &self,
         time_bucket: &str,
     ) -> Result<Vec<TimelineAsset>, String> {
-        self.fetch_timeline_bucket_assets_with_query(
-            &[
-                ("size", "MONTH"),
-                ("timeBucket", time_bucket),
-                ("isTrashed", "true"),
-            ],
-            "trash timeline bucket",
-            false,
-            None,
-        )
-        .await
+        self.get_filtered_timeline_bucket_assets(TRASH_TIMELINE, time_bucket)
+            .await
     }
 }
 
@@ -1609,6 +1622,54 @@ mod tests {
             assert!(!request.contains("isTrashed"));
             assert!(!request.contains("withPartners"));
         }
+    }
+
+    #[tokio::test]
+    async fn a_filtered_timeline_sends_its_filter_after_size_and_time_bucket_and_reads_its_responses_its_way(
+    ) {
+        const FILTER: super::TimelineFilter = super::TimelineFilter {
+            name: "example timeline",
+            query: &[("isOffline", "true"), ("visibility", "hidden")],
+            default_favorite: true,
+            permission: None,
+        };
+        let (url, server) = serve_pages(vec![
+            (
+                "200 OK",
+                r#"[{"timeBucket":"2025-02-01T00:00:00.000Z","count":1},{"timeBucket":"2025-03-01T00:00:00.000Z","count":1}]"#,
+            ),
+            (
+                "200 OK",
+                r#"[{"id":"legacy","type":"IMAGE","fileCreatedAt":"2025-03-14T10:00:00.000Z"}]"#,
+            ),
+            ("500 Internal Server Error", "internal secret stacktrace"),
+        ])
+        .await;
+        let client = test_client(url, "test-key");
+
+        let buckets = client.get_filtered_timeline_buckets(FILTER).await.unwrap();
+        assert_eq!(buckets[0].time_bucket, "2025-03-01T00:00:00.000Z");
+        let assets = client
+            .get_filtered_timeline_bucket_assets(FILTER, "2025-03-01T00:00:00.000Z")
+            .await
+            .unwrap();
+        assert!(assets[0].is_favorite);
+        let error = client
+            .get_filtered_timeline_bucket_assets(FILTER, "2025-02-01T00:00:00.000Z")
+            .await
+            .unwrap_err();
+        assert!(
+            error.starts_with("Failed to fetch example timeline bucket:"),
+            "{error}"
+        );
+
+        let requests = server.await.unwrap();
+        assert!(requests[0].starts_with(
+            "GET /api/timeline/buckets?size=MONTH&isOffline=true&visibility=hidden HTTP/1.1"
+        ));
+        assert!(requests[1].starts_with(
+            "GET /api/timeline/bucket?size=MONTH&timeBucket=2025-03-01T00%3A00%3A00.000Z&isOffline=true&visibility=hidden HTTP/1.1"
+        ));
     }
 
     #[tokio::test]
