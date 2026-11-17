@@ -383,6 +383,8 @@
   ,"search_filter_tag": "Tags"
   ,"search_filter_tag_hint": "Zeigt Fotos und Videos, die alle gewählten Tags haben. Nur die gewählten Tags zählen, nicht ihre untergeordneten Tags."
   ,"search_filter_tag_permission_denied": "Der Tags-Filter ist nicht verfügbar. Konfigurieren Sie einen API-Schlüssel mit der Berechtigung tag.read. Der Rest der Suche funktioniert weiter."
+  ,"search_filter_tag_chosen": "{count} ausgewählt"
+  ,"search_filter_tag_clear": "Ausgewählte Tags entfernen"
   ,"search_filter_display": "Anzeige"
   ,"search_filter_favorite": "Favoriten"
   ,"search_filter_archived": "Archiviert"

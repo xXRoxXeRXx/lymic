@@ -383,6 +383,8 @@
   ,"search_filter_tag": "الوسوم"
   ,"search_filter_tag_hint": "يعرض الصور ومقاطع الفيديو التي تحمل كل الوسوم المختارة. تُحتسب الوسوم المختارة فقط وليس الوسوم الفرعية التابعة لها."
   ,"search_filter_tag_permission_denied": "عامل تصفية الوسوم غير متاح. قم بإعداد مفتاح API بصلاحية tag.read. يستمر باقي البحث في العمل."
+  ,"search_filter_tag_chosen": "{count} محدد"
+  ,"search_filter_tag_clear": "مسح الوسوم المحددة"
   ,"search_filter_display": "العرض"
   ,"search_filter_favorite": "المفضلة"
   ,"search_filter_archived": "المؤرشف"

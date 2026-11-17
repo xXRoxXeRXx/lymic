@@ -10,9 +10,11 @@
   /**
    * The Tag hierarchy as an accessible tree (arrow keys, roving focus). `onSelect` gets the Tag that was clicked
    * or activated with Enter or Space; expanding is the chevron or the arrow keys. With `selected` the tree is a
-   * multi-select: it marks those Tags (and only those) as selected.
+   * multi-select: it marks those Tags (and only those) as selected. `labelledBy` is the id of the element that
+   * names the tree; without it the tree is named "Tags".
    */
-  let { tags, onSelect, selected }: { tags: TagsViewState; onSelect: (tag: Tag) => void; selected?: readonly string[] } = $props();
+  let { tags, onSelect, selected, labelledBy }: { tags: TagsViewState; onSelect: (tag: Tag) => void; selected?: readonly string[]; labelledBy?: string } = $props();
+  const selectedIds = $derived(new Set(selected));
 
   let tree = $state<HTMLElement>();
   /** The Tag that holds the tree's single tab stop (roving focus). */
@@ -52,19 +54,20 @@
   }
 </script>
 
-<div bind:this={tree} role="tree" aria-label={$t("tags_title")}
+<div bind:this={tree} role="tree" aria-label={labelledBy ? undefined : $t("tags_title")} aria-labelledby={labelledBy}
   aria-multiselectable={selected ? true : undefined} class="flex flex-col text-sm text-slate-800 dark:text-zinc-100">
   {#each tags.rows as row, index (row.tag.id)}
+    {@const isSelected = selectedIds.has(row.tag.id)}
     <div
       role="treeitem"
-      aria-selected={selected ? selected.includes(row.tag.id) : false}
+      aria-selected={isSelected}
       tabindex={row.tag.id === tabStopId ? 0 : -1}
       aria-level={row.level}
       aria-posinset={row.position}
       aria-setsize={row.siblingCount}
       aria-expanded={row.hasChildren ? row.expanded : undefined}
       data-tag-id={row.tag.id}
-      class="flex cursor-default items-center gap-2 rounded-lg py-1.5 pe-3 outline-none hover:bg-slate-200 {selected?.includes(row.tag.id) ? 'bg-blue-100 font-medium dark:bg-sky-900/40' : ''} focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-zinc-800"
+      class="flex cursor-default items-center gap-2 rounded-lg py-1.5 pe-3 outline-none hover:bg-slate-200 {isSelected ? 'bg-blue-100 font-medium dark:bg-sky-900/40' : ''} focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-zinc-800"
       style="padding-inline-start: {0.5 + (row.level - 1) * 1.25}rem"
       onclick={() => { focusedId = row.tag.id; onSelect(row.tag); }}
       onfocus={() => (focusedId = row.tag.id)}
@@ -80,7 +83,7 @@
       </span>
       <TagColorDot color={row.tag.color} />
       <span class="truncate">{row.tag.name}</span>
-      {#if selected?.includes(row.tag.id)}<Check class="ms-auto h-4 w-4 shrink-0 text-blue-600 dark:text-sky-400" aria-hidden="true" />{/if}
+      {#if isSelected}<Check class="ms-auto h-4 w-4 shrink-0 text-blue-600 dark:text-sky-400" aria-hidden="true" />{/if}
     </div>
   {/each}
 </div>

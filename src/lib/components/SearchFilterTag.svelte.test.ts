@@ -102,6 +102,63 @@ describe("Search Tag filter", () => {
     expect(search.canSubmit).toBe(true);
   });
 
+  it("still shows the chosen Tags and lets them be cleared when the Tags cannot be loaded", async () => {
+    const { search } = setup(async () => {
+      throw "tags_permission_denied:tag.read";
+    });
+    search.filters.tagIds = ["travel", "family"];
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("tag.read");
+    expect(screen.getByText("2 chosen")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Clear chosen tags" }));
+
+    expect(search.filters.tagIds).toBeUndefined();
+    expect(screen.queryByText("2 chosen")).not.toBeInTheDocument();
+  });
+
+  it("drops a chosen Tag that no longer exists once the Tags have loaded", async () => {
+    const { search } = setup();
+    search.filters.tagIds = ["travel", "deleted-in-immich"];
+
+    await screen.findByRole("tree");
+
+    await vi.waitFor(() => expect(search.filters.tagIds).toEqual(["travel"]));
+  });
+
+  it("clears the filter when none of the chosen Tags exists any more", async () => {
+    const { search } = setup(async () => []);
+    search.filters.tagIds = ["deleted-in-immich"];
+
+    await screen.findByText(/No tags yet/);
+
+    await vi.waitFor(() => expect(search.filters.tagIds).toBeUndefined());
+  });
+
+  it("keeps the chosen Tags while the Tags are offline", async () => {
+    const getTags = vi.fn().mockResolvedValueOnce(TAGS).mockRejectedValue("tags_unavailable");
+    const { search, tags } = setup(getTags);
+    await screen.findByRole("tree");
+    search.filters.tagIds = ["travel"];
+
+    await tags.refresh();
+
+    expect(await screen.findByText("Tags is offline. Showing cached tags.")).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "Travel" })).toBeInTheDocument();
+    expect(search.filters.tagIds).toEqual(["travel"]);
+  });
+
+  it("labels the tree with the filter heading", async () => {
+    setup();
+
+    const tree = await screen.findByRole("tree");
+
+    const heading = document.getElementById("search-filter-tag-label");
+    expect(tree).toHaveAttribute("aria-labelledby", "search-filter-tag-label");
+    expect(tree).not.toHaveAttribute("aria-label");
+    expect(heading).toHaveTextContent("Tags");
+  });
+
   it("offers Retry when the Tags cannot be loaded", async () => {
     const getTags = vi.fn().mockRejectedValueOnce("tags_unavailable").mockResolvedValue(TAGS);
     setup(getTags);

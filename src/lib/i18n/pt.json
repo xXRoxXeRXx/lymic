@@ -383,6 +383,8 @@
   ,"search_filter_tag": "Etiquetas"
   ,"search_filter_tag_hint": "Mostra as fotos e os vídeos que têm todas as etiquetas escolhidas. Só contam as etiquetas escolhidas, não as suas etiquetas subordinadas."
   ,"search_filter_tag_permission_denied": "O filtro de etiquetas não está disponível. Configure uma chave de API com a permissão tag.read. O restante da pesquisa continua a funcionar."
+  ,"search_filter_tag_chosen": "{count} escolhidas"
+  ,"search_filter_tag_clear": "Limpar as etiquetas escolhidas"
   ,"search_filter_display": "Exibição"
   ,"search_filter_favorite": "Favoritos"
   ,"search_filter_archived": "Arquivados"

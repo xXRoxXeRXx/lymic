@@ -383,6 +383,8 @@
   ,"search_filter_tag": "ট্যাগ"
   ,"search_filter_tag_hint": "সব নির্বাচিত ট্যাগ আছে এমন ছবি ও ভিডিও দেখায়। শুধু নির্বাচিত ট্যাগ গণ্য হয়, তাদের চাইল্ড ট্যাগ নয়।"
   ,"search_filter_tag_permission_denied": "ট্যাগ ফিল্টার উপলব্ধ নয়। tag.read অনুমতি সহ একটি API কী কনফিগার করুন। বাকি অনুসন্ধান কাজ করতে থাকবে।"
+  ,"search_filter_tag_chosen": "{count}টি বাছাই করা হয়েছে"
+  ,"search_filter_tag_clear": "বাছাই করা ট্যাগ মুছুন"
   ,"search_filter_display": "প্রদর্শন"
   ,"search_filter_favorite": "পছন্দসমূহ"
   ,"search_filter_archived": "আর্কাইভ করা"

@@ -383,6 +383,8 @@
   ,"search_filter_tag": "Теги"
   ,"search_filter_tag_hint": "Показывает фото и видео, у которых есть все выбранные теги. Учитываются только выбранные теги, а не их дочерние теги."
   ,"search_filter_tag_permission_denied": "Фильтр по тегам недоступен. Настройте ключ API с разрешением tag.read. Остальной поиск продолжает работать."
+  ,"search_filter_tag_chosen": "Выбрано: {count}"
+  ,"search_filter_tag_clear": "Сбросить выбранные теги"
   ,"search_filter_display": "Отображение"
   ,"search_filter_favorite": "Избранное"
   ,"search_filter_archived": "В архиве"
