@@ -180,13 +180,13 @@ pub async fn remap_watched_folder_path(
         ("sync_state", "local_path", None),
         ("album_retry_remote_ids", "local_path", None),
         ("sync_jobs", "current_path", Some("id = 1")),
+        ("sync_queue", "local_path", None),
+        ("sync_queue", "upload_unit_id", None),
     ] {
         remap
             .remap_column(&mut tx, table, column, row_filter)
             .await?;
     }
-
-    remap.remap_sync_queue(&mut tx).await?;
 
     tx.commit().await?;
     Ok(())
@@ -208,7 +208,7 @@ impl FolderRemap {
         let filter_prefix = row_filter.map(|f| format!("{f} AND ")).unwrap_or_default();
         let path_cond = super::sql_path_is_or_descendant_of(column, "?1");
         let paths: Vec<String> = sqlx::query_scalar(&format!(
-            "SELECT {column} FROM {table} WHERE {filter_prefix}{column} IS NOT NULL AND {path_cond}"
+            "SELECT DISTINCT {column} FROM {table} WHERE {filter_prefix}{column} IS NOT NULL AND {path_cond}"
         ))
         .bind(&self.old_prefix)
         .fetch_all(&mut **tx)
@@ -220,37 +220,6 @@ impl FolderRemap {
                 ))
                 .bind(&new_row_path)
                 .bind(&old_row_path)
-                .execute(&mut **tx)
-                .await?;
-            }
-        }
-        Ok(())
-    }
-
-    async fn remap_sync_queue(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    ) -> Result<(), sqlx::Error> {
-        let local_path_cond = super::sql_path_is_or_descendant_of("local_path", "?1");
-        let upload_unit_cond = super::sql_path_is_or_descendant_of("upload_unit_id", "?1");
-        let queue_rows: Vec<(i64, String, String)> = sqlx::query_as(&format!(
-            "SELECT job_id, local_path, upload_unit_id FROM sync_queue WHERE ({local_path_cond} OR {upload_unit_cond})"
-        ))
-        .bind(&self.old_prefix)
-        .fetch_all(&mut **tx)
-        .await?;
-        for (job_id, old_local_path, old_upload_unit_id) in queue_rows {
-            let new_local = self.paths.remap_if_changed(&old_local_path);
-            let new_unit = self.paths.remap_if_changed(&old_upload_unit_id);
-            if new_local.is_some() || new_unit.is_some() {
-                sqlx::query(
-                    "UPDATE sync_queue SET local_path = ?, upload_unit_id = ? \
-                     WHERE job_id = ? AND local_path = ?",
-                )
-                .bind(new_local.as_deref().unwrap_or(&old_local_path))
-                .bind(new_unit.as_deref().unwrap_or(&old_upload_unit_id))
-                .bind(job_id)
-                .bind(&old_local_path)
                 .execute(&mut **tx)
                 .await?;
             }

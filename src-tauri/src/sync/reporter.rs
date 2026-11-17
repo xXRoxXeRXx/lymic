@@ -2,7 +2,7 @@
 
 use crate::{
     app::{
-        events::{emit_sync_error, log_to_ui_key, log_to_ui_keyed, show_os_notification},
+        events::{emit_sync_error, log_to_ui_key, send_notification_keyed},
         locale::{backend_translations, LocaleState},
         tray,
     },
@@ -162,7 +162,17 @@ impl<R: tauri::Runtime> DesktopServiceReporter<R> {
     }
 }
 
-type OsNotifier<R> = Arc<dyn Fn(&tauri::AppHandle<R>, &str, &str) + Send + Sync>;
+type KeyedNotifier<R> = Arc<
+    dyn Fn(
+            &tauri::AppHandle<R>,
+            &str,
+            &str,
+            &str,
+            &str,
+            std::collections::HashMap<String, String>,
+        ) + Send
+        + Sync,
+>;
 
 struct DesktopRunTelemetry<R: tauri::Runtime> {
     app: tauri::AppHandle<R>,
@@ -171,7 +181,7 @@ struct DesktopRunTelemetry<R: tauri::Runtime> {
     progress: DesktopRunProgress<R>,
     transfer_stats: TransferStatsTracker,
     cleanup_armed: AtomicBool,
-    notifier: OsNotifier<R>,
+    notifier: KeyedNotifier<R>,
 }
 
 impl<R: tauri::Runtime> DesktopRunTelemetry<R> {
@@ -208,7 +218,7 @@ impl<R: tauri::Runtime> DesktopRunReporter<R> {
             source,
             audit_context,
             progress,
-            Arc::new(show_os_notification),
+            Arc::new(send_notification_keyed),
         )
     }
 
@@ -217,7 +227,7 @@ impl<R: tauri::Runtime> DesktopRunReporter<R> {
         source: SyncSource,
         audit_context: SyncAuditContext,
         progress: DesktopRunProgress<R>,
-        notifier: OsNotifier<R>,
+        notifier: KeyedNotifier<R>,
     ) -> Self {
         let transfer_stats = progress.transfer_stats();
         Self {
@@ -340,11 +350,11 @@ impl<R: tauri::Runtime> SyncRunReporter for DesktopRunReporter<R> {
             params.insert("processed".to_string(), totals.processed.to_string());
             params.insert("uploaded".to_string(), totals.uploaded.to_string());
             params.insert("failed".to_string(), totals.failed.to_string());
-            (self.run.notifier)(&self.run.app, &title, &body);
-            log_to_ui_keyed(
+            (self.run.notifier)(
                 &self.run.app,
-                "INFO",
+                &title,
                 &body,
+                "INFO",
                 "notification_complete_body",
                 params,
             );
@@ -511,7 +521,7 @@ mod tests {
             SyncSource::Manual,
             audit_context,
             progress.clone(),
-            Arc::new(|_, _, _| {}),
+            Arc::new(|_, _, _, _, _, _| {}),
         );
 
         let started = test_snapshot(db::SyncJobStatus::Running, 2, 0, 0);
@@ -620,7 +630,7 @@ mod tests {
                 JobByteProgress::new(100, 0),
                 CurrentFileProgress::default(),
             ),
-            Arc::new(|_, _, _| {}),
+            Arc::new(|_, _, _, _, _, _| {}),
         );
 
         let started = test_snapshot(db::SyncJobStatus::Running, 1, 0, 0);
@@ -679,7 +689,7 @@ mod tests {
                 JobByteProgress::new(0, 0),
                 CurrentFileProgress::default(),
             ),
-            Arc::new(|_, _, _| {}),
+            Arc::new(|_, _, _, _, _, _| {}),
         );
 
         let started = test_snapshot(db::SyncJobStatus::Running, 1, 0, 0);
@@ -728,7 +738,7 @@ mod tests {
                 JobByteProgress::new(0, 0),
                 CurrentFileProgress::default(),
             ),
-            Arc::new(|_, _, _| {}),
+            Arc::new(|_, _, _, _, _, _| {}),
         );
 
         let failed = test_snapshot(db::SyncJobStatus::Failed, 1, 0, 0);
@@ -872,8 +882,9 @@ mod tests {
                     JobByteProgress::new(0, 0),
                     CurrentFileProgress::default(),
                 ),
-                Arc::new(move |_, _, _| {
+                Arc::new(move |app, _, body, level, key, params| {
                     notified_flag.store(true, Ordering::SeqCst);
+                    crate::app::events::log_to_ui_keyed(app, level, body, key, params);
                 }),
             );
             let snapshot = test_snapshot(db::SyncJobStatus::Idle, 1, 0, totals.failed as i64);

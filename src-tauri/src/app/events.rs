@@ -34,7 +34,7 @@ pub(crate) fn send_notification_keyed<R: Runtime>(
     log_to_ui_keyed(app, level, body, key, params);
 }
 
-pub(crate) fn show_os_notification<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
+fn show_os_notification<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
