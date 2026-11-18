@@ -7,6 +7,7 @@ import type { TimelineController } from "../controllers/timeline-controller.svel
 import { createFilteredTimelineController } from "../controllers/filtered-timeline-controller.svelte";
 import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 import type { AssetDetails, TimelineAsset } from "../contracts";
+import type { RemoteAssetDesktopAdapter } from "../tauri/desktop-adapter";
 
 vi.stubGlobal("ResizeObserver", class {
   observe() { }
@@ -43,6 +44,25 @@ const timeline: TimelineController = {
   locateAsset: vi.fn(() => null),
   stepAsset: vi.fn(async () => null),
 };
+
+/** A Remote Asset adapter whose operations resolve quietly unless a test supplies its own. */
+type FakeDesktopOverrides = Omit<Partial<RemoteAssetDesktopAdapter>, "getAssetDetails"> & {
+  /** `null` stands for an asset whose details are unavailable. */
+  getAssetDetails?: (assetId: string) => Promise<AssetDetails | null>;
+};
+
+function fakeDesktop(overrides: FakeDesktopOverrides = {}): RemoteAssetDesktopAdapter {
+  return {
+    getAssetDetails: vi.fn().mockResolvedValue(null),
+    setAssetFavorite: vi.fn().mockResolvedValue(undefined),
+    chooseDownloadDestination: vi.fn().mockResolvedValue(null),
+    downloadAsset: vi.fn().mockResolvedValue(undefined),
+    downloadArchive: vi.fn().mockResolvedValue(undefined),
+    addAssetsToAlbum: vi.fn(async (assetIds: string[]) => ({ succeeded: assetIds.length, failed: 0 })),
+    openExternalUrl: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as RemoteAssetDesktopAdapter;
+}
 
 function assetDetails(overrides: Partial<AssetDetails> = {}): AssetDetails {
   return {
@@ -103,7 +123,7 @@ describe("TimelineView scrubber", () => {
       }, "favorites");
       await favorites.refresh();
       await favorites.activateBucket(first);
-      render(TimelineView, { timeline: favorites, removeUnfavoritedAssets: true, setAssetFavorite: vi.fn().mockResolvedValue(undefined) });
+      render(TimelineView, { timeline: favorites, removeUnfavoritedAssets: true, desktop: fakeDesktop({ setAssetFavorite: vi.fn().mockResolvedValue(undefined) }) });
       await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
       const lightbox = screen.getByRole("dialog", { name: "Media lightbox" });
       await fireEvent.click(within(lightbox).getByRole("button", { name: "Remove from favorites" }));
@@ -116,7 +136,7 @@ describe("TimelineView scrubber", () => {
   });
   it("refreshes the timeline from its header and indicates loading", async () => {
     const refresh = vi.fn();
-    const view = render(TimelineView, { timeline: { ...timeline, refresh } });
+    const view = render(TimelineView, { timeline: { ...timeline, refresh }, desktop: fakeDesktop() });
 
     await fireEvent.click(screen.getByRole("button", { name: "Refresh timeline" }));
 
@@ -127,7 +147,7 @@ describe("TimelineView scrubber", () => {
 
   it("shows an offline banner and retries without hiding cached timeline content", async () => {
     const refresh = vi.fn();
-    render(TimelineView, { timeline: { ...timeline, refresh, isOffline: true } });
+    render(TimelineView, { timeline: { ...timeline, refresh, isOffline: true }, desktop: fakeDesktop() });
 
     await fireEvent.click(screen.getByRole("button", { name: "Retry timeline connection" }));
 
@@ -140,6 +160,7 @@ describe("TimelineView scrubber", () => {
     render(TimelineView, {
       timeline: { ...timeline, buckets: [], isOffline: true, hasInitialLoadError: true },
       loadErrorMessage: "Could not load this album",
+      desktop: fakeDesktop(),
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent("Could not load this album");
@@ -147,7 +168,7 @@ describe("TimelineView scrubber", () => {
   });
 
   it("starts selection from a thumbnail checkbox, prevents opening media, and exits with Escape", async () => {
-    render(TimelineView, { timeline });
+    render(TimelineView, { timeline, desktop: fakeDesktop() });
     const [photoCheckbox] = screen.getAllByRole("checkbox", { name: "Select asset" });
 
     await fireEvent.click(photoCheckbox);
@@ -182,7 +203,7 @@ describe("TimelineView scrubber", () => {
     });
     const chooseDownloadDestination = vi.fn().mockResolvedValue("C:/Downloads/IMG_0001.CR3");
     const downloadAsset = vi.fn().mockResolvedValue(undefined);
-    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, chooseDownloadDestination, downloadAsset }) });
 
     await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Download" }));
@@ -213,7 +234,7 @@ describe("TimelineView scrubber", () => {
     });
     const chooseDownloadDestination = vi.fn().mockResolvedValue("C:/Downloads/IMG_0001.CR3");
     const downloadAsset = vi.fn().mockResolvedValue(undefined);
-    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, chooseDownloadDestination, downloadAsset }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await screen.findByRole("button", { name: "Download original" });
@@ -227,7 +248,7 @@ describe("TimelineView scrubber", () => {
 
   it("downloads multiple selected assets as an Immich archive", async () => {
     const downloadArchive = vi.fn().mockResolvedValue(undefined);
-    render(TimelineView, { timeline, downloadArchive });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ downloadArchive }) });
 
     const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
     await fireEvent.click(checkboxes[0]);
@@ -243,7 +264,7 @@ describe("TimelineView scrubber", () => {
     const getAssetDetails = vi.fn().mockResolvedValue({ originalFileName: "IMG_0001.CR3" });
     const chooseDownloadDestination = vi.fn().mockResolvedValue(null);
     const downloadAsset = vi.fn();
-    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, chooseDownloadDestination, downloadAsset }) });
 
     await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Download" }));
@@ -256,7 +277,7 @@ describe("TimelineView scrubber", () => {
 
   it("reports a failed selected archive download", async () => {
     const downloadArchive = vi.fn().mockRejectedValue(new Error("Network unavailable"));
-    render(TimelineView, { timeline, downloadArchive });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ downloadArchive }) });
 
     const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
     await fireEvent.click(checkboxes[0]);
@@ -268,7 +289,7 @@ describe("TimelineView scrubber", () => {
 
   it("updates every selected asset as a favorite and ends selection", async () => {
     const setAssetFavorite = vi.fn().mockResolvedValue(undefined);
-    render(TimelineView, { timeline, setAssetFavorite });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ setAssetFavorite }) });
     const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
     await fireEvent.click(checkboxes[0]);
     await fireEvent.click(checkboxes[1]);
@@ -286,7 +307,7 @@ describe("TimelineView scrubber", () => {
     const setAssetFavorite = vi.fn()
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error("Network unavailable"));
-    render(TimelineView, { timeline, setAssetFavorite });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ setAssetFavorite }) });
     const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
     await fireEvent.click(checkboxes[0]);
     await fireEvent.click(checkboxes[1]);
@@ -300,7 +321,7 @@ describe("TimelineView scrubber", () => {
   it("adds every selected asset to the album chosen in the existing dialog with one batch action", async () => {
     const catalogue = albumCatalogue();
     const addAssetsToAlbum = vi.fn().mockResolvedValue({ succeeded: 2, failed: 0 });
-    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, desktop: fakeDesktop({ addAssetsToAlbum }) });
     const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
     await fireEvent.click(checkboxes[0]);
     await fireEvent.click(checkboxes[1]);
@@ -317,7 +338,7 @@ describe("TimelineView scrubber", () => {
   it("reports partial batch album assignments", async () => {
     const catalogue = albumCatalogue();
     const addAssetsToAlbum = vi.fn().mockResolvedValue({ succeeded: 1, failed: 1 });
-    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, desktop: fakeDesktop({ addAssetsToAlbum }) });
     const checkboxes = screen.getAllByRole("checkbox", { name: "Select asset" });
     await fireEvent.click(checkboxes[0]);
     await fireEvent.click(checkboxes[1]);
@@ -348,7 +369,7 @@ describe("TimelineView scrubber", () => {
       fileSize: 12_345_678,
       isFavorite: false,
     });
-    render(TimelineView, { timeline, serverUrl: "https://immich.example", onOpenExternalUrl: vi.fn().mockResolvedValue(undefined), getAssetDetails });
+    render(TimelineView, { timeline, serverUrl: "https://immich.example", desktop: fakeDesktop({ openExternalUrl: vi.fn().mockResolvedValue(undefined), getAssetDetails }) });
     const thumbnail = screen.getByRole("button", { name: "Open photo" });
     thumbnail.focus();
     await fireEvent.click(thumbnail);
@@ -390,7 +411,7 @@ describe("TimelineView scrubber", () => {
       fileSize: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, chooseDownloadDestination, downloadAsset }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     const downloadButton = await screen.findByRole("button", { name: "Download original" });
@@ -404,7 +425,7 @@ describe("TimelineView scrubber", () => {
   it("assigns the open asset to a searched album and confirms success", async () => {
     const catalogue = albumCatalogue();
     const addAssetsToAlbum = vi.fn().mockResolvedValue({ succeeded: 1, failed: 0 });
-    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, desktop: fakeDesktop({ addAssetsToAlbum }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
@@ -425,7 +446,7 @@ describe("TimelineView scrubber", () => {
   it("creates and selects a new album before assigning the open asset", async () => {
     const catalogue = albumCatalogue();
     const addAssetsToAlbum = vi.fn().mockResolvedValue({ succeeded: 1, failed: 0 });
-    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, desktop: fakeDesktop({ addAssetsToAlbum }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
@@ -442,7 +463,7 @@ describe("TimelineView scrubber", () => {
   it("keeps the album picker open and reports a failed assignment", async () => {
     const catalogue = albumCatalogue();
     const addAssetsToAlbum = vi.fn().mockRejectedValue(new Error("Network unavailable"));
-    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, desktop: fakeDesktop({ addAssetsToAlbum }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
@@ -477,7 +498,7 @@ describe("TimelineView scrubber", () => {
       fileSize: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, chooseDownloadDestination, downloadAsset }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     const downloadButton = await screen.findByRole("button", { name: "Download original" });
@@ -512,7 +533,7 @@ describe("TimelineView scrubber", () => {
       fileSize: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, chooseDownloadDestination, downloadAsset }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Download original" }));
@@ -532,7 +553,7 @@ describe("TimelineView scrubber", () => {
     const addAssetsToAlbum = vi.fn(() => new Promise<{ succeeded: number; failed: number }>((resolve) => {
       resolveAssignment = resolve;
     }));
-    render(TimelineView, { timeline, albumCatalogue: catalogue, addAssetsToAlbum });
+    render(TimelineView, { timeline, albumCatalogue: catalogue, desktop: fakeDesktop({ addAssetsToAlbum }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
@@ -571,7 +592,7 @@ describe("TimelineView scrubber", () => {
       fileSize: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline, getAssetDetails, chooseDownloadDestination, downloadAsset });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, chooseDownloadDestination, downloadAsset }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Download original" }));
@@ -598,7 +619,7 @@ describe("TimelineView scrubber", () => {
       fileSize: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline, getAssetDetails });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await waitFor(() => expect(getAssetDetails).toHaveBeenCalledWith("photo-1"));
@@ -626,7 +647,7 @@ describe("TimelineView scrubber", () => {
       fileSize: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline, serverUrl: "https://immich.example/", onOpenExternalUrl, getAssetDetails });
+    render(TimelineView, { timeline, serverUrl: "https://immich.example/", desktop: fakeDesktop({ openExternalUrl: onOpenExternalUrl, getAssetDetails }) });
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     const nextButton = screen.getByRole("button", { name: "Next asset" });
     const previousButton = screen.getByRole("button", { name: "Previous asset" });
@@ -668,7 +689,7 @@ describe("TimelineView scrubber", () => {
       fileSize: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, setAssetFavorite }) });
 
     expect(screen.getAllByLabelText("Favorite")).toHaveLength(1);
 
@@ -701,7 +722,7 @@ describe("TimelineView scrubber", () => {
       fileSize: null,
       isFavorite: false,
     });
-    render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, setAssetFavorite }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Add to favorites" })).toBeInTheDocument());
@@ -735,7 +756,7 @@ describe("TimelineView scrubber", () => {
       fileSize: null,
       isFavorite: assetId === "video-1",
     }));
-    render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, setAssetFavorite }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Add to favorites" })).toBeEnabled());
@@ -757,7 +778,7 @@ describe("TimelineView scrubber", () => {
       .mockResolvedValueOnce(undefined)
       .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectRemoval = reject; }));
     const getAssetDetails = vi.fn().mockResolvedValue(assetDetails({ originalFileName: "IMG_0001.CR3" }));
-    render(TimelineView, { timeline, getAssetDetails, setAssetFavorite });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails, setAssetFavorite }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Add to favorites" })).toBeEnabled());
@@ -778,7 +799,7 @@ describe("TimelineView scrubber", () => {
       if (assetId === "photo-1") resolvePhoto = resolve;
       else resolveVideo = resolve;
     }));
-    render(TimelineView, { timeline, getAssetDetails });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(screen.getByRole("button", { name: "Info" }));
@@ -804,8 +825,7 @@ describe("TimelineView scrubber", () => {
     render(TimelineView, {
       timeline,
       serverUrl: "https://immich.example",
-      onOpenExternalUrl,
-      getAssetDetails: vi.fn().mockRejectedValue(new Error("Unavailable")),
+      desktop: fakeDesktop({ openExternalUrl: onOpenExternalUrl, getAssetDetails: vi.fn().mockRejectedValue(new Error("Unavailable")) }),
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
@@ -819,12 +839,13 @@ describe("TimelineView scrubber", () => {
     const getAssetDetails = vi.fn()
       .mockResolvedValueOnce(assetDetails({ originalFileName: "before-refresh.CR3", isFavorite: true }))
       .mockResolvedValueOnce(assetDetails({ originalFileName: "after-refresh.CR3", isFavorite: false }));
-    const view = render(TimelineView, { timeline, getAssetDetails });
+    const desktop = fakeDesktop({ getAssetDetails });
+    const view = render(TimelineView, { timeline, desktop });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await fireEvent.click(screen.getByRole("button", { name: "Info" }));
     await waitFor(() => expect(screen.getByRole("complementary", { name: "Info" })).toHaveTextContent("before-refresh.CR3"));
-    view.rerender({ timeline: { ...timeline, refreshGeneration: 1 }, getAssetDetails });
+    view.rerender({ timeline: { ...timeline, refreshGeneration: 1 }, desktop });
 
     await waitFor(() => expect(screen.getByRole("complementary", { name: "Info" })).toHaveTextContent("after-refresh.CR3"));
     expect(getAssetDetails).toHaveBeenCalledTimes(2);
@@ -833,20 +854,21 @@ describe("TimelineView scrubber", () => {
   it("closes the lightbox and discards in-flight selection updates when the timeline is cleared", async () => {
     let resolveFavorite!: () => void;
     const setAssetFavorite = vi.fn(() => new Promise<void>((resolve) => { resolveFavorite = resolve; }));
-    const view = render(TimelineView, { timeline, setAssetFavorite });
+    const desktop = fakeDesktop({ setAssetFavorite });
+    const view = render(TimelineView, { timeline, desktop });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     expect(screen.getByRole("dialog", { name: "Media lightbox" })).toBeInTheDocument();
 
     view.rerender({
       timeline: { ...timeline, buckets: [], assetsFor: () => [], refreshGeneration: 1 },
-      setAssetFavorite,
+      desktop,
     });
     expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
 
     view.rerender({
       timeline: { ...timeline, refreshGeneration: 2 },
-      setAssetFavorite,
+      desktop,
     });
     await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
     await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
@@ -854,7 +876,7 @@ describe("TimelineView scrubber", () => {
 
     view.rerender({
       timeline: { ...timeline, buckets: [], assetsFor: () => [], refreshGeneration: 3 },
-      setAssetFavorite,
+      desktop,
     });
     resolveFavorite();
     await Promise.resolve();
@@ -867,7 +889,7 @@ describe("TimelineView scrubber", () => {
     const getAssetDetails = vi.fn((assetId: string) => assetId === "photo-1"
       ? Promise.resolve(assetDetails({ originalFileName: "photo.CR3" }))
       : new Promise<AssetDetails | null>((resolve) => { resolveVideo = resolve; }));
-    render(TimelineView, { timeline, getAssetDetails });
+    render(TimelineView, { timeline, desktop: fakeDesktop({ getAssetDetails }) });
 
     await fireEvent.click(screen.getByRole("button", { name: "Open photo" }));
     await screen.findByRole("button", { name: "Download original" });
@@ -878,7 +900,7 @@ describe("TimelineView scrubber", () => {
   });
 
   it("renders year and month indicators and jumps to a clicked month", async () => {
-    render(TimelineView, { timeline });
+    render(TimelineView, { timeline, desktop: fakeDesktop() });
     const target = document.getElementById("timeline-bucket-2025-02-01T00-00-00-000Z")!;
     target.scrollIntoView = vi.fn();
 
@@ -890,7 +912,7 @@ describe("TimelineView scrubber", () => {
   });
 
   it("marks the visible month as active when the timeline viewport scrolls", async () => {
-    render(TimelineView, { timeline });
+    render(TimelineView, { timeline, desktop: fakeDesktop() });
     const viewport = screen.getByLabelText("Photos");
     const march = document.getElementById("timeline-bucket-2025-03-01T00-00-00-000Z")!;
     const february = document.getElementById("timeline-bucket-2025-02-01T00-00-00-000Z")!;
@@ -906,7 +928,7 @@ describe("TimelineView scrubber", () => {
   });
 
   it("jumps through periods while the scrubber thumb is dragged", async () => {
-    render(TimelineView, { timeline });
+    render(TimelineView, { timeline, desktop: fakeDesktop() });
     const viewport = screen.getByLabelText("Photos");
     const target = document.getElementById("timeline-bucket-2024-12-01T00-00-00-000Z")!;
     target.scrollIntoView = vi.fn();
@@ -927,7 +949,7 @@ describe("TimelineView scrubber", () => {
         `http://${protocol}.localhost/${encodeURIComponent(filePath)}`,
     };
     try {
-      render(TimelineView, { timeline });
+      render(TimelineView, { timeline, desktop: fakeDesktop() });
       const thumbnailButton = screen.getByRole("button", { name: "Open photo" });
       expect(thumbnailButton.querySelector("img")).toHaveAttribute(
         "src",
@@ -953,6 +975,7 @@ describe("TimelineView scrubber", () => {
       },
       showRefreshButton: false,
       loadErrorMessage: "Could not load favorites right now.",
+      desktop: fakeDesktop(),
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent("Could not load favorites right now.");
@@ -969,6 +992,7 @@ describe("TimelineView scrubber", () => {
       },
       showRefreshButton: false,
       offlineMessage: "Showing last loaded favorites while offline.",
+      desktop: fakeDesktop(),
     });
 
     expect(screen.getByRole("status")).toHaveTextContent("Showing last loaded favorites while offline.");
@@ -988,6 +1012,7 @@ describe("TimelineView scrubber", () => {
       loadingMessage: "Loading favorites...",
       emptyMessage: "No favorites yet.",
       loadErrorMessage: "Could not load favorites.",
+      desktop: fakeDesktop(),
     });
 
     expect(screen.getByRole("status")).toHaveTextContent("Loading favorites...");
@@ -999,6 +1024,7 @@ describe("TimelineView scrubber", () => {
     render(TimelineView, {
       timeline,
       ariaLabel: "Favorites",
+      desktop: fakeDesktop(),
     });
 
     expect(screen.getByLabelText("Favorites")).toBeInTheDocument();
@@ -1043,8 +1069,7 @@ describe("Favorites removal in TimelineView", () => {
       showRefreshButton: false,
       ariaLabel: "Favorites",
       emptyMessage: "No favorites yet.",
-      getAssetDetails: options.getAssetDetails ?? vi.fn().mockResolvedValue(assetDetails({ isFavorite: true })),
-      setAssetFavorite: options.setAssetFavorite ?? vi.fn().mockResolvedValue(undefined),
+      desktop: fakeDesktop({ getAssetDetails: options.getAssetDetails ?? vi.fn().mockResolvedValue(assetDetails({ isFavorite: true })), setAssetFavorite: options.setAssetFavorite ?? vi.fn().mockResolvedValue(undefined) }),
     });
     const expectedCount = buckets.reduce((sum, entry) => sum + entry.assets.length, 0);
     if (expectedCount > 0) {
@@ -1280,8 +1305,7 @@ describe("Favorites removal in TimelineView", () => {
 
     render(TimelineView, {
       timeline: keepingController,
-      getAssetDetails: vi.fn().mockResolvedValue(assetDetails({ isFavorite: true })),
-      setAssetFavorite: vi.fn().mockResolvedValue(undefined),
+      desktop: fakeDesktop({ getAssetDetails: vi.fn().mockResolvedValue(assetDetails({ isFavorite: true })), setAssetFavorite: vi.fn().mockResolvedValue(undefined) }),
     });
 
     await waitFor(() => expect(screen.getAllByLabelText("Favorite")).toHaveLength(2));

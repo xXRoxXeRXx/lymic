@@ -17,8 +17,8 @@
     search: SearchController;
     backLabel: string;
     onBack: () => void;
-    /** What every timeline shares: server URL, Lightbox actions and album catalogue. */
-    timelineProps: Partial<ComponentProps<typeof TimelineView>>;
+    /** What every timeline shares: server URL, the Remote Asset adapter and album catalogue. */
+    timelineProps: Partial<ComponentProps<typeof TimelineView>> & Pick<ComponentProps<typeof TimelineView>, "desktop">;
   } = $props();
 
   const numberLocale = $derived(toBcp47Locale($locale));

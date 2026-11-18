@@ -6,7 +6,7 @@
   import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
   import "maplibre-gl/dist/maplibre-gl.css";
   import type { MapViewState } from "../controllers/map-controller.svelte";
-  import type { AssetDesktopAdapter, AlbumAssignmentDesktopAdapter, UpdateDesktopAdapter } from "../tauri/desktop-adapter";
+  import type { RemoteAssetDesktopAdapter } from "../tauri/desktop-adapter";
   import type { AssetDetails, AssetTag, TimelineAsset } from "../contracts";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import Lightbox from "./Lightbox.svelte";
@@ -17,7 +17,7 @@
     mapState: MapViewState;
     active: boolean;
     serverUrl: string;
-    desktop: AssetDesktopAdapter & AlbumAssignmentDesktopAdapter & Pick<UpdateDesktopAdapter, "openExternalUrl">;
+    desktop: RemoteAssetDesktopAdapter;
     albumCatalogue: TargetAlbumCatalogue;
     /** Opens the Tag Timeline of a Tag chip selected in the Lightbox, which has been closed by then. */
     onSelectTag?(tag: AssetTag): void;
