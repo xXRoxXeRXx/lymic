@@ -427,4 +427,10 @@
   ,"tags_unavailable": "标签不可用。请检查网络连接和登录状态。"
   ,"tags_permission_denied": "无法加载标签。请为 API 密钥授予 tag.read 权限。"
   ,"tags_retry": "重试"
+  ,"archive_unarchive": "取消归档"
+  ,"archive_unarchive_success": "已取消归档 {count} 项。"
+  ,"archive_unarchive_partial": "{count} 项中有 {failed} 项无法取消归档。它们仍处于选中状态，方便你重试。"
+  ,"archive_unarchive_none": "{count} 项中有 {failed} 项无法取消归档，请重试。"
+  ,"archive_unarchive_failed": "无法取消归档，请重试。"
+  ,"archive_unarchive_permission": "取消归档被拒绝。请为 API 密钥授予 asset.update 权限。"
 }

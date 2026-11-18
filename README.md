@@ -43,7 +43,7 @@
 - **Explore** — Recognized people, places (cities) and memories, each opening as a timeline.
 - **People and Tags** — Filter the timeline by person; browse Tags as a hierarchy tree. Tags are never created or changed.
 - **Map** — Geotagged photos and videos as clusters and thumbnails. Map tiles come from OpenFreeMap, not from your Immich server.
-- **Archive** — Read-only view of archived items. Archiving is done in Immich.
+- **Archive** — View archived items and **Unarchive** them (single or multi-selection) so they return to your Photos. Lymic only switches an asset between archived and not archived: never the locked folder, hidden assets or the trash.
 - **Trash** — View, download and **Restore** trashed items (single or multi-selection). Lymic never deletes anything or empties the trash. A local file whose copy is in the Immich trash counts as synced and is not uploaded again.
 - **Search** — Search bar on every view: by Context, Filename, Description, Folder Path or OCR, with filters for people, Tags, dates, location, media type, camera, rating, Favorites, Archived and Unfiled Assets. Requires **Immich 3.2 or later**; Context search needs Smart Search and OCR needs OCR enabled in Immich.
 
@@ -75,7 +75,7 @@ Create the API key in Immich under **Account Settings → API Keys**. The simple
 | `asset.read` | Every timeline (Photos, Favorites, Archive, Trash, Albums, Places, Tags), asset details, Search, and finding existing duplicates for target albums |
 | `asset.view` | Thumbnails, previews and video playback |
 | `asset.download` | Downloading originals |
-| `asset.update` | Setting or clearing Favorite |
+| `asset.update` | Setting or clearing Favorite; Archive and Unarchive |
 | `asset.delete` | Trash: Restore only. Lymic never deletes anything. |
 | `person.read` | People, Explore people, Search: Recognized People filter |
 | `memory.read` | Explore: memories |

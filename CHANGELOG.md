@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Unarchive from the Archive Timeline**:
+  - Select archived assets in the Archive and choose Unarchive. It runs at once without a confirmation: the assets that changed leave the view, the ones that did not stay selected, and the message gives the counts. A key without the `asset.update` permission gets a message that names it. The Photo Timeline shows the unarchived assets the next time it is opened from another view.
+  - Lymic only switches visibility between `timeline` and `archive` (ADR-0012); Synchronization never touches the archive status. Available in all supported languages.
+
 ## [0.30.0] - 2026-11-17
 
 ### Added

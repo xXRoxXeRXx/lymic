@@ -53,6 +53,14 @@ export interface TrashRestoreResult {
   restoredAssetIds: string[];
 }
 
+/** The only visibilities Lymic writes: Archive sends `archive`, Unarchive sends `timeline`. Never `locked` or `hidden`. */
+export type AssetVisibility = "archive" | "timeline";
+
+/** The requested Remote Assets Immich confirmed as changed by an Archive or Unarchive; every other requested asset kept its visibility. */
+export interface AssetVisibilityResult {
+  changedAssetIds: string[];
+}
+
 export interface AlbumCatalogueItem extends Album {
   albumThumbnailAssetId: string | null;
   assetCount: number;

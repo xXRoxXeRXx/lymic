@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::immich::{
-    AlbumTimeline, AssetDetails, FilteredTimeline, ImmichSession, PlaceTimeline, RemoteAssetId,
-    TimelineAsset, TimelineBucket, TrashRestoreResult,
+    AlbumTimeline, AssetDetails, AssetVisibility, AssetVisibilityResult, FilteredTimeline,
+    ImmichSession, PlaceTimeline, RemoteAssetId, TimelineAsset, TimelineBucket, TrashRestoreResult,
 };
 
 #[tauri::command]
@@ -96,6 +96,33 @@ pub(crate) async fn restore_trashed_assets(
         .collect::<Result<Vec<_>, _>>()?;
     ImmichSession::with_stored_credentials(|client| async move {
         client.restore_trashed_assets(&asset_ids).await
+    })
+    .await
+}
+
+/// Archives or Unarchives Remote Assets. `visibility` accepts only `archive` and `timeline`, so
+/// Lymic can never write `locked` or `hidden`.
+#[tauri::command]
+pub(crate) async fn set_assets_visibility(
+    asset_ids: Vec<String>,
+    visibility: AssetVisibility,
+) -> Result<AssetVisibilityResult, String> {
+    if asset_ids.is_empty() {
+        return Err("At least one asset ID is required".to_string());
+    }
+    let asset_ids = asset_ids
+        .iter()
+        .map(|asset_id| {
+            let asset_id = asset_id.trim();
+            if asset_id.is_empty() {
+                Err("Asset ID cannot be empty".to_string())
+            } else {
+                Ok(RemoteAssetId::new(asset_id))
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.set_assets_visibility(&asset_ids, visibility).await
     })
     .await
 }
