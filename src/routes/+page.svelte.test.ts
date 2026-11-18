@@ -4340,6 +4340,187 @@ describe("Photo and Favorites Timeline Archive", () => {
   });
 });
 
+describe("Archive in views that show archived and other assets together", () => {
+  beforeEach(stubImmediateIntersectionObserver);
+
+  const march = "2025-03-01T00:00:00.000Z";
+  const asset = (id: string, visibility?: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE" as const, takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false, ...(visibility ? { visibility } : {}),
+  });
+  const timelineOf = (assets: ReturnType<typeof asset>[]) => ({ buckets: [{ timeBucket: march, count: assets.length }], assetsByBucket: { [march]: assets }, truncated: false });
+  const holiday = { id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 3, isShared: false, order: null };
+  const supported = { supported: true, version: "3.4.1", requiredVersion: "3.2" };
+  const details = {
+    originalFileName: "photo.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  };
+  const archiveAll = async (args?: unknown) => ({ changedAssetIds: (args as { assetIds: string[] }).assetIds });
+
+  async function select(count: number) {
+    const boxes = screen.getAllByRole("checkbox", { name: "Select asset" });
+    for (let index = 0; index < count; index += 1) await fireEvent.click(boxes[index]);
+    await screen.findByText(`${count} selected`);
+  }
+
+  /** The Archive action of the selection toolbar: the navigation entry of the same name has no aria-busy. */
+  const archiveButtons = () => screen.queryAllByRole("button", { name: "Archive" }).filter((button) => button.hasAttribute("aria-busy"));
+  const archiveButton = () => {
+    const [button] = archiveButtons();
+    if (!button) throw new Error("The selection offers no Archive action");
+    return button;
+  };
+
+  const views = [
+    {
+      name: "Album Timeline",
+      handlers: (assets: ReturnType<typeof asset>[]) => ({ get_album_catalogue: async () => [holiday], get_album_timeline: async () => timelineOf(assets) }),
+      async open() {
+        await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
+        await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+        await screen.findAllByRole("button", { name: "Open photo" });
+      },
+    },
+    {
+      name: "Search Results",
+      handlers: (assets: ReturnType<typeof asset>[]) => ({ get_search_support: async () => supported, search_assets: async () => timelineOf(assets) }),
+      async open() {
+        await fireEvent.input(await screen.findByRole("searchbox", { name: "Search your Immich library" }), { target: { value: "IMG_" } });
+        await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+        await screen.findAllByRole("button", { name: "Open photo" });
+      },
+    },
+  ];
+
+  describe.each(views)("$name", ({ handlers, open }) => {
+    function render(setVisibility: (args?: unknown) => Promise<unknown>, assets = [asset("a-1"), asset("a-2"), asset("a-3")]) {
+      renderAuthenticatedPage({ ...handlers(assets), get_asset_details: async () => details, set_assets_visibility: setVisibility });
+    }
+
+    it("offers Archive and no Unarchive or Restore", async () => {
+      render(vi.fn(archiveAll));
+      await open();
+      await select(1);
+
+      expect(archiveButtons()).toHaveLength(1);
+      expect(screen.queryByRole("button", { name: "Unarchive" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
+    });
+
+    it("archives the selection, keeps every asset in the list and announces the result", async () => {
+      const setVisibility = vi.fn(archiveAll);
+      render(setVisibility);
+      await open();
+
+      await select(2);
+      await fireEvent.click(archiveButton());
+
+      await waitFor(() => expect(setVisibility).toHaveBeenCalledWith({ assetIds: ["a-1", "a-2"], visibility: "archive" }));
+      expect(setVisibility).toHaveBeenCalledTimes(1);
+      expect(await screen.findByRole("status")).toHaveTextContent("2 archived.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+      expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+    });
+
+    it("treats an already archived asset in a mixed selection as archived, with no error or failed count", async () => {
+      const setVisibility = vi.fn(archiveAll);
+      render(setVisibility, [asset("a-1"), asset("already-archived", "archive"), asset("a-3")]);
+      await open();
+
+      await select(3);
+      await fireEvent.click(archiveButton());
+
+      await waitFor(() => expect(setVisibility).toHaveBeenCalledWith({ assetIds: ["a-1", "already-archived", "a-3"], visibility: "archive" }));
+      expect(await screen.findByRole("status")).toHaveTextContent("3 archived.");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+    });
+
+    it("keeps failed assets in the list and selected on a partial failure and lets the user retry them", async () => {
+      const setVisibility = vi.fn()
+        .mockResolvedValueOnce({ changedAssetIds: ["a-1"] })
+        .mockImplementationOnce(archiveAll);
+      render(setVisibility);
+      await open();
+
+      await select(3);
+      await fireEvent.click(archiveButton());
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("2 of 3 could not be archived. They stay selected so you can retry.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+
+      await fireEvent.click(archiveButton());
+      await waitFor(() => expect(setVisibility).toHaveBeenLastCalledWith({ assetIds: ["a-2", "a-3"], visibility: "archive" }));
+      expect(await screen.findByText("2 archived.")).toHaveAttribute("role", "status");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+    });
+
+    it("names the missing asset.update permission and keeps the selection", async () => {
+      render(vi.fn(async () => { throw "archive_permission_denied:asset.update"; }));
+      await open();
+
+      await select(2);
+      await fireEvent.click(archiveButton());
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Archiving was refused. Give the API key the asset.update permission.");
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+    });
+
+    it("leaves a hidden asset (a Live Photo video) out of the Archive request and keeps it selected", async () => {
+      const setVisibility = vi.fn(archiveAll);
+      render(setVisibility, [asset("a-1"), asset("live-video", "hidden"), asset("a-3")]);
+      await open();
+
+      await select(3);
+      await fireEvent.click(archiveButton());
+
+      await waitFor(() => expect(setVisibility).toHaveBeenCalledWith({ assetIds: ["a-1", "a-3"], visibility: "archive" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("1 of 3 could not be archived. They stay selected so you can retry.");
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+    });
+
+    it("does not call Immich when only hidden assets are selected", async () => {
+      const setVisibility = vi.fn(archiveAll);
+      render(setVisibility, [asset("live-video", "hidden"), asset("a-2")]);
+      await open();
+
+      await select(1);
+      await fireEvent.click(archiveButton());
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("1 of 1 could not be archived. Please try again.");
+      expect(setVisibility).not.toHaveBeenCalled();
+    });
+  });
+
+  it("drops an asset archived from an Album from the Photo Timeline cache without reloading it", async () => {
+    const photosBuckets = vi.fn(async () => [{ timeBucket: march, count: 2 }]);
+    renderAuthenticatedPage({
+      get_timeline_buckets: photosBuckets,
+      get_timeline_bucket_assets: async () => [asset("a-1"), asset("a-2")],
+      get_album_catalogue: async () => [holiday],
+      get_album_timeline: async () => timelineOf([asset("a-1"), asset("a-2"), asset("a-3")]),
+      get_asset_details: async () => details,
+      set_assets_visibility: archiveAll,
+    });
+    await waitFor(() => expect(photosBuckets).toHaveBeenCalledTimes(1));
+    await fireEvent.click(await screen.findByRole("button", { name: "Photos" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2));
+
+    await fireEvent.click(screen.getByRole("button", { name: "Albums" }));
+    await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+    await screen.findAllByRole("button", { name: "Open photo" });
+    await select(1);
+    await fireEvent.click(archiveButton());
+    await screen.findByRole("status");
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+    await fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1));
+    expect(photosBuckets).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("Search", () => {
   const march = "2025-03-01T00:00:00.000Z";
   const found = (id: string) => ({

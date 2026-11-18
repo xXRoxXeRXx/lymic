@@ -2,13 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 import type { TimelineController } from "../controllers/timeline-controller.svelte";
 import { archiveFeedbackMessage, createRemoteAssetArchive } from "./remote-asset-archive";
 
-function setup(setAssetsVisibility: (assetIds: string[], visibility: "archive" | "timeline") => Promise<{ changedAssetIds: string[] }>) {
+function setup(
+  setAssetsVisibility: (assetIds: string[], visibility: "archive" | "timeline") => Promise<{ changedAssetIds: string[] }>,
+  extra: { assetsStayInView?: boolean; isArchivable?: (assetId: string) => boolean } = {},
+) {
   const removeAsset = vi.fn();
   const onRemoved = vi.fn();
   const archive = createRemoteAssetArchive({
     timeline: { removeAsset } as unknown as TimelineController,
     setAssetsVisibility,
     onRemoved,
+    ...extra,
   });
   return { archive, removeAsset, onRemoved };
 }
@@ -67,6 +71,48 @@ describe("Archive", () => {
     const refused = setup(async () => { throw "archive_permission_denied:asset.update"; });
     expect(await refused.archive.apply("archive", ["a"])).toEqual({ changedAssetIds: [], failedAssetIds: ["a"], failure: "permission" });
     expect(refused.removeAsset).not.toHaveBeenCalled();
+  });
+});
+
+describe("Archive in a view that shows archived and other assets together", () => {
+  it("keeps the archived assets in the view and reports them as changed, including ones that were already archived", async () => {
+    const setAssetsVisibility = vi.fn(async (assetIds: string[]) => ({ changedAssetIds: assetIds }));
+    const { archive, removeAsset, onRemoved } = setup(setAssetsVisibility, { assetsStayInView: true });
+
+    const outcome = await archive.apply("archive", ["a", "already-archived"]);
+
+    expect(setAssetsVisibility).toHaveBeenCalledWith(["a", "already-archived"], "archive");
+    expect(outcome).toEqual({ changedAssetIds: ["a", "already-archived"], failedAssetIds: [], failure: null });
+    expect(removeAsset).not.toHaveBeenCalled();
+    expect(onRemoved).not.toHaveBeenCalled();
+  });
+
+  it("leaves hidden assets out of the request and reports them as not archived", async () => {
+    const setAssetsVisibility = vi.fn(async (assetIds: string[]) => ({ changedAssetIds: assetIds }));
+    const { archive } = setup(setAssetsVisibility, { assetsStayInView: true, isArchivable: (assetId) => assetId !== "live-video" });
+
+    const outcome = await archive.apply("archive", ["a", "live-video", "b"]);
+
+    expect(setAssetsVisibility).toHaveBeenCalledWith(["a", "b"], "archive");
+    expect(outcome).toEqual({ changedAssetIds: ["a", "b"], failedAssetIds: ["live-video"], failure: null });
+  });
+
+  it("does not call the backend when no selected asset can be archived", async () => {
+    const setAssetsVisibility = vi.fn(async (assetIds: string[]) => ({ changedAssetIds: assetIds }));
+    const { archive } = setup(setAssetsVisibility, { assetsStayInView: true, isArchivable: () => false });
+
+    expect(await archive.apply("archive", ["live-video"])).toEqual({ changedAssetIds: [], failedAssetIds: ["live-video"], failure: null });
+    expect(setAssetsVisibility).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed request's assets failed and does not skip anything for an Unarchive", async () => {
+    const broken = setup(async () => { throw new Error("boom"); }, { assetsStayInView: true, isArchivable: (assetId) => assetId !== "hidden" });
+    expect(await broken.archive.apply("archive", ["a", "hidden"])).toEqual({ changedAssetIds: [], failedAssetIds: ["a", "hidden"], failure: "error" });
+
+    const setAssetsVisibility = vi.fn(async (assetIds: string[]) => ({ changedAssetIds: assetIds }));
+    const unarchive = setup(setAssetsVisibility, { isArchivable: () => false });
+    await unarchive.archive.apply("unarchive", ["a"]);
+    expect(setAssetsVisibility).toHaveBeenCalledWith(["a"], "timeline");
   });
 });
 

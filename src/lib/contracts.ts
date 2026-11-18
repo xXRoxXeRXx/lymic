@@ -84,6 +84,8 @@ export interface TimelineAsset {
   fileSize: number | null;
   duration: number | null;
   isFavorite: boolean;
+  /** The Immich visibility when the response names one; absent when unknown. Archive skips `hidden` assets. */
+  visibility?: string;
 }
 
 export interface AssetDetails {
