@@ -277,6 +277,28 @@ describe('i18n catalogs', () => {
     expect(de.archive_unarchive).toBe('Dearchivieren');
   });
 
+  it('translates the Photo and Favorites Timeline Archive strings in every locale with their placeholders', () => {
+    const placeholders: Record<string, string[]> = {
+      archive_archive: [],
+      archive_archive_success: ['{count}'],
+      archive_archive_partial: ['{failed}', '{count}'],
+      archive_archive_none: ['{failed}', '{count}'],
+      archive_archive_failed: [],
+      archive_archive_permission: [],
+    };
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const [key, expected] of Object.entries(placeholders)) {
+        const value = (translations as Record<string, string>)[key];
+        expect(value, `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+        for (const placeholder of expected) expect(value, `${localeCode}.${key}`).toContain(placeholder);
+      }
+      // A refused Archive names the permission to grant, never a credential.
+      expect((translations as Record<string, string>).archive_archive_permission, localeCode).toContain('asset.update');
+    }
+    expect(en.archive_archive).toBe('Archive');
+    expect(de.archive_archive).toBe('Archivieren');
+  });
+
   it('uses consistent timeline and video terminology in favorites strings', () => {
     expect(de.favorites_offline).toContain('Zeitachse');
     expect(de.favorites_offline).not.toContain('Timeline');

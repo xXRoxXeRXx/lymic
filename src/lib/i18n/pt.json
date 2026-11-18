@@ -433,4 +433,10 @@
   ,"archive_unarchive_none": "{failed} de {count} não puderam ser desarquivados. Tente novamente."
   ,"archive_unarchive_failed": "Não foi possível desarquivar. Tente novamente."
   ,"archive_unarchive_permission": "O desarquivamento foi recusado. Conceda à chave de API a permissão asset.update."
+  ,"archive_archive": "Arquivar"
+  ,"archive_archive_success": "{count} arquivado(s)."
+  ,"archive_archive_partial": "{failed} de {count} não puderam ser arquivados. Continuam selecionados para você tentar novamente."
+  ,"archive_archive_none": "{failed} de {count} não puderam ser arquivados. Tente novamente."
+  ,"archive_archive_failed": "Não foi possível arquivar. Tente novamente."
+  ,"archive_archive_permission": "O arquivamento foi recusado. Conceda à chave de API a permissão asset.update."
 }
