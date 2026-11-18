@@ -1,13 +1,14 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
   import { flushSync, onDestroy, untrack } from "svelte";
-  import { Album, ArchiveRestore, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, X } from "lucide-svelte";
+  import { Album, ArchiveRestore, ArchiveX, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { AlbumAssignmentResult, AssetDetails, AssetTag, TimelineAsset } from "../contracts";
   import TagColorDot from "./TagColorDot.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { RemoteAssetActions } from "./remote-asset-actions.svelte";
+  import { archiveFeedbackFor, archiveFeedbackMessage, type RemoteAssetArchiveOutcome } from "./remote-asset-archive";
   import { restoreFeedbackFor, restoreFeedbackMessage, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   interface Props {
@@ -26,10 +27,12 @@
     allowFavorite?: boolean;
     /** Offers Restore for a Trashed Asset; reports what happened and never rejects. */
     onRestore?(assetId: string): Promise<RemoteAssetRestoreOutcome>;
+    /** Offers Unarchive for an Archived Asset; reports what happened and never rejects. After a success the Lightbox moves on to the next asset, or closes when there is none. */
+    onUnarchive?(assetId: string): Promise<RemoteAssetArchiveOutcome>;
     /** Shows the Tags of the asset as chips; selecting one closes the Lightbox first, then calls this to open that Tag's Tag Timeline. */
     onSelectTag?(tag: AssetTag): void;
   }
-  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, onSelectTag }: Props = $props();
+  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, onUnarchive, onSelectTag }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   let selectedAsset = $state<TimelineAsset | null>(untrack(() => asset));
   let assetDetails = $state<AssetDetails | null>(null);
@@ -46,6 +49,8 @@
   let addToAlbumError = $state("");
   let isRestoring = $state(false);
   let restoreError = $state("");
+  let isUnarchiving = $state(false);
+  let unarchiveFeedback = $state<{ message: string; isSuccess: boolean } | null>(null);
   let addToAlbumMessageTimeout: ReturnType<typeof setTimeout> | null = null;
   const exifDetails = $derived.by(() => {
     if (!assetDetails) return [];
@@ -114,7 +119,7 @@
   }
 
   async function toggleFavorite() {
-    if (!selectedAsset) return;
+    if (!selectedAsset || isUnarchiving) return;
 
     const assetId = selectedAsset.id;
     if (updatingFavoriteAssetIds[assetId]) return;
@@ -138,7 +143,7 @@
   }
 
   async function downloadOriginal() {
-    if (!selectedAsset || !assetDetails?.originalFileName || downloadingAssetId) return;
+    if (!selectedAsset || !assetDetails?.originalFileName || downloadingAssetId || isUnarchiving) return;
 
     const assetId = selectedAsset.id;
     downloadMessage = "";
@@ -169,8 +174,44 @@
     }
   }
 
+  async function unarchiveAsset() {
+    if (!selectedAsset || !onUnarchive || isBusy) return;
+    const current = selectedAsset;
+    unarchiveFeedback = null;
+    isUnarchiving = true;
+    try {
+      const outcome = await onUnarchive(current.id);
+      if (isDestroyed || selectedAsset !== current) return;
+      const feedback = archiveFeedbackFor(outcome, 1);
+      const message = archiveFeedbackMessage("unarchive", feedback, $t, numberLocale);
+      if (outcome.changedAssetIds.includes(current.id)) {
+        // The asset left the Archive Timeline: show its neighbour, or close when none is left. Busy until then.
+        const moved = await moveOnFrom(current);
+        if (isDestroyed) return;
+        if (moved) unarchiveFeedback = { message, isSuccess: true };
+      } else {
+        unarchiveFeedback = { message, isSuccess: false };
+      }
+    } finally {
+      if (!isDestroyed) isUnarchiving = false;
+    }
+  }
+
+  /** Shows the asset after `current`, which left the timeline; closes the Lightbox when there is none. False when it closed or the Lightbox was left meanwhile. */
+  async function moveOnFrom(current: TimelineAsset) {
+    const generation = ++navigationGeneration;
+    const nextAsset = navigateAsset ? await navigateAsset(1, current) : null;
+    if (isDestroyed || generation !== navigationGeneration || selectedAsset !== current) return false;
+    if (!nextAsset) {
+      onClose();
+      return false;
+    }
+    showAsset(nextAsset);
+    return true;
+  }
+
   function openAddToAlbum() {
-    if (!selectedAsset || !albumCatalogue) return;
+    if (!selectedAsset || !albumCatalogue || isUnarchiving) return;
     clearAddToAlbumMessage();
     addToAlbumError = "";
     isAddToAlbumOpen = true;
@@ -221,7 +262,7 @@
     if (isBusy) return;
     onClose();
   }
-  const isBusy = $derived(downloadingAssetId !== null || isAddingToAlbum || isRestoring);
+  const isBusy = $derived(downloadingAssetId !== null || isAddingToAlbum || isRestoring || isUnarchiving);
   function selectTag(tag: AssetTag) {
     if (!onSelectTag || isBusy) return;
     onClose();
@@ -238,6 +279,9 @@
     const nextAsset = await navigateAsset(delta, current);
     if (generation !== navigationGeneration || selectedAsset !== current) return;
     if (!nextAsset) return;
+    showAsset(nextAsset);
+  }
+  function showAsset(nextAsset: TimelineAsset) {
     flushSync(() => {
       selectedAsset = nextAsset;
       assetDetails = null;
@@ -245,6 +289,7 @@
       downloadMessage = "";
       downloadError = "";
       restoreError = "";
+      unarchiveFeedback = null;
       isAddToAlbumOpen = false;
       clearAddToAlbumMessage();
       addToAlbumError = "";
@@ -281,15 +326,18 @@
           <button type="button" tabindex="-1" class="absolute inset-0 z-10 cursor-default" aria-label={$t("timeline_close_info")} onclick={() => isInfoOpen = false}></button>
         {/if}
         <div class="absolute right-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-wrap justify-end gap-2">
-          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:cursor-not-allowed" title={$t("timeline_download_original")} aria-label={$t("timeline_download_original")} aria-busy={downloadingAssetId === selectedAsset.id} disabled={!assetDetails?.originalFileName || downloadingAssetId !== null} onclick={() => void downloadOriginal()}><Download class="h-5 w-5 {downloadingAssetId === selectedAsset.id ? 'animate-spin' : ''}" /></button>
+          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:cursor-not-allowed" title={$t("timeline_download_original")} aria-label={$t("timeline_download_original")} aria-busy={downloadingAssetId === selectedAsset.id} disabled={!assetDetails?.originalFileName || downloadingAssetId !== null || isUnarchiving} onclick={() => void downloadOriginal()}><Download class="h-5 w-5 {downloadingAssetId === selectedAsset.id ? 'animate-spin' : ''}" /></button>
           {#if onRestore}
             <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={isRestoring} disabled={isRestoring} onclick={() => void restoreAsset()}><ArchiveRestore class="h-5 w-5 {isRestoring ? 'animate-pulse' : ''}" /></button>
           {/if}
+          {#if onUnarchive}
+            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("archive_unarchive")} aria-label={$t("archive_unarchive")} aria-busy={isUnarchiving} disabled={isBusy} onclick={() => void unarchiveAsset()}><ArchiveX class="h-5 w-5 {isUnarchiving ? 'animate-pulse' : ''}" /></button>
+          {/if}
           {#if albumCatalogue}
-            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isAddingToAlbum} onclick={openAddToAlbum}><Album class="h-5 w-5" /></button>
+            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isAddingToAlbum || isUnarchiving} onclick={openAddToAlbum}><Album class="h-5 w-5" /></button>
           {/if}
           {#if allowFavorite}
-          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-label={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={isFavorite(selectedAsset)} disabled={Boolean(updatingFavoriteAssetIds[selectedAsset.id])} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {isFavorite(selectedAsset) ? 'fill-current' : ''}" /></button>
+          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-label={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={isFavorite(selectedAsset)} disabled={Boolean(updatingFavoriteAssetIds[selectedAsset.id]) || isUnarchiving} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {isFavorite(selectedAsset) ? 'fill-current' : ''}" /></button>
           {/if}
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80" title={$t("timeline_info")} aria-label={$t("timeline_info")} aria-pressed={isInfoOpen} onclick={() => isInfoOpen = !isInfoOpen}><Info class="h-5 w-5" /></button>
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_close_lightbox")} aria-label={$t("timeline_close_lightbox")} disabled={isBusy} onclick={closeLightbox}><X class="h-5 w-5" /></button>
@@ -359,6 +407,7 @@
           {#if downloadMessage}<p class="rounded bg-emerald-950/90 px-3 py-2 text-emerald-200" role="status">{downloadMessage}</p>{/if}
           {#if downloadError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{downloadError}</p>{/if}
           {#if restoreError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{restoreError}</p>{/if}
+          {#if unarchiveFeedback}<p class="rounded px-3 py-2 {unarchiveFeedback.isSuccess ? 'bg-emerald-950/90 text-emerald-200' : 'bg-red-950/90 text-red-200'}" role={unarchiveFeedback.isSuccess ? "status" : "alert"}>{unarchiveFeedback.message}</p>{/if}
           {#if addToAlbumMessage}<p class="rounded bg-emerald-950/90 px-3 py-2 text-emerald-200" role="status">{addToAlbumMessage}</p>{/if}
         </div>
       </div>

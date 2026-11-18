@@ -73,6 +73,18 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
     options.onRemoved?.(assetId);
   }
 
+  /** Remembers where the open Remote Asset sits before an action removes it from the timeline, so the Lightbox can step on from there. */
+  function expectRemoval(assetId: string) {
+    if (activeAssetId !== assetId) return;
+    const located = options.timeline.locateAsset(assetId);
+    if (located) removedPosition = { assetId, ...located };
+  }
+
+  /** The expected removal did not happen: the Lightbox keeps navigating from the asset itself. */
+  function cancelExpectedRemoval() {
+    removedPosition = null;
+  }
+
   async function navigateFromFormerPosition(delta: number, current: TimelineAsset) {
     const navigation = ++navigationGeneration;
     const former = removedPosition?.assetId === current.id ? removedPosition : null;
@@ -111,7 +123,8 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
     singleConfirmed: () => {},
     singleFailed: () => {},
     selectionConfirmed: reflect,
-    navigate: navigateAround,
+    // An asset removed by another action (Unarchive) leaves the Lightbox stepping on from where it was.
+    navigate: (delta, current) => removedPosition?.assetId === current.id ? navigateFromFormerPosition(delta, current) : navigateAround(delta, current),
   };
 
   function mode() {
@@ -165,6 +178,8 @@ export function createRemoteAssetFavorites(options: RemoteAssetFavoritesOptions)
     isFavorite,
     reflect,
     reset,
+    expectRemoval,
+    cancelExpectedRemoval,
     updateOne,
     updateMany,
     navigate,

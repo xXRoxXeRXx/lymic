@@ -351,6 +351,14 @@
     return outcome;
   }
 
+  /** Unarchives the Lightbox's asset; the Lightbox moves on from where the asset was, so it is remembered before the asset leaves the timeline. */
+  async function unarchiveFromLightbox(assetId: string) {
+    favorites.expectRemoval(assetId);
+    const outcome = await selection.unarchiveOne(assetId);
+    if (!outcome.changedAssetIds.includes(assetId)) favorites.cancelExpectedRemoval();
+    return outcome;
+  }
+
   function openAddSelectionToAlbum() {
     if (selection.count === 0 || !targetAlbumCatalogue || selection.isBusy) return;
     selection.clearResult();
@@ -593,7 +601,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} {onSelectTag} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} onUnarchive={offersUnarchive ? unarchiveFromLightbox : undefined} {onSelectTag} />
 {/if}
 {#if targetAlbumCatalogue}
   <AddToAlbumModal
