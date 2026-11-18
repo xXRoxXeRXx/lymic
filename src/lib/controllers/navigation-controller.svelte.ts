@@ -10,6 +10,16 @@ export const PEOPLE_VIEW = "people";
 export const PERSON_TIMELINE_VIEW = "person-timeline";
 export const EXPLORE_VIEW = "explore";
 export const MAP_VIEW = "map";
+// Views the page shows through `show`: the page owns their state and Back origins.
+export const PLACES_VIEW = "places";
+export const PLACE_TIMELINE_VIEW = "place-timeline";
+export const ALL_MEMORIES_VIEW = "all-memories";
+export const MEMORY_TIMELINE_VIEW = "memory-timeline";
+export const SEARCH_VIEW = "search";
+export const DASHBOARD_VIEW = "dashboard";
+export const LOGS_VIEW = "logs";
+export const SETTINGS_VIEW = "settings";
+export const INFO_VIEW = "info";
 
 export type PersonOrigin = typeof PEOPLE_VIEW | typeof EXPLORE_VIEW;
 
@@ -78,6 +88,7 @@ export function createNavigationController(options: NavigationOptions) {
   }
 
   function openExplore() {
+    if (view === EXPLORE_VIEW) return;
     view = EXPLORE_VIEW;
     void refresh.explore();
   }

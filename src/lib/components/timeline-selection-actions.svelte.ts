@@ -5,11 +5,15 @@ import { restoreFeedbackFor, type RemoteAssetRestoreOutcome, type RestoreFeedbac
 /** The bulk actions of a timeline selection; at most one runs at a time. */
 export type SelectionAction = "favorite" | "album" | "download" | "restore";
 
-/** What a finished favorite, add-to-Album or Download bulk action reports: `succeeded` of `total` selected Remote Assets. */
-export interface SelectionResult {
-  action: "favorite" | "album" | "download";
+/** How many of the selected Remote Assets a bulk action handled. */
+export interface SelectionCounts {
   succeeded: number;
   total: number;
+}
+
+/** What a finished favorite, add-to-Album or Download bulk action reports (Restore reports through `restoreFeedback`). */
+export interface SelectionResult extends SelectionCounts {
+  action: Exclude<SelectionAction, "restore">;
 }
 
 export interface TimelineSelectionActionsOptions {
@@ -18,7 +22,7 @@ export interface TimelineSelectionActionsOptions {
     assetIds: string[],
     isFavorite: boolean,
     isCurrent: () => boolean,
-  ) => Promise<{ succeeded: number; total: number } | null>;
+  ) => Promise<SelectionCounts | null>;
   readonly clearFavoriteError: () => void;
   /** Rejects on failure; anything but "saved" (cancelled, stale) is not reported. */
   readonly download: (assetIds: string[], isCurrent: () => boolean) => Promise<RemoteAssetDownloadOutcome>;
@@ -55,6 +59,12 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     select([]);
   }
 
+  /** Selecting is over: drops the selection and reports what the action did. */
+  function finish(action: SelectionResult["action"], counts: SelectionCounts) {
+    clear();
+    result = { action, ...counts };
+  }
+
   /** Call when a Remote Asset left the timeline. */
   function forget(assetId: string) {
     if (!selectedIds.has(assetId)) return;
@@ -76,12 +86,17 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     clear();
   }
 
+  /** Tells whether the timeline was neither refreshed nor replaced (`reset`) since this call. */
+  function currentGeneration() {
+    const started = generation;
+    return () => started === generation;
+  }
+
   /** Starts `action` on the selection unless another one runs; the callback tells whether its result still applies. */
   async function run(action: SelectionAction, perform: (assetIds: string[], isCurrent: () => boolean) => Promise<void>) {
     const assetIds = [...selectedIds];
     if (assetIds.length === 0 || busyAction !== null) return false;
-    const started = generation;
-    const isCurrent = () => started === generation;
+    const isCurrent = currentGeneration();
     clearResult();
     busyAction = action;
     try {
@@ -97,8 +112,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
       options.clearFavoriteError();
       const outcome = await options.updateFavorites(assetIds, isFavorite, isCurrent);
       if (!outcome || !isCurrent()) return;
-      clear();
-      result = { action: "favorite", ...outcome };
+      finish("favorite", outcome);
     });
   }
 
@@ -110,8 +124,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
         succeeded = (await options.addAssetsToAlbum(assetIds, albumId)).succeeded;
       } catch { /* Reported as zero succeeded below. */ }
       if (!isCurrent()) return;
-      clear();
-      result = { action: "album", succeeded, total: assetIds.length };
+      finish("album", { succeeded, total: assetIds.length });
     });
   }
 
@@ -143,10 +156,12 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
 
   /** Restores one Remote Asset (from the Lightbox). `applied` is false when the timeline changed meanwhile. */
   async function restoreOne(assetId: string) {
-    const started = generation;
+    const restoreAssets = options.restore;
+    if (!restoreAssets) throw new Error("This timeline offers no Restore.");
+    const isCurrent = currentGeneration();
     restoreFeedback = null;
-    const outcome = await options.restore!([assetId]);
-    const applied = started === generation && outcome.restoredAssetIds.includes(assetId);
+    const outcome = await restoreAssets([assetId]);
+    const applied = isCurrent() && outcome.restoredAssetIds.includes(assetId);
     if (applied) restoreFeedback = restoreFeedbackFor(outcome, 1);
     return { outcome, applied };
   }

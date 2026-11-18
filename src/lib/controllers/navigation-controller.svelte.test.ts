@@ -70,9 +70,13 @@ describe("navigation controller", () => {
     expect(refresh.filteredTimeline).toHaveBeenLastCalledWith("archive");
   });
 
-  it("refreshes the Explore Overview every time it opens", () => {
+  it("refreshes the Explore Overview when it opens and not when it is already open", () => {
     const { navigation, refresh } = setup();
     navigation.openExplore();
+    navigation.openExplore();
+    expect(navigation.view).toBe("explore");
+    expect(refresh.explore).toHaveBeenCalledTimes(1);
+    navigation.openPeople();
     navigation.openExplore();
     expect(refresh.explore).toHaveBeenCalledTimes(2);
   });
