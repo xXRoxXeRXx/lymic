@@ -404,6 +404,30 @@ describe("selection unarchive", () => {
     expect(selection.archiveFeedback).toBeNull();
     expect(selection.busyAction).toBeNull();
   });
+
+  it("unarchives a single asset outside the busy state and keeps its feedback only while the timeline is the same", async () => {
+    const unarchive = vi.fn(async (ids: string[]) => outcome(ids, []));
+    const selection = createSelection({ unarchive });
+
+    const result = await selection.unarchiveOne("a");
+
+    expect(unarchive).toHaveBeenCalledWith(["a"]);
+    expect(result.changedAssetIds).toEqual(["a"]);
+    expect(selection.busyAction).toBeNull();
+    expect(selection.archiveFeedback).toEqual({ action: "unarchive", feedback: { kind: "success", count: 1 } });
+
+    const pending = deferred<ReturnType<typeof outcome>>();
+    const stale = createSelection({ unarchive: () => pending.promise });
+    const running = stale.unarchiveOne("a");
+    stale.reset();
+    pending.resolve(outcome(["a"], []));
+    await running;
+    expect(stale.archiveFeedback).toBeNull();
+
+    const failing = createSelection({ unarchive: async () => outcome([], ["a"]) });
+    await failing.unarchiveOne("a");
+    expect(failing.archiveFeedback).toBeNull();
+  });
 });
 
 describe("selection archive", () => {
