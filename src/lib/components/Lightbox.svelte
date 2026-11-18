@@ -162,7 +162,7 @@
     isRestoring = true;
     try {
       const outcome = await onRestore(assetId);
-      if (isDestroyed || selectedAsset?.id !== assetId || outcome.restoredAssetIds.includes(assetId)) return;
+      if (isDestroyed || selectedAsset?.id !== assetId || outcome.changedAssetIds.includes(assetId)) return;
       restoreError = restoreFeedbackMessage(restoreFeedbackFor(outcome, 1), $t, numberLocale);
     } finally {
       if (!isDestroyed) isRestoring = false;

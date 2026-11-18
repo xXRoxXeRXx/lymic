@@ -291,7 +291,7 @@ describe("selection restore", () => {
   });
 
   it("keeps the assets that were not restored selected and reports partial feedback", async () => {
-    const restore = vi.fn(async () => ({ restoredAssetIds: ["a"], failedAssetIds: ["b"], failure: null }));
+    const restore = vi.fn(async () => ({ changedAssetIds: ["a"], failedAssetIds: ["b"], failure: null }));
     const selection = createSelection({ restore });
     selection.toggle("a");
     selection.toggle("b");
@@ -305,14 +305,14 @@ describe("selection restore", () => {
   });
 
   it("is dropped by reset and leaves no busy state", async () => {
-    const pending = deferred<{ restoredAssetIds: string[]; failedAssetIds: string[]; failure: null }>();
+    const pending = deferred<{ changedAssetIds: string[]; failedAssetIds: string[]; failure: null }>();
     const selection = createSelection({ restore: () => pending.promise });
     selection.toggle("a");
 
     const running = selection.restore();
     expect(selection.busyAction).toBe("restore");
     selection.reset();
-    pending.resolve({ restoredAssetIds: ["a"], failedAssetIds: [], failure: null });
+    pending.resolve({ changedAssetIds: ["a"], failedAssetIds: [], failure: null });
     await running;
 
     expect(selection.restoreFeedback).toBeNull();
@@ -320,20 +320,20 @@ describe("selection restore", () => {
   });
 
   it("restores a single asset outside the busy state and reports whether the result still applies", async () => {
-    const restore = vi.fn(async (ids: string[]) => ({ restoredAssetIds: ids, failedAssetIds: [], failure: null }));
+    const restore = vi.fn(async (ids: string[]) => ({ changedAssetIds: ids, failedAssetIds: [], failure: null }));
     const selection = createSelection({ restore });
 
     const { outcome, applied } = await selection.restoreOne("a");
 
-    expect(outcome.restoredAssetIds).toEqual(["a"]);
+    expect(outcome.changedAssetIds).toEqual(["a"]);
     expect(applied).toBe(true);
     expect(selection.restoreFeedback).toEqual({ kind: "success", count: 1 });
 
-    const pending = deferred<{ restoredAssetIds: string[]; failedAssetIds: string[]; failure: null }>();
+    const pending = deferred<{ changedAssetIds: string[]; failedAssetIds: string[]; failure: null }>();
     const stale = createSelection({ restore: () => pending.promise });
     const running = stale.restoreOne("a");
     stale.reset();
-    pending.resolve({ restoredAssetIds: ["a"], failedAssetIds: [], failure: null });
+    pending.resolve({ changedAssetIds: ["a"], failedAssetIds: [], failure: null });
     expect((await running).applied).toBe(false);
     expect(stale.restoreFeedback).toBeNull();
   });

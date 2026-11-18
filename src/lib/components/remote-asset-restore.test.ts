@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { restoreFeedbackFor, restoreFeedbackMessage, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
 
 const outcome = (restored: string[], failed: string[], failure: RemoteAssetRestoreOutcome["failure"] = null): RemoteAssetRestoreOutcome => ({
-  restoredAssetIds: restored,
+  changedAssetIds: restored,
   failedAssetIds: failed,
   failure,
 });
