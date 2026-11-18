@@ -94,7 +94,6 @@
   let selectedAsset = $state<TimelineAsset | null>(null);
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
   let isAddToAlbumOpen = $state(false);
-  let addToAlbumError = $state("");
   let opener = $state<HTMLElement | null>(null);
   const assetActions = createRemoteAssetActions({
     get getAssetDetails() { return desktop.getAssetDetails; },
@@ -123,17 +122,13 @@
     addAssetsToAlbum: (assetIds, albumId) => desktop.addAssetsToAlbum(assetIds, albumId),
     get restore() { return restoreTrashedAssets ? (assetIds: string[]) => restore.restore(assetIds) : undefined; },
   });
-  const selectionCount = $derived(selection.count);
-  const isSelectionMode = $derived(selection.isSelectionMode);
   const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selection.isSelected(asset.id)));
   const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => favorites.isFavorite(asset)));
   const hasNonFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => !favorites.isFavorite(asset)));
-  const isSelectionActionBusy = $derived(selection.isBusy);
 
   function resetSelectionAndModals() {
     selection.reset();
     isAddToAlbumOpen = false;
-    addToAlbumError = "";
   }
 
   function resetLightbox() {
@@ -341,9 +336,8 @@
   }
 
   function openAddSelectionToAlbum() {
-    if (selectionCount === 0 || !targetAlbumCatalogue || isSelectionActionBusy) return;
+    if (selection.count === 0 || !targetAlbumCatalogue || selection.isBusy) return;
     selection.clearResult();
-    addToAlbumError = "";
     isAddToAlbumOpen = true;
   }
 
@@ -352,7 +346,7 @@
   }
 
   function openAsset(asset: TimelineAsset, source: HTMLElement) {
-    if (isSelectionMode) return;
+    if (selection.isSelectionMode) return;
     favorites.open(asset.id);
     selectedAsset = { ...asset, isFavorite: favorites.isFavorite(asset) };
     opener = source;
@@ -363,7 +357,7 @@
     queueMicrotask(() => opener?.focus());
   }
   function handleKeydown(event: KeyboardEvent) {
-    if (!selectedAsset && isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen) {
+    if (!selectedAsset && selection.isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen) {
       event.preventDefault();
       selection.clear();
     }
@@ -420,24 +414,24 @@
   {:else}
     <div class="mb-2 h-8 shrink-0" aria-hidden="true"></div>
   {/if}
-  {#if isSelectionMode}
+  {#if selection.isSelectionMode}
     <div class="mb-3 mr-16 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 shadow-sm dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-100 sm:flex sm:flex-wrap">
-      <span class="min-w-0 truncate font-medium sm:mr-auto">{$t("timeline_selection_count", { values: { count: selectionCount.toLocaleString(numberLocale) } })}</span>
+      <span class="min-w-0 truncate font-medium sm:mr-auto">{$t("timeline_selection_count", { values: { count: selection.count.toLocaleString(numberLocale) } })}</span>
       <div class="col-span-2 flex flex-wrap justify-end gap-1 border-t border-blue-200 pt-2 dark:border-blue-900/70 sm:contents sm:border-0 sm:pt-0">
-        <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_download")} aria-label={$t("timeline_selection_download")} disabled={isSelectionActionBusy} onclick={() => void selection.download()}><Download class="h-4 w-4 {selection.busyAction === 'download' ? 'animate-spin' : ''}" /></button>
+        <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_download")} aria-label={$t("timeline_selection_download")} disabled={selection.isBusy} onclick={() => void selection.download()}><Download class="h-4 w-4 {selection.busyAction === 'download' ? 'animate-spin' : ''}" /></button>
         {#if restoreTrashedAssets}
-          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={selection.busyAction === 'restore'} disabled={isSelectionActionBusy} onclick={() => void selection.restore()}><ArchiveRestore class="h-4 w-4 {selection.busyAction === 'restore' ? 'animate-pulse' : ''}" /></button>
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={selection.busyAction === 'restore'} disabled={selection.isBusy} onclick={() => void selection.restore()}><ArchiveRestore class="h-4 w-4 {selection.busyAction === 'restore' ? 'animate-pulse' : ''}" /></button>
         {/if}
         {#if allowFavoriteAndAlbum && hasNonFavoriteSelection}
-          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_favorite")} aria-label={$t("timeline_add_favorite")} disabled={isSelectionActionBusy} onclick={() => void selection.setFavorite(true)}><Heart class="h-4 w-4" /></button>
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_favorite")} aria-label={$t("timeline_add_favorite")} disabled={selection.isBusy} onclick={() => void selection.setFavorite(true)}><Heart class="h-4 w-4" /></button>
         {/if}
         {#if allowFavoriteAndAlbum && hasFavoriteSelection}
-          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_remove_favorite")} aria-label={$t("timeline_remove_favorite")} disabled={isSelectionActionBusy} onclick={() => void selection.setFavorite(false)}><HeartOff class="h-4 w-4" /></button>
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_remove_favorite")} aria-label={$t("timeline_remove_favorite")} disabled={selection.isBusy} onclick={() => void selection.setFavorite(false)}><HeartOff class="h-4 w-4" /></button>
         {/if}
         {#if targetAlbumCatalogue}
-          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isSelectionActionBusy} onclick={openAddSelectionToAlbum}><Album class="h-4 w-4" /></button>
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={selection.isBusy} onclick={openAddSelectionToAlbum}><Album class="h-4 w-4" /></button>
         {/if}
-        <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_finish")} aria-label={$t("timeline_selection_finish")} disabled={isSelectionActionBusy} onclick={() => selection.clear()}><X class="h-4 w-4" /></button>
+        <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_finish")} aria-label={$t("timeline_selection_finish")} disabled={selection.isBusy} onclick={() => selection.clear()}><X class="h-4 w-4" /></button>
       </div>
     </div>
   {/if}
@@ -509,7 +503,7 @@
                         <span class="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white"><Play class="h-3 w-3 fill-current" />{formatDuration(item.asset.duration)}</span>
                       {/if}
                       </button>
-                      <label class="absolute left-0 top-0 z-10 flex h-11 w-11 cursor-pointer items-center justify-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 {isSelectionMode || selection.isSelected(item.asset.id) ? 'opacity-100' : ''}">
+                      <label class="absolute left-0 top-0 z-10 flex h-11 w-11 cursor-pointer items-center justify-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 {selection.isSelectionMode || selection.isSelected(item.asset.id) ? 'opacity-100' : ''}">
                         <input type="checkbox" class="peer sr-only" aria-label={$t("timeline_select_asset")} checked={selection.isSelected(item.asset.id)} onchange={() => selection.toggle(item.asset.id)} />
                         <span class="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-black/45 text-white shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 peer-focus-visible:ring-offset-2 {selection.isSelected(item.asset.id) ? 'border-blue-600 bg-blue-600 dark:border-sky-500 dark:bg-sky-500' : ''}">
                           {#if selection.isSelected(item.asset.id)}<Check class="h-3 w-3 stroke-[3]" />{/if}
@@ -577,8 +571,8 @@
     isOpen={isAddToAlbumOpen}
     catalogue={targetAlbumCatalogue}
     isAssigning={selection.busyAction === 'album'}
-    assignmentError={addToAlbumError}
+    assignmentError=""
     onConfirm={(albumId) => void assignSelectedAssetToAlbum(albumId)}
-    onCancel={() => { if (selection.busyAction !== 'album') { isAddToAlbumOpen = false; addToAlbumError = ""; } }}
+    onCancel={() => { if (selection.busyAction !== 'album') { isAddToAlbumOpen = false; } }}
   />
 {/if}
