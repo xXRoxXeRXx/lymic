@@ -44,6 +44,8 @@
     setAssetsVisibility?(assetIds: string[], visibility: AssetVisibility): Promise<AssetVisibilityResult>;
     /** The one Archive action the multi-selection offers (Archive in the Photo and Favorites Timelines, Unarchive in the Archive Timeline); leave it out where there is none. */
     archiveAction?: ArchiveAction;
+    /** For a view that shows archived and other assets together: an archived asset stays in the list. */
+    archivedAssetsStay?: boolean;
     /** Where to scroll to once the first buckets are shown, for a view that is reopened where the user left it. */
     initialScrollTop?: number;
     /** Reports the scroll position when the view opens and whenever the user scrolls. */
@@ -77,6 +79,7 @@
     restoreTrashedAssets,
     setAssetsVisibility,
     archiveAction,
+    archivedAssetsStay = false,
     initialScrollTop = 0,
     onScrollPosition,
     onSelectTag,
@@ -125,6 +128,9 @@
   const archive = createRemoteAssetArchive({
     get timeline() { return timeline; },
     setAssetsVisibility: (assetIds, visibility) => setAssetsVisibility!(assetIds, visibility),
+    get assetsStayInView() { return archivedAssetsStay; },
+    // A hidden asset (a Live Photo's video) is not archivable: Immich would accept it and make it a standalone asset (#287).
+    isArchivable: (assetId) => lightboxAssets.find((asset) => asset.id === assetId)?.visibility !== "hidden",
     onRemoved: (assetId) => selection.forget(assetId),
   });
   const offersArchive = $derived(archiveAction === "archive" && setAssetsVisibility !== undefined);

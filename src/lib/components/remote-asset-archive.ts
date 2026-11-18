@@ -57,6 +57,13 @@ export interface RemoteAssetArchiveOptions {
   readonly setAssetsVisibility: (assetIds: string[], visibility: AssetVisibility) => Promise<AssetVisibilityResult>;
   /** Called after a changed Remote Asset left the view. */
   onRemoved?: (assetId: string) => void;
+  /**
+   * For a view that shows archived and other assets together (Album, Person, Place, Memory, Tag, Search):
+   * an archived Remote Asset stays in the list, so nothing is removed after an Archive.
+   */
+  assetsStayInView?: boolean;
+  /** Whether an Archive may write this Remote Asset; one that may not (a `hidden` one) is left out of the request and counts as failed. */
+  isArchivable?: (assetId: string) => boolean;
 }
 
 /**
@@ -66,14 +73,22 @@ export interface RemoteAssetArchiveOptions {
  */
 export function createRemoteAssetArchive(options: RemoteAssetArchiveOptions) {
   async function apply(action: ArchiveAction, assetIds: string[]): Promise<RemoteAssetArchiveOutcome> {
+    const writable = action === "archive" && options.isArchivable ? assetIds.filter(options.isArchivable) : assetIds;
+    const skipped = new Set(assetIds.filter((assetId) => !writable.includes(assetId)));
+    if (writable.length === 0) return { changedAssetIds: [], failedAssetIds: [...assetIds], failure: null };
     let result: AssetVisibilityResult;
     try {
-      result = await options.setAssetsVisibility(assetIds, VISIBILITY[action]);
+      result = await options.setAssetsVisibility(writable, VISIBILITY[action]);
     } catch (error) {
       return bulkAssetOutcomeFromFailure(assetIds, error, "archive");
     }
     // Anything not confirmed as changed stays visible, whatever the backend said about it.
-    const outcome = bulkAssetOutcomeFromResult(assetIds, result.changedAssetIds);
+    const written = bulkAssetOutcomeFromResult(writable, result.changedAssetIds);
+    const outcome: RemoteAssetArchiveOutcome = {
+      ...written,
+      failedAssetIds: assetIds.filter((assetId) => skipped.has(assetId) || written.failedAssetIds.includes(assetId)),
+    };
+    if (options.assetsStayInView) return outcome;
     for (const assetId of outcome.changedAssetIds) {
       options.timeline.removeAsset(assetId);
       options.onRemoved?.(assetId);

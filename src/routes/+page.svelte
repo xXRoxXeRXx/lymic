@@ -397,6 +397,9 @@
     onScrollPosition: (scrollTop: number) => { timelineScrollTop = scrollTop; },
     onSelectTag: selectTag,
   });
+  /** What the views that show archived and other assets together add: the selection offers Archive and the assets stay in the list. */
+  const mixedViewArchiveProps = { setAssetsVisibility, archiveAction: "archive", archivedAssetsStay: true } as const;
+  const mixedTimelineProps = $derived({ ...sharedTimelineProps, ...mixedViewArchiveProps });
 </script>
 
 <div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60">
@@ -571,25 +574,25 @@
           <AlbumCatalogueView catalogue={albumCatalogue} onSelect={navigation.selectAlbum} />
         {:else if currentView === ALBUM_TIMELINE_VIEW && navigation.albumTimeline}
           <BackBarView label={$t('albums_return')} onBack={navigation.returnToAlbums}>
-            <TimelineView timeline={navigation.albumTimeline} {...sharedTimelineProps} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
+            <TimelineView timeline={navigation.albumTimeline} {...mixedTimelineProps} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
           </BackBarView>
         {:else if currentView === PLACE_TIMELINE_VIEW && placeTimeline}
           <BackBarView label={$t(placeOrigin === PLACES_VIEW ? 'places_return' : 'explore_return')} onBack={returnFromPlaceTimeline}>
-            <TimelineView timeline={placeTimeline} {...sharedTimelineProps} emptyMessage={$t('places_timeline_empty')} loadErrorMessage={$t('places_timeline_error')} />
+            <TimelineView timeline={placeTimeline} {...mixedTimelineProps} emptyMessage={$t('places_timeline_empty')} loadErrorMessage={$t('places_timeline_error')} />
           </BackBarView>
         {:else if currentView === PERSON_TIMELINE_VIEW && navigation.personTimeline}
           <BackBarView label={$t(navigation.personOrigin === EXPLORE_VIEW ? 'explore_return' : 'people_return')} onBack={navigation.returnFromPersonTimeline}>
-            <TimelineView timeline={navigation.personTimeline} {...sharedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
+            <TimelineView timeline={navigation.personTimeline} {...mixedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
           </BackBarView>
         {:else if currentView === MEMORY_TIMELINE_VIEW && memoryTimeline}
           <BackBarView label={$t(memoryOrigin === ALL_MEMORIES_VIEW ? 'memories_all_return' : 'explore_return')} onBack={returnFromMemoryTimeline}>
-            <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} />
+            <TimelineView timeline={memoryTimeline} {...mixedTimelineProps} emptyMessage={$t('memories_timeline_empty')} />
           </BackBarView>
         {:else if currentView === TAG_TIMELINE_VIEW && tagTimeline}
           <BackBarView label={$t("tags_timeline_return", { values: { view: viewTitle(tagOrigin.view) } })} onBack={returnFromTagTimeline}>
             <!-- A Tag chip in the Lightbox opens another Tag Timeline in this same place: start it afresh, at its top. -->
             {#key tagTimeline}
-              <TimelineView timeline={tagTimeline} {...sharedTimelineProps} emptyMessage={$t('tags_timeline_empty')} loadErrorMessage={$t('tags_timeline_error')} />
+              <TimelineView timeline={tagTimeline} {...mixedTimelineProps} emptyMessage={$t('tags_timeline_empty')} loadErrorMessage={$t('tags_timeline_error')} />
             {/key}
           </BackBarView>
         {:else if currentView === SEARCH_VIEW}
@@ -597,7 +600,7 @@
             {search}
             backLabel={$t("search_return", { values: { view: viewTitle(searchOrigin?.view ?? PHOTOS_VIEW) } })}
             onBack={returnFromSearch}
-            timelineProps={sharedTimelineProps}
+            timelineProps={mixedTimelineProps}
           />
         {:else if currentView === DASHBOARD_VIEW}
           <DashboardView

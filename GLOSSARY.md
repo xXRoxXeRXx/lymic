@@ -225,7 +225,7 @@ A Remote Asset that Immich hides from its main views (visibility `archive`). Lym
 _Avoid_: archive (alone, for the asset), hidden asset
 
 **Archive**:
-Setting a Remote Asset's visibility from `timeline` to `archive`, from the Lightbox or a multi-selection, so Immich hides it from the Photo and Favorites Timelines. It runs at once without a confirmation and is undone by Unarchive. Lymic offers it only where the Remote Asset is not a Trashed Asset, and never writes `locked` or `hidden` (ADR-0012).
+Setting a Remote Asset's visibility from `timeline` to `archive`, from the Lightbox or a multi-selection, so Immich hides it from the Photo and Favorites Timelines. In the views that show archived and other assets together (Album, Person, Place, Memory and Tag Timelines, Search Results) the multi-selection offers only Archive and the assets stay in the list. It runs at once without a confirmation and is undone by Unarchive. Lymic offers it only where the Remote Asset is not a Trashed Asset, and never writes `locked` or `hidden` (ADR-0012).
 _Avoid_: hide, move to archive, send to archive
 
 **Unarchive**:

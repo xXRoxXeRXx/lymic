@@ -28,6 +28,10 @@ pub struct TimelineAsset {
     pub file_size: Option<u64>,
     pub duration: Option<u64>,
     pub is_favorite: bool,
+    /// The asset's Immich `visibility` when the response names one (`timeline`, `archive`, `hidden`,
+    /// `locked`); absent when it does not. Only a guard (Archive skips `hidden` assets), never shown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<String>,
 }
 
 /// A complete, locally indexed Album Timeline. Unlike the library timeline,
@@ -192,6 +196,8 @@ pub(super) struct TimelineAssetResponse {
     duration: Option<u64>,
     #[serde(rename = "isFavorite", default)]
     is_favorite: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_visibility")]
+    visibility: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -252,6 +258,22 @@ struct ColumnarTimelineBucketResponse {
     file_created_at: Vec<Option<String>>,
     #[serde(rename = "createdAt", default)]
     created_at: Vec<Option<String>>,
+    #[serde(default)]
+    visibility: Vec<Option<serde_json::Value>>,
+}
+
+/// Reads an optional `visibility` string; any other value counts as absent, so an unexpected
+/// shape never fails a timeline.
+fn visibility_from_value(value: &serde_json::Value) -> Option<String> {
+    value.as_str().map(str::to_string)
+}
+
+fn deserialize_visibility<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.as_ref().and_then(visibility_from_value))
 }
 
 fn default_image_type() -> String {
@@ -622,6 +644,11 @@ fn parse_timeline_bucket_assets(
                         .get(index)
                         .and_then(|value| *value)
                         .unwrap_or(default_favorite),
+                    visibility: columnar
+                        .visibility
+                        .get(index)
+                        .and_then(|value| value.as_ref())
+                        .and_then(visibility_from_value),
                 }
             })
             .collect(),
@@ -656,6 +683,7 @@ pub(super) fn timeline_asset_from_response(
         file_size: asset.exif.file_size,
         duration: asset.duration,
         is_favorite: asset.is_favorite.unwrap_or(default_favorite),
+        visibility: asset.visibility,
     }
 }
 
@@ -719,6 +747,7 @@ mod tests {
                 file_size: None,
                 duration: None,
                 is_favorite: false,
+                visibility: None,
             },
             TimelineAsset {
                 id: "dateless".to_string(),
@@ -731,6 +760,7 @@ mod tests {
                 file_size: None,
                 duration: None,
                 is_favorite: false,
+                visibility: None,
             },
         ]);
 
@@ -1289,6 +1319,64 @@ mod tests {
         assert_eq!(march[0].width, 1200);
         assert_eq!(march[0].height, 900);
         assert_eq!(march[1].duration, Some(65));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn keeps_the_visibility_of_album_metadata_items_and_leaves_it_out_when_absent() {
+        let body = r#"{"assets":{"items":[{"id":"still","type":"IMAGE","visibility":"timeline","fileCreatedAt":"2025-03-10T10:00:00.000Z"},{"id":"live-video","type":"VIDEO","visibility":"hidden","fileCreatedAt":"2025-03-10T10:00:00.000Z"},{"id":"old-server","type":"IMAGE","fileCreatedAt":"2025-03-09T10:00:00.000Z"}],"nextPage":null}}"#;
+        let (url, server) = serve_pages(vec![("200 OK", body)]).await;
+        let client = test_client(url, "test-key");
+
+        let timeline = client.get_album_timeline("album-1").await.unwrap();
+
+        let march = &timeline.assets_by_bucket["2025-03-01T00:00:00.000Z"];
+        let visibility = |id: &str| {
+            march
+                .iter()
+                .find(|asset| asset.id == id)
+                .unwrap()
+                .visibility
+                .as_deref()
+        };
+        assert_eq!(visibility("still"), Some("timeline"));
+        assert_eq!(visibility("live-video"), Some("hidden"));
+        assert_eq!(visibility("old-server"), None);
+        let serialized = serde_json::to_value(&timeline).unwrap();
+        let items = serialized["assetsByBucket"]["2025-03-01T00:00:00.000Z"]
+            .as_array()
+            .unwrap();
+        assert!(items.iter().any(|item| item["visibility"] == "hidden"));
+        assert!(items
+            .iter()
+            .filter(|item| item["id"] == "old-server")
+            .all(|item| item.get("visibility").is_none()));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn keeps_the_visibility_of_columnar_bucket_assets() {
+        let buckets = r#"[{"timeBucket":"2026-11-01","count":3}]"#;
+        let assets = r#"{"id":["a","b","c"],"isImage":[true,true,true],"visibility":["timeline","hidden",null],"fileCreatedAt":["2026-11-04T10:00:00.000Z","2026-11-03T10:00:00.000Z","2026-11-02T10:00:00.000Z"]}"#;
+        let (url, server) = serve_pages(vec![("200 OK", buckets), ("200 OK", assets)]).await;
+        let client = test_client(url, "test-key");
+
+        client
+            .get_person_timeline_buckets("person-1")
+            .await
+            .unwrap();
+        let assets = client
+            .get_person_timeline_bucket_assets("person-1", "2026-11-01")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            assets
+                .iter()
+                .map(|asset| asset.visibility.as_deref())
+                .collect::<Vec<_>>(),
+            vec![Some("timeline"), Some("hidden"), None]
+        );
         server.await.unwrap();
     }
 
