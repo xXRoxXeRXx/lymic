@@ -1,6 +1,8 @@
+import type { ViewId } from "./navigation-controller.svelte";
+
 /** An open view and the scroll position to return to; Back from a Search or a Tag Timeline returns to one. */
 export interface ViewPosition {
-  view: string;
+  view: ViewId;
   top: number;
 }
 
