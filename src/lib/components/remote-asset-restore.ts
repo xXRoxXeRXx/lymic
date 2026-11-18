@@ -7,6 +7,7 @@ import {
   type BulkAssetFeedback,
   type BulkAssetFeedbackKeys,
   type BulkAssetOutcome,
+  type Translate,
 } from "./bulk-asset-outcome";
 import type { TimelineController } from "../controllers/timeline-controller.svelte";
 
@@ -26,8 +27,6 @@ const RESTORE_FEEDBACK_KEYS: BulkAssetFeedbackKeys = {
   permission: "trash_restore_permission",
   failed: "trash_restore_failed",
 };
-
-type Translate = (key: string, options?: { values: Record<string, string | number> }) => string;
 
 /** The localized message for Restore feedback; counts are formatted for `numberLocale`. */
 export function restoreFeedbackMessage(feedback: RestoreFeedback, translate: Translate, numberLocale: string): string {

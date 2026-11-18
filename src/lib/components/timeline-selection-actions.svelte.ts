@@ -168,7 +168,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
   }
 
   /** Archives or unarchives the selection; Remote Assets that did not change stay selected so the user can retry. */
-  async function changeArchiveStatus(action: ArchiveAction, change: ((assetIds: string[]) => Promise<RemoteAssetArchiveOutcome>) | undefined) {
+  async function changeSelectionArchive(action: ArchiveAction, change: ((assetIds: string[]) => Promise<RemoteAssetArchiveOutcome>) | undefined) {
     if (!change) return;
     await run(action, async (assetIds, isCurrent) => {
       archiveFeedback = null;
@@ -179,8 +179,8 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     });
   }
 
-  const archive = () => changeArchiveStatus("archive", options.archive);
-  const unarchive = () => changeArchiveStatus("unarchive", options.unarchive);
+  const archive = () => changeSelectionArchive("archive", options.archive);
+  const unarchive = () => changeSelectionArchive("unarchive", options.unarchive);
 
   /** Restores one Remote Asset (from the Lightbox). `applied` is false when the timeline changed meanwhile. */
   async function restoreOne(assetId: string) {
@@ -196,7 +196,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
 
   /** Archives or unarchives one Remote Asset (from the Lightbox). Its feedback is kept only when the change was applied to the current timeline. */
   async function archiveOne(action: ArchiveAction, assetId: string) {
-    const change = action === "archive" ? options.archive : options.unarchive;
+    const change = options[action];
     if (!change) throw new Error(`This timeline offers no ${action === "archive" ? "Archive" : "Unarchive"}.`);
     const isCurrent = currentGeneration();
     archiveFeedback = null;
