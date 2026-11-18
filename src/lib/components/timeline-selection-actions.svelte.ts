@@ -4,7 +4,7 @@ import { archiveFeedbackFor, type ArchiveAction, type ArchiveFeedback, type Remo
 import { restoreFeedbackFor, type RemoteAssetRestoreOutcome, type RestoreFeedback } from "./remote-asset-restore";
 
 /** The bulk actions of a timeline selection; at most one runs at a time. */
-export type SelectionAction = "favorite" | "album" | "download" | "restore" | "unarchive";
+export type SelectionAction = "favorite" | "album" | "download" | "restore" | "archive" | "unarchive";
 
 /** How many of the selected Remote Assets a bulk action handled. */
 export interface SelectionCounts {
@@ -12,9 +12,9 @@ export interface SelectionCounts {
   total: number;
 }
 
-/** What a finished favorite, add-to-Album or Download bulk action reports (Restore and Unarchive report through their own feedback). */
+/** What a finished favorite, add-to-Album or Download bulk action reports (Restore, Archive and Unarchive report through their own feedback). */
 export interface SelectionResult extends SelectionCounts {
-  action: Exclude<SelectionAction, "restore" | "unarchive">;
+  action: Exclude<SelectionAction, "restore" | "archive" | "unarchive">;
 }
 
 /** What the user is told about the last Archive or Unarchive of the selection. */
@@ -36,12 +36,14 @@ export interface TimelineSelectionActionsOptions {
   readonly addAssetsToAlbum: (assetIds: string[], albumId: string) => Promise<AlbumAssignmentResult>;
   /** Restore of Trashed Assets; leave it out where the timeline offers no Restore. Never rejects. */
   readonly restore?: (assetIds: string[]) => Promise<RemoteAssetRestoreOutcome>;
+  /** Archive of Remote Assets; leave it out where the timeline offers no Archive. Never rejects. */
+  readonly archive?: (assetIds: string[]) => Promise<RemoteAssetArchiveOutcome>;
   /** Unarchive of Archived Assets; leave it out where the timeline offers no Unarchive. Never rejects. */
   readonly unarchive?: (assetIds: string[]) => Promise<RemoteAssetArchiveOutcome>;
 }
 
 /**
- * Owns the multi-selection of a timeline and its bulk actions (favorite, add to Album, Download, Restore, Unarchive):
+ * Owns the multi-selection of a timeline and its bulk actions (favorite, add to Album, Download, Restore, Archive, Unarchive):
  * the selected set, which single action is running, and the last result. Call `reset` when the timeline
  * refreshed or was replaced: it ends the running action and drops its result when it arrives.
  */
@@ -165,18 +167,20 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     });
   }
 
-  /** Unarchives the selection; Archived Assets that were not unarchived stay selected so the user can retry. */
-  async function unarchive() {
-    const unarchiveAssets = options.unarchive;
-    if (!unarchiveAssets) return;
-    await run("unarchive", async (assetIds, isCurrent) => {
+  /** Archives or unarchives the selection; Remote Assets that did not change stay selected so the user can retry. */
+  async function changeArchiveStatus(action: ArchiveAction, change: ((assetIds: string[]) => Promise<RemoteAssetArchiveOutcome>) | undefined) {
+    if (!change) return;
+    await run(action, async (assetIds, isCurrent) => {
       archiveFeedback = null;
-      const outcome = await unarchiveAssets(assetIds);
+      const outcome = await change(assetIds);
       if (!isCurrent()) return;
       select(outcome.failedAssetIds);
-      archiveFeedback = { action: "unarchive", feedback: archiveFeedbackFor(outcome, assetIds.length) };
+      archiveFeedback = { action, feedback: archiveFeedbackFor(outcome, assetIds.length) };
     });
   }
+
+  const archive = () => changeArchiveStatus("archive", options.archive);
+  const unarchive = () => changeArchiveStatus("unarchive", options.unarchive);
 
   /** Restores one Remote Asset (from the Lightbox). `applied` is false when the timeline changed meanwhile. */
   async function restoreOne(assetId: string) {
@@ -210,6 +214,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     download,
     restore,
     restoreOne,
+    archive,
     unarchive,
   };
 }

@@ -433,4 +433,10 @@
   ,"archive_unarchive_none": "Не удалось разархивировать {failed} из {count}. Повторите попытку."
   ,"archive_unarchive_failed": "Не удалось разархивировать. Повторите попытку."
   ,"archive_unarchive_permission": "Разархивирование отклонено. Предоставьте ключу API разрешение asset.update."
+  ,"archive_archive": "Архивировать"
+  ,"archive_archive_success": "Архивировано: {count}."
+  ,"archive_archive_partial": "Не удалось архивировать {failed} из {count}. Они остаются выбранными, чтобы вы могли повторить попытку."
+  ,"archive_archive_none": "Не удалось архивировать {failed} из {count}. Повторите попытку."
+  ,"archive_archive_failed": "Не удалось архивировать. Повторите попытку."
+  ,"archive_archive_permission": "Архивирование отклонено. Предоставьте ключу API разрешение asset.update."
 }

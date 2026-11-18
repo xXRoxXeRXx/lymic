@@ -1,7 +1,7 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
   import { tick, untrack, type Snippet } from "svelte";
-  import { Album, ArchiveRestore, ArchiveX, Check, Download, Heart, HeartOff, Play, RefreshCw, X } from "lucide-svelte";
+  import { Album, Archive, ArchiveRestore, ArchiveX, Check, Download, Heart, HeartOff, Play, RefreshCw, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineController } from "../controllers/timeline-controller.svelte";
@@ -42,7 +42,7 @@
     restoreTrashedAssets?(assetIds: string[]): Promise<TrashRestoreResult>;
     /** Writes the visibility for an Archive or Unarchive; needed together with `archiveAction`. */
     setAssetsVisibility?(assetIds: string[], visibility: AssetVisibility): Promise<AssetVisibilityResult>;
-    /** The one Archive action the multi-selection offers (Unarchive in the Archive Timeline); leave it out where there is none. */
+    /** The one Archive action the multi-selection offers (Archive in the Photo and Favorites Timelines, Unarchive in the Archive Timeline); leave it out where there is none. */
     archiveAction?: ArchiveAction;
     /** Where to scroll to once the first buckets are shown, for a view that is reopened where the user left it. */
     initialScrollTop?: number;
@@ -127,6 +127,7 @@
     setAssetsVisibility: (assetIds, visibility) => setAssetsVisibility!(assetIds, visibility),
     onRemoved: (assetId) => selection.forget(assetId),
   });
+  const offersArchive = $derived(archiveAction === "archive" && setAssetsVisibility !== undefined);
   const offersUnarchive = $derived(archiveAction === "unarchive" && setAssetsVisibility !== undefined);
   const selection = createTimelineSelectionActions({
     updateFavorites: (assetIds, isFavorite, isCurrent) => favorites.updateMany(assetIds, isFavorite, isCurrent),
@@ -134,6 +135,7 @@
     download: (assetIds, isCurrent) => assetActions.download(assetIds, isCurrent),
     addAssetsToAlbum: (assetIds, albumId) => desktop.addAssetsToAlbum(assetIds, albumId),
     get restore() { return restoreTrashedAssets ? (assetIds: string[]) => restore.restore(assetIds) : undefined; },
+    get archive() { return offersArchive ? (assetIds: string[]) => archive.apply("archive", assetIds) : undefined; },
     get unarchive() { return offersUnarchive ? (assetIds: string[]) => archive.apply("unarchive", assetIds) : undefined; },
   });
   const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selection.isSelected(asset.id)));
@@ -435,6 +437,9 @@
         <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_download")} aria-label={$t("timeline_selection_download")} disabled={selection.isBusy} onclick={() => void selection.download()}><Download class="h-4 w-4 {selection.busyAction === 'download' ? 'animate-spin' : ''}" /></button>
         {#if restoreTrashedAssets}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={selection.busyAction === 'restore'} disabled={selection.isBusy} onclick={() => void selection.restore()}><ArchiveRestore class="h-4 w-4 {selection.busyAction === 'restore' ? 'animate-pulse' : ''}" /></button>
+        {/if}
+        {#if offersArchive}
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("archive_archive")} aria-label={$t("archive_archive")} aria-busy={selection.busyAction === 'archive'} disabled={selection.isBusy} onclick={() => void selection.archive()}><Archive class="h-4 w-4 {selection.busyAction === 'archive' ? 'animate-pulse' : ''}" /></button>
         {/if}
         {#if offersUnarchive}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("archive_unarchive")} aria-label={$t("archive_unarchive")} aria-busy={selection.busyAction === 'unarchive'} disabled={selection.isBusy} onclick={() => void selection.unarchive()}><ArchiveX class="h-4 w-4 {selection.busyAction === 'unarchive' ? 'animate-pulse' : ''}" /></button>

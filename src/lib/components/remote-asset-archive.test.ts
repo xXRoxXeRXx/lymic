@@ -46,6 +46,43 @@ describe("Unarchive", () => {
   });
 });
 
+describe("Archive", () => {
+  it("writes the archive visibility and removes the archived assets from the view", async () => {
+    const setAssetsVisibility = vi.fn(async (assetIds: string[]) => ({ changedAssetIds: assetIds }));
+    const { archive, removeAsset, onRemoved } = setup(setAssetsVisibility);
+
+    const outcome = await archive.apply("archive", ["a", "b"]);
+
+    expect(setAssetsVisibility).toHaveBeenCalledWith(["a", "b"], "archive");
+    expect(outcome).toEqual({ changedAssetIds: ["a", "b"], failedAssetIds: [], failure: null });
+    expect(removeAsset.mock.calls).toEqual([["a"], ["b"]]);
+    expect(onRemoved.mock.calls).toEqual([["a"], ["b"]]);
+  });
+
+  it("keeps assets the backend did not confirm and reports a missing permission without removing anything", async () => {
+    const partial = setup(async () => ({ changedAssetIds: ["a"] }));
+    expect(await partial.archive.apply("archive", ["a", "b"])).toEqual({ changedAssetIds: ["a"], failedAssetIds: ["b"], failure: null });
+    expect(partial.removeAsset.mock.calls).toEqual([["a"]]);
+
+    const refused = setup(async () => { throw "archive_permission_denied:asset.update"; });
+    expect(await refused.archive.apply("archive", ["a"])).toEqual({ changedAssetIds: [], failedAssetIds: ["a"], failure: "permission" });
+    expect(refused.removeAsset).not.toHaveBeenCalled();
+  });
+});
+
+describe("Archive feedback", () => {
+  const translate = (key: string, options?: { values: Record<string, string | number> }) =>
+    `${key}${options ? `:${JSON.stringify(options.values)}` : ""}`;
+
+  it("uses the Archive locale keys with locale-formatted counts", () => {
+    expect(archiveFeedbackMessage("archive", { kind: "success", count: 1234 }, translate, "en")).toBe('archive_archive_success:{"count":"1,234"}');
+    expect(archiveFeedbackMessage("archive", { kind: "partial", failed: 2, total: 3 }, translate, "en")).toBe('archive_archive_partial:{"failed":"2","count":"3"}');
+    expect(archiveFeedbackMessage("archive", { kind: "none", failed: 1, total: 1 }, translate, "en")).toBe('archive_archive_none:{"failed":"1","count":"1"}');
+    expect(archiveFeedbackMessage("archive", { kind: "permission" }, translate, "en")).toBe("archive_archive_permission");
+    expect(archiveFeedbackMessage("archive", { kind: "failed" }, translate, "en")).toBe("archive_archive_failed");
+  });
+});
+
 describe("Unarchive feedback", () => {
   const translate = (key: string, options?: { values: Record<string, string | number> }) =>
     `${key}${options ? `:${JSON.stringify(options.values)}` : ""}`;

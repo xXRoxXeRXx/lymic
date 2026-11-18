@@ -10,8 +10,8 @@ import {
 } from "./bulk-asset-outcome";
 import type { TimelineController } from "../controllers/timeline-controller.svelte";
 
-/** What Lymic changes about a Remote Asset's archive status. Only Unarchive exists so far; Archive joins it in its own ticket. */
-export type ArchiveAction = "unarchive";
+/** What Lymic changes about a Remote Asset's archive status. */
+export type ArchiveAction = "archive" | "unarchive";
 
 /** What an Archive or Unarchive did: the shared bulk outcome, where "changed" means the visibility was written. */
 export type RemoteAssetArchiveOutcome = BulkAssetOutcome;
@@ -24,10 +24,18 @@ export const archiveFeedbackFor = bulkAssetFeedbackFor;
 
 /** The only visibility each action writes: Lymic never sends `locked` or `hidden`. */
 const VISIBILITY: Record<ArchiveAction, AssetVisibility> = {
+  archive: "archive",
   unarchive: "timeline",
 };
 
 const FEEDBACK_KEYS: Record<ArchiveAction, BulkAssetFeedbackKeys> = {
+  archive: {
+    success: "archive_archive_success",
+    partial: "archive_archive_partial",
+    none: "archive_archive_none",
+    permission: "archive_archive_permission",
+    failed: "archive_archive_failed",
+  },
   unarchive: {
     success: "archive_unarchive_success",
     partial: "archive_unarchive_partial",
