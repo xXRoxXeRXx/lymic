@@ -141,7 +141,7 @@ The chronological presentation of Remote Assets marked as Favorites in the authe
 _Avoid_: favorites album, favorites folder
 
 **Archive Timeline**:
-The chronological presentation of the Remote Assets that are Archived Assets in the authenticated user's Immich Library, grouped into time buckets like the Photo Timeline. It is read-only: Lymic neither archives nor unarchives a Remote Asset.
+The chronological presentation of the Remote Assets that are Archived Assets in the authenticated user's Immich Library, grouped into time buckets like the Photo Timeline. The user can Unarchive its Remote Assets (and Archive others from the other views); Synchronization never changes the archive status (ADR-0012).
 _Avoid_: archive folder, archive album, hidden gallery
 
 **Trashed Asset**:
@@ -221,8 +221,16 @@ A country, a state or region within it, and a city, each optional, used to narro
 _Avoid_: place (in a Search), geo filter
 
 **Archived Asset**:
-A Remote Asset that Immich hides from its main views. Lymic only reads this status and never sets or clears it. Not related to the archive file produced by a multi-asset Download.
-_Avoid_: archive (alone), hidden asset
+A Remote Asset that Immich hides from its main views (visibility `archive`). Lymic sets or clears this status only through Archive and Unarchive on explicit user action, never through Synchronization, and never writes the visibilities `locked` or `hidden` (ADR-0012). Not related to the archive file produced by a multi-asset Download.
+_Avoid_: archive (alone, for the asset), hidden asset
+
+**Archive**:
+Setting a Remote Asset's visibility from `timeline` to `archive`, from the Lightbox or a multi-selection, so Immich hides it from the Photo and Favorites Timelines. It runs at once without a confirmation and is undone by Unarchive. Lymic offers it only where the Remote Asset is not a Trashed Asset, and never writes `locked` or `hidden` (ADR-0012).
+_Avoid_: hide, move to archive, send to archive
+
+**Unarchive**:
+Setting an Archived Asset's visibility from `archive` back to `timeline`, from the Archive Timeline's Lightbox or multi-selection, so it returns to the Photo Timeline. It runs at once without a confirmation. Assets that could not be unarchived stay visible and selected so the user can retry (ADR-0012).
+_Avoid_: restore (Restore is for Trashed Assets), unhide
 
 **Rating**:
 The one-to-five star evaluation Immich stores for a Remote Asset. Lymic only reads it.
