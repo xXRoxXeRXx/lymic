@@ -161,7 +161,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     const isCurrent = currentGeneration();
     restoreFeedback = null;
     const outcome = await restoreAssets([assetId]);
-    const applied = isCurrent() && outcome.restoredAssetIds.includes(assetId);
+    const applied = isCurrent() && outcome.changedAssetIds.includes(assetId);
     if (applied) restoreFeedback = restoreFeedbackFor(outcome, 1);
     return { outcome, applied };
   }
