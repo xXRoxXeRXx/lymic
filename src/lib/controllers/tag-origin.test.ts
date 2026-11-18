@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultTagOrigin, recordTagOrigin } from "./tag-origin";
+import type { ViewPosition } from "./view-position";
 
 describe("Tag origin", () => {
   it("defaults to the Tags view at the top", () => {
@@ -12,7 +13,7 @@ describe("Tag origin", () => {
   });
 
   it("keeps the original origin when hopping from one Tag Timeline to another", () => {
-    const origin = { view: "album-timeline", top: 75 };
+    const origin: ViewPosition = { view: "album-timeline", top: 75 };
 
     expect(recordTagOrigin(origin, { view: "tag-timeline", top: 0 })).toBe(origin);
   });

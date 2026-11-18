@@ -43,7 +43,9 @@
     PLACE_TIMELINE_VIEW,
     SEARCH_VIEW,
     SETTINGS_VIEW,
+    TRASH_VIEW,
     createNavigationController,
+    type ViewId,
   } from "#lib/controllers/navigation-controller.svelte.ts";
   import { createPlaceTimelineController } from "#lib/controllers/place-timeline-controller.svelte.ts";
   import { createMemoryTimelineController } from "#lib/controllers/memory-timeline-controller.svelte.ts";
@@ -55,7 +57,7 @@
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   /** Whether `view` is a Filtered Timeline: a main view that shows its own filtered timeline and reloads it every time it opens. */
-  function isFilteredTimeline(view: string): view is FilteredTimeline {
+  function isFilteredTimeline(view: ViewId): view is FilteredTimeline {
     return (FILTERED_TIMELINES as readonly string[]).includes(view);
   }
   const desktop = tauriDesktopAdapter;
@@ -120,7 +122,6 @@
   function selectPlace(place: Place) {
     placeOrigin = currentView === PLACES_VIEW ? PLACES_VIEW : EXPLORE_VIEW;
     if (placeOrigin === PLACES_VIEW) placesScrollTop = content?.scrollTop ?? 0;
-    else navigation.exploreScrollTop = content?.scrollTop ?? 0;
     selectedPlace = place;
     placeTimeline = createPlaceTimelineController(desktop, place.city);
     navigation.show(PLACE_TIMELINE_VIEW);
@@ -130,14 +131,13 @@
   function selectMemory(memory: Memory) {
     memoryOrigin = currentView === ALL_MEMORIES_VIEW ? ALL_MEMORIES_VIEW : EXPLORE_VIEW;
     if (memoryOrigin === ALL_MEMORIES_VIEW) allMemoriesScrollTop = content?.scrollTop ?? 0;
-    else navigation.exploreScrollTop = content?.scrollTop ?? 0;
     selectedMemory = memory;
     memoryTimeline = createMemoryTimelineController(memory);
     navigation.show(MEMORY_TIMELINE_VIEW);
     void memoryTimeline.refresh();
   }
 
-  function viewTitle(view: string) {
+  function viewTitle(view: ViewId) {
     // A main view's title is its navigation label.
     const mainView = navigationEntries.find((entry) => entry.view === view);
     if (mainView) return $t(mainView.label);
@@ -189,31 +189,33 @@
   /** "All Places" has no navigation entry; it is only opened from the Explore Overview. */
   function openAllPlaces() {
     placesScrollTop = 0;
-    navigation.exploreScrollTop = content?.scrollTop ?? 0;
     navigation.show(PLACES_VIEW);
   }
 
   /** "All Memories" has no navigation entry; it is only opened from the Explore Overview. */
   function openAllMemories() {
     allMemoriesScrollTop = 0;
-    navigation.exploreScrollTop = content?.scrollTop ?? 0;
     navigation.show(ALL_MEMORIES_VIEW);
     void allMemories.refresh();
   }
 
+  function returnToListOrExplore(origin: typeof EXPLORE_VIEW | typeof PLACES_VIEW | typeof ALL_MEMORIES_VIEW, listScrollTop: number) {
+    if (origin === EXPLORE_VIEW) {
+      navigation.returnToExplore();
+      return;
+    }
+    navigation.show(origin);
+    restoreScroll(listScrollTop);
+  }
+
   function returnFromPlaceTimeline() {
     closePlaceTimeline();
-    navigation.show(placeOrigin);
-    if (placeOrigin === EXPLORE_VIEW) void explore.refreshIfStale();
-    restoreScroll(placeOrigin === PLACES_VIEW ? placesScrollTop : navigation.exploreScrollTop);
+    returnToListOrExplore(placeOrigin, placesScrollTop);
   }
 
   function returnFromMemoryTimeline() {
     closeMemoryTimeline();
-    if (memoryOrigin === ALL_MEMORIES_VIEW) {
-      navigation.show(ALL_MEMORIES_VIEW);
-      restoreScroll(allMemoriesScrollTop);
-    } else navigation.returnToExplore();
+    returnToListOrExplore(memoryOrigin, allMemoriesScrollTop);
   }
 
   function submitSearch() {
@@ -232,7 +234,7 @@
     if (timelineScrollViews.has(origin.view)) scrollRestore = { view: origin.view, top: origin.top };
     else restoreScroll(origin.top);
     // The Trash Timeline is dropped when it is left, and Explore and Tags may have gone stale.
-    if (origin.view === "trash") void filteredTimelines.trash.refresh();
+    if (origin.view === TRASH_VIEW) void filteredTimelines.trash.refresh();
     if (origin.view === EXPLORE_VIEW) void explore.refreshIfStale();
     if (origin.view === TAGS_VIEW) void tags.refreshIfStale();
   }
@@ -342,7 +344,7 @@
   // Leaving the Trash Timeline drops its assets and selection; returning shows a fresh load.
   let trashWasOpen = false;
   $effect(() => {
-    const trashIsOpen = currentView === "trash";
+    const trashIsOpen = currentView === TRASH_VIEW;
     if (trashWasOpen && !trashIsOpen) untrack(() => filteredTimelines.trash.clear());
     trashWasOpen = trashIsOpen;
   });
@@ -494,7 +496,7 @@
         <SearchBar {search} {people} {tags} onSubmit={submitSearch} onClear={clearSearch} onOpenArchive={() => navigation.openFilteredTimeline("archive")} />
       </div>
 
-      <main bind:this={content} onscroll={() => { if (currentView === TAGS_VIEW && content) tagsScrollTop = content.scrollTop; }} class="flex-1 {currentView === 'map' || timelineScrollViews.has(currentView) ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
+      <main bind:this={content} onscroll={() => { if (currentView === TAGS_VIEW && content) tagsScrollTop = content.scrollTop; }} class="flex-1 {currentView === MAP_VIEW || timelineScrollViews.has(currentView) ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
         {#if feedback.error}
           <div class="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/50 text-red-600 dark:text-red-300 text-xs rounded-xl flex items-center gap-3" role="alert">
             <AlertCircle class="w-4 h-4 shrink-0" />

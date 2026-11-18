@@ -2,6 +2,7 @@ import type { AlbumCatalogueItem, FilteredTimeline, RecognizedPerson } from "../
 import type { AlbumTimelineDesktopAdapter, PeopleDesktopAdapter } from "../tauri/desktop-adapter";
 import { createAlbumTimelineController } from "./album-timeline-controller.svelte";
 import { createPersonTimelineController } from "./person-timeline-controller.svelte";
+import { TAGS_VIEW, TAG_TIMELINE_VIEW } from "./view-position";
 
 export const PHOTOS_VIEW = "photos";
 export const ALBUMS_VIEW = "albums";
@@ -10,6 +11,7 @@ export const PEOPLE_VIEW = "people";
 export const PERSON_TIMELINE_VIEW = "person-timeline";
 export const EXPLORE_VIEW = "explore";
 export const MAP_VIEW = "map";
+export const TRASH_VIEW = "trash";
 // Views the page shows through `show`: the page owns their state and Back origins.
 export const PLACES_VIEW = "places";
 export const PLACE_TIMELINE_VIEW = "place-timeline";
@@ -20,6 +22,27 @@ export const DASHBOARD_VIEW = "dashboard";
 export const LOGS_VIEW = "logs";
 export const SETTINGS_VIEW = "settings";
 export const INFO_VIEW = "info";
+
+export type ViewId =
+  | FilteredTimeline
+  | typeof PHOTOS_VIEW
+  | typeof ALBUMS_VIEW
+  | typeof ALBUM_TIMELINE_VIEW
+  | typeof PEOPLE_VIEW
+  | typeof PERSON_TIMELINE_VIEW
+  | typeof EXPLORE_VIEW
+  | typeof MAP_VIEW
+  | typeof PLACES_VIEW
+  | typeof PLACE_TIMELINE_VIEW
+  | typeof ALL_MEMORIES_VIEW
+  | typeof MEMORY_TIMELINE_VIEW
+  | typeof TAGS_VIEW
+  | typeof TAG_TIMELINE_VIEW
+  | typeof SEARCH_VIEW
+  | typeof DASHBOARD_VIEW
+  | typeof LOGS_VIEW
+  | typeof SETTINGS_VIEW
+  | typeof INFO_VIEW;
 
 export type PersonOrigin = typeof PEOPLE_VIEW | typeof EXPLORE_VIEW;
 
@@ -48,7 +71,7 @@ export interface NavigationOptions {
 export function createNavigationController(options: NavigationOptions) {
   const { adapter, refresh, scroll } = options;
 
-  let view = $state(PHOTOS_VIEW);
+  let view = $state<ViewId>(PHOTOS_VIEW);
   let mapCreated = $state(false);
   let selectedAlbum = $state<AlbumCatalogueItem | null>(null);
   let albumTimeline = $state<ReturnType<typeof createAlbumTimelineController> | null>(null);
@@ -62,8 +85,15 @@ export function createNavigationController(options: NavigationOptions) {
   // that affects it (a Restore) marks it stale and the next visit to Photos refreshes it once.
   let photosStale = false;
 
-  function show(next: string) {
+  function show(next: ViewId) {
+    if (view === EXPLORE_VIEW) exploreScrollTop = scroll.read();
     view = next;
+  }
+
+  function openAndRefresh(target: ViewId, load: () => unknown) {
+    if (view === target) return;
+    view = target;
+    void load();
   }
 
   function openPhotos() {
@@ -75,9 +105,7 @@ export function createNavigationController(options: NavigationOptions) {
   }
 
   function openFilteredTimeline(timeline: FilteredTimeline) {
-    if (view === timeline) return;
-    view = timeline;
-    void refresh.filteredTimeline(timeline);
+    openAndRefresh(timeline, () => refresh.filteredTimeline(timeline));
   }
 
   function openMap() {
@@ -87,23 +115,9 @@ export function createNavigationController(options: NavigationOptions) {
     void refresh.map();
   }
 
-  function openExplore() {
-    if (view === EXPLORE_VIEW) return;
-    view = EXPLORE_VIEW;
-    void refresh.explore();
-  }
-
-  function openPeople() {
-    if (view === PEOPLE_VIEW) return;
-    view = PEOPLE_VIEW;
-    void refresh.people();
-  }
-
-  function openAlbums() {
-    if (view === ALBUMS_VIEW) return;
-    view = ALBUMS_VIEW;
-    void refresh.albums();
-  }
+  const openExplore = () => openAndRefresh(EXPLORE_VIEW, refresh.explore);
+  const openPeople = () => openAndRefresh(PEOPLE_VIEW, refresh.people);
+  const openAlbums = () => openAndRefresh(ALBUMS_VIEW, refresh.albums);
 
   function selectAlbum(album: AlbumCatalogueItem) {
     albumsScrollTop = scroll.read();
@@ -127,11 +141,10 @@ export function createNavigationController(options: NavigationOptions) {
 
   function selectPerson(person: RecognizedPerson) {
     personOrigin = view === EXPLORE_VIEW ? EXPLORE_VIEW : PEOPLE_VIEW;
-    if (personOrigin === EXPLORE_VIEW) exploreScrollTop = scroll.read();
-    else peopleScrollTop = scroll.read();
+    if (personOrigin === PEOPLE_VIEW) peopleScrollTop = scroll.read();
     selectedPerson = person;
     personTimeline = createPersonTimelineController(adapter, person.id);
-    view = PERSON_TIMELINE_VIEW;
+    show(PERSON_TIMELINE_VIEW);
     void personTimeline.refresh();
   }
 
@@ -141,18 +154,21 @@ export function createNavigationController(options: NavigationOptions) {
     selectedPerson = null;
   }
 
-  function returnFromPersonTimeline() {
-    closePersonTimeline();
-    view = personOrigin;
-    if (personOrigin === EXPLORE_VIEW) void refresh.exploreIfStale();
-    scroll.restore(personOrigin === EXPLORE_VIEW ? exploreScrollTop : peopleScrollTop);
-  }
-
   /** Back to Explore from a view opened out of it, at the position Explore was left. */
   function returnToExplore() {
     view = EXPLORE_VIEW;
     void refresh.exploreIfStale();
     scroll.restore(exploreScrollTop);
+  }
+
+  function returnFromPersonTimeline() {
+    closePersonTimeline();
+    if (personOrigin === EXPLORE_VIEW) {
+      returnToExplore();
+      return;
+    }
+    view = PEOPLE_VIEW;
+    scroll.restore(peopleScrollTop);
   }
 
   /** Signing out: everything returns to its initial state and the photo timeline is the open view. */
@@ -176,9 +192,6 @@ export function createNavigationController(options: NavigationOptions) {
     get selectedPerson() { return selectedPerson; },
     get personTimeline() { return personTimeline; },
     get personOrigin() { return personOrigin; },
-    /** The Explore Overview's scroll position, remembered while a view opened from it is shown. */
-    get exploreScrollTop() { return exploreScrollTop; },
-    set exploreScrollTop(top: number) { exploreScrollTop = top; },
     show,
     openPhotos,
     markPhotosStale() { photosStale = true; },

@@ -155,6 +155,19 @@ describe("navigation controller", () => {
     });
   });
 
+  it("remembers the Explore scroll position when leaving Explore with show and restores it on returnToExplore", () => {
+    const { navigation, refresh, restoreScroll, scrollTo } = setup();
+    navigation.openExplore();
+    scrollTo(180);
+    navigation.show("places");
+    scrollTo(40);
+    navigation.show("place-timeline");
+    navigation.returnToExplore();
+    expect(navigation.view).toBe("explore");
+    expect(refresh.exploreIfStale).toHaveBeenCalledTimes(1);
+    expect(restoreScroll).toHaveBeenCalledWith(180);
+  });
+
   it("resets to the photo timeline on logout, forgetting selections, scroll positions and the map", () => {
     const { navigation, restoreScroll, scrollTo } = setup();
     navigation.openMap();
