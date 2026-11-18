@@ -190,6 +190,17 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     return { outcome, applied };
   }
 
+  /** Unarchives one Remote Asset (from the Lightbox). Its feedback is kept only when the unarchive was applied to the current timeline. */
+  async function unarchiveOne(assetId: string) {
+    const unarchiveAssets = options.unarchive;
+    if (!unarchiveAssets) throw new Error("This timeline offers no Unarchive.");
+    const isCurrent = currentGeneration();
+    archiveFeedback = null;
+    const outcome = await unarchiveAssets([assetId]);
+    if (isCurrent() && outcome.changedAssetIds.includes(assetId)) archiveFeedback = { action: "unarchive", feedback: archiveFeedbackFor(outcome, 1) };
+    return outcome;
+  }
+
   return {
     get selectedIds() { return selectedIds; },
     get count() { return selectedIds.size; },
@@ -211,5 +222,6 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     restore,
     restoreOne,
     unarchive,
+    unarchiveOne,
   };
 }
