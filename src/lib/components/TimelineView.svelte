@@ -42,7 +42,7 @@
     restoreTrashedAssets?(assetIds: string[]): Promise<TrashRestoreResult>;
     /** Writes the visibility for an Archive or Unarchive; needed together with `archiveAction`. */
     setAssetsVisibility?(assetIds: string[], visibility: AssetVisibility): Promise<AssetVisibilityResult>;
-    /** The one Archive action the multi-selection offers (Archive in the Photo and Favorites Timelines, Unarchive in the Archive Timeline); leave it out where there is none. */
+    /** The one Archive action the multi-selection and the Lightbox offer (Archive in the Photo and Favorites Timelines, Unarchive in the Archive Timeline); leave it out where there is none. */
     archiveAction?: ArchiveAction;
     /** Where to scroll to once the first buckets are shown, for a view that is reopened where the user left it. */
     initialScrollTop?: number;
@@ -351,10 +351,10 @@
     return outcome;
   }
 
-  /** Unarchives the Lightbox's asset; the Lightbox moves on from where the asset was, so it is remembered before the asset leaves the timeline. */
-  async function unarchiveFromLightbox(assetId: string) {
+  /** Archives or unarchives the Lightbox's asset; the Lightbox moves on from where the asset was, so it is remembered before the asset leaves the timeline. */
+  async function changeArchiveFromLightbox(action: ArchiveAction, assetId: string) {
     favorites.expectRemoval(assetId);
-    const outcome = await selection.unarchiveOne(assetId);
+    const outcome = await selection.archiveOne(action, assetId);
     if (!outcome.changedAssetIds.includes(assetId)) favorites.cancelExpectedRemoval();
     return outcome;
   }
@@ -601,7 +601,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} onUnarchive={offersUnarchive ? unarchiveFromLightbox : undefined} {onSelectTag} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} archiveAction={offersArchive || offersUnarchive ? archiveAction : undefined} onChangeArchive={changeArchiveFromLightbox} {onSelectTag} />
 {/if}
 {#if targetAlbumCatalogue}
   <AddToAlbumModal

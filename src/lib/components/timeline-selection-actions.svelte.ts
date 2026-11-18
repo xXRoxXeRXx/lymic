@@ -194,14 +194,14 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     return { outcome, applied };
   }
 
-  /** Unarchives one Remote Asset (from the Lightbox). Its feedback is kept only when the unarchive was applied to the current timeline. */
-  async function unarchiveOne(assetId: string) {
-    const unarchiveAssets = options.unarchive;
-    if (!unarchiveAssets) throw new Error("This timeline offers no Unarchive.");
+  /** Archives or unarchives one Remote Asset (from the Lightbox). Its feedback is kept only when the change was applied to the current timeline. */
+  async function archiveOne(action: ArchiveAction, assetId: string) {
+    const change = action === "archive" ? options.archive : options.unarchive;
+    if (!change) throw new Error(`This timeline offers no ${action === "archive" ? "Archive" : "Unarchive"}.`);
     const isCurrent = currentGeneration();
     archiveFeedback = null;
-    const outcome = await unarchiveAssets([assetId]);
-    if (isCurrent() && outcome.changedAssetIds.includes(assetId)) archiveFeedback = { action: "unarchive", feedback: archiveFeedbackFor(outcome, 1) };
+    const outcome = await change([assetId]);
+    if (isCurrent() && outcome.changedAssetIds.includes(assetId)) archiveFeedback = { action, feedback: archiveFeedbackFor(outcome, 1) };
     return outcome;
   }
 
@@ -227,6 +227,6 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     restoreOne,
     archive,
     unarchive,
-    unarchiveOne,
+    archiveOne,
   };
 }

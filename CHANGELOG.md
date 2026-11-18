@@ -10,8 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Archive from Photos and Favorites**:
   - Select photos and videos in Photos or Favorites and choose Archive. It runs at once without a confirmation: the assets that changed leave the view and Photos, the ones that did not stay selected, and the message gives the counts. A key without the `asset.update` permission gets a message that names it. Archived assets show in the Archive the next time it is opened; a Favorite that is archived stays a Favorite but is hidden in Photos and Favorites, as in Immich's web app. Available in all supported languages.
+  - The Lightbox of Photos and Favorites has an Archive button for the open photo or video. It runs at once without a confirmation, shows the next one and closes only when none is left; while it runs, navigation and the other actions wait. Failures and a missing `asset.update` permission are reported in the Lightbox, which keeps the asset open to retry. Not offered in Trash or on the Map.
 - **Unarchive from the Archive Timeline**:
   - Select archived assets in the Archive and choose Unarchive. It runs at once without a confirmation: the assets that changed leave the view, the ones that did not stay selected, and the message gives the counts. A key without the `asset.update` permission gets a message that names it. The Photo Timeline shows the unarchived assets the next time it is opened from another view.
+  - The Lightbox of the Archive has an Unarchive button for the open photo or video with the same behaviour: it runs at once, shows the next archived asset and closes only when none is left.
   - Lymic only switches visibility between `timeline` and `archive` (ADR-0012); Synchronization never touches the archive status. Available in all supported languages.
 
 ## [0.30.0] - 2026-11-17
