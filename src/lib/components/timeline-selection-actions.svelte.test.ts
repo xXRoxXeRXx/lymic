@@ -405,11 +405,26 @@ describe("selection unarchive", () => {
     expect(selection.busyAction).toBeNull();
   });
 
+  it("archives a single asset with the archive callback and reports it as an Archive", async () => {
+    const archive = vi.fn(async (ids: string[]) => outcome(ids, []));
+    const unarchive = vi.fn(async (ids: string[]) => outcome(ids, []));
+    const selection = createSelection({ archive, unarchive });
+
+    const result = await selection.archiveOne("archive", "a");
+
+    expect(archive).toHaveBeenCalledWith(["a"]);
+    expect(unarchive).not.toHaveBeenCalled();
+    expect(result.changedAssetIds).toEqual(["a"]);
+    expect(selection.busyAction).toBeNull();
+    expect(selection.archiveFeedback).toEqual({ action: "archive", feedback: { kind: "success", count: 1 } });
+    await expect(createSelection({ unarchive }).archiveOne("archive", "a")).rejects.toThrow("This timeline offers no Archive.");
+  });
+
   it("unarchives a single asset outside the busy state and keeps its feedback only while the timeline is the same", async () => {
     const unarchive = vi.fn(async (ids: string[]) => outcome(ids, []));
     const selection = createSelection({ unarchive });
 
-    const result = await selection.unarchiveOne("a");
+    const result = await selection.archiveOne("unarchive", "a");
 
     expect(unarchive).toHaveBeenCalledWith(["a"]);
     expect(result.changedAssetIds).toEqual(["a"]);
@@ -418,14 +433,14 @@ describe("selection unarchive", () => {
 
     const pending = deferred<ReturnType<typeof outcome>>();
     const stale = createSelection({ unarchive: () => pending.promise });
-    const running = stale.unarchiveOne("a");
+    const running = stale.archiveOne("unarchive", "a");
     stale.reset();
     pending.resolve(outcome(["a"], []));
     await running;
     expect(stale.archiveFeedback).toBeNull();
 
     const failing = createSelection({ unarchive: async () => outcome([], ["a"]) });
-    await failing.unarchiveOne("a");
+    await failing.archiveOne("unarchive", "a");
     expect(failing.archiveFeedback).toBeNull();
   });
 });
