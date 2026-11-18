@@ -450,14 +450,8 @@
   });
   const sharedTimelineProps = $derived({
     serverUrl: auth.serverUrl,
-    onOpenExternalUrl: desktop.openExternalUrl,
-    getAssetDetails: desktop.getAssetDetails,
-    setAssetFavorite: desktop.setAssetFavorite,
-    chooseDownloadDestination: desktop.chooseDownloadDestination,
-    downloadAsset: desktop.downloadAsset,
-    downloadArchive: desktop.downloadArchive,
+    desktop,
     albumCatalogue: targetAlbumCatalogue,
-    addAssetsToAlbum: desktop.addAssetsToAlbum,
     initialScrollTop: scrollRestore?.view === currentView ? scrollRestore.top : 0,
     onScrollPosition: (scrollTop: number) => { timelineScrollTop = scrollTop; },
     onSelectTag: selectTag,

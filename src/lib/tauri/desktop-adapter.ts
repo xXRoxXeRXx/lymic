@@ -112,6 +112,9 @@ export interface AssetDesktopAdapter {
   downloadArchive(assetIds: string[]): Promise<void>;
 }
 
+/** Every Remote Asset operation a view with a Lightbox needs: details, favorite, Download, add to Album and opening in Immich. */
+export type RemoteAssetDesktopAdapter = AssetDesktopAdapter & AlbumAssignmentDesktopAdapter & Pick<UpdateDesktopAdapter, "openExternalUrl">;
+
 export interface AlbumTimelineDesktopAdapter {
   getAlbumTimeline(albumId: string): Promise<AlbumTimeline>;
 }
