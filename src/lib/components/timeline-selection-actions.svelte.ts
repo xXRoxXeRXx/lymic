@@ -1,9 +1,10 @@
 import type { AlbumAssignmentResult } from "../contracts";
 import type { RemoteAssetDownloadOutcome } from "./remote-asset-actions.svelte";
+import { archiveFeedbackFor, type ArchiveAction, type ArchiveFeedback, type RemoteAssetArchiveOutcome } from "./remote-asset-archive";
 import { restoreFeedbackFor, type RemoteAssetRestoreOutcome, type RestoreFeedback } from "./remote-asset-restore";
 
 /** The bulk actions of a timeline selection; at most one runs at a time. */
-export type SelectionAction = "favorite" | "album" | "download" | "restore";
+export type SelectionAction = "favorite" | "album" | "download" | "restore" | "unarchive";
 
 /** How many of the selected Remote Assets a bulk action handled. */
 export interface SelectionCounts {
@@ -11,9 +12,15 @@ export interface SelectionCounts {
   total: number;
 }
 
-/** What a finished favorite, add-to-Album or Download bulk action reports (Restore reports through `restoreFeedback`). */
+/** What a finished favorite, add-to-Album or Download bulk action reports (Restore and Unarchive report through their own feedback). */
 export interface SelectionResult extends SelectionCounts {
-  action: Exclude<SelectionAction, "restore">;
+  action: Exclude<SelectionAction, "restore" | "unarchive">;
+}
+
+/** What the user is told about the last Archive or Unarchive of the selection. */
+export interface SelectionArchiveFeedback {
+  action: ArchiveAction;
+  feedback: ArchiveFeedback;
 }
 
 export interface TimelineSelectionActionsOptions {
@@ -29,10 +36,12 @@ export interface TimelineSelectionActionsOptions {
   readonly addAssetsToAlbum: (assetIds: string[], albumId: string) => Promise<AlbumAssignmentResult>;
   /** Restore of Trashed Assets; leave it out where the timeline offers no Restore. Never rejects. */
   readonly restore?: (assetIds: string[]) => Promise<RemoteAssetRestoreOutcome>;
+  /** Unarchive of Archived Assets; leave it out where the timeline offers no Unarchive. Never rejects. */
+  readonly unarchive?: (assetIds: string[]) => Promise<RemoteAssetArchiveOutcome>;
 }
 
 /**
- * Owns the multi-selection of a timeline and its bulk actions (favorite, add to Album, Download, Restore):
+ * Owns the multi-selection of a timeline and its bulk actions (favorite, add to Album, Download, Restore, Unarchive):
  * the selected set, which single action is running, and the last result. Call `reset` when the timeline
  * refreshed or was replaced: it ends the running action and drops its result when it arrives.
  */
@@ -41,6 +50,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
   let busyAction = $state<SelectionAction | null>(null);
   let result = $state<SelectionResult | null>(null);
   let restoreFeedback = $state<RestoreFeedback | null>(null);
+  let archiveFeedback = $state<SelectionArchiveFeedback | null>(null);
   let generation = 0;
 
   function select(assetIds: Iterable<string>) {
@@ -83,6 +93,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     busyAction = null;
     clearResult();
     restoreFeedback = null;
+    archiveFeedback = null;
     clear();
   }
 
@@ -154,6 +165,19 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     });
   }
 
+  /** Unarchives the selection; Archived Assets that were not unarchived stay selected so the user can retry. */
+  async function unarchive() {
+    const unarchiveAssets = options.unarchive;
+    if (!unarchiveAssets) return;
+    await run("unarchive", async (assetIds, isCurrent) => {
+      archiveFeedback = null;
+      const outcome = await unarchiveAssets(assetIds);
+      if (!isCurrent()) return;
+      select(outcome.failedAssetIds);
+      archiveFeedback = { action: "unarchive", feedback: archiveFeedbackFor(outcome, assetIds.length) };
+    });
+  }
+
   /** Restores one Remote Asset (from the Lightbox). `applied` is false when the timeline changed meanwhile. */
   async function restoreOne(assetId: string) {
     const restoreAssets = options.restore;
@@ -174,6 +198,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     get isBusy() { return busyAction !== null; },
     get result() { return result; },
     get restoreFeedback() { return restoreFeedback; },
+    get archiveFeedback() { return archiveFeedback; },
     clearResult,
     isSelected: (assetId: string) => selectedIds.has(assetId),
     toggle,
@@ -185,5 +210,6 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     download,
     restore,
     restoreOne,
+    unarchive,
   };
 }

@@ -427,4 +427,10 @@
   ,"tags_unavailable": "As etiquetas não estão disponíveis. Verifique a sua ligação e o início de sessão."
   ,"tags_permission_denied": "Não foi possível carregar as etiquetas. Conceda à chave de API a permissão tag.read."
   ,"tags_retry": "Tentar novamente"
+  ,"archive_unarchive": "Desarquivar"
+  ,"archive_unarchive_success": "{count} desarquivado(s)."
+  ,"archive_unarchive_partial": "{failed} de {count} não puderam ser desarquivados. Continuam selecionados para você tentar novamente."
+  ,"archive_unarchive_none": "{failed} de {count} não puderam ser desarquivados. Tente novamente."
+  ,"archive_unarchive_failed": "Não foi possível desarquivar. Tente novamente."
+  ,"archive_unarchive_permission": "O desarquivamento foi recusado. Conceda à chave de API a permissão asset.update."
 }

@@ -53,7 +53,7 @@
   import { defaultTagOrigin, recordTagOrigin } from "#lib/controllers/tag-origin.ts";
   import { TAG_TIMELINE_VIEW, TAGS_VIEW, type ViewPosition } from "#lib/controllers/view-position.ts";
   import { localizedMemoryTitle } from "#lib/memory-title.ts";
-  import { FILTERED_TIMELINES, type AssetTag, type FilteredTimeline, type Memory, type Place } from "#lib/contracts.ts";
+  import { FILTERED_TIMELINES, type AssetTag, type AssetVisibility, type FilteredTimeline, type Memory, type Place } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   /** Whether `view` is a Filtered Timeline: a main view that shows its own filtered timeline and reloads it every time it opens. */
@@ -176,6 +176,13 @@
   async function restoreTrashedAssets(assetIds: string[]) {
     const result = await desktop.restoreTrashedAssets(assetIds);
     if (result.restoredAssetIds.length > 0) navigation.markPhotosStale();
+    return result;
+  }
+
+  /** Writes an Archive or Unarchive; an Unarchive that changed something marks the Photo Timeline stale. */
+  async function setAssetsVisibility(assetIds: string[], visibility: AssetVisibility) {
+    const result = await desktop.setAssetsVisibility(assetIds, visibility);
+    if (visibility === "timeline" && result.changedAssetIds.length > 0) navigation.markPhotosStale();
     return result;
   }
 
@@ -302,7 +309,7 @@
    */
   const filteredTimelineViews: Record<FilteredTimeline, { icon: typeof Heart; options(): Partial<ComponentProps<typeof TimelineView>> }> = {
     favorites: { icon: Heart, options: () => ({ removeUnfavoritedAssets: true, showRefreshButton: false }) },
-    archive: { icon: Archive, options: () => ({}) },
+    archive: { icon: Archive, options: () => ({ setAssetsVisibility, archiveAction: "unarchive" }) },
     trash: { icon: Trash2, options: () => ({ allowFavoriteAndAlbum: false, restoreTrashedAssets, hintMessage: $t("trash_hint") }) },
   };
   function filteredTimelineEntry(view: FilteredTimeline) {

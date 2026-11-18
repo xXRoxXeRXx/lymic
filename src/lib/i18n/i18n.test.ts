@@ -255,6 +255,28 @@ describe('i18n catalogs', () => {
     expect(de.trash_restore).toBe('Wiederherstellen');
   });
 
+  it('translates the Archive Timeline Unarchive strings in every locale with their placeholders', () => {
+    const placeholders: Record<string, string[]> = {
+      archive_unarchive: [],
+      archive_unarchive_success: ['{count}'],
+      archive_unarchive_partial: ['{failed}', '{count}'],
+      archive_unarchive_none: ['{failed}', '{count}'],
+      archive_unarchive_failed: [],
+      archive_unarchive_permission: [],
+    };
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const [key, expected] of Object.entries(placeholders)) {
+        const value = (translations as Record<string, string>)[key];
+        expect(value, `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+        for (const placeholder of expected) expect(value, `${localeCode}.${key}`).toContain(placeholder);
+      }
+      // A refused Unarchive names the permission to grant, never a credential.
+      expect((translations as Record<string, string>).archive_unarchive_permission, localeCode).toContain('asset.update');
+    }
+    expect(en.archive_unarchive).toBe('Unarchive');
+    expect(de.archive_unarchive).toBe('Dearchivieren');
+  });
+
   it('uses consistent timeline and video terminology in favorites strings', () => {
     expect(de.favorites_offline).toContain('Zeitachse');
     expect(de.favorites_offline).not.toContain('Timeline');

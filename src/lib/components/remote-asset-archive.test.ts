@@ -1,0 +1,60 @@
+import { describe, expect, it, vi } from "vitest";
+import type { TimelineController } from "../controllers/timeline-controller.svelte";
+import { archiveFeedbackMessage, createRemoteAssetArchive } from "./remote-asset-archive";
+
+function setup(setAssetsVisibility: (assetIds: string[], visibility: "archive" | "timeline") => Promise<{ changedAssetIds: string[] }>) {
+  const removeAsset = vi.fn();
+  const onRemoved = vi.fn();
+  const archive = createRemoteAssetArchive({
+    timeline: { removeAsset } as unknown as TimelineController,
+    setAssetsVisibility,
+    onRemoved,
+  });
+  return { archive, removeAsset, onRemoved };
+}
+
+describe("Unarchive", () => {
+  it("writes the timeline visibility and removes the unarchived assets from the view", async () => {
+    const setAssetsVisibility = vi.fn(async (assetIds: string[]) => ({ changedAssetIds: assetIds }));
+    const { archive, removeAsset, onRemoved } = setup(setAssetsVisibility);
+
+    const outcome = await archive.apply("unarchive", ["a", "b"]);
+
+    expect(setAssetsVisibility).toHaveBeenCalledWith(["a", "b"], "timeline");
+    expect(outcome).toEqual({ changedAssetIds: ["a", "b"], failedAssetIds: [], failure: null });
+    expect(removeAsset.mock.calls).toEqual([["a"], ["b"]]);
+    expect(onRemoved.mock.calls).toEqual([["a"], ["b"]]);
+  });
+
+  it("keeps assets the backend did not confirm, including ones it was never asked about", async () => {
+    const { archive, removeAsset } = setup(async () => ({ changedAssetIds: ["a", "stranger"] }));
+
+    const outcome = await archive.apply("unarchive", ["a", "b", "c"]);
+
+    expect(outcome).toEqual({ changedAssetIds: ["a"], failedAssetIds: ["b", "c"], failure: null });
+    expect(removeAsset.mock.calls).toEqual([["a"]]);
+  });
+
+  it("never rejects: a missing asset.update permission is reported as permission, anything else as an error", async () => {
+    const refused = setup(async () => { throw "archive_permission_denied:asset.update"; });
+    expect(await refused.archive.apply("unarchive", ["a"])).toEqual({ changedAssetIds: [], failedAssetIds: ["a"], failure: "permission" });
+    expect(refused.removeAsset).not.toHaveBeenCalled();
+
+    const broken = setup(async () => { throw new Error("Failed with key secret-key"); });
+    expect(await broken.archive.apply("unarchive", ["a", "b"])).toEqual({ changedAssetIds: [], failedAssetIds: ["a", "b"], failure: "error" });
+    expect(broken.removeAsset).not.toHaveBeenCalled();
+  });
+});
+
+describe("Unarchive feedback", () => {
+  const translate = (key: string, options?: { values: Record<string, string | number> }) =>
+    `${key}${options ? `:${JSON.stringify(options.values)}` : ""}`;
+
+  it("uses the Unarchive locale keys with locale-formatted counts", () => {
+    expect(archiveFeedbackMessage("unarchive", { kind: "success", count: 1234 }, translate, "en")).toBe('archive_unarchive_success:{"count":"1,234"}');
+    expect(archiveFeedbackMessage("unarchive", { kind: "partial", failed: 2, total: 3 }, translate, "en")).toBe('archive_unarchive_partial:{"failed":"2","count":"3"}');
+    expect(archiveFeedbackMessage("unarchive", { kind: "none", failed: 1, total: 1 }, translate, "en")).toBe('archive_unarchive_none:{"failed":"1","count":"1"}');
+    expect(archiveFeedbackMessage("unarchive", { kind: "permission" }, translate, "en")).toBe("archive_unarchive_permission");
+    expect(archiveFeedbackMessage("unarchive", { kind: "failed" }, translate, "en")).toBe("archive_unarchive_failed");
+  });
+});

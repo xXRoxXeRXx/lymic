@@ -1,4 +1,5 @@
 mod album;
+mod archive;
 mod bulk_check;
 mod client;
 pub(crate) mod ids;
@@ -17,6 +18,7 @@ mod trash;
 mod upload;
 
 pub(crate) use album::{Album, AlbumAssignmentResult, AlbumCatalogueItem};
+pub(crate) use archive::{AssetVisibility, AssetVisibilityResult};
 pub(crate) use bulk_check::{BulkCheckDuplicate, DuplicateRemoteAsset};
 pub(crate) use client::{AssetDetails, AssetResponse, ImmichClient};
 pub(crate) use ids::{AlbumId, RemoteAssetId};

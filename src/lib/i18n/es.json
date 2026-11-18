@@ -427,4 +427,10 @@
   ,"tags_unavailable": "Etiquetas no está disponible. Comprueba tu conexión y tu inicio de sesión."
   ,"tags_permission_denied": "No se pudieron cargar las etiquetas. Concede a la clave de API el permiso tag.read."
   ,"tags_retry": "Reintentar"
+  ,"archive_unarchive": "Desarchivar"
+  ,"archive_unarchive_success": "{count} desarchivados."
+  ,"archive_unarchive_partial": "No se pudieron desarchivar {failed} de {count}. Siguen seleccionados para que puedas reintentarlo."
+  ,"archive_unarchive_none": "No se pudieron desarchivar {failed} de {count}. Inténtalo de nuevo."
+  ,"archive_unarchive_failed": "No se pudo desarchivar. Inténtalo de nuevo."
+  ,"archive_unarchive_permission": "Se rechazó el desarchivado. Concede a la clave de API el permiso asset.update."
 }

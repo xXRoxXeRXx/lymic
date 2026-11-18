@@ -427,4 +427,10 @@
   ,"tags_unavailable": "Теги недоступны. Проверьте подключение и вход в систему."
   ,"tags_permission_denied": "Не удалось загрузить теги. Предоставьте API-ключу разрешение tag.read."
   ,"tags_retry": "Повторить"
+  ,"archive_unarchive": "Разархивировать"
+  ,"archive_unarchive_success": "Разархивировано: {count}."
+  ,"archive_unarchive_partial": "Не удалось разархивировать {failed} из {count}. Они остаются выбранными, чтобы вы могли повторить попытку."
+  ,"archive_unarchive_none": "Не удалось разархивировать {failed} из {count}. Повторите попытку."
+  ,"archive_unarchive_failed": "Не удалось разархивировать. Повторите попытку."
+  ,"archive_unarchive_permission": "Разархивирование отклонено. Предоставьте ключу API разрешение asset.update."
 }

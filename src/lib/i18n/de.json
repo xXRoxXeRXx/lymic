@@ -427,4 +427,10 @@
   ,"tags_unavailable": "Tags ist nicht verfügbar. Prüfen Sie Ihre Verbindung und Anmeldung."
   ,"tags_permission_denied": "Tags konnten nicht geladen werden. Geben Sie dem API-Schlüssel die Berechtigung tag.read."
   ,"tags_retry": "Erneut versuchen"
+  ,"archive_unarchive": "Dearchivieren"
+  ,"archive_unarchive_success": "{count} dearchiviert."
+  ,"archive_unarchive_partial": "{failed} von {count} konnten nicht dearchiviert werden. Sie bleiben ausgewählt, damit du es erneut versuchen kannst."
+  ,"archive_unarchive_none": "{failed} von {count} konnten nicht dearchiviert werden. Bitte versuche es erneut."
+  ,"archive_unarchive_failed": "Dearchivieren fehlgeschlagen. Bitte versuche es erneut."
+  ,"archive_unarchive_permission": "Das Dearchivieren wurde abgelehnt. Erteile dem API-Schlüssel die Berechtigung asset.update."
 }

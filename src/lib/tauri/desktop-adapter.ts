@@ -12,6 +12,8 @@ import type {
   Album,
   AlbumAssignmentResult,
   TrashRestoreResult,
+  AssetVisibility,
+  AssetVisibilityResult,
   FilteredTimeline,
   AlbumCatalogueItem,
   AlbumTimeline,
@@ -102,6 +104,11 @@ export interface FilteredTimelineDesktopAdapter {
 
 export interface TrashRestoreDesktopAdapter {
   restoreTrashedAssets(assetIds: string[]): Promise<TrashRestoreResult>;
+}
+
+/** The one write that Archives or Unarchives Remote Assets; Lymic sends only `archive` and `timeline`. */
+export interface AssetVisibilityDesktopAdapter {
+  setAssetsVisibility(assetIds: string[], visibility: AssetVisibility): Promise<AssetVisibilityResult>;
 }
 
 export interface AssetDesktopAdapter {
@@ -208,6 +215,7 @@ export interface DesktopAdapter
     TimelineDesktopAdapter,
     FilteredTimelineDesktopAdapter,
     TrashRestoreDesktopAdapter,
+    AssetVisibilityDesktopAdapter,
     MapDesktopAdapter,
     AssetDesktopAdapter,
     AlbumTimelineDesktopAdapter,
@@ -266,6 +274,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getFilteredTimelineBuckets: (timeline) => invoke<TimelineBucket[]>("get_filtered_timeline_buckets", { timeline }),
   getFilteredTimelineBucketAssets: (timeline, timeBucket) => invoke<TimelineAsset[]>("get_filtered_timeline_bucket_assets", { timeline, timeBucket }),
   restoreTrashedAssets: (assetIds) => invoke<TrashRestoreResult>("restore_trashed_assets", { assetIds }),
+  setAssetsVisibility: (assetIds, visibility) => invoke<AssetVisibilityResult>("set_assets_visibility", { assetIds, visibility }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),
   setAssetFavorite: (assetId, isFavorite) => invoke<void>("set_asset_favorite", { assetId, isFavorite }),
   chooseDownloadDestination: (originalFileName) => save({ defaultPath: originalFileName }),

@@ -338,3 +338,70 @@ describe("selection restore", () => {
     expect(stale.restoreFeedback).toBeNull();
   });
 });
+
+describe("selection unarchive", () => {
+  const outcome = (changedAssetIds: string[], failedAssetIds: string[]) => ({ changedAssetIds, failedAssetIds, failure: null });
+
+  it("is unavailable without an unarchive", async () => {
+    const selection = createSelection();
+    selection.toggle("a");
+
+    await selection.unarchive();
+
+    expect(selection.busyAction).toBeNull();
+    expect(selection.isSelected("a")).toBe(true);
+    expect(selection.archiveFeedback).toBeNull();
+  });
+
+  it("keeps the assets that were not unarchived selected and reports partial feedback for the action", async () => {
+    const unarchive = vi.fn(async () => outcome(["a"], ["b"]));
+    const selection = createSelection({ unarchive });
+    selection.toggle("a");
+    selection.toggle("b");
+
+    await selection.unarchive();
+
+    expect(unarchive).toHaveBeenCalledWith(["a", "b"]);
+    expect([...selection.selectedIds]).toEqual(["b"]);
+    expect(selection.archiveFeedback).toEqual({ action: "unarchive", feedback: { kind: "partial", failed: 1, total: 2 } });
+    expect(selection.busyAction).toBeNull();
+  });
+
+  it("ignores a second action while one runs", async () => {
+    const pending = deferred<ReturnType<typeof outcome>>();
+    const unarchive = vi.fn(() => pending.promise);
+    const selection = createSelection({ unarchive });
+    selection.toggle("a");
+
+    const running = selection.unarchive();
+    expect(selection.busyAction).toBe("unarchive");
+    expect(selection.isBusy).toBe(true);
+    await selection.unarchive();
+    await selection.download();
+    expect(unarchive).toHaveBeenCalledTimes(1);
+
+    pending.resolve(outcome(["a"], []));
+    await running;
+    expect(selection.archiveFeedback).toEqual({ action: "unarchive", feedback: { kind: "success", count: 1 } });
+  });
+
+  it("clears the previous feedback when a new action starts and when the selection is reset", async () => {
+    const pending = deferred<ReturnType<typeof outcome>>();
+    const unarchive = vi.fn()
+      .mockResolvedValueOnce(outcome([], ["a"]))
+      .mockImplementationOnce(() => pending.promise);
+    const selection = createSelection({ unarchive });
+    selection.toggle("a");
+    await selection.unarchive();
+    expect(selection.archiveFeedback?.feedback).toEqual({ kind: "none", failed: 1, total: 1 });
+
+    const running = selection.unarchive();
+    expect(selection.archiveFeedback).toBeNull();
+    selection.reset();
+    pending.resolve(outcome(["a"], []));
+    await running;
+
+    expect(selection.archiveFeedback).toBeNull();
+    expect(selection.busyAction).toBeNull();
+  });
+});
