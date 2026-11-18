@@ -12,4 +12,5 @@ Lymic will continue to distribute the existing Windows NSIS installer through Gi
 - **Build input**: `LYMIC_RELEASE_CHANNEL` (allowed values: `github` [default], `store`). Exposed to the frontend via `VITE_LYMIC_RELEASE_CHANNEL` / `LYMIC_RELEASE_CHANNEL`.
 - **Runtime observability**: The Tauri command `get_release_channel` returns the active channel to the desktop adapter and UI.
 - **Store channel behaviour**: Disables the in-app Tauri update check on startup and in settings, omits the update dialog and settings update actions, and prevents outbound requests to GitHub update endpoints.
+- **Store-only features**: The planned read-only Windows Virtual Library ([ADR-0003](0003-windows-virtual-cloud-library.md)) relies on the Store package's Package Identity and ships only in this channel.
 

@@ -2,21 +2,67 @@
 status: proposed
 ---
 
-# Read-only Windows Virtual Library via Cloud Files API
+# Read-only Windows Virtual Library via Cloud Files API (Store channel only)
 
-On Windows, Lymic plans to provide an optional, read-only Virtual Library under `%USERPROFILE%\Pictures\Lymic` using the Windows Cloud Filter API (`cldapi.dll`), projecting Remote Assets (including paired image and Live Photo Video Virtual Placeholders) as on-demand Virtual Placeholders under canonical date paths (`All Photos/YYYY/MM Month/<asset>`) and album directories (`Albums/<album>/<asset>`). Explorer delete, move, and write operations on virtual projections will be denied (`STATUS_ACCESS_DENIED`), keeping asset lifecycle, uploads, and Target Album membership strictly within Watched Folders and Synchronization. Thumbnails will be served by a lightweight COM `IThumbnailProvider` DLL registered under `SyncRootManager` in the Windows registry without Sparse Packages or commercial code-signing certificates.
+On Windows, Lymic plans to provide an optional, read-only Virtual Library under the user's Pictures folder (`<Pictures>\Lymic`, resolved through the Known Folder API) using the Windows Cloud Files API. It projects Remote Assets as on-demand Virtual Placeholders under canonical date paths (`All Photos/YYYY/MM Month/<asset>`, `All Photos/Undated/<asset>`) and album directories (`Albums/<album>/<asset>`). The Virtual Library ships **only in the Microsoft Store (MSIX) release channel** ([ADR-0004](0004-microsoft-store-release-channel.md)). It is unavailable in the GitHub/NSIS channel, on macOS and on Linux, and there is no experimental NSIS path.
+
+The Store package supplies Package Identity and Store signing, so the sync root is registered with `StorageProviderSyncRootManager` and the thumbnail provider is a COM server declared in the package manifest. No registry-based shell registration, installer-time COM registration or Sparse Package is needed. Callbacks, placeholder creation and Hydration use the Cloud Filter API (`cldapi.dll`).
+
+The Virtual Library is read-only by design. This is a product decision, not an API limit: the Cloud Files API supports bidirectional sync, but Lymic keeps uploads, asset lifecycle and Target Album membership strictly within Watched Folders and Synchronization.
 
 ## Considered Options
 
-- **Bidirectional read-write virtual root with Explorer drag-and-drop ingestion**: Allow pasting files directly into Explorer folders and uploading them to Immich. Rejected because detecting Live Photo pairs via arbitrary timing windows (e.g. 10-second debounce) is fragile, Explorer file locking creates race conditions, and mixing ad-hoc writes with the Watched Folder queue violates Lymic's Synchronization architecture.
-- **Multi-view projection including Persons and Places**: Project virtual hierarchies for `Persons/<person>/` and `Places/<country>/<city>/`. Rejected because multiple NTFS placeholders for the same Remote Asset cause placeholder explosion, redundant metadata tracking, complex path sanitization for person/place names, and cache confusion.
-- **Sparse Package with Windows App Identity and in-process Explorer extensions**: Package Lymic with a Sparse Package manifest and sign it with a Windows code-signing certificate to declare modern shell extension handlers. Rejected because public releases would be blocked without an expensive commercial code-signing certificate, and hosting custom COM shell extensions in `explorer.exe` risks desktop shell instability. A minimal COM thumbnail provider registered directly in the registry under `SyncRootManager` achieves cached thumbnail rendering without packaging overhead.
-- **Permitting standard Explorer file deletion**: Allow the user to press Delete in Explorer to remove Virtual Placeholders or directories. Rejected because Windows Explorer does not differentiate between local cache eviction and remote deletion. Deletion attempts are synchronously blocked with `STATUS_ACCESS_DENIED` to prevent accidental loss of Remote Assets; users manage local disk space through native Cloud Files commands ("Free up space") or Immich.
+- **Bidirectional read-write virtual root with Explorer drag-and-drop ingestion**: Allow pasting files directly into Explorer folders and uploading them to Immich. Rejected because detecting Live Photo pairs via arbitrary timing windows (e.g. 10-second debounce) is fragile, Explorer file locking creates race conditions, mixing ad-hoc writes with the Watched Folder queue violates Lymic's Synchronization architecture, and an Explorer delete would have to map to a remote deletion that Lymic never performs. May be revisited as a separate decision.
+- **Multi-view projection including Persons and Places**: Project virtual hierarchies for `Persons/<person>/` and `Places/<country>/<city>/`. Rejected because multiple NTFS placeholders for the same Remote Asset cause placeholder explosion, redundant metadata tracking, and cache confusion.
+- **Sparse Package with Windows App Identity and in-process Explorer extensions**: Rejected. It would need a commercial code-signing certificate for public releases and would host custom COM shell extensions in `explorer.exe`. The Store channel already provides Package Identity and signing.
+- **Registry-based registration for the GitHub/NSIS installer**: Register the sync root and an unsigned thumbnail DLL in the registry under `SyncRootManager`. Rejected: an unsigned DLL loaded into `explorer.exe` is exposed to Smart App Control and antivirus blocking, and the NSIS installer is already unsigned.
+- **Permitting standard Explorer file deletion**: Rejected because Windows Explorer does not differentiate between local cache eviction and remote deletion. Delete and rename of Virtual Placeholders are vetoed, and users manage disk space through "Free up space" or Immich.
+
+## Decisions
+
+**Availability and registration**
+- The feature is gated on actual Package Identity at runtime (for example `GetCurrentPackageFullName`) in addition to `LYMIC_RELEASE_CHANNEL=store`. It is unavailable in `tauri dev` and in any unpackaged run. Developers use a locally registered MSIX build.
+- The sync root path is resolved with the Known Folder API, not `%USERPROFILE%\Pictures`. Lymic detects an enclosing sync root (for example Pictures redirected into OneDrive) and asks the user to choose another folder instead of failing. The effective path is shown in settings.
+- A Watched Folder may not be inside, equal to, or a parent of the Virtual Library root. Lymic rejects it with an explicit error and refuses to enable the Virtual Library while such a Watched Folder exists.
+
+**Write behaviour**
+- Delete and rename of Virtual Placeholders are vetoed. The Cloud Files API cannot prevent the user from creating new local files in the sync root; Lymic ignores them and never uploads them.
+
+**Projection**
+- Placeholders are created lazily per directory through `FETCH_PLACEHOLDERS` when Explorer first lists it. Reconciliation only diffs directories that were already populated.
+- `YYYY/MM Month` uses the asset's local capture time (`localDateTime`). Assets without a usable capture time appear under `All Photos/Undated/`.
+- `All Photos` matches the Photo Timeline (no Archived, Trashed or locked-folder assets). `Albums/<album>` shows what Immich returns for that Album. Trashed Assets are never projected.
+- Names are sanitized to NTFS rules. A short, stable suffix derived from the Immich ID is appended only on collision (`IMG_0001 (a1b2c3).jpg`), for asset and Album names alike.
+- A Live Photo is projected as two placeholders in the same directory with a shared base name (`IMG_0001.HEIC` and `IMG_0001.MOV`).
+
+**Hydration**
+- Hydration always downloads the full original, never a preview variant, and not progressively. Thumbnails come from the thumbnail provider using the Immich thumbnail and never trigger Hydration.
+- Offline server, expired token or a remotely removed asset fail the read with a matching Cloud Files error, without retry loops, plus one in-app notice. A 401 offers re-login. A removed asset disappears on the next reconciliation.
+
+**Lifecycle**
+- Reconciliation runs on startup, every 10 minutes, and through a manual "Refresh Library" action in settings.
+- Disabling the Virtual Library or logging out deregisters the sync root and removes everything Lymic created, including hydrated and pinned originals, after a confirmation that says so. Files that Lymic did not create and that are not placeholders stay in place, together with their folder, and the dialog reports this.
+- Unhydrated placeholders only work while Lymic runs. Enabling the Virtual Library shows a hint when autostart is off.
+
+**Module boundaries**
+- A platform-neutral `virtual_library` module in the Tauri backend holds the pure projection rules (date buckets, Undated, collision suffix, NTFS sanitizing, Live Photo pairs) so they are testable on any OS.
+- A Windows-only `cloud_files` module (`cfg(windows)`) holds sync root registration, callbacks, placeholder creation and Hydration, following the pattern of `removable/`.
+- The thumbnail provider is a separate `lymic-shell-ext` crate in the workspace, declared in the MSIX manifest.
+
+## Acceptance gates
+
+This ADR stays `proposed` until prototypes confirm the assumptions that would change the design:
+
+1. Delete and rename of Virtual Placeholders are rejected, including Explorer's Recycle Bin path.
+2. The manifest-declared thumbnail provider renders thumbnails without triggering Hydration.
+3. The sync root's behaviour on MSIX uninstall is known (no uninstall hook exists), and any leftover placeholders have an acceptable story.
+4. A sync root nested in another sync root (for example OneDrive-redirected Pictures) is detected before registration.
+
+Two items are implementation tasks, not gates: whether the existing autostart works inside the MSIX package or needs a manifest `StartupTask`, and any Store certification requirements specific to Cloud Files apps.
 
 ## Consequences
 
-- Not yet implemented on `master` or shipped in current builds; this remains a proposed, Windows-only capability (unavailable on macOS and Linux).
-- When implemented, it will add a Windows-only `cloud_files` module in Tauri and a minimal companion COM DLL (`lymic-shell-ext`) registered via the Windows installer.
-- Incremental reconciliation will run on application startup, periodically (every 10 minutes), and via a manual "Refresh Library" action in settings, pruning locally cached Virtual Placeholders when assets are removed remotely.
-- Explorer will provide native on-demand Hydration, cloud status icons, and standard "Free up space" / "Always keep on this device" context menu actions out of the box, while remaining strictly separate from Synchronization.
-- Disabling the Virtual Library or logging out will deregister the sync root (`CfUnregisterSyncRoot`) and clean up the virtual directory structure.
+- Not yet implemented on `master` or shipped in current builds; this remains a proposed, Windows-only, Store-only capability.
+- When implemented, it adds the `virtual_library` and `cloud_files` modules, the `lymic-shell-ext` crate, and new declarations in the MSIX manifest template used by `scripts/package-msix.ps1`.
+- Explorer provides native on-demand Hydration, cloud status icons, and "Free up space" / "Always keep on this device" actions, while the feature stays strictly separate from Synchronization.
+- GitHub/NSIS users get no Virtual Library. This limits the feature's reach until the NSIS channel gets a signed path, which needs its own decision.
