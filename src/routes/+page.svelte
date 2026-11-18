@@ -26,40 +26,46 @@
   import { createSessionController } from "#lib/controllers/session-controller.svelte.ts";
   import { createPreferencesController } from "#lib/controllers/preferences-controller.svelte.ts";
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
-  import { createAlbumTimelineController } from "#lib/controllers/album-timeline-controller.svelte.ts";
-  import { createPersonTimelineController } from "#lib/controllers/person-timeline-controller.svelte.ts";
+  import { createNavigationController } from "#lib/controllers/navigation-controller.svelte.ts";
   import { createPlaceTimelineController } from "#lib/controllers/place-timeline-controller.svelte.ts";
   import { createMemoryTimelineController } from "#lib/controllers/memory-timeline-controller.svelte.ts";
   import { createTagTimelineController } from "#lib/controllers/tag-timeline-controller.svelte.ts";
   import { defaultTagOrigin, recordTagOrigin } from "#lib/controllers/tag-origin.ts";
   import { TAG_TIMELINE_VIEW, TAGS_VIEW, type ViewPosition } from "#lib/controllers/view-position.ts";
   import { localizedMemoryTitle } from "#lib/memory-title.ts";
-  import { FILTERED_TIMELINES, type AlbumCatalogueItem, type AssetTag, type FilteredTimeline, type Memory, type Place, type RecognizedPerson } from "#lib/contracts.ts";
+  import { FILTERED_TIMELINES, type AssetTag, type FilteredTimeline, type Memory, type Place } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
-  let currentView = $state("photos");
   /** Whether `view` is a Filtered Timeline: a main view that shows its own filtered timeline and reloads it every time it opens. */
   function isFilteredTimeline(view: string): view is FilteredTimeline {
     return (FILTERED_TIMELINES as readonly string[]).includes(view);
   }
   const desktop = tauriDesktopAdapter;
-  let mapCreated = $state(false);
-  let selectedAlbum = $state<AlbumCatalogueItem | null>(null);
-  let albumTimeline = $state<ReturnType<typeof createAlbumTimelineController> | null>(null);
-  let selectedPerson = $state<RecognizedPerson | null>(null);
-  let personTimeline = $state<ReturnType<typeof createPersonTimelineController> | null>(null);
+  const navigation = createNavigationController({
+    adapter: desktop,
+    refresh: {
+      photos: () => timeline.refresh(),
+      filteredTimeline: (view) => filteredTimelines[view].refresh(),
+      map: () => map.refresh(),
+      explore: () => explore.refresh(),
+      exploreIfStale: () => explore.refreshIfStale(),
+      people: () => people.refresh(),
+      albums: () => albumCatalogue.refresh(),
+    },
+    scroll: {
+      read: () => content?.scrollTop ?? 0,
+      restore: (top) => queueMicrotask(() => { if (content) content.scrollTop = top; }),
+    },
+  });
+  const currentView = $derived(navigation.view);
   let selectedMemory = $state<Memory | null>(null);
   let memoryTimeline = $state<ReturnType<typeof createMemoryTimelineController> | null>(null);
-  let personOrigin = $state<"people" | "explore">("people");
   let memoryOrigin = $state<"explore" | "all-memories">("explore");
   let selectedPlace = $state<Place | null>(null);
   let placeTimeline = $state<ReturnType<typeof createPlaceTimelineController> | null>(null);
   let placeOrigin = $state<"explore" | "places">("explore");
   let placesScrollTop = 0;
-  let peopleScrollTop = 0;
-  let exploreScrollTop = 0;
   let allMemoriesScrollTop = 0;
-  let albumsScrollTop = 0;
   /** The Tags view's own scroll position, kept while another view is open. */
   let tagsScrollTop = 0;
   let selectedTag = $state<AssetTag | null>(null);
@@ -76,16 +82,6 @@
   /** Views that show the shared timeline view, which scrolls inside itself. */
   const timelineScrollViews = new Set<string>(["photos", ...FILTERED_TIMELINES, "person-timeline", "album-timeline", "place-timeline", "memory-timeline", TAG_TIMELINE_VIEW, "search"]);
 
-  function selectPerson(person: RecognizedPerson) {
-    personOrigin = currentView === "explore" ? "explore" : "people";
-    if (personOrigin === "explore") exploreScrollTop = content?.scrollTop ?? 0;
-    else peopleScrollTop = content?.scrollTop ?? 0;
-    selectedPerson = person;
-    personTimeline = createPersonTimelineController(desktop, person.id);
-    currentView = "person-timeline";
-    void personTimeline.refresh();
-  }
-
   /** The open view and its scroll position; a timeline view scrolls inside itself, any other view in `main`. */
   function currentPosition(): ViewPosition {
     return { view: currentView, top: timelineScrollViews.has(currentView) ? timelineScrollTop : (content?.scrollTop ?? 0) };
@@ -97,36 +93,28 @@
     tagTimeline?.clear();
     selectedTag = tag;
     tagTimeline = createTagTimelineController(desktop, tag.id);
-    currentView = TAG_TIMELINE_VIEW;
+    navigation.show(TAG_TIMELINE_VIEW);
     void tagTimeline.refresh();
   }
 
   function selectPlace(place: Place) {
     placeOrigin = currentView === "places" ? "places" : "explore";
     if (placeOrigin === "places") placesScrollTop = content?.scrollTop ?? 0;
-    else exploreScrollTop = content?.scrollTop ?? 0;
+    else navigation.exploreScrollTop = content?.scrollTop ?? 0;
     selectedPlace = place;
     placeTimeline = createPlaceTimelineController(desktop, place.city);
-    currentView = "place-timeline";
+    navigation.show("place-timeline");
     void placeTimeline.refresh();
   }
 
   function selectMemory(memory: Memory) {
     memoryOrigin = currentView === "all-memories" ? "all-memories" : "explore";
     if (memoryOrigin === "all-memories") allMemoriesScrollTop = content?.scrollTop ?? 0;
-    else exploreScrollTop = content?.scrollTop ?? 0;
+    else navigation.exploreScrollTop = content?.scrollTop ?? 0;
     selectedMemory = memory;
     memoryTimeline = createMemoryTimelineController(memory);
-    currentView = "memory-timeline";
+    navigation.show("memory-timeline");
     void memoryTimeline.refresh();
-  }
-
-  function selectAlbum(album: AlbumCatalogueItem) {
-    albumsScrollTop = content?.scrollTop ?? 0;
-    selectedAlbum = album;
-    albumTimeline = createAlbumTimelineController(desktop, album.id);
-    currentView = "album-timeline";
-    void albumTimeline.refresh();
   }
 
   function viewTitle(view: string) {
@@ -137,21 +125,15 @@
       case "search": return $t("search_title");
       case "places": return $t("places_all_title");
       case "all-memories": return $t("memories_all_title");
-      case "album-timeline": return selectedAlbum?.albumName ?? $t("albums_title");
+      case "album-timeline": return navigation.selectedAlbum?.albumName ?? $t("albums_title");
       case "place-timeline": return selectedPlace?.city ?? $t("places_title");
       case TAG_TIMELINE_VIEW: return selectedTag?.value ?? $t("tags_title");
-      case "person-timeline": return selectedPerson?.name ?? $t("people_unnamed");
+      case "person-timeline": return navigation.selectedPerson?.name ?? $t("people_unnamed");
       case "memory-timeline": return selectedMemory ? localizedMemoryTitle(selectedMemory, $t, $locale) : $t("memories_title");
       default: return $t("info");
     }
   }
   const pageTitle = $derived(viewTitle(currentView));
-
-  function closePersonTimeline() {
-    personTimeline?.clear();
-    personTimeline = null;
-    selectedPerson = null;
-  }
 
   function closeTagTimeline() {
     tagTimeline?.clear();
@@ -171,114 +153,48 @@
     selectedMemory = null;
   }
 
-  function closeAlbumTimeline() {
-    albumTimeline?.clear();
-    albumTimeline = null;
-    selectedAlbum = null;
-  }
-
-  // Favorites, Archive and Trash reload every time they open. The Photo Timeline keeps its cache, so a Restore
-  // marks it stale and the next visit to Photos refreshes it once.
-  let photosStale = false;
-
-  function openPhotos() {
-    if (currentView === "photos") return;
-    currentView = "photos";
-    if (!photosStale) return;
-    photosStale = false;
-    void timeline.refresh();
-  }
-
   async function restoreTrashedAssets(assetIds: string[]) {
     const result = await desktop.restoreTrashedAssets(assetIds);
-    if (result.restoredAssetIds.length > 0) photosStale = true;
+    if (result.restoredAssetIds.length > 0) navigation.markPhotosStale();
     return result;
-  }
-
-  function openFilteredTimeline(view: FilteredTimeline) {
-    if (currentView === view) return;
-    currentView = view;
-    void filteredTimelines[view].refresh();
-  }
-
-  function openMap() {
-    if (currentView === "map") return;
-    mapCreated = true;
-    currentView = "map";
-    void map.refresh();
-  }
-
-  function openExplore() {
-    currentView = "explore";
-    void explore.refresh();
-  }
-
-  function openPeople() {
-    currentView = "people";
-    void people.refresh();
   }
 
   function openTags() {
     if (currentView === TAGS_VIEW) return;
-    currentView = TAGS_VIEW;
+    navigation.show(TAGS_VIEW);
     void tags.refresh();
     void tick().then(() => { if (content) content.scrollTop = tagsScrollTop; });
-  }
-
-  function openAlbums() {
-    currentView = "albums";
-    void albumCatalogue.refresh();
   }
 
   /** "All Places" has no navigation entry; it is only opened from the Explore Overview. */
   function openAllPlaces() {
     placesScrollTop = 0;
-    exploreScrollTop = content?.scrollTop ?? 0;
-    currentView = "places";
+    navigation.exploreScrollTop = content?.scrollTop ?? 0;
+    navigation.show("places");
   }
 
   /** "All Memories" has no navigation entry; it is only opened from the Explore Overview. */
   function openAllMemories() {
     allMemoriesScrollTop = 0;
-    exploreScrollTop = content?.scrollTop ?? 0;
-    currentView = "all-memories";
+    navigation.exploreScrollTop = content?.scrollTop ?? 0;
+    navigation.show("all-memories");
     void allMemories.refresh();
-  }
-
-  function returnToExplore() {
-    currentView = "explore";
-    void explore.refreshIfStale();
-    queueMicrotask(() => { if (content) content.scrollTop = exploreScrollTop; });
-  }
-
-  function returnFromPersonTimeline() {
-    closePersonTimeline();
-    currentView = personOrigin;
-    if (personOrigin === "explore") void explore.refreshIfStale();
-    const scrollTop = personOrigin === "explore" ? exploreScrollTop : peopleScrollTop;
-    queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
   }
 
   function returnFromPlaceTimeline() {
     closePlaceTimeline();
-    currentView = placeOrigin;
+    navigation.show(placeOrigin);
     if (placeOrigin === "explore") void explore.refreshIfStale();
-    const scrollTop = placeOrigin === "places" ? placesScrollTop : exploreScrollTop;
+    const scrollTop = placeOrigin === "places" ? placesScrollTop : navigation.exploreScrollTop;
     queueMicrotask(() => { if (content) content.scrollTop = scrollTop; });
   }
 
   function returnFromMemoryTimeline() {
     closeMemoryTimeline();
     if (memoryOrigin === "all-memories") {
-      currentView = "all-memories";
+      navigation.show("all-memories");
       queueMicrotask(() => { if (content) content.scrollTop = allMemoriesScrollTop; });
-    } else returnToExplore();
-  }
-
-  function returnToAlbums() {
-    closeAlbumTimeline();
-    currentView = "albums";
-    queueMicrotask(() => { if (content) content.scrollTop = albumsScrollTop; });
+    } else navigation.returnToExplore();
   }
 
   function submitSearch() {
@@ -286,14 +202,14 @@
     // Refining a Search from its results keeps the view the user first searched from.
     if (currentView !== "search") {
       searchOrigin = currentPosition();
-      currentView = "search";
+      navigation.show("search");
     }
     void search.submit();
   }
 
   /** Shows `origin.view` again at its scroll position, reloading what was dropped or went stale while it was left. */
   function returnTo(origin: ViewPosition) {
-    currentView = origin.view;
+    navigation.show(origin.view);
     if (timelineScrollViews.has(origin.view)) scrollRestore = { view: origin.view, top: origin.top };
     else queueMicrotask(() => { if (content) content.scrollTop = origin.top; });
     // The Trash Timeline is dropped when it is left, and Explore and Tags may have gone stale.
@@ -322,26 +238,19 @@
     t: (key, params) => $t(key, params),
     locale: () => $locale ?? "en",
     resetView: () => {
-      mapCreated = false;
-      peopleScrollTop = 0;
-      exploreScrollTop = 0;
+      navigation.reset();
       allMemoriesScrollTop = 0;
-      personOrigin = "people";
       memoryOrigin = "explore";
       placeOrigin = "explore";
       placesScrollTop = 0;
-      albumsScrollTop = 0;
       tagsScrollTop = 0;
       tagOrigin = defaultTagOrigin;
       closeTagTimeline();
-      closeAlbumTimeline();
-      closePersonTimeline();
       closePlaceTimeline();
       closeMemoryTimeline();
       searchOrigin = null;
       timelineScrollTop = 0;
       scrollRestore = null;
-      currentView = "photos";
     },
     isExploreActive: () => currentView === "explore",
     isTagsActive: () => currentView === TAGS_VIEW,
@@ -376,28 +285,28 @@
     trash: { icon: Trash2, options: () => ({ allowFavoriteAndAlbum: false, restoreTrashedAssets, hintMessage: $t("trash_hint") }) },
   };
   function filteredTimelineEntry(view: FilteredTimeline) {
-    return { view, icon: filteredTimelineViews[view].icon, label: `${view}_title`, open: () => openFilteredTimeline(view) };
+    return { view, icon: filteredTimelineViews[view].icon, label: `${view}_title`, open: () => navigation.openFilteredTimeline(view) };
   }
   /** The main views, grouped in navigation order. A main view's navigation label is also its page title. */
   const navigationGroups = [
     [
-      { view: "photos", icon: Images, label: "timeline_title", open: openPhotos },
-      { view: "explore", icon: Compass, label: "explore_title", open: openExplore },
-      { view: "map", icon: MapIcon, label: "map_title", open: openMap },
-      { view: "people", icon: Users, label: "people_title", open: openPeople },
+      { view: "photos", icon: Images, label: "timeline_title", open: navigation.openPhotos },
+      { view: "explore", icon: Compass, label: "explore_title", open: navigation.openExplore },
+      { view: "map", icon: MapIcon, label: "map_title", open: navigation.openMap },
+      { view: "people", icon: Users, label: "people_title", open: navigation.openPeople },
       filteredTimelineEntry("favorites"),
-      { view: "albums", icon: Album, label: "albums_title", open: openAlbums },
+      { view: "albums", icon: Album, label: "albums_title", open: navigation.openAlbums },
       { view: TAGS_VIEW, icon: TagIcon, label: "tags_title", open: openTags },
       filteredTimelineEntry("archive"),
       filteredTimelineEntry("trash"),
     ],
     [
-      { view: "dashboard", icon: FolderSync, label: "dashboard", open: () => currentView = "dashboard" },
-      { view: "logs", icon: ScrollText, label: "logs", open: () => currentView = "logs" },
+      { view: "dashboard", icon: FolderSync, label: "dashboard", open: () => navigation.show("dashboard") },
+      { view: "logs", icon: ScrollText, label: "logs", open: () => navigation.show("logs") },
     ],
     [
-      { view: "settings", icon: SettingsIcon, label: "settings", open: () => currentView = "settings" },
-      { view: "info", icon: InfoIcon, label: "info", open: () => currentView = "info" },
+      { view: "settings", icon: SettingsIcon, label: "settings", open: () => navigation.show("settings") },
+      { view: "info", icon: InfoIcon, label: "info", open: () => navigation.show("info") },
     ],
   ];
   const navigationEntries = navigationGroups.flat();
@@ -569,7 +478,7 @@
       </header>
 
       <div class="shrink-0 px-8 pb-2">
-        <SearchBar {search} {people} {tags} onSubmit={submitSearch} onClear={clearSearch} onOpenArchive={() => openFilteredTimeline("archive")} />
+        <SearchBar {search} {people} {tags} onSubmit={submitSearch} onClear={clearSearch} onOpenArchive={() => navigation.openFilteredTimeline("archive")} />
       </div>
 
       <main bind:this={content} onscroll={() => { if (currentView === TAGS_VIEW && content) tagsScrollTop = content.scrollTop; }} class="flex-1 {currentView === 'map' || timelineScrollViews.has(currentView) ? 'overflow-hidden px-8 pt-2 pb-8' : 'overflow-y-auto px-8 pt-4 pb-8'} flex flex-col space-y-6">
@@ -591,14 +500,14 @@
           <RemovableVolumePrompt
             volume={removable.currentPrompt}
             onAccept={async (vol) => {
-              currentView = "dashboard";
+              navigation.show("dashboard");
               await watchedFolders.acceptRemovableFolder(vol);
             }}
             onDismiss={(volId) => removable.dismiss(volId)}
           />
         {/if}
 
-        {#if mapCreated}<MapView mapState={map} active={currentView === "map"} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} />{/if}
+        {#if navigation.mapCreated}<MapView mapState={map} active={currentView === "map"} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} />{/if}
         {#if currentView === "photos"}
           <TimelineView {timeline} {...sharedTimelineProps} />
         {:else if isFilteredTimeline(currentView)}
@@ -619,32 +528,32 @@
             />
           {/key}
         {:else if currentView === "explore"}
-          <ExploreView {explore} {people} {places} {memories} onViewAllPeople={openPeople} onSelectPerson={selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} onViewAllMemories={openAllMemories} onSelectMemory={selectMemory} />
+          <ExploreView {explore} {people} {places} {memories} onViewAllPeople={navigation.openPeople} onSelectPerson={navigation.selectPerson} onViewAllPlaces={openAllPlaces} onSelectPlace={selectPlace} onViewAllMemories={openAllMemories} onSelectMemory={selectMemory} />
         {:else if currentView === "all-memories"}
-          <BackBarView label={$t('explore_return')} onBack={returnToExplore}>
+          <BackBarView label={$t('explore_return')} onBack={navigation.returnToExplore}>
             <AllMemoriesView {allMemories} onSelect={selectMemory} />
           </BackBarView>
         {:else if currentView === "places"}
-          <BackBarView label={$t('explore_return')} onBack={returnToExplore}>
+          <BackBarView label={$t('explore_return')} onBack={navigation.returnToExplore}>
             <PlacesView {places} onSelect={selectPlace} />
           </BackBarView>
         {:else if currentView === "people"}
-          <PeopleView {people} onSelect={selectPerson} />
+          <PeopleView {people} onSelect={navigation.selectPerson} />
         {:else if currentView === TAGS_VIEW}
           <TagsView {tags} onSelect={selectTag} />
         {:else if currentView === "albums"}
-          <AlbumCatalogueView catalogue={albumCatalogue} onSelect={selectAlbum} />
-        {:else if currentView === "album-timeline" && albumTimeline}
-          <BackBarView label={$t('albums_return')} onBack={returnToAlbums}>
-            <TimelineView timeline={albumTimeline} {...sharedTimelineProps} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
+          <AlbumCatalogueView catalogue={albumCatalogue} onSelect={navigation.selectAlbum} />
+        {:else if currentView === "album-timeline" && navigation.albumTimeline}
+          <BackBarView label={$t('albums_return')} onBack={navigation.returnToAlbums}>
+            <TimelineView timeline={navigation.albumTimeline} {...sharedTimelineProps} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
           </BackBarView>
         {:else if currentView === "place-timeline" && placeTimeline}
           <BackBarView label={$t(placeOrigin === "places" ? 'places_return' : 'explore_return')} onBack={returnFromPlaceTimeline}>
             <TimelineView timeline={placeTimeline} {...sharedTimelineProps} emptyMessage={$t('places_timeline_empty')} loadErrorMessage={$t('places_timeline_error')} />
           </BackBarView>
-        {:else if currentView === "person-timeline" && personTimeline}
-          <BackBarView label={$t(personOrigin === "explore" ? 'explore_return' : 'people_return')} onBack={returnFromPersonTimeline}>
-            <TimelineView timeline={personTimeline} {...sharedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
+        {:else if currentView === "person-timeline" && navigation.personTimeline}
+          <BackBarView label={$t(navigation.personOrigin === "explore" ? 'explore_return' : 'people_return')} onBack={navigation.returnFromPersonTimeline}>
+            <TimelineView timeline={navigation.personTimeline} {...sharedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
           </BackBarView>
         {:else if currentView === "memory-timeline" && memoryTimeline}
           <BackBarView label={$t(memoryOrigin === "all-memories" ? 'memories_all_return' : 'explore_return')} onBack={returnFromMemoryTimeline}>
