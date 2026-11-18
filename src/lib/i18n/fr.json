@@ -439,4 +439,6 @@
   ,"archive_archive_none": "{failed} sur {count} n'ont pas pu être archivés. Veuillez réessayer."
   ,"archive_archive_failed": "Échec de l'archivage. Veuillez réessayer."
   ,"archive_archive_permission": "L'archivage a été refusé. Accordez à la clé API l'autorisation asset.update."
+  ,"archive_archive_stays": "Archivé. Il reste dans cette liste."
+  ,"archive_unarchive_stays": "Désarchivé. Il reste dans cette liste."
 }

@@ -1,4 +1,4 @@
-import type { AssetDetails, TimelineAsset } from "../contracts";
+import type { AssetDetails, AssetVisibility, TimelineAsset } from "../contracts";
 
 export interface RemoteAssetActionsOptions {
   readonly getAssetDetails: (assetId: string) => Promise<AssetDetails | null>;
@@ -30,6 +30,7 @@ export function createRemoteAssetActions(options: RemoteAssetActionsOptions) {
   const inFlight = new Map<string, Promise<RemoteAssetDetailsLoad>>();
   let generation = $state(0);
   let favoriteOverrides = $state<Record<string, boolean>>({});
+  const visibilityOverrides = new Map<string, AssetVisibility>();
 
   function store(assetId: string, details: AssetDetails | null) {
     cache.delete(assetId);
@@ -39,7 +40,9 @@ export function createRemoteAssetActions(options: RemoteAssetActionsOptions) {
 
   function withOverride(assetId: string, details: AssetDetails | null) {
     const favorite = favoriteOverrides[assetId];
-    return details && favorite !== undefined ? { ...details, isFavorite: favorite } : details;
+    const visibility = visibilityOverrides.get(assetId);
+    if (!details) return details;
+    return { ...details, ...(favorite !== undefined ? { isFavorite: favorite } : {}), ...(visibility !== undefined ? { visibility } : {}) };
   }
 
   /** Cached details; `undefined` when not cached and `null` when the asset is known to have none. */
@@ -81,11 +84,19 @@ export function createRemoteAssetActions(options: RemoteAssetActionsOptions) {
     if (cached) cache.set(assetId, { ...cached, isFavorite });
   }
 
+  /** Records the visibility an Archive or Unarchive left a Remote Asset with, so cached and later-loaded details show it until the next `invalidate()`. */
+  function reflectVisibility(assetId: string, visibility: AssetVisibility) {
+    visibilityOverrides.set(assetId, visibility);
+    const cached = cache.get(assetId);
+    if (cached) cache.set(assetId, { ...cached, visibility });
+  }
+
   /** Drops cached details and in-flight results, e.g. after a timeline refresh; keeps favorite overrides for assets whose update is still in flight. */
   function invalidate(retainFavoriteFor: readonly string[] = []) {
     generation += 1;
     cache.clear();
     inFlight.clear();
+    visibilityOverrides.clear();
     favoriteOverrides = Object.fromEntries(
       retainFavoriteFor.filter((assetId) => assetId in favoriteOverrides).map((assetId) => [assetId, favoriteOverrides[assetId]]),
     );
@@ -120,6 +131,7 @@ export function createRemoteAssetActions(options: RemoteAssetActionsOptions) {
     loadDetails,
     isFavorite,
     reflectFavorite,
+    reflectVisibility,
     invalidate,
     download,
   };

@@ -926,10 +926,68 @@ mod tests {
                     image_height: None,
                     file_size: None,
                     tags: None,
+                    visibility: None,
                 }
             );
         }
         server.await.unwrap();
+    }
+
+    async fn visibility_of(body: &'static str) -> Option<String> {
+        let (url, server) = serve_pages(vec![("200 OK", body)]).await;
+        let details = test_client(url, "test-key")
+            .get_asset_details("asset-1")
+            .await
+            .unwrap();
+        assert!(server.await.unwrap()[0].starts_with("GET /api/assets/asset-1 HTTP/1.1"));
+        details.visibility
+    }
+
+    #[tokio::test]
+    async fn reads_the_visibility_of_asset_details() {
+        for visibility in ["timeline", "archive", "locked", "hidden"] {
+            let body: &'static str =
+                Box::leak(format!(r#"{{"visibility":"{visibility}"}}"#).into_boxed_str());
+            assert_eq!(visibility_of(body).await.as_deref(), Some(visibility));
+        }
+    }
+
+    #[tokio::test]
+    async fn keeps_an_unknown_visibility_as_reported() {
+        assert_eq!(
+            visibility_of(r#"{"visibility":"future-value"}"#)
+                .await
+                .as_deref(),
+            Some("future-value")
+        );
+    }
+
+    #[tokio::test]
+    async fn reports_no_visibility_when_the_server_omits_or_garbles_it() {
+        assert_eq!(visibility_of(r#"{"originalFileName":"a.jpg"}"#).await, None);
+        assert_eq!(visibility_of(r#"{"visibility":null}"#).await, None);
+        assert_eq!(visibility_of(r#"{"visibility":""}"#).await, None);
+        assert_eq!(visibility_of(r#"{"visibility":"  "}"#).await, None);
+        assert_eq!(visibility_of(r#"{"visibility":42}"#).await, None);
+        assert_eq!(visibility_of(r#"{"visibility":["archive"]}"#).await, None);
+        assert_eq!(visibility_of(r#"{"visibility":{"a":1}}"#).await, None);
+    }
+
+    #[tokio::test]
+    async fn a_garbled_visibility_does_not_hide_the_other_details() {
+        let (url, server) = serve_pages(vec![(
+            "200 OK",
+            r#"{"visibility":42,"originalFileName":"a.jpg","isFavorite":true}"#,
+        )])
+        .await;
+        let details = test_client(url, "test-key")
+            .get_asset_details("asset-1")
+            .await
+            .unwrap();
+        server.await.unwrap();
+        assert_eq!(details.original_file_name.as_deref(), Some("a.jpg"));
+        assert!(details.is_favorite);
+        assert_eq!(details.visibility, None);
     }
 
     async fn tags_of(body: &'static str) -> Option<Vec<AssetTag>> {

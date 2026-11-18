@@ -108,6 +108,8 @@ export interface AssetDetails {
   fileSize: number | null;
   /** The Tags of the Remote Asset. Absent when the server does not report them: no chips, never an error. */
   tags?: AssetTag[];
+  /** The Immich visibility (`timeline`, `archive`, `locked`, `hidden`, or a value this version does not know). Absent when the server does not report it: the Lightbox then offers no Archive. */
+  visibility?: string;
 }
 
 /** A Tag of one Remote Asset, as the Lightbox shows it. */

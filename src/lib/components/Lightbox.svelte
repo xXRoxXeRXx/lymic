@@ -8,7 +8,7 @@
   import TagColorDot from "./TagColorDot.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { RemoteAssetActions } from "./remote-asset-actions.svelte";
-  import { archiveFeedbackFor, archiveFeedbackMessage, type ArchiveAction, type RemoteAssetArchiveOutcome } from "./remote-asset-archive";
+  import { archiveActionForVisibility, archiveFeedbackFor, archiveFeedbackMessage, archiveStaysMessage, visibilityAfter, type ArchiveAction, type RemoteAssetArchiveOutcome } from "./remote-asset-archive";
   import { restoreFeedbackFor, restoreFeedbackMessage, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   interface Props {
@@ -31,10 +31,16 @@
     archiveAction?: ArchiveAction;
     /** Performs `archiveAction` for an asset; reports what happened and never rejects. After a success the Lightbox moves on to the next asset, or closes when there is none. */
     onChangeArchive?(action: ArchiveAction, assetId: string): Promise<RemoteAssetArchiveOutcome>;
+    /**
+     * For a view that shows archived and other assets together: the action follows the open asset's `visibility` from its details
+     * (Archive for `timeline`, Unarchive for `archive`, none for `locked`, `hidden`, an unknown or missing value) instead of `archiveAction`,
+     * and the asset stays in the list, so after a success the Lightbox stays on it and the button flips. Needs `onChangeArchive`.
+     */
+    archiveByVisibility?: boolean;
     /** Shows the Tags of the asset as chips; selecting one closes the Lightbox first, then calls this to open that Tag's Tag Timeline. */
     onSelectTag?(tag: AssetTag): void;
   }
-  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, archiveAction, onChangeArchive, onSelectTag }: Props = $props();
+  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, archiveAction, onChangeArchive, archiveByVisibility = false, onSelectTag }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   let selectedAsset = $state<TimelineAsset | null>(untrack(() => asset));
   let assetDetails = $state<AssetDetails | null>(null);
@@ -79,6 +85,7 @@
     }).join(", ");
   }
 
+  const shownArchiveAction = $derived(archiveByVisibility ? archiveActionForVisibility(assetDetails?.visibility) : archiveAction);
   const cameraName = $derived(cameraLabel(assetDetails?.cameraMake, assetDetails?.cameraModel));
   const locationName = $derived(locationLabel(assetDetails?.city, assetDetails?.state, assetDetails?.country));
   const imageWidth = $derived(assetDetails?.imageWidth ?? selectedAsset?.width ?? null);
@@ -186,7 +193,13 @@
       if (isDestroyed || selectedAsset !== current) return;
       const feedback = archiveFeedbackFor(outcome, 1);
       const message = archiveFeedbackMessage(action, feedback, $t, numberLocale);
-      if (outcome.changedAssetIds.includes(current.id)) {
+      if (outcome.changedAssetIds.includes(current.id) && archiveByVisibility) {
+        // The asset stays in the list: stay on it, and show the opposite action from now on.
+        const visibility = visibilityAfter(action);
+        assetActions.reflectVisibility(current.id, visibility);
+        assetDetails = assetActions.cachedDetails(current.id) ?? (assetDetails ? { ...assetDetails, visibility } : assetDetails);
+        archiveFeedback = { message: archiveStaysMessage(action, $t), isSuccess: true };
+      } else if (outcome.changedAssetIds.includes(current.id)) {
         // The asset left the Archive Timeline: show its neighbour, or close when none is left. Busy until then.
         const moved = await moveOnFrom(current);
         if (isDestroyed) return;
@@ -332,10 +345,10 @@
           {#if onRestore}
             <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={isRestoring} disabled={isRestoring} onclick={() => void restoreAsset()}><ArchiveRestore class="h-5 w-5 {isRestoring ? 'animate-pulse' : ''}" /></button>
           {/if}
-          {#if archiveAction && onChangeArchive}
-            {@const archiveLabel = $t(archiveAction === "archive" ? "archive_archive" : "archive_unarchive")}
-            {@const ArchiveIcon = archiveAction === "archive" ? Archive : ArchiveX}
-            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={archiveLabel} aria-label={archiveLabel} aria-busy={isChangingArchive} disabled={isBusy} onclick={() => void changeArchiveStatus(archiveAction)}><ArchiveIcon class="h-5 w-5 {isChangingArchive ? 'animate-pulse' : ''}" /></button>
+          {#if shownArchiveAction && onChangeArchive}
+            {@const archiveLabel = $t(shownArchiveAction === "archive" ? "archive_archive" : "archive_unarchive")}
+            {@const ArchiveIcon = shownArchiveAction === "archive" ? Archive : ArchiveX}
+            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={archiveLabel} aria-label={archiveLabel} aria-busy={isChangingArchive} disabled={isBusy} onclick={() => void changeArchiveStatus(shownArchiveAction)}><ArchiveIcon class="h-5 w-5 {isChangingArchive ? 'animate-pulse' : ''}" /></button>
           {/if}
           {#if albumCatalogue}
             <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isAddingToAlbum || isChangingArchive} onclick={openAddToAlbum}><Album class="h-5 w-5" /></button>

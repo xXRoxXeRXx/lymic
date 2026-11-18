@@ -439,4 +439,6 @@
   ,"archive_archive_none": "Не удалось архивировать {failed} из {count}. Повторите попытку."
   ,"archive_archive_failed": "Не удалось архивировать. Повторите попытку."
   ,"archive_archive_permission": "Архивирование отклонено. Предоставьте ключу API разрешение asset.update."
+  ,"archive_archive_stays": "Архивировано. Элемент остаётся в этом списке."
+  ,"archive_unarchive_stays": "Разархивировано. Элемент остаётся в этом списке."
 }

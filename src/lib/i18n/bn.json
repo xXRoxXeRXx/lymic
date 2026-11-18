@@ -439,4 +439,6 @@
   ,"archive_archive_none": "{count}টির মধ্যে {failed}টি আর্কাইভ করা যায়নি। আবার চেষ্টা করুন।"
   ,"archive_archive_failed": "আর্কাইভ করা যায়নি। আবার চেষ্টা করুন।"
   ,"archive_archive_permission": "আর্কাইভ করা প্রত্যাখ্যান করা হয়েছে। API কী-কে asset.update অনুমতি দিন।"
+  ,"archive_archive_stays": "আর্কাইভ করা হয়েছে। এটি এই তালিকায় থাকবে।"
+  ,"archive_unarchive_stays": "আর্কাইভ থেকে সরানো হয়েছে। এটি এই তালিকায় থাকবে।"
 }

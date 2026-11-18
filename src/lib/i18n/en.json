@@ -439,4 +439,6 @@
   ,"archive_archive_none": "{failed} of {count} could not be archived. Please try again."
   ,"archive_archive_failed": "Could not archive. Please try again."
   ,"archive_archive_permission": "Archiving was refused. Give the API key the asset.update permission."
+  ,"archive_archive_stays": "Archived. It stays in this list."
+  ,"archive_unarchive_stays": "Unarchived. It stays in this list."
 }

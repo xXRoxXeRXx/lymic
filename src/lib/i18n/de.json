@@ -439,4 +439,6 @@
   ,"archive_archive_none": "{failed} von {count} konnten nicht archiviert werden. Bitte versuche es erneut."
   ,"archive_archive_failed": "Archivieren fehlgeschlagen. Bitte versuche es erneut."
   ,"archive_archive_permission": "Das Archivieren wurde abgelehnt. Erteile dem API-Schlüssel die Berechtigung asset.update."
+  ,"archive_archive_stays": "Archiviert. Es bleibt in dieser Liste."
+  ,"archive_unarchive_stays": "Dearchiviert. Es bleibt in dieser Liste."
 }

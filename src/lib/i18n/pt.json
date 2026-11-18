@@ -439,4 +439,6 @@
   ,"archive_archive_none": "{failed} de {count} não puderam ser arquivados. Tente novamente."
   ,"archive_archive_failed": "Não foi possível arquivar. Tente novamente."
   ,"archive_archive_permission": "O arquivamento foi recusado. Conceda à chave de API a permissão asset.update."
+  ,"archive_archive_stays": "Arquivado. Continua nesta lista."
+  ,"archive_unarchive_stays": "Desarquivado. Continua nesta lista."
 }

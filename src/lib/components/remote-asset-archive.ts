@@ -28,6 +28,21 @@ const VISIBILITY: Record<ArchiveAction, AssetVisibility> = {
   unarchive: "timeline",
 };
 
+/**
+ * The Archive action the Lightbox offers for an asset in a view that shows archived and other assets together:
+ * Archive for `timeline`, Unarchive for `archive`, nothing for `locked`, `hidden`, an unknown value or none at all.
+ */
+export function archiveActionForVisibility(visibility: string | undefined): ArchiveAction | undefined {
+  if (visibility === "timeline") return "archive";
+  if (visibility === "archive") return "unarchive";
+  return undefined;
+}
+
+/** The visibility an `action` leaves a Remote Asset with. */
+export function visibilityAfter(action: ArchiveAction): AssetVisibility {
+  return VISIBILITY[action];
+}
+
 const FEEDBACK_KEYS: Record<ArchiveAction, BulkAssetFeedbackKeys> = {
   archive: {
     success: "archive_archive_success",
@@ -50,6 +65,11 @@ type Translate = (key: string, options?: { values: Record<string, string | numbe
 /** The localized message for the feedback of `action`; counts are formatted for `numberLocale`. */
 export function archiveFeedbackMessage(action: ArchiveAction, feedback: ArchiveFeedback, translate: Translate, numberLocale: string): string {
   return bulkAssetFeedbackMessage(feedback, FEEDBACK_KEYS[action], translate, numberLocale);
+}
+
+/** The Lightbox's message after a change in a view where the asset stays in the list. */
+export function archiveStaysMessage(action: ArchiveAction, translate: Translate): string {
+  return translate(action === "archive" ? "archive_archive_stays" : "archive_unarchive_stays");
 }
 
 export interface RemoteAssetArchiveOptions {

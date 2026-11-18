@@ -439,4 +439,6 @@
   ,"archive_archive_none": "{count} 项中有 {failed} 项无法归档，请重试。"
   ,"archive_archive_failed": "无法归档，请重试。"
   ,"archive_archive_permission": "归档被拒绝。请为 API 密钥授予 asset.update 权限。"
+  ,"archive_archive_stays": "已归档。它仍保留在此列表中。"
+  ,"archive_unarchive_stays": "已取消归档。它仍保留在此列表中。"
 }

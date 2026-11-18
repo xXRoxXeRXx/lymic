@@ -225,11 +225,11 @@ A Remote Asset that Immich hides from its main views (visibility `archive`). Lym
 _Avoid_: archive (alone, for the asset), hidden asset
 
 **Archive**:
-Setting a Remote Asset's visibility from `timeline` to `archive`, from the Lightbox or a multi-selection, so Immich hides it from the Photo and Favorites Timelines. In the views that show archived and other assets together (Album, Person, Place, Memory and Tag Timelines, Search Results) the Lightbox and multi-selection offer only Archive and the assets stay in the list. It runs at once without a confirmation, and from the Lightbox the next Remote Asset is shown, or the Lightbox closes when none is left. It is undone by Unarchive. Lymic offers it only where the Remote Asset is not a Trashed Asset, and never writes `locked` or `hidden` (ADR-0012).
+Setting a Remote Asset's visibility from `timeline` to `archive`, from the Lightbox or a multi-selection, so Immich hides it from the Photo and Favorites Timelines. In the views that show archived and other assets together (Album, Person, Place, Memory and Tag Timelines, Search Results) the multi-selection offers only Archive, the Lightbox offers Archive or Unarchive depending on the open asset's visibility (neither for a `locked` or `hidden` asset), and the assets stay in the list. It runs at once without a confirmation, and from the Lightbox the next Remote Asset is shown, or the Lightbox closes when none is left. It is undone by Unarchive. Lymic offers it only where the Remote Asset is not a Trashed Asset, and never writes `locked` or `hidden` (ADR-0012).
 _Avoid_: hide, move to archive, send to archive
 
 **Unarchive**:
-Setting an Archived Asset's visibility from `archive` back to `timeline`, from the Archive Timeline's Lightbox or multi-selection, so it returns to the Photo Timeline. It runs at once without a confirmation, and from the Lightbox the next Archived Asset is shown, or the Lightbox closes when none is left. Assets that could not be unarchived stay visible and selected so the user can retry (ADR-0012).
+Setting an Archived Asset's visibility from `archive` back to `timeline`, from the Archive Timeline's Lightbox or multi-selection, so it returns to the Photo Timeline. It runs at once without a confirmation, and from the Lightbox the next Archived Asset is shown, or the Lightbox closes when none is left. Assets that could not be unarchived stay visible and selected so the user can retry. In the views that show archived and other assets together the Lightbox also offers it for an Archived Asset, which then stays in the list (ADR-0012).
 _Avoid_: restore (Restore is for Trashed Assets), unhide
 
 **Rating**:

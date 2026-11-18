@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TimelineController } from "../controllers/timeline-controller.svelte";
-import { archiveFeedbackMessage, createRemoteAssetArchive } from "./remote-asset-archive";
+import { archiveActionForVisibility, archiveFeedbackMessage, archiveStaysMessage, createRemoteAssetArchive } from "./remote-asset-archive";
 
 function setup(
   setAssetsVisibility: (assetIds: string[], visibility: "archive" | "timeline") => Promise<{ changedAssetIds: string[] }>,
@@ -139,5 +139,21 @@ describe("Unarchive feedback", () => {
     expect(archiveFeedbackMessage("unarchive", { kind: "none", failed: 1, total: 1 }, translate, "en")).toBe('archive_unarchive_none:{"failed":"1","count":"1"}');
     expect(archiveFeedbackMessage("unarchive", { kind: "permission" }, translate, "en")).toBe("archive_unarchive_permission");
     expect(archiveFeedbackMessage("unarchive", { kind: "failed" }, translate, "en")).toBe("archive_unarchive_failed");
+  });
+});
+
+describe("Archive action by visibility", () => {
+  it("offers Archive for timeline, Unarchive for archive and nothing for any other or missing visibility", () => {
+    expect(archiveActionForVisibility("timeline")).toBe("archive");
+    expect(archiveActionForVisibility("archive")).toBe("unarchive");
+    for (const visibility of ["locked", "hidden", "Timeline", "", "future-value", undefined]) {
+      expect(archiveActionForVisibility(visibility)).toBeUndefined();
+    }
+  });
+
+  it("names the key of the message for an asset that stays in the list", () => {
+    const translate = (key: string) => key;
+    expect(archiveStaysMessage("archive", translate)).toBe("archive_archive_stays");
+    expect(archiveStaysMessage("unarchive", translate)).toBe("archive_unarchive_stays");
   });
 });
