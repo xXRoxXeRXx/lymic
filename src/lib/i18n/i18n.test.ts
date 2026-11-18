@@ -277,6 +277,22 @@ describe('i18n catalogs', () => {
     expect(de.archive_unarchive).toBe('Dearchivieren');
   });
 
+  it('translates the Lightbox Archive and Unarchive messages for views that keep the asset in the list in every locale', () => {
+    const keys = ['archive_archive_stays', 'archive_unarchive_stays'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        const value = (translations as Record<string, string>)[key];
+        expect(value, `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+        expect(value.trim(), `${localeCode}.${key}`).not.toBe('');
+        // A fixed message about one asset: no count to fill in.
+        expect(value, `${localeCode}.${key}`).not.toContain('{');
+      }
+    }
+    expect(en.archive_archive_stays).toBe('Archived. It stays in this list.');
+    expect(en.archive_unarchive_stays).toBe('Unarchived. It stays in this list.');
+    expect(de.archive_archive_stays).toBe('Archiviert. Es bleibt in dieser Liste.');
+  });
+
   it('translates the Photo and Favorites Timeline Archive strings in every locale with their placeholders', () => {
     const placeholders: Record<string, string[]> = {
       archive_archive: [],

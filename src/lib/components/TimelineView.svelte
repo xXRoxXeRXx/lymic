@@ -135,14 +135,16 @@
   });
   const offersArchive = $derived(archiveAction === "archive" && setAssetsVisibility !== undefined);
   const offersUnarchive = $derived(archiveAction === "unarchive" && setAssetsVisibility !== undefined);
+  /** Mixed views: the Lightbox decides between Archive and Unarchive from the open asset's visibility, the selection toolbar still offers Archive only. */
+  const archiveByVisibility = $derived(archivedAssetsStay && setAssetsVisibility !== undefined);
   const selection = createTimelineSelectionActions({
     updateFavorites: (assetIds, isFavorite, isCurrent) => favorites.updateMany(assetIds, isFavorite, isCurrent),
     clearFavoriteError: () => favorites.clearError(),
     download: (assetIds, isCurrent) => assetActions.download(assetIds, isCurrent),
     addAssetsToAlbum: (assetIds, albumId) => desktop.addAssetsToAlbum(assetIds, albumId),
     get restore() { return restoreTrashedAssets ? (assetIds: string[]) => restore.restore(assetIds) : undefined; },
-    get archive() { return offersArchive ? (assetIds: string[]) => archive.apply("archive", assetIds) : undefined; },
-    get unarchive() { return offersUnarchive ? (assetIds: string[]) => archive.apply("unarchive", assetIds) : undefined; },
+    get archive() { return offersArchive || archiveByVisibility ? (assetIds: string[]) => archive.apply("archive", assetIds) : undefined; },
+    get unarchive() { return offersUnarchive || archiveByVisibility ? (assetIds: string[]) => archive.apply("unarchive", assetIds) : undefined; },
   });
   const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selection.isSelected(asset.id)));
   const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => favorites.isFavorite(asset)));
@@ -359,6 +361,7 @@
 
   /** Archives or unarchives the Lightbox's asset; the Lightbox moves on from where the asset was, so it is remembered before the asset leaves the timeline. */
   async function changeArchiveFromLightbox(action: ArchiveAction, assetId: string) {
+    if (archivedAssetsStay) return selection.archiveOne(action, assetId);
     favorites.expectRemoval(assetId);
     const outcome = await selection.archiveOne(action, assetId);
     if (!outcome.changedAssetIds.includes(assetId)) favorites.cancelExpectedRemoval();
@@ -607,7 +610,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} archiveAction={offersArchive || offersUnarchive ? archiveAction : undefined} onChangeArchive={changeArchiveFromLightbox} {onSelectTag} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} archiveAction={offersArchive || offersUnarchive ? archiveAction : undefined} {archiveByVisibility} onChangeArchive={changeArchiveFromLightbox} {onSelectTag} />
 {/if}
 {#if targetAlbumCatalogue}
   <AddToAlbumModal

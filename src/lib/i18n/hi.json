@@ -439,4 +439,6 @@
   ,"archive_archive_none": "{count} में से {failed} आइटम संग्रह में नहीं रखे जा सके। कृपया फिर से प्रयास करें।"
   ,"archive_archive_failed": "संग्रह में नहीं रखा जा सका। कृपया फिर से प्रयास करें।"
   ,"archive_archive_permission": "संग्रह में रखना अस्वीकार कर दिया गया। API कुंजी को asset.update अनुमति दें।"
+  ,"archive_archive_stays": "संग्रह में रखा गया। यह इस सूची में बना रहेगा।"
+  ,"archive_unarchive_stays": "संग्रह से निकाला गया। यह इस सूची में बना रहेगा।"
 }

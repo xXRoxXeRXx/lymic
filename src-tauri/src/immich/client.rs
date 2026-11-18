@@ -94,6 +94,10 @@ pub(crate) struct AssetDetails {
     /// The Tags of the Remote Asset. `None` when the server does not report them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<AssetTag>>,
+    /// The Immich visibility as reported (`timeline`, `archive`, `locked`, `hidden`, or a value this
+    /// version does not know). `None` when the server omits it or sends something that is not text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -111,6 +115,9 @@ struct AssetDetailsResponse {
     /// Kept raw so a malformed field or entry is skipped instead of failing the request.
     #[serde(default)]
     tags: Option<serde_json::Value>,
+    /// Kept raw so a value that is not text is treated as absent instead of failing the request.
+    #[serde(default)]
+    visibility: Option<serde_json::Value>,
 }
 
 #[derive(Default, Deserialize)]
@@ -234,6 +241,10 @@ impl From<AssetDetailsResponse> for AssetDetails {
             image_height: exif.image_height,
             file_size: exif.file_size,
             tags: response.tags.and_then(asset_tags_from_value),
+            visibility: non_empty(match response.visibility {
+                Some(serde_json::Value::String(value)) => Some(value),
+                _ => None,
+            }),
         }
     }
 }
