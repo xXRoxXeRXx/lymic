@@ -75,15 +75,12 @@ async fn download_archive_with(
     session.save_archive(archive, &destination_path).await
 }
 
-/// Restores Trashed Assets to the Immich Library. Lymic offers no other write to the Immich trash.
-#[tauri::command]
-pub(crate) async fn restore_trashed_assets(
-    asset_ids: Vec<String>,
-) -> Result<TrashRestoreResult, String> {
+/// Turns the IDs a command received into Remote Asset IDs: at least one, each trimmed and non-empty.
+fn remote_asset_ids(asset_ids: &[String]) -> Result<Vec<RemoteAssetId>, String> {
     if asset_ids.is_empty() {
         return Err("At least one asset ID is required".to_string());
     }
-    let asset_ids = asset_ids
+    asset_ids
         .iter()
         .map(|asset_id| {
             let asset_id = asset_id.trim();
@@ -93,7 +90,15 @@ pub(crate) async fn restore_trashed_assets(
                 Ok(RemoteAssetId::new(asset_id))
             }
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect()
+}
+
+/// Restores Trashed Assets to the Immich Library. Lymic offers no other write to the Immich trash.
+#[tauri::command]
+pub(crate) async fn restore_trashed_assets(
+    asset_ids: Vec<String>,
+) -> Result<TrashRestoreResult, String> {
+    let asset_ids = remote_asset_ids(&asset_ids)?;
     ImmichSession::with_stored_credentials(|client| async move {
         client.restore_trashed_assets(&asset_ids).await
     })
@@ -107,20 +112,7 @@ pub(crate) async fn set_assets_visibility(
     asset_ids: Vec<String>,
     visibility: AssetVisibility,
 ) -> Result<AssetVisibilityResult, String> {
-    if asset_ids.is_empty() {
-        return Err("At least one asset ID is required".to_string());
-    }
-    let asset_ids = asset_ids
-        .iter()
-        .map(|asset_id| {
-            let asset_id = asset_id.trim();
-            if asset_id.is_empty() {
-                Err("Asset ID cannot be empty".to_string())
-            } else {
-                Ok(RemoteAssetId::new(asset_id))
-            }
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let asset_ids = remote_asset_ids(&asset_ids)?;
     ImmichSession::with_stored_credentials(|client| async move {
         client.set_assets_visibility(&asset_ids, visibility).await
     })

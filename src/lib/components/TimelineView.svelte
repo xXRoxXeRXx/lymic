@@ -13,7 +13,7 @@
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
   import { createRemoteAssetFavorites } from "./remote-asset-favorites.svelte";
-  import { archiveFeedbackMessage, createRemoteAssetArchive, type ArchiveAction } from "./remote-asset-archive";
+  import { archiveFeedbackMessage, createRemoteAssetArchive, type ArchiveAction, type ArchiveMode } from "./remote-asset-archive";
   import { createRemoteAssetRestore, restoreFeedbackMessage } from "./remote-asset-restore";
   import { createTimelineSelectionActions } from "./timeline-selection-actions.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
@@ -40,12 +40,14 @@
     allowFavoriteAndAlbum?: boolean;
     /** Offers Restore in the Lightbox and in multi-selection: Trashed Assets only. */
     restoreTrashedAssets?(assetIds: string[]): Promise<TrashRestoreResult>;
-    /** Writes the visibility for an Archive or Unarchive; needed together with `archiveAction`. */
+    /** Writes the visibility for an Archive or Unarchive; needed together with `archiveMode`. */
     setAssetsVisibility?(assetIds: string[], visibility: AssetVisibility): Promise<AssetVisibilityResult>;
-    /** The one Archive action the multi-selection and the Lightbox offer (Archive in the Photo and Favorites Timelines, Unarchive in the Archive Timeline); leave it out where there is none. */
-    archiveAction?: ArchiveAction;
-    /** For a view that shows archived and other assets together: an archived asset stays in the list. */
-    archivedAssetsStay?: boolean;
+    /**
+     * How the multi-selection and the Lightbox offer Archive; leave it out where there is none. `archive` (Photo and Favorites Timelines) and
+     * `unarchive` (Archive Timeline) offer that one action and a changed asset leaves the list. `by-visibility` is for a view that shows archived
+     * and other assets together: the Lightbox follows the open asset's visibility, the selection offers Archive, and a changed asset stays in the list.
+     */
+    archiveMode?: ArchiveMode;
     /** Where to scroll to once the first buckets are shown, for a view that is reopened where the user left it. */
     initialScrollTop?: number;
     /** Reports the scroll position when the view opens and whenever the user scrolls. */
@@ -78,8 +80,7 @@
     allowFavoriteAndAlbum = true,
     restoreTrashedAssets,
     setAssetsVisibility,
-    archiveAction,
-    archivedAssetsStay = false,
+    archiveMode,
     initialScrollTop = 0,
     onScrollPosition,
     onSelectTag,
@@ -128,23 +129,23 @@
   const archive = createRemoteAssetArchive({
     get timeline() { return timeline; },
     setAssetsVisibility: (assetIds, visibility) => setAssetsVisibility!(assetIds, visibility),
-    get assetsStayInView() { return archivedAssetsStay; },
+    get assetsStayInView() { return offeredArchiveMode === "by-visibility"; },
     // A hidden asset (a Live Photo's video) is not archivable: Immich would accept it and make it a standalone asset (#287).
     isArchivable: (assetId) => lightboxAssets.find((asset) => asset.id === assetId)?.visibility !== "hidden",
     onRemoved: (assetId) => selection.forget(assetId),
   });
-  const offersArchive = $derived(archiveAction === "archive" && setAssetsVisibility !== undefined);
-  const offersUnarchive = $derived(archiveAction === "unarchive" && setAssetsVisibility !== undefined);
-  /** Mixed views: the Lightbox decides between Archive and Unarchive from the open asset's visibility, the selection toolbar still offers Archive only. */
-  const archiveByVisibility = $derived(archivedAssetsStay && setAssetsVisibility !== undefined);
+  const offeredArchiveMode = $derived(setAssetsVisibility ? archiveMode : undefined);
+  /** The selection toolbar's buttons; in a `by-visibility` view it offers Archive only, the Lightbox decides per asset. */
+  const offersArchive = $derived(offeredArchiveMode === "archive" || offeredArchiveMode === "by-visibility");
+  const offersUnarchive = $derived(offeredArchiveMode === "unarchive");
   const selection = createTimelineSelectionActions({
     updateFavorites: (assetIds, isFavorite, isCurrent) => favorites.updateMany(assetIds, isFavorite, isCurrent),
     clearFavoriteError: () => favorites.clearError(),
     download: (assetIds, isCurrent) => assetActions.download(assetIds, isCurrent),
     addAssetsToAlbum: (assetIds, albumId) => desktop.addAssetsToAlbum(assetIds, albumId),
     get restore() { return restoreTrashedAssets ? (assetIds: string[]) => restore.restore(assetIds) : undefined; },
-    get archive() { return offersArchive || archiveByVisibility ? (assetIds: string[]) => archive.apply("archive", assetIds) : undefined; },
-    get unarchive() { return offersUnarchive || archiveByVisibility ? (assetIds: string[]) => archive.apply("unarchive", assetIds) : undefined; },
+    get archive() { return offersArchive ? (assetIds: string[]) => archive.apply("archive", assetIds) : undefined; },
+    get unarchive() { return offersUnarchive || offeredArchiveMode === "by-visibility" ? (assetIds: string[]) => archive.apply("unarchive", assetIds) : undefined; },
   });
   const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selection.isSelected(asset.id)));
   const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => favorites.isFavorite(asset)));
@@ -361,7 +362,7 @@
 
   /** Archives or unarchives the Lightbox's asset; the Lightbox moves on from where the asset was, so it is remembered before the asset leaves the timeline. */
   async function changeArchiveFromLightbox(action: ArchiveAction, assetId: string) {
-    if (archivedAssetsStay) return selection.archiveOne(action, assetId);
+    if (offeredArchiveMode === "by-visibility") return selection.archiveOne(action, assetId);
     favorites.expectRemoval(assetId);
     const outcome = await selection.archiveOne(action, assetId);
     if (!outcome.changedAssetIds.includes(assetId)) favorites.cancelExpectedRemoval();
@@ -610,7 +611,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} archiveAction={offersArchive || offersUnarchive ? archiveAction : undefined} {archiveByVisibility} onChangeArchive={changeArchiveFromLightbox} {onSelectTag} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} archiveMode={offeredArchiveMode} onChangeArchive={changeArchiveFromLightbox} {onSelectTag} />
 {/if}
 {#if targetAlbumCatalogue}
   <AddToAlbumModal

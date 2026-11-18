@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TimelineController } from "../controllers/timeline-controller.svelte";
-import { archiveActionForVisibility, archiveFeedbackMessage, archiveStaysMessage, createRemoteAssetArchive } from "./remote-asset-archive";
+import { archiveActionForVisibility, archiveFeedbackMessage, archiveLabel, archiveStaysMessage, createRemoteAssetArchive, visibilityAfter } from "./remote-asset-archive";
 
 function setup(
   setAssetsVisibility: (assetIds: string[], visibility: "archive" | "timeline") => Promise<{ changedAssetIds: string[] }>,
@@ -149,6 +149,14 @@ describe("Archive action by visibility", () => {
     for (const visibility of ["locked", "hidden", "Timeline", "", "future-value", undefined]) {
       expect(archiveActionForVisibility(visibility)).toBeUndefined();
     }
+  });
+
+  it("names the button label key and the visibility each action leaves", () => {
+    const translate = (key: string) => key;
+    expect(archiveLabel("archive", translate)).toBe("archive_archive");
+    expect(archiveLabel("unarchive", translate)).toBe("archive_unarchive");
+    expect(visibilityAfter("archive")).toBe("archive");
+    expect(visibilityAfter("unarchive")).toBe("timeline");
   });
 
   it("names the key of the message for an asset that stays in the list", () => {

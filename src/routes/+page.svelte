@@ -312,8 +312,8 @@
    * `_permission_error` when its controller reports a missing permission (only Archive does).
    */
   const filteredTimelineViews: Record<FilteredTimeline, { icon: typeof Heart; options(): Partial<ComponentProps<typeof TimelineView>> }> = {
-    favorites: { icon: Heart, options: () => ({ removeUnfavoritedAssets: true, showRefreshButton: false, setAssetsVisibility, archiveAction: "archive" }) },
-    archive: { icon: Archive, options: () => ({ setAssetsVisibility, archiveAction: "unarchive" }) },
+    favorites: { icon: Heart, options: () => ({ removeUnfavoritedAssets: true, showRefreshButton: false, setAssetsVisibility, archiveMode: "archive" }) },
+    archive: { icon: Archive, options: () => ({ setAssetsVisibility, archiveMode: "unarchive" }) },
     trash: { icon: Trash2, options: () => ({ allowFavoriteAndAlbum: false, restoreTrashedAssets, hintMessage: $t("trash_hint") }) },
   };
   function filteredTimelineEntry(view: FilteredTimeline) {
@@ -398,7 +398,7 @@
     onSelectTag: selectTag,
   });
   /** What the views that show archived and other assets together add: the selection offers Archive and the assets stay in the list. */
-  const mixedViewArchiveProps = { setAssetsVisibility, archiveAction: "archive", archivedAssetsStay: true } as const;
+  const mixedViewArchiveProps = { setAssetsVisibility, archiveMode: "by-visibility" } as const;
   const mixedTimelineProps = $derived({ ...sharedTimelineProps, ...mixedViewArchiveProps });
 </script>
 
@@ -538,7 +538,7 @@
 
         {#if navigation.mapCreated}<MapView mapState={map} active={currentView === MAP_VIEW} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} />{/if}
         {#if currentView === PHOTOS_VIEW}
-          <TimelineView {timeline} {...sharedTimelineProps} {setAssetsVisibility} archiveAction="archive" />
+          <TimelineView {timeline} {...sharedTimelineProps} {setAssetsVisibility} archiveMode="archive" />
         {:else if isFilteredTimeline(currentView)}
           {@const view = currentView}
           {@const filtered = filteredTimelines[view]}

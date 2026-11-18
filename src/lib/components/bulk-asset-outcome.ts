@@ -27,7 +27,8 @@ export interface BulkAssetFeedbackKeys {
   failed: string;
 }
 
-type Translate = (key: string, options?: { values: Record<string, string | number> }) => string;
+/** The translate function the feedback messages use. */
+export type Translate = (key: string, options?: { values: Record<string, string | number> }) => string;
 
 /** The outcome of a write that answered: requested assets it names are changed, every other requested asset failed. */
 export function bulkAssetOutcomeFromResult(requestedAssetIds: string[], changedAssetIds: string[]): BulkAssetOutcome {

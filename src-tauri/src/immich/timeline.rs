@@ -258,22 +258,23 @@ struct ColumnarTimelineBucketResponse {
     file_created_at: Vec<Option<String>>,
     #[serde(rename = "createdAt", default)]
     created_at: Vec<Option<String>>,
+    /// Kept as a raw value so a missing, non-array or odd column never fails the bucket; entries
+    /// that are not strings count as absent.
     #[serde(default)]
-    visibility: Vec<Option<serde_json::Value>>,
+    visibility: serde_json::Value,
 }
 
 /// Reads an optional `visibility` string; any other value counts as absent, so an unexpected
 /// shape never fails a timeline.
-fn visibility_from_value(value: &serde_json::Value) -> Option<String> {
-    value.as_str().map(str::to_string)
-}
-
 fn deserialize_visibility<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let value = Option::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(value.as_ref().and_then(visibility_from_value))
+    Ok(value
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string))
 }
 
 fn default_image_type() -> String {
@@ -646,9 +647,10 @@ fn parse_timeline_bucket_assets(
                         .unwrap_or(default_favorite),
                     visibility: columnar
                         .visibility
-                        .get(index)
-                        .and_then(|value| value.as_ref())
-                        .and_then(visibility_from_value),
+                        .as_array()
+                        .and_then(|column| column.get(index))
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string),
                 }
             })
             .collect(),
@@ -1436,6 +1438,49 @@ mod tests {
             vec![Some("timeline"), Some("hidden"), None]
         );
         server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_odd_columnar_visibility_never_fails_the_bucket_request() {
+        for visibility in [
+            r#""archive""#,
+            "42",
+            "null",
+            r#"{"a":1}"#,
+            r#"[["x"],"hidden"]"#,
+        ] {
+            let buckets = r#"[{"timeBucket":"2026-11-01","count":2}]"#;
+            let assets = format!(
+                r#"{{"id":["a","b"],"isImage":[true,true],"visibility":{visibility},"fileCreatedAt":["2026-11-04T10:00:00.000Z","2026-11-03T10:00:00.000Z"]}}"#
+            );
+            let assets: &'static str = Box::leak(assets.into_boxed_str());
+            let (url, server) = serve_pages(vec![("200 OK", buckets), ("200 OK", assets)]).await;
+            let client = test_client(url, "test-key");
+
+            client
+                .get_person_timeline_buckets("person-1")
+                .await
+                .unwrap();
+            let assets = client
+                .get_person_timeline_bucket_assets("person-1", "2026-11-01")
+                .await
+                .unwrap();
+
+            let expected = if visibility.starts_with('[') {
+                vec![None, Some("hidden")]
+            } else {
+                vec![None, None]
+            };
+            assert_eq!(
+                assets
+                    .iter()
+                    .map(|asset| asset.visibility.as_deref())
+                    .collect::<Vec<_>>(),
+                expected,
+                "visibility column {visibility}"
+            );
+            server.await.unwrap();
+        }
     }
 
     #[tokio::test]

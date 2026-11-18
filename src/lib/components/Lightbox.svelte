@@ -8,7 +8,7 @@
   import TagColorDot from "./TagColorDot.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { RemoteAssetActions } from "./remote-asset-actions.svelte";
-  import { archiveActionForVisibility, archiveFeedbackFor, archiveFeedbackMessage, archiveStaysMessage, visibilityAfter, type ArchiveAction, type RemoteAssetArchiveOutcome } from "./remote-asset-archive";
+  import { archiveActionForVisibility, archiveFeedbackFor, archiveFeedbackMessage, archiveLabel, archiveStaysMessage, visibilityAfter, type ArchiveAction, type ArchiveMode, type RemoteAssetArchiveOutcome } from "./remote-asset-archive";
   import { restoreFeedbackFor, restoreFeedbackMessage, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   interface Props {
@@ -27,20 +27,20 @@
     allowFavorite?: boolean;
     /** Offers Restore for a Trashed Asset; reports what happened and never rejects. */
     onRestore?(assetId: string): Promise<RemoteAssetRestoreOutcome>;
-    /** The Archive action the Lightbox offers for the open asset (Archive or Unarchive); leave it out where there is none. Needs `onChangeArchive`. */
-    archiveAction?: ArchiveAction;
-    /** Performs `archiveAction` for an asset; reports what happened and never rejects. After a success the Lightbox moves on to the next asset, or closes when there is none. */
-    onChangeArchive?(action: ArchiveAction, assetId: string): Promise<RemoteAssetArchiveOutcome>;
     /**
-     * For a view that shows archived and other assets together: the action follows the open asset's `visibility` from its details
-     * (Archive for `timeline`, Unarchive for `archive`, none for `locked`, `hidden`, an unknown or missing value) instead of `archiveAction`,
-     * and the asset stays in the list, so after a success the Lightbox stays on it and the button flips. Needs `onChangeArchive`.
+     * The Archive action the Lightbox offers for the open asset; leave it out where there is none. Needs `onChangeArchive`.
+     * `archive` or `unarchive` offer that action. `by-visibility` is for a view that shows archived and other assets together:
+     * the action follows the open asset's `visibility` from its details (Archive for `timeline`, Unarchive for `archive`, none for
+     * `locked`, `hidden`, an unknown or missing value), and the asset stays in the list, so after a success the Lightbox stays
+     * on it and the button flips.
      */
-    archiveByVisibility?: boolean;
+    archiveMode?: ArchiveMode;
+    /** Performs an Archive action for an asset; reports what happened and never rejects. After a success the Lightbox moves on to the next asset, or closes when there is none. */
+    onChangeArchive?(action: ArchiveAction, assetId: string): Promise<RemoteAssetArchiveOutcome>;
     /** Shows the Tags of the asset as chips; selecting one closes the Lightbox first, then calls this to open that Tag's Tag Timeline. */
     onSelectTag?(tag: AssetTag): void;
   }
-  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, archiveAction, onChangeArchive, archiveByVisibility = false, onSelectTag }: Props = $props();
+  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, archiveMode, onChangeArchive, onSelectTag }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   let selectedAsset = $state<TimelineAsset | null>(untrack(() => asset));
   let assetDetails = $state<AssetDetails | null>(null);
@@ -85,7 +85,7 @@
     }).join(", ");
   }
 
-  const shownArchiveAction = $derived(archiveByVisibility ? archiveActionForVisibility(assetDetails?.visibility) : archiveAction);
+  const shownArchiveAction = $derived(archiveMode === "by-visibility" ? archiveActionForVisibility(assetDetails?.visibility) : archiveMode);
   const cameraName = $derived(cameraLabel(assetDetails?.cameraMake, assetDetails?.cameraModel));
   const locationName = $derived(locationLabel(assetDetails?.city, assetDetails?.state, assetDetails?.country));
   const imageWidth = $derived(assetDetails?.imageWidth ?? selectedAsset?.width ?? null);
@@ -183,6 +183,8 @@
     }
   }
 
+  const ARCHIVE_ICONS = { archive: Archive, unarchive: ArchiveX };
+
   async function changeArchiveStatus(action: ArchiveAction) {
     if (!selectedAsset || !onChangeArchive || isBusy) return;
     const current = selectedAsset;
@@ -191,21 +193,23 @@
     try {
       const outcome = await onChangeArchive(action, current.id);
       if (isDestroyed || selectedAsset !== current) return;
-      const feedback = archiveFeedbackFor(outcome, 1);
-      const message = archiveFeedbackMessage(action, feedback, $t, numberLocale);
-      if (outcome.changedAssetIds.includes(current.id) && archiveByVisibility) {
+      const changed = outcome.changedAssetIds.includes(current.id);
+      if (changed && archiveMode === "by-visibility") {
         // The asset stays in the list: stay on it, and show the opposite action from now on.
         const visibility = visibilityAfter(action);
         assetActions.reflectVisibility(current.id, visibility);
         assetDetails = assetActions.cachedDetails(current.id) ?? (assetDetails ? { ...assetDetails, visibility } : assetDetails);
         archiveFeedback = { message: archiveStaysMessage(action, $t), isSuccess: true };
-      } else if (outcome.changedAssetIds.includes(current.id)) {
-        // The asset left the Archive Timeline: show its neighbour, or close when none is left. Busy until then.
-        const moved = await moveOnFrom(current);
-        if (isDestroyed) return;
-        if (moved) archiveFeedback = { message, isSuccess: true };
       } else {
-        archiveFeedback = { message, isSuccess: false };
+        const message = archiveFeedbackMessage(action, archiveFeedbackFor(outcome, 1), $t, numberLocale);
+        if (changed) {
+          // The asset left the Archive Timeline: show its neighbour, or close when none is left. Busy until then.
+          const moved = await moveOnFrom(current);
+          if (isDestroyed) return;
+          if (moved) archiveFeedback = { message, isSuccess: true };
+        } else {
+          archiveFeedback = { message, isSuccess: false };
+        }
       }
     } finally {
       if (!isDestroyed) isChangingArchive = false;
@@ -346,9 +350,9 @@
             <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={isRestoring} disabled={isRestoring} onclick={() => void restoreAsset()}><ArchiveRestore class="h-5 w-5 {isRestoring ? 'animate-pulse' : ''}" /></button>
           {/if}
           {#if shownArchiveAction && onChangeArchive}
-            {@const archiveLabel = $t(shownArchiveAction === "archive" ? "archive_archive" : "archive_unarchive")}
-            {@const ArchiveIcon = shownArchiveAction === "archive" ? Archive : ArchiveX}
-            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={archiveLabel} aria-label={archiveLabel} aria-busy={isChangingArchive} disabled={isBusy} onclick={() => void changeArchiveStatus(shownArchiveAction)}><ArchiveIcon class="h-5 w-5 {isChangingArchive ? 'animate-pulse' : ''}" /></button>
+            {@const archiveText = archiveLabel(shownArchiveAction, $t)}
+            {@const ArchiveIcon = ARCHIVE_ICONS[shownArchiveAction]}
+            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={archiveText} aria-label={archiveText} aria-busy={isChangingArchive} disabled={isBusy} onclick={() => void changeArchiveStatus(shownArchiveAction)}><ArchiveIcon class="h-5 w-5 {isChangingArchive ? 'animate-pulse' : ''}" /></button>
           {/if}
           {#if albumCatalogue}
             <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isAddingToAlbum || isChangingArchive} onclick={openAddToAlbum}><Album class="h-5 w-5" /></button>

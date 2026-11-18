@@ -7,11 +7,19 @@ import {
   type BulkAssetFeedback,
   type BulkAssetFeedbackKeys,
   type BulkAssetOutcome,
+  type Translate,
 } from "./bulk-asset-outcome";
 import type { TimelineController } from "../controllers/timeline-controller.svelte";
 
 /** What Lymic changes about a Remote Asset's archive status. */
 export type ArchiveAction = "archive" | "unarchive";
+
+/**
+ * How a view offers Archive: `archive` and `unarchive` for a view whose assets all share one status (a changed asset
+ * leaves the list), `by-visibility` for a view that shows archived and other assets together (the Lightbox picks the
+ * action from the open asset's visibility, the selection offers Archive, and changed assets stay in the list).
+ */
+export type ArchiveMode = ArchiveAction | "by-visibility";
 
 /** What an Archive or Unarchive did: the shared bulk outcome, where "changed" means the visibility was written. */
 export type RemoteAssetArchiveOutcome = BulkAssetOutcome;
@@ -22,10 +30,42 @@ export type ArchiveFeedback = BulkAssetFeedback;
 /** Maps an Archive or Unarchive outcome to its feedback. */
 export const archiveFeedbackFor = bulkAssetFeedbackFor;
 
-/** The only visibility each action writes: Lymic never sends `locked` or `hidden`. */
-const VISIBILITY: Record<ArchiveAction, AssetVisibility> = {
-  archive: "archive",
-  unarchive: "timeline",
+interface ArchiveActionTexts {
+  /** The only visibility the action writes: Lymic never sends `locked` or `hidden`. */
+  visibility: AssetVisibility;
+  /** The button label. */
+  label: string;
+  /** The Lightbox's message after a change in a view where the asset stays in the list. */
+  stays: string;
+  feedback: BulkAssetFeedbackKeys;
+}
+
+/** Everything that differs between Archive and Unarchive, in one place. */
+const ARCHIVE_ACTIONS: Record<ArchiveAction, ArchiveActionTexts> = {
+  archive: {
+    visibility: "archive",
+    label: "archive_archive",
+    stays: "archive_archive_stays",
+    feedback: {
+      success: "archive_archive_success",
+      partial: "archive_archive_partial",
+      none: "archive_archive_none",
+      permission: "archive_archive_permission",
+      failed: "archive_archive_failed",
+    },
+  },
+  unarchive: {
+    visibility: "timeline",
+    label: "archive_unarchive",
+    stays: "archive_unarchive_stays",
+    feedback: {
+      success: "archive_unarchive_success",
+      partial: "archive_unarchive_partial",
+      none: "archive_unarchive_none",
+      permission: "archive_unarchive_permission",
+      failed: "archive_unarchive_failed",
+    },
+  },
 };
 
 /**
@@ -40,36 +80,22 @@ export function archiveActionForVisibility(visibility: string | undefined): Arch
 
 /** The visibility an `action` leaves a Remote Asset with. */
 export function visibilityAfter(action: ArchiveAction): AssetVisibility {
-  return VISIBILITY[action];
+  return ARCHIVE_ACTIONS[action].visibility;
 }
 
-const FEEDBACK_KEYS: Record<ArchiveAction, BulkAssetFeedbackKeys> = {
-  archive: {
-    success: "archive_archive_success",
-    partial: "archive_archive_partial",
-    none: "archive_archive_none",
-    permission: "archive_archive_permission",
-    failed: "archive_archive_failed",
-  },
-  unarchive: {
-    success: "archive_unarchive_success",
-    partial: "archive_unarchive_partial",
-    none: "archive_unarchive_none",
-    permission: "archive_unarchive_permission",
-    failed: "archive_unarchive_failed",
-  },
-};
-
-type Translate = (key: string, options?: { values: Record<string, string | number> }) => string;
+/** The localized button label of `action`. */
+export function archiveLabel(action: ArchiveAction, translate: Translate): string {
+  return translate(ARCHIVE_ACTIONS[action].label);
+}
 
 /** The localized message for the feedback of `action`; counts are formatted for `numberLocale`. */
 export function archiveFeedbackMessage(action: ArchiveAction, feedback: ArchiveFeedback, translate: Translate, numberLocale: string): string {
-  return bulkAssetFeedbackMessage(feedback, FEEDBACK_KEYS[action], translate, numberLocale);
+  return bulkAssetFeedbackMessage(feedback, ARCHIVE_ACTIONS[action].feedback, translate, numberLocale);
 }
 
 /** The Lightbox's message after a change in a view where the asset stays in the list. */
 export function archiveStaysMessage(action: ArchiveAction, translate: Translate): string {
-  return translate(action === "archive" ? "archive_archive_stays" : "archive_unarchive_stays");
+  return translate(ARCHIVE_ACTIONS[action].stays);
 }
 
 export interface RemoteAssetArchiveOptions {
@@ -98,7 +124,7 @@ export function createRemoteAssetArchive(options: RemoteAssetArchiveOptions) {
     if (writable.length === 0) return { changedAssetIds: [], failedAssetIds: [...assetIds], failure: null };
     let result: AssetVisibilityResult;
     try {
-      result = await options.setAssetsVisibility(writable, VISIBILITY[action]);
+      result = await options.setAssetsVisibility(writable, visibilityAfter(action));
     } catch (error) {
       return bulkAssetOutcomeFromFailure(assetIds, error, "archive");
     }
