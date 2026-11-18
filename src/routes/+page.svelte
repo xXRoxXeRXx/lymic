@@ -317,7 +317,7 @@
     if (isOpen) returnFromSearch();
   }
 
-  const auth = createSessionController({
+  const session = createSessionController({
     adapter: desktop,
     t: (key, params) => $t(key, params),
     locale: () => $locale ?? "en",
@@ -347,6 +347,7 @@
     isTagsActive: () => currentView === TAGS_VIEW,
   });
   const {
+    auth,
     feedback,
     targetAlbumCatalogue,
     removable,
@@ -363,7 +364,7 @@
     map,
     albumCatalogue,
     search,
-  } = auth;
+  } = session;
   /**
    * What each Filtered Timeline adds to the shared timeline: its navigation icon and its own TimelineView options.
    * Its texts are the `<timeline>_title`, `_loading`, `_empty`, `_error` and `_offline` locale keys, plus
@@ -432,7 +433,7 @@
   });
 
   onMount(() => {
-    auth.startLifecycle();
+    session.startLifecycle();
     updater.startLifecycle();
     preferences.startLifecycle();
 
@@ -442,7 +443,7 @@
     updater.startup();
 
     return () => {
-      auth.destroy();
+      session.destroy();
       updater.destroy();
       preferences.stopLifecycle();
     };

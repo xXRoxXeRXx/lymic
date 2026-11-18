@@ -55,8 +55,8 @@ function setup(overrides: Partial<SessionDesktopAdapter> = {}) {
     locale: () => "en",
     resetView,
   });
-  session.serverUrl = "https://example.com";
-  session.apiKey = "key";
+  session.auth.serverUrl = "https://example.com";
+  session.auth.apiKey = "key";
   return { session, adapter, resetView };
 }
 
@@ -69,7 +69,7 @@ describe("authenticated session", () => {
     expect(session.search.resultCount).toBe(1);
     expect(session.search.mode).toBe("description");
 
-    await session.logout();
+    await session.auth.logout();
 
     expect(session.search.text).toBe("");
     expect(session.search.mode).toBe("context");
@@ -83,7 +83,7 @@ describe("authenticated session", () => {
     session.search.filters.date = { from: "2025-03-01" };
     expect(session.search.filters).toEqual({ mediaType: "video", date: { from: "2025-03-01" } });
 
-    await session.logout();
+    await session.auth.logout();
 
     expect(session.search.filters).toEqual({});
     expect(session.search.canSubmit).toBe(false);
@@ -108,14 +108,14 @@ describe("authenticated session", () => {
         .mockResolvedValueOnce({ displayName: "Bob", profileImage: null }),
     });
 
-    session.allowLocalHttp = true;
-    session.cloudflareClientId = "cf-id";
-    session.cloudflareClientSecret = "cf-secret";
-    await session.login();
+    session.auth.allowLocalHttp = true;
+    session.auth.cloudflareClientId = "cf-id";
+    session.auth.cloudflareClientSecret = "cf-secret";
+    await session.auth.login();
 
-    expect(session.allowLocalHttp).toBe(false);
-    expect(session.cloudflareClientId).toBe("");
-    expect(session.cloudflareClientSecret).toBe("");
+    expect(session.auth.allowLocalHttp).toBe(false);
+    expect(session.auth.cloudflareClientId).toBe("");
+    expect(session.auth.cloudflareClientSecret).toBe("");
     expect(session.timeline.buckets).toEqual([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 2 }]);
     expect(session.watchedFolders.folders.watchedFolders).toEqual([{ id: 1, path: "C:/Alice", recursive: true, target_album_id: null }]);
 
@@ -140,11 +140,11 @@ describe("authenticated session", () => {
     expect(session.map.markers).toHaveLength(1);
     expect(session.feedback.error).toBe("Stale error");
 
-    session.apiKey = "bob-key";
-    await session.login();
+    session.auth.apiKey = "bob-key";
+    await session.auth.login();
 
     expect(resetView).toHaveBeenCalledTimes(2);
-    expect(session.currentUserName).toBe("Bob");
+    expect(session.auth.currentUserName).toBe("Bob");
     expect(session.timeline.buckets).toEqual([{ timeBucket: "2024-01-01T00:00:00.000Z", count: 1 }]);
     expect(session.watchedFolders.folders.watchedFolders).toEqual([{ id: 2, path: "C:/Bob", recursive: true, target_album_id: null }]);
     expect(session.targetAlbumCatalogue.albums).toEqual([]);
@@ -157,11 +157,11 @@ describe("authenticated session", () => {
     expect(session.map.markers).toEqual([]);
     expect(session.feedback.error).toBe("");
 
-    await session.logout();
+    await session.auth.logout();
 
     expect(resetView).toHaveBeenCalledTimes(3);
-    expect(session.isAuthenticated).toBe(false);
-    expect(session.currentUserName).toBe("");
+    expect(session.auth.isAuthenticated).toBe(false);
+    expect(session.auth.currentUserName).toBe("");
     expect(session.timeline.buckets).toEqual([]);
     expect(session.watchedFolders.folders.watchedFolders).toEqual([]);
   });
@@ -169,13 +169,13 @@ describe("authenticated session", () => {
   it("does not restore a previous profile when its request completes after logout", async () => {
     let resolveUser!: (value: { displayName: string; profileImage: null }) => void;
     const { session } = setup({ getCurrentUser: () => new Promise((resolve) => { resolveUser = resolve; }) });
-    const login = session.login();
+    const login = session.auth.login();
     await vi.waitFor(() => expect(resolveUser).toBeDefined());
-    await session.logout();
+    await session.auth.logout();
     resolveUser({ displayName: "Alice", profileImage: null });
     await login;
-    expect(session.isAuthenticated).toBe(false);
-    expect(session.currentUserName).toBe("");
+    expect(session.auth.isAuthenticated).toBe(false);
+    expect(session.auth.currentUserName).toBe("");
   });
 
   it("discards pending requests from a previous session across session-owned controllers", async () => {
@@ -201,7 +201,7 @@ describe("authenticated session", () => {
       getMapMarkers: () => new Promise((resolve) => { resolveMarkers = resolve; }),
     });
 
-    const login = session.login();
+    const login = session.auth.login();
     const pendingAlbums = session.targetAlbumCatalogue.refresh();
     const pendingPeople = session.people.refresh();
     const pendingMap = session.map.refresh();
@@ -214,7 +214,7 @@ describe("authenticated session", () => {
       expect(resolveMarkers).toBeDefined();
     });
 
-    await session.logout();
+    await session.auth.logout();
 
     resolveFailures([{ localPath: "old.jpg", failureReason: "failed" }]);
     resolveBuckets([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 5 }]);
@@ -238,12 +238,12 @@ describe("authenticated session", () => {
       getAuthStatus: vi.fn().mockResolvedValue(false),
       getTimelineBuckets: vi.fn().mockResolvedValue([{ timeBucket: "2025-03-01T00:00:00.000Z", count: 1 }]),
     });
-    await session.login();
+    await session.auth.login();
     expect(session.timeline.buckets).toHaveLength(1);
 
-    await session.hydrate();
-    expect(session.isAuthenticated).toBe(false);
-    expect(session.currentUserName).toBe("");
+    await session.auth.hydrate();
+    expect(session.auth.isAuthenticated).toBe(false);
+    expect(session.auth.currentUserName).toBe("");
     expect(session.timeline.buckets).toEqual([]);
     expect(resetView).toHaveBeenCalledTimes(2);
   });
@@ -261,15 +261,15 @@ describe("authenticated session", () => {
       })),
     });
 
-    await session.login();
-    const pendingLogout = session.logout();
+    await session.auth.login();
+    const pendingLogout = session.auth.logout();
     await vi.waitFor(() => expect(resolveLogout).toBeDefined());
 
-    const pendingHydrate = session.hydrate();
+    const pendingHydrate = session.auth.hydrate();
     resolveLogout();
     await Promise.all([pendingLogout, pendingHydrate]);
 
-    expect(session.isAuthenticated).toBe(false);
+    expect(session.auth.isAuthenticated).toBe(false);
   });
 
   it("ignores a previous account profile after signing in to another account", async () => {
@@ -278,12 +278,12 @@ describe("authenticated session", () => {
       .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
       .mockResolvedValueOnce({ displayName: "Bob", profileImage: null });
     const { session } = setup({ getCurrentUser });
-    const first = session.login();
+    const first = session.auth.login();
     await vi.waitFor(() => expect(resolveFirst).toBeDefined());
-    session.apiKey = "other key";
-    await session.login();
+    session.auth.apiKey = "other key";
+    await session.auth.login();
     resolveFirst({ displayName: "Alice", profileImage: null });
     await first;
-    expect(session.currentUserName).toBe("Bob");
+    expect(session.auth.currentUserName).toBe("Bob");
   });
 });
