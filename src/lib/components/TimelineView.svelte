@@ -6,7 +6,8 @@
   import { toBcp47Locale } from "../i18n";
   import type { TimelineController } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
-  import type { AlbumAssignmentResult, AssetDetails, AssetTag, TimelineAsset, TrashRestoreResult } from "../contracts";
+  import type { AssetTag, TimelineAsset, TrashRestoreResult } from "../contracts";
+  import type { RemoteAssetDesktopAdapter } from "../tauri/desktop-adapter";
   import { calculateMasonryLayout } from "./timeline-masonry";
   import Lightbox from "./Lightbox.svelte";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
@@ -18,14 +19,9 @@
   interface Props {
     timeline: TimelineController;
     serverUrl?: string;
-    onOpenExternalUrl?(url: string): Promise<void>;
-    getAssetDetails?(assetId: string): Promise<AssetDetails | null>;
-    setAssetFavorite?(assetId: string, isFavorite: boolean): Promise<void>;
-    chooseDownloadDestination?(originalFileName: string): Promise<string | null>;
-    downloadAsset?(assetId: string, destinationPath: string): Promise<void>;
-    downloadArchive?(assetIds: string[]): Promise<void>;
+    /** The Remote Asset operations of the Lightbox and multi-selection. */
+    desktop: RemoteAssetDesktopAdapter;
     albumCatalogue?: TargetAlbumCatalogue;
-    addAssetsToAlbum?(assetIds: string[], albumId: string): Promise<AlbumAssignmentResult>;
     showScrubber?: boolean;
     showRefreshButton?: boolean;
     removeUnfavoritedAssets?: boolean;
@@ -59,14 +55,8 @@
   let {
     timeline,
     serverUrl = "",
-    onOpenExternalUrl = async () => {},
-    getAssetDetails = async () => null,
-    setAssetFavorite = async () => {},
-    chooseDownloadDestination = async () => null,
-    downloadAsset = async () => {},
-    downloadArchive = async () => {},
+    desktop,
     albumCatalogue,
-    addAssetsToAlbum = async (assetIds) => ({ succeeded: assetIds.length, failed: 0 }),
     showScrubber = true,
     showRefreshButton = true,
     removeUnfavoritedAssets = false,
@@ -114,14 +104,14 @@
   let restoreFeedback = $state<RestoreFeedback | null>(null);
   let actionGeneration = 0;
   const assetActions = createRemoteAssetActions({
-    get getAssetDetails() { return getAssetDetails; },
-    get chooseDownloadDestination() { return chooseDownloadDestination; },
-    get downloadAsset() { return downloadAsset; },
-    get downloadArchive() { return downloadArchive; },
+    get getAssetDetails() { return desktop.getAssetDetails; },
+    get chooseDownloadDestination() { return desktop.chooseDownloadDestination; },
+    get downloadAsset() { return desktop.downloadAsset; },
+    get downloadArchive() { return desktop.downloadArchive; },
   });
   const favorites = createRemoteAssetFavorites({
     get timeline() { return timeline; },
-    get setAssetFavorite() { return setAssetFavorite; },
+    get setAssetFavorite() { return desktop.setAssetFavorite; },
     get removeUnfavorited() { return removeUnfavoritedAssets; },
     get errorMessage() { return $t("timeline_favorite_update_error"); },
     isFavorite: (asset) => assetActions.isFavorite(asset),
@@ -447,7 +437,7 @@
     const generation = actionGeneration;
     isAddingToAlbum = true;
     let succeeded = 0;
-    try { succeeded = (await addAssetsToAlbum(assetIds, albumId)).succeeded; } catch { /* Report failure below. */ }
+    try { succeeded = (await desktop.addAssetsToAlbum(assetIds, albumId)).succeeded; } catch { /* Report failure below. */ }
     if (generation !== actionGeneration) return;
     isAddingToAlbum = false;
     isAddToAlbumOpen = false;
@@ -672,7 +662,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} {onOpenExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} {addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} {onSelectTag} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} {onSelectTag} />
 {/if}
 {#if targetAlbumCatalogue}
   <AddToAlbumModal
