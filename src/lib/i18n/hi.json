@@ -433,4 +433,10 @@
   ,"archive_unarchive_none": "{count} में से {failed} आइटम संग्रह से नहीं निकाले जा सके। कृपया फिर से प्रयास करें।"
   ,"archive_unarchive_failed": "संग्रह से नहीं निकाला जा सका। कृपया फिर से प्रयास करें।"
   ,"archive_unarchive_permission": "संग्रह से निकालना अस्वीकार कर दिया गया। API कुंजी को asset.update अनुमति दें।"
+  ,"archive_archive": "संग्रह में रखें"
+  ,"archive_archive_success": "{count} आइटम संग्रह में रखे गए।"
+  ,"archive_archive_partial": "{count} में से {failed} आइटम संग्रह में नहीं रखे जा सके। वे चयनित रहेंगे ताकि आप फिर से प्रयास कर सकें।"
+  ,"archive_archive_none": "{count} में से {failed} आइटम संग्रह में नहीं रखे जा सके। कृपया फिर से प्रयास करें।"
+  ,"archive_archive_failed": "संग्रह में नहीं रखा जा सका। कृपया फिर से प्रयास करें।"
+  ,"archive_archive_permission": "संग्रह में रखना अस्वीकार कर दिया गया। API कुंजी को asset.update अनुमति दें।"
 }

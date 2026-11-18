@@ -242,6 +242,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn archives_each_asset_individually_when_the_batch_is_rejected() {
+        let (url, server) = serve_pages(vec![
+            (
+                "400 Bad Request",
+                r#"{"message":"Not found or no asset.update access"}"#,
+            ),
+            ("200 OK", r#"{"id":"asset-1"}"#),
+            (
+                "400 Bad Request",
+                r#"{"message":"Not found or no asset.update access"}"#,
+            ),
+        ])
+        .await;
+
+        let result = test_client(url, "test-key")
+            .set_assets_visibility(&ids(&["asset-1", "gone-2"]), AssetVisibility::Archive)
+            .await
+            .unwrap();
+
+        assert_eq!(result.changed_asset_ids, vec!["asset-1"]);
+        let requests = server.await.unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(requests[0].ends_with(r#"{"ids":["asset-1","gone-2"],"visibility":"archive"}"#));
+        for (request, id) in requests[1..].iter().zip(["asset-1", "gone-2"]) {
+            assert!(request.starts_with(&format!("PUT /api/assets/{id} HTTP/1.1")));
+            assert!(request.ends_with(r#"{"visibility":"archive"}"#));
+        }
+    }
+
+    #[tokio::test]
     async fn a_single_asset_rejected_by_the_batch_call_is_not_requested_twice() {
         let (url, server) =
             serve_pages(vec![("400 Bad Request", r#"{"message":"Not found"}"#)]).await;

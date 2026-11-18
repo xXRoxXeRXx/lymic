@@ -179,10 +179,14 @@
     return result;
   }
 
-  /** Writes an Archive or Unarchive; an Unarchive that changed something marks the Photo Timeline stale. */
+  /**
+   * Writes an Archive or Unarchive. An Unarchive that changed something marks the Photo Timeline stale; an Archive
+   * removes the archived assets from the Photo Timeline's cache (the view it was started from removes them itself).
+   */
   async function setAssetsVisibility(assetIds: string[], visibility: AssetVisibility) {
     const result = await desktop.setAssetsVisibility(assetIds, visibility);
     if (visibility === "timeline" && result.changedAssetIds.length > 0) navigation.markPhotosStale();
+    if (visibility === "archive") for (const assetId of result.changedAssetIds) timeline.removeAsset(assetId);
     return result;
   }
 
@@ -308,7 +312,7 @@
    * `_permission_error` when its controller reports a missing permission (only Archive does).
    */
   const filteredTimelineViews: Record<FilteredTimeline, { icon: typeof Heart; options(): Partial<ComponentProps<typeof TimelineView>> }> = {
-    favorites: { icon: Heart, options: () => ({ removeUnfavoritedAssets: true, showRefreshButton: false }) },
+    favorites: { icon: Heart, options: () => ({ removeUnfavoritedAssets: true, showRefreshButton: false, setAssetsVisibility, archiveAction: "archive" }) },
     archive: { icon: Archive, options: () => ({ setAssetsVisibility, archiveAction: "unarchive" }) },
     trash: { icon: Trash2, options: () => ({ allowFavoriteAndAlbum: false, restoreTrashedAssets, hintMessage: $t("trash_hint") }) },
   };
@@ -531,7 +535,7 @@
 
         {#if navigation.mapCreated}<MapView mapState={map} active={currentView === MAP_VIEW} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} />{/if}
         {#if currentView === PHOTOS_VIEW}
-          <TimelineView {timeline} {...sharedTimelineProps} />
+          <TimelineView {timeline} {...sharedTimelineProps} {setAssetsVisibility} archiveAction="archive" />
         {:else if isFilteredTimeline(currentView)}
           {@const view = currentView}
           {@const filtered = filteredTimelines[view]}

@@ -433,4 +433,10 @@
   ,"archive_unarchive_none": "تعذر إلغاء أرشفة {failed} من أصل {count}. يُرجى المحاولة مرة أخرى."
   ,"archive_unarchive_failed": "تعذر إلغاء الأرشفة. يُرجى المحاولة مرة أخرى."
   ,"archive_unarchive_permission": "تم رفض إلغاء الأرشفة. امنح مفتاح API الإذن asset.update."
+  ,"archive_archive": "أرشفة"
+  ,"archive_archive_success": "تمت أرشفة {count}."
+  ,"archive_archive_partial": "تعذرت أرشفة {failed} من أصل {count}. تبقى محددة حتى تتمكن من إعادة المحاولة."
+  ,"archive_archive_none": "تعذرت أرشفة {failed} من أصل {count}. يُرجى المحاولة مرة أخرى."
+  ,"archive_archive_failed": "تعذرت الأرشفة. يُرجى المحاولة مرة أخرى."
+  ,"archive_archive_permission": "تم رفض الأرشفة. امنح مفتاح API الإذن asset.update."
 }

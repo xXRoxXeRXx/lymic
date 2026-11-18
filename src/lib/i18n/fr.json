@@ -433,4 +433,10 @@
   ,"archive_unarchive_none": "{failed} sur {count} n'ont pas pu être désarchivés. Veuillez réessayer."
   ,"archive_unarchive_failed": "Échec du désarchivage. Veuillez réessayer."
   ,"archive_unarchive_permission": "Le désarchivage a été refusé. Accordez à la clé API l'autorisation asset.update."
+  ,"archive_archive": "Archiver"
+  ,"archive_archive_success": "{count} archivé(s)."
+  ,"archive_archive_partial": "{failed} sur {count} n'ont pas pu être archivés. Ils restent sélectionnés pour que vous puissiez réessayer."
+  ,"archive_archive_none": "{failed} sur {count} n'ont pas pu être archivés. Veuillez réessayer."
+  ,"archive_archive_failed": "Échec de l'archivage. Veuillez réessayer."
+  ,"archive_archive_permission": "L'archivage a été refusé. Accordez à la clé API l'autorisation asset.update."
 }

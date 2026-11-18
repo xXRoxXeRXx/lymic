@@ -433,4 +433,10 @@
   ,"archive_unarchive_none": "{count} 项中有 {failed} 项无法取消归档，请重试。"
   ,"archive_unarchive_failed": "无法取消归档，请重试。"
   ,"archive_unarchive_permission": "取消归档被拒绝。请为 API 密钥授予 asset.update 权限。"
+  ,"archive_archive": "归档"
+  ,"archive_archive_success": "已归档 {count} 项。"
+  ,"archive_archive_partial": "{count} 项中有 {failed} 项无法归档。它们仍处于选中状态，方便你重试。"
+  ,"archive_archive_none": "{count} 项中有 {failed} 项无法归档，请重试。"
+  ,"archive_archive_failed": "无法归档，请重试。"
+  ,"archive_archive_permission": "归档被拒绝。请为 API 密钥授予 asset.update 权限。"
 }
