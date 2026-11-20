@@ -6,7 +6,7 @@
   import { toBcp47Locale } from "../i18n";
   import type { TimelineController } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
-  import type { AssetTag, TimelineAsset, TrashRestoreResult } from "../contracts";
+  import type { AssetTag, TimelineAsset, TrashMoveResult, TrashRestoreResult } from "../contracts";
   import type { RemoteAssetDesktopAdapter } from "../tauri/desktop-adapter";
   import { calculateMasonryLayout } from "./timeline-masonry";
   import Lightbox from "./Lightbox.svelte";
@@ -14,6 +14,7 @@
   import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
   import { createRemoteAssetFavorites } from "./remote-asset-favorites.svelte";
   import { createRemoteAssetRestore, restoreFeedbackMessage } from "./remote-asset-restore";
+  import { createRemoteAssetTrash, trashFeedbackFor, trashFeedbackMessage, type RemoteAssetTrashOutcome, type TrashFeedback } from "./remote-asset-trash";
   import { createTimelineSelectionActions } from "./timeline-selection-actions.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
@@ -39,6 +40,8 @@
     allowFavoriteAndAlbum?: boolean;
     /** Offers Restore in the Lightbox and in multi-selection: Trashed Assets only. */
     restoreTrashedAssets?(assetIds: string[]): Promise<TrashRestoreResult>;
+    /** Offers Move to Trash in the Lightbox, after a confirmation: the Photo Timeline only (ADR-0011). */
+    trashAssets?(assetIds: string[]): Promise<TrashMoveResult>;
     /** Where to scroll to once the first buckets are shown, for a view that is reopened where the user left it. */
     initialScrollTop?: number;
     /** Reports the scroll position when the view opens and whenever the user scrolls. */
@@ -70,6 +73,7 @@
     hintMessage = "",
     allowFavoriteAndAlbum = true,
     restoreTrashedAssets,
+    trashAssets,
     initialScrollTop = 0,
     onScrollPosition,
     onSelectTag,
@@ -94,6 +98,7 @@
   let selectedAsset = $state<TimelineAsset | null>(null);
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
   let isAddToAlbumOpen = $state(false);
+  let trashFeedback = $state<TrashFeedback | null>(null);
   let opener = $state<HTMLElement | null>(null);
   const assetActions = createRemoteAssetActions({
     get getAssetDetails() { return desktop.getAssetDetails; },
@@ -115,6 +120,11 @@
     restoreTrashedAssets: (assetIds) => restoreTrashedAssets!(assetIds),
     onRemoved: (assetId) => selection.forget(assetId),
   });
+  const trash = createRemoteAssetTrash({
+    get timeline() { return timeline; },
+    trashAssets: (assetIds) => trashAssets!(assetIds),
+    onRemoved: (assetId) => selection.forget(assetId),
+  });
   const selection = createTimelineSelectionActions({
     updateFavorites: (assetIds, isFavorite, isCurrent) => favorites.updateMany(assetIds, isFavorite, isCurrent),
     clearFavoriteError: () => favorites.clearError(),
@@ -128,6 +138,7 @@
 
   function resetSelectionAndModals() {
     selection.reset();
+    trashFeedback = null;
     isAddToAlbumOpen = false;
   }
 
@@ -335,6 +346,18 @@
     return outcome;
   }
 
+  /** Moves the Lightbox's asset to the Immich trash (the Lightbox has asked for confirmation); on success the Lightbox closes because the asset left the timeline. */
+  async function trashFromLightbox(assetId: string): Promise<RemoteAssetTrashOutcome> {
+    const outcome = await trash.trash([assetId]);
+    if (outcome.movedAssetIds.includes(assetId)) {
+      trashFeedback = trashFeedbackFor(outcome);
+      favorites.close();
+      selectedAsset = null;
+      opener = null;
+    }
+    return outcome;
+  }
+
   function openAddSelectionToAlbum() {
     if (selection.count === 0 || !targetAlbumCatalogue || selection.isBusy) return;
     selection.clearResult();
@@ -347,6 +370,7 @@
 
   function openAsset(asset: TimelineAsset, source: HTMLElement) {
     if (selection.isSelectionMode) return;
+    trashFeedback = null;
     favorites.open(asset.id);
     selectedAsset = { ...asset, isFavorite: favorites.isFavorite(asset) };
     opener = source;
@@ -464,6 +488,12 @@
       {restoreFeedbackMessage(restoreFeedback, $t, numberLocale)}
     </p>
   {/if}
+  {#if trashFeedback}
+    {@const feedback = trashFeedback}
+    <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {feedback.kind === 'success' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200' : 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200'}" role={feedback.kind === "success" ? "status" : "alert"}>
+      {trashFeedbackMessage(feedback, $t, numberLocale)}
+    </p>
+  {/if}
   {#if hintMessage}
     <p class="mb-3 mr-16 shrink-0 text-sm text-slate-500 dark:text-zinc-400">{hintMessage}</p>
   {/if}
@@ -564,7 +594,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} {onSelectTag} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} onTrash={trashAssets ? trashFromLightbox : undefined} {onSelectTag} />
 {/if}
 {#if targetAlbumCatalogue}
   <AddToAlbumModal

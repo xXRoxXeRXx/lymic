@@ -12,6 +12,7 @@ import type {
   Album,
   AlbumAssignmentResult,
   TrashRestoreResult,
+  TrashMoveResult,
   FilteredTimeline,
   AlbumCatalogueItem,
   AlbumTimeline,
@@ -102,6 +103,11 @@ export interface FilteredTimelineDesktopAdapter {
 
 export interface TrashRestoreDesktopAdapter {
   restoreTrashedAssets(assetIds: string[]): Promise<TrashRestoreResult>;
+}
+
+export interface TrashMoveDesktopAdapter {
+  /** Moves Remote Assets to the Immich trash (a soft delete); the result lists those Immich confirmed as moved. */
+  trashAssets(assetIds: string[]): Promise<TrashMoveResult>;
 }
 
 export interface AssetDesktopAdapter {
@@ -208,6 +214,7 @@ export interface DesktopAdapter
     TimelineDesktopAdapter,
     FilteredTimelineDesktopAdapter,
     TrashRestoreDesktopAdapter,
+    TrashMoveDesktopAdapter,
     MapDesktopAdapter,
     AssetDesktopAdapter,
     AlbumTimelineDesktopAdapter,
@@ -266,6 +273,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getFilteredTimelineBuckets: (timeline) => invoke<TimelineBucket[]>("get_filtered_timeline_buckets", { timeline }),
   getFilteredTimelineBucketAssets: (timeline, timeBucket) => invoke<TimelineAsset[]>("get_filtered_timeline_bucket_assets", { timeline, timeBucket }),
   restoreTrashedAssets: (assetIds) => invoke<TrashRestoreResult>("restore_trashed_assets", { assetIds }),
+  trashAssets: (assetIds) => invoke<TrashMoveResult>("trash_assets", { assetIds }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),
   setAssetFavorite: (assetId, isFavorite) => invoke<void>("set_asset_favorite", { assetId, isFavorite }),
   chooseDownloadDestination: (originalFileName) => save({ defaultPath: originalFileName }),
