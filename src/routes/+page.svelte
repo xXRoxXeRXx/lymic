@@ -179,6 +179,23 @@
     return result;
   }
 
+  /**
+   * Move to Trash for every view that offers it (selection actions, the Lightbox and the Map View all receive this).
+   * The one place that runs after a move: cached views that may still show a moved asset reload when they next open.
+   * The Photo Timeline already dropped it when the move ran inside it, and Explore and Tags only mark themselves
+   * stale while they are not the open view.
+   */
+  async function trashAssets(assetIds: string[]) {
+    const origin = currentView;
+    const result = await desktop.trashAssets(assetIds);
+    if (result.movedAssetIds.length > 0) {
+      if (origin !== PHOTOS_VIEW) navigation.markPhotosStale();
+      void explore.refreshIfActive();
+      void tags.refreshIfActive();
+    }
+    return result;
+  }
+
   function openTags() {
     if (currentView === TAGS_VIEW) return;
     navigation.show(TAGS_VIEW);
@@ -233,8 +250,9 @@
     navigation.show(origin.view);
     if (timelineScrollViews.has(origin.view)) scrollRestore = { view: origin.view, top: origin.top };
     else restoreScroll(origin.top);
-    // The Trash Timeline is dropped when it is left, and Explore and Tags may have gone stale.
+    // The Trash Timeline is dropped when it is left, and Photos, Explore and Tags may have gone stale.
     if (origin.view === TRASH_VIEW) void filteredTimelines.trash.refresh();
+    if (origin.view === PHOTOS_VIEW) navigation.refreshPhotosIfStale();
     if (origin.view === EXPLORE_VIEW) void explore.refreshIfStale();
     if (origin.view === TAGS_VIEW) void tags.refreshIfStale();
   }
@@ -386,7 +404,7 @@
     onScrollPosition: (scrollTop: number) => { timelineScrollTop = scrollTop; },
     onSelectTag: selectTag,
     // Move to Trash is offered by every hosting view through this one prop; only the Trash Timeline opts out.
-    trashAssets: desktop.trashAssets,
+    trashAssets,
   });
 </script>
 
@@ -524,7 +542,7 @@
           />
         {/if}
 
-        {#if navigation.mapCreated}<MapView mapState={map} active={currentView === MAP_VIEW} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} trashAssets={desktop.trashAssets} />{/if}
+        {#if navigation.mapCreated}<MapView mapState={map} active={currentView === MAP_VIEW} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} {trashAssets} />{/if}
         {#if currentView === PHOTOS_VIEW}
           <TimelineView {timeline} {...sharedTimelineProps} />
         {:else if isFilteredTimeline(currentView)}

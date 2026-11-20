@@ -82,7 +82,8 @@ export function createNavigationController(options: NavigationOptions) {
   let peopleScrollTop = 0;
   let exploreScrollTop = 0;
   // Favorites, Archive and Trash reload every time they open. The Photo Timeline keeps its cache, so a change
-  // that affects it (a Restore) marks it stale and the next visit to Photos refreshes it once.
+  // that affects it (a Restore, a Move to Trash from another view) marks it stale and the next visit to Photos
+  // refreshes it once.
   let photosStale = false;
 
   function show(next: ViewId) {
@@ -96,12 +97,17 @@ export function createNavigationController(options: NavigationOptions) {
     void load();
   }
 
-  function openPhotos() {
-    if (view === PHOTOS_VIEW) return;
-    view = PHOTOS_VIEW;
+  /** Refreshes the Photo Timeline once when something marked it stale since it last loaded. */
+  function refreshPhotosIfStale() {
     if (!photosStale) return;
     photosStale = false;
     void refresh.photos();
+  }
+
+  function openPhotos() {
+    if (view === PHOTOS_VIEW) return;
+    view = PHOTOS_VIEW;
+    refreshPhotosIfStale();
   }
 
   function openFilteredTimeline(timeline: FilteredTimeline) {
@@ -195,6 +201,7 @@ export function createNavigationController(options: NavigationOptions) {
     show,
     openPhotos,
     markPhotosStale() { photosStale = true; },
+    refreshPhotosIfStale,
     openFilteredTimeline,
     openMap,
     openExplore,
