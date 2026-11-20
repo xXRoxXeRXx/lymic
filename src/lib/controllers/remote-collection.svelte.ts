@@ -35,6 +35,8 @@ export interface RemoteCollection<T> {
   refresh(): Promise<void>;
   /** Appends the next page, and does nothing when there is none. Concurrent calls share one request. */
   loadMore(): Promise<void>;
+  /** Drops the items that match from what is shown, for an item that left Immich meanwhile; a request in flight is unaffected. */
+  remove(matches: (item: T) => boolean): void;
   /** Stops waiting for a request in flight, which is ignored when it settles; cached items and any earlier failure stay. */
   abandon(): void;
   /** Drops items and state; a request still in flight is ignored when it settles. */
@@ -66,6 +68,7 @@ export function createRemoteCollection<T>(options: {
   // The public methods are called from effects; they must not subscribe the caller to the state they write.
   const refresh = () => untrack(startRefresh);
   const loadMore = () => untrack(startLoadMore);
+  const remove = (matches: (item: T) => boolean) => untrack(() => { items = items.filter((item) => !matches(item)); });
   const abandon = () => untrack(stopWaiting);
   const clear = () => untrack(reset);
 
@@ -138,6 +141,7 @@ export function createRemoteCollection<T>(options: {
     get hasNextPage() { return hasNextPage; },
     refresh,
     loadMore,
+    remove,
     abandon,
     clear,
   };

@@ -14,6 +14,8 @@ export interface MapViewState {
   /** Why the last refresh failed, also while previous markers stay shown. */
   readonly error: RequestFailure | null;
   refresh(): Promise<void>;
+  /** Drops the marker of an asset that left the library (moved to the trash) until the next refresh. */
+  removeMarker(assetId: string): void;
   /** Stops waiting for a marker load in flight, for when the view is left. */
   abandon(): void;
   clear(): void;
@@ -30,6 +32,7 @@ export function createMapController(adapter: MapDesktopAdapter): MapViewState {
     get isOffline() { return collection.isOffline; },
     get error() { return collection.failure ? classifyRequestFailure(collection.failure.reason, "map") : null; },
     refresh: collection.refresh,
+    removeMarker: (assetId) => collection.remove((marker) => marker.id === assetId),
     abandon: collection.abandon,
     clear: collection.clear,
   };
