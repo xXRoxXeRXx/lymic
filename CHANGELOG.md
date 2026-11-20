@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Move to Trash**:
+  - Move photos and videos to the Immich trash from the Lightbox, and from the multi-selection of every view that shows them: Photos, Favorites, Archive, Albums, People, Places, Memories, Tags and Search results. The Map View offers it in its Lightbox. The Trash view does not offer it; it keeps Restore and Download.
+  - Asks for confirmation naming the count and says the items can be restored in the Trash. Moved items leave the view at once; items Immich refuses (for example in a shared Album you do not own) stay visible and selected so you can retry, and the message says how many could not be moved.
+  - It is a soft delete: Lymic never deletes permanently, never empties the trash and never trashes on its own, and local files are never touched. A local file whose copy was moved to the trash is reported as a Trashed Duplicate in the activity log and is not uploaded again.
+  - Needs the `asset.delete` API key permission, the same one Restore needs; a key without it gets a message naming the permission. Verified against Immich v3.4.1 only; no minimum Immich version is claimed.
+  - Photos, Explore and Tags reload the next time you open them (or return to them) after something was moved, so a trashed item no longer shows there. Available in all supported languages.
+
+### Changed
+- The README, the documentation and the permission table no longer say that Lymic never deletes anything; they describe Move to Trash and name `asset.delete` for both Restore and Move to Trash.
+
 ## [0.30.0] - 2026-11-17
 
 ### Added
