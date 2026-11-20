@@ -63,7 +63,7 @@ A locally discovered Media Asset that Immich recognizes as an existing Remote As
 _Avoid_: duplicate file, already-uploaded file
 
 **Trashed Duplicate**:
-A Duplicate whose Remote Asset is a Trashed Asset. Synchronization treats it as synchronized and leaves the Remote Asset in the Immich trash: Lymic never uploads it again and never restores it. It still receives Album Assignment where Immich allows, and the activity log reports the file as in the Immich trash so the user can restore it in the Trash Timeline (ADR-0010).
+A Duplicate whose Remote Asset is a Trashed Asset, whether it was deleted in Immich or moved to the trash with Move to Trash. Synchronization treats it as synchronized and leaves the Remote Asset in the Immich trash: Lymic never uploads it again and never restores it. It still receives Album Assignment where Immich allows, and the activity log reports the file as in the Immich trash so the user can restore it in the Trash Timeline (ADR-0010).
 _Avoid_: deleted duplicate, re-upload candidate
 
 ## Synchronization
@@ -145,11 +145,11 @@ The chronological presentation of the Remote Assets that are Archived Assets in 
 _Avoid_: archive folder, archive album, hidden gallery
 
 **Trashed Asset**:
-A Remote Asset that sits in the Immich trash after being deleted in Immich, until Immich removes it permanently or it is restored. Lymic only reads this status and may restore a Trashed Asset; it never moves a Remote Asset into the trash and never deletes one permanently. Not related to the Windows Recycle Bin or to removing a Watched Folder.
+A Remote Asset that sits in the Immich trash, after being deleted in Immich or after a Move to Trash from Lymic, until Immich removes it permanently or it is restored. Lymic may restore a Trashed Asset and may move a Remote Asset into the trash on explicit user action ([ADR-0011](docs/adr/0011-move-to-trash-is-a-soft-delete-on-explicit-user-action.md)); it never deletes one permanently or empties the trash. Not related to the Windows Recycle Bin or to removing a Watched Folder.
 _Avoid_: deleted asset, recycle bin item, bin item
 
 **Trash Timeline**:
-The chronological presentation of the authenticated user's Trashed Assets, grouped into time buckets like the Photo Timeline. Restoring a Trashed Asset returns it to the Immich Library; it does not touch local files, Watched Folders or Synchronization state.
+The chronological presentation of the authenticated user's Trashed Assets, grouped into time buckets like the Photo Timeline. Restoring a Trashed Asset returns it to the Immich Library; neither Restore nor Move to Trash touches local files, Watched Folders or Synchronization state. The Trash Timeline offers Restore and Download, never Move to Trash.
 _Avoid_: recycle bin, trash folder, deleted gallery
 
 **Filtered Timeline**:
@@ -157,8 +157,12 @@ A main view that presents the authenticated user's Immich Library through one fi
 _Avoid_: filtered main view, filtered view, smart album
 
 **Restore**:
-Returning a Trashed Asset to the authenticated user's Immich Library, from the Trash Timeline Lightbox or a multi-selection. It is the only Immich write the Trash Timeline performs; Lymic never moves a Remote Asset into the trash and never deletes one permanently. Trashed Assets that could not be restored stay visible and selected in the Trash Timeline so the user can retry.
+Returning a Trashed Asset to the authenticated user's Immich Library, from the Trash Timeline Lightbox or a multi-selection. Together with Move to Trash it is the only Immich write that touches trash state, and it is the only one the Trash Timeline performs; Lymic never deletes a Remote Asset permanently. Both need the API key permission `asset.delete`. Trashed Assets that could not be restored stay visible and selected in the Trash Timeline so the user can retry.
 _Avoid_: undelete, recover, untrash
+
+**Move to Trash**:
+Putting one or more Remote Assets into the Immich trash, from the Lightbox or a timeline multi-selection of any view except the Trash Timeline, after an explicit confirmation. It is a soft delete only: the assets become Trashed Assets and stay recoverable with Restore until Immich removes them after its retention period. Lymic never deletes permanently, never empties the trash and never moves an asset to the trash on its own; Synchronization never does. It does not touch local files, so the next Synchronization reports a local file whose Remote Asset was moved to the trash as a Trashed Duplicate ([ADR-0010](docs/adr/0010-trashed-duplicates-stay-in-the-trash.md), [ADR-0011](docs/adr/0011-move-to-trash-is-a-soft-delete-on-explicit-user-action.md)). Assets that could not be moved stay visible and selected so the user can retry. The German UI label is "In den Papierkorb verschieben".
+_Avoid_: delete, remove, löschen, discard
 
 ## Map
 
