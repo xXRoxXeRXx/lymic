@@ -320,6 +320,8 @@
   ,"trash_move_success": "{count} in den Immich-Papierkorb verschoben. Du kannst sie im Papierkorb wiederherstellen."
   ,"trash_move_permission": "Das Verschieben in den Papierkorb wurde abgelehnt. Erteile dem API-Schlüssel die Berechtigung asset.delete."
   ,"trash_move_failed": "Verschieben in den Papierkorb fehlgeschlagen. Bitte versuche es erneut."
+  ,"trash_move_partial": "{failed} von {count} konnten nicht in den Papierkorb verschoben werden. Sie bleiben ausgewählt, damit du es erneut versuchen kannst."
+  ,"trash_move_none": "{failed} von {count} konnten nicht in den Papierkorb verschoben werden. Bitte versuche es erneut."
   ,"explore_title": "Erkunden"
   ,"explore_view_all": "Alle anzeigen"
   ,"explore_retry": "Erneut versuchen"

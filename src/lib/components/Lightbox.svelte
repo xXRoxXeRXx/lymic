@@ -196,7 +196,7 @@
       if (isDestroyed) return;
       isTrashConfirmOpen = false;
       if (outcome.movedAssetIds.includes(assetId)) return;
-      trashError = trashFeedbackMessage(trashFeedbackFor(outcome), $t, numberLocale);
+      trashError = trashFeedbackMessage(trashFeedbackFor(outcome, 1), $t, numberLocale);
     } finally {
       if (!isDestroyed) isTrashing = false;
     }

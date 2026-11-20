@@ -320,6 +320,8 @@
   ,"trash_move_success": "{count} moved to the Immich trash. You can restore them in the Trash."
   ,"trash_move_permission": "Moving to the trash was refused. Give the API key the asset.delete permission."
   ,"trash_move_failed": "Could not move to the trash. Please try again."
+  ,"trash_move_partial": "{failed} of {count} could not be moved to the trash. They stay selected so you can retry."
+  ,"trash_move_none": "{failed} of {count} could not be moved to the trash. Please try again."
   ,"explore_title": "Explore"
   ,"explore_view_all": "View all"
   ,"explore_retry": "Retry"

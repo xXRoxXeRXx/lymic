@@ -1,9 +1,10 @@
 import type { AlbumAssignmentResult } from "../contracts";
 import type { RemoteAssetDownloadOutcome } from "./remote-asset-actions.svelte";
 import { restoreFeedbackFor, type RemoteAssetRestoreOutcome, type RestoreFeedback } from "./remote-asset-restore";
+import { trashFeedbackFor, type RemoteAssetTrashOutcome, type TrashFeedback } from "./remote-asset-trash";
 
 /** The bulk actions of a timeline selection; at most one runs at a time. */
-export type SelectionAction = "favorite" | "album" | "download" | "restore";
+export type SelectionAction = "favorite" | "album" | "download" | "restore" | "trash";
 
 /** How many of the selected Remote Assets a bulk action handled. */
 export interface SelectionCounts {
@@ -11,9 +12,9 @@ export interface SelectionCounts {
   total: number;
 }
 
-/** What a finished favorite, add-to-Album or Download bulk action reports (Restore reports through `restoreFeedback`). */
+/** What a finished favorite, add-to-Album or Download bulk action reports (Restore and Move to Trash report through `restoreFeedback` and `trashFeedback`). */
 export interface SelectionResult extends SelectionCounts {
-  action: Exclude<SelectionAction, "restore">;
+  action: Exclude<SelectionAction, "restore" | "trash">;
 }
 
 export interface TimelineSelectionActionsOptions {
@@ -29,10 +30,12 @@ export interface TimelineSelectionActionsOptions {
   readonly addAssetsToAlbum: (assetIds: string[], albumId: string) => Promise<AlbumAssignmentResult>;
   /** Restore of Trashed Assets; leave it out where the timeline offers no Restore. Never rejects. */
   readonly restore?: (assetIds: string[]) => Promise<RemoteAssetRestoreOutcome>;
+  /** Move to Trash (the caller has asked for confirmation); leave it out where the timeline offers none. Never rejects. */
+  readonly trash?: (assetIds: string[]) => Promise<RemoteAssetTrashOutcome>;
 }
 
 /**
- * Owns the multi-selection of a timeline and its bulk actions (favorite, add to Album, Download, Restore):
+ * Owns the multi-selection of a timeline and its bulk actions (favorite, add to Album, Download, Restore, Move to Trash):
  * the selected set, which single action is running, and the last result. Call `reset` when the timeline
  * refreshed or was replaced: it ends the running action and drops its result when it arrives.
  */
@@ -41,6 +44,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
   let busyAction = $state<SelectionAction | null>(null);
   let result = $state<SelectionResult | null>(null);
   let restoreFeedback = $state<RestoreFeedback | null>(null);
+  let trashFeedback = $state<TrashFeedback | null>(null);
   let generation = 0;
 
   function select(assetIds: Iterable<string>) {
@@ -83,6 +87,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     busyAction = null;
     clearResult();
     restoreFeedback = null;
+    trashFeedback = null;
     clear();
   }
 
@@ -166,6 +171,34 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     return { outcome, applied };
   }
 
+  /** Moves the selection to the Immich trash; Remote Assets that were not moved stay selected so the user can retry. */
+  async function trash() {
+    const trashAssets = options.trash;
+    if (!trashAssets) return;
+    await run("trash", async (assetIds, isCurrent) => {
+      trashFeedback = null;
+      const outcome = await trashAssets(assetIds);
+      if (!isCurrent()) return;
+      select(outcome.failedAssetIds);
+      trashFeedback = trashFeedbackFor(outcome, assetIds.length);
+    });
+  }
+
+  /**
+   * Moves one Remote Asset (from the Lightbox, which reports a failure itself). `applied` is false when the
+   * asset was not moved or the timeline changed meanwhile; only an applied success is reported as `trashFeedback`.
+   */
+  async function trashOne(assetId: string) {
+    const trashAssets = options.trash;
+    if (!trashAssets) throw new Error("This timeline offers no Move to Trash.");
+    const isCurrent = currentGeneration();
+    trashFeedback = null;
+    const outcome = await trashAssets([assetId]);
+    const applied = isCurrent() && outcome.movedAssetIds.includes(assetId);
+    if (applied) trashFeedback = trashFeedbackFor(outcome, 1);
+    return { outcome, applied };
+  }
+
   return {
     get selectedIds() { return selectedIds; },
     get count() { return selectedIds.size; },
@@ -174,7 +207,9 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     get isBusy() { return busyAction !== null; },
     get result() { return result; },
     get restoreFeedback() { return restoreFeedback; },
+    get trashFeedback() { return trashFeedback; },
     clearResult,
+    clearTrashFeedback: () => { trashFeedback = null; },
     isSelected: (assetId: string) => selectedIds.has(assetId),
     toggle,
     clear,
@@ -185,5 +220,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     download,
     restore,
     restoreOne,
+    trash,
+    trashOne,
   };
 }

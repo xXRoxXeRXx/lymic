@@ -320,6 +320,8 @@
   ,"trash_move_success": "已将 {count} 项移至 Immich 回收站。您可以在回收站中恢复它们。"
   ,"trash_move_permission": "移至回收站被拒绝。请为 API 密钥授予 asset.delete 权限。"
   ,"trash_move_failed": "无法移至回收站。请重试。"
+  ,"trash_move_partial": "{count} 项中有 {failed} 项无法移至回收站。它们仍处于选中状态，方便你重试。"
+  ,"trash_move_none": "{count} 项中有 {failed} 项无法移至回收站，请重试。"
   ,"explore_title": "探索"
   ,"explore_view_all": "查看全部"
   ,"explore_retry": "重试"

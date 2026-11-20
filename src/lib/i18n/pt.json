@@ -320,6 +320,8 @@
   ,"trash_move_success": "{count} movido(s) para a lixeira do Immich. Você pode restaurá-los na lixeira."
   ,"trash_move_permission": "A movimentação para a lixeira foi recusada. Conceda à chave de API a permissão asset.delete."
   ,"trash_move_failed": "Não foi possível mover para a lixeira. Tente novamente."
+  ,"trash_move_partial": "{failed} de {count} não puderam ser movidos para a lixeira. Continuam selecionados para você tentar novamente."
+  ,"trash_move_none": "{failed} de {count} não puderam ser movidos para a lixeira. Tente novamente."
   ,"explore_title": "Explorar"
   ,"explore_view_all": "Ver tudo"
   ,"explore_retry": "Tentar novamente"

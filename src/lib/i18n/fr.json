@@ -320,6 +320,8 @@
   ,"trash_move_success": "{count} déplacé(s) vers la corbeille d'Immich. Vous pouvez les restaurer depuis la corbeille."
   ,"trash_move_permission": "Le déplacement vers la corbeille a été refusé. Accordez à la clé API l'autorisation asset.delete."
   ,"trash_move_failed": "Impossible de déplacer vers la corbeille. Veuillez réessayer."
+  ,"trash_move_partial": "{failed} sur {count} n'ont pas pu être déplacés vers la corbeille. Ils restent sélectionnés pour que vous puissiez réessayer."
+  ,"trash_move_none": "{failed} sur {count} n'ont pas pu être déplacés vers la corbeille. Veuillez réessayer."
   ,"explore_title": "Explorer"
   ,"explore_view_all": "Tout afficher"
   ,"explore_retry": "Réessayer"

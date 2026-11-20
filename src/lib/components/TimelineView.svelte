@@ -1,7 +1,7 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
   import { tick, untrack, type Snippet } from "svelte";
-  import { Album, ArchiveRestore, Check, Download, Heart, HeartOff, Play, RefreshCw, X } from "lucide-svelte";
+  import { Album, ArchiveRestore, Check, Download, Heart, HeartOff, Play, RefreshCw, Trash2, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineController } from "../controllers/timeline-controller.svelte";
@@ -14,7 +14,8 @@
   import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
   import { createRemoteAssetFavorites } from "./remote-asset-favorites.svelte";
   import { createRemoteAssetRestore, restoreFeedbackMessage } from "./remote-asset-restore";
-  import { createRemoteAssetTrash, trashFeedbackFor, trashFeedbackMessage, type RemoteAssetTrashOutcome, type TrashFeedback } from "./remote-asset-trash";
+  import { createRemoteAssetTrash, trashFeedbackMessage, type RemoteAssetTrashOutcome } from "./remote-asset-trash";
+  import MoveToTrashDialog from "./MoveToTrashDialog.svelte";
   import { createTimelineSelectionActions } from "./timeline-selection-actions.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
@@ -98,7 +99,7 @@
   let selectedAsset = $state<TimelineAsset | null>(null);
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
   let isAddToAlbumOpen = $state(false);
-  let trashFeedback = $state<TrashFeedback | null>(null);
+  let isTrashConfirmOpen = $state(false);
   let opener = $state<HTMLElement | null>(null);
   const assetActions = createRemoteAssetActions({
     get getAssetDetails() { return desktop.getAssetDetails; },
@@ -131,6 +132,7 @@
     download: (assetIds, isCurrent) => assetActions.download(assetIds, isCurrent),
     addAssetsToAlbum: (assetIds, albumId) => desktop.addAssetsToAlbum(assetIds, albumId),
     get restore() { return restoreTrashedAssets ? (assetIds: string[]) => restore.restore(assetIds) : undefined; },
+    get trash() { return trashAssets ? (assetIds: string[]) => trash.trash(assetIds) : undefined; },
   });
   const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selection.isSelected(asset.id)));
   const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => favorites.isFavorite(asset)));
@@ -138,8 +140,8 @@
 
   function resetSelectionAndModals() {
     selection.reset();
-    trashFeedback = null;
     isAddToAlbumOpen = false;
+    isTrashConfirmOpen = false;
   }
 
   function resetLightbox() {
@@ -348,9 +350,8 @@
 
   /** Moves the Lightbox's asset to the Immich trash (the Lightbox has asked for confirmation); on success the Lightbox closes because the asset left the timeline. */
   async function trashFromLightbox(assetId: string): Promise<RemoteAssetTrashOutcome> {
-    const outcome = await trash.trash([assetId]);
-    if (outcome.movedAssetIds.includes(assetId)) {
-      trashFeedback = trashFeedbackFor(outcome);
+    const { outcome, applied } = await selection.trashOne(assetId);
+    if (applied) {
       favorites.close();
       selectedAsset = null;
       opener = null;
@@ -364,13 +365,25 @@
     isAddToAlbumOpen = true;
   }
 
+  function openTrashConfirmation() {
+    if (selection.count === 0 || !trashAssets || selection.isBusy) return;
+    selection.clearResult();
+    isTrashConfirmOpen = true;
+  }
+
+  /** Moves the confirmed selection; whatever the outcome, the page feedback reports it and the failed assets stay selected. */
+  async function trashSelection() {
+    await selection.trash();
+    isTrashConfirmOpen = false;
+  }
+
   async function assignSelectedAssetToAlbum(albumId: string) {
     if (await selection.addToAlbum(albumId)) isAddToAlbumOpen = false;
   }
 
   function openAsset(asset: TimelineAsset, source: HTMLElement) {
     if (selection.isSelectionMode) return;
-    trashFeedback = null;
+    selection.clearTrashFeedback();
     favorites.open(asset.id);
     selectedAsset = { ...asset, isFavorite: favorites.isFavorite(asset) };
     opener = source;
@@ -381,7 +394,7 @@
     queueMicrotask(() => opener?.focus());
   }
   function handleKeydown(event: KeyboardEvent) {
-    if (!selectedAsset && selection.isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen) {
+    if (!selectedAsset && selection.isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen && !isTrashConfirmOpen && !event.defaultPrevented) {
       event.preventDefault();
       selection.clear();
     }
@@ -455,6 +468,9 @@
         {#if targetAlbumCatalogue}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={selection.isBusy} onclick={openAddSelectionToAlbum}><Album class="h-4 w-4" /></button>
         {/if}
+        {#if trashAssets}
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("trash_move")} aria-label={$t("trash_move")} aria-busy={selection.busyAction === 'trash'} disabled={selection.isBusy} onclick={openTrashConfirmation}><Trash2 class="h-4 w-4 {selection.busyAction === 'trash' ? 'animate-pulse' : ''}" /></button>
+        {/if}
         <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_finish")} aria-label={$t("timeline_selection_finish")} disabled={selection.isBusy} onclick={() => selection.clear()}><X class="h-4 w-4" /></button>
       </div>
     </div>
@@ -488,8 +504,8 @@
       {restoreFeedbackMessage(restoreFeedback, $t, numberLocale)}
     </p>
   {/if}
-  {#if trashFeedback}
-    {@const feedback = trashFeedback}
+  {#if selection.trashFeedback}
+    {@const feedback = selection.trashFeedback}
     <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {feedback.kind === 'success' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200' : 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200'}" role={feedback.kind === "success" ? "status" : "alert"}>
       {trashFeedbackMessage(feedback, $t, numberLocale)}
     </p>
@@ -595,6 +611,9 @@
 
 {#if selectedAsset}
   <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} onTrash={trashAssets ? trashFromLightbox : undefined} {onSelectTag} />
+{/if}
+{#if trashAssets}
+  <MoveToTrashDialog isOpen={isTrashConfirmOpen} count={selection.count} isMoving={selection.busyAction === 'trash'} onConfirm={() => void trashSelection()} onCancel={() => { if (selection.busyAction !== 'trash') isTrashConfirmOpen = false; }} />
 {/if}
 {#if targetAlbumCatalogue}
   <AddToAlbumModal
