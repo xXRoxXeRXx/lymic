@@ -255,6 +255,29 @@ describe('i18n catalogs', () => {
     expect(de.trash_restore).toBe('Wiederherstellen');
   });
 
+  it('translates the Move to Trash strings in every locale with their placeholders', () => {
+    const placeholders: Record<string, string[]> = {
+      trash_move: [],
+      trash_move_confirm_title: [],
+      trash_move_confirm_message: ['{count}'],
+      trash_move_cancel: [],
+      trash_move_success: ['{count}'],
+      trash_move_permission: [],
+      trash_move_failed: [],
+    };
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const [key, expected] of Object.entries(placeholders)) {
+        const value = (translations as Record<string, string>)[key];
+        expect(value, `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+        for (const placeholder of expected) expect(value, `${localeCode}.${key}`).toContain(placeholder);
+      }
+      // A refused Move to Trash names the permission to grant, never a credential.
+      expect((translations as Record<string, string>).trash_move_permission, localeCode).toContain('asset.delete');
+    }
+    expect(en.trash_move).toBe('Move to Trash');
+    expect(de.trash_move).toBe('In den Papierkorb verschieben');
+  });
+
   it('uses consistent timeline and video terminology in favorites strings', () => {
     expect(de.favorites_offline).toContain('Zeitachse');
     expect(de.favorites_offline).not.toContain('Timeline');

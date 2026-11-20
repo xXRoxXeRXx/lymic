@@ -37,6 +37,7 @@ import {
   type AuthDesktopAdapter,
   type FilteredTimelineDesktopAdapter,
   type TrashRestoreDesktopAdapter,
+  type TrashMoveDesktopAdapter,
   type PreferencesDesktopAdapter,
   type SearchDesktopAdapter,
   type RemovableVolumeDesktopAdapter,
@@ -56,6 +57,7 @@ describe("tauriDesktopAdapter", () => {
   const timelineAdapter: TimelineDesktopAdapter = tauriDesktopAdapter;
   const filteredTimelineAdapter: FilteredTimelineDesktopAdapter = tauriDesktopAdapter;
   const trashRestoreAdapter: TrashRestoreDesktopAdapter = tauriDesktopAdapter;
+  const trashMoveAdapter: TrashMoveDesktopAdapter = tauriDesktopAdapter;
   const albumTimelineAdapter: AlbumTimelineDesktopAdapter = tauriDesktopAdapter;
   const placeTimelineAdapter: PlaceTimelineDesktopAdapter = tauriDesktopAdapter;
   const preferencesAdapter: PreferencesDesktopAdapter = tauriDesktopAdapter;
@@ -106,6 +108,7 @@ describe("tauriDesktopAdapter", () => {
     await filteredTimelineAdapter.getFilteredTimelineBuckets("trash");
     await filteredTimelineAdapter.getFilteredTimelineBucketAssets("trash", "2025-03-01T00:00:00.000Z");
     await trashRestoreAdapter.restoreTrashedAssets(["trash-1", "trash-2"]);
+    await trashMoveAdapter.trashAssets(["asset-1", "asset-2"]);
     await tauriDesktopAdapter.getAssetDetails("asset-1");
     await tauriDesktopAdapter.setAssetFavorite("asset-1", true);
     await tauriDesktopAdapter.chooseDownloadDestination("IMG_0001.CR3");
@@ -176,6 +179,7 @@ describe("tauriDesktopAdapter", () => {
       ["get_filtered_timeline_buckets", { timeline: "trash" }],
       ["get_filtered_timeline_bucket_assets", { timeline: "trash", timeBucket: "2025-03-01T00:00:00.000Z" }],
       ["restore_trashed_assets", { assetIds: ["trash-1", "trash-2"] }],
+      ["trash_assets", { assetIds: ["asset-1", "asset-2"] }],
       ["get_asset_details", { assetId: "asset-1" }],
       ["set_asset_favorite", { assetId: "asset-1", isFavorite: true }],
       ["download_asset", { assetId: "asset-1", destinationPath: "C:/Downloads/IMG_0001.CR3" }],

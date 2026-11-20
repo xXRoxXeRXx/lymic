@@ -53,6 +53,11 @@ export interface TrashRestoreResult {
   restoredAssetIds: string[];
 }
 
+/** The requested Remote Assets a Move to Trash put into the Immich trash; every other requested asset is still in the library. */
+export interface TrashMoveResult {
+  movedAssetIds: string[];
+}
+
 export interface AlbumCatalogueItem extends Album {
   albumThumbnailAssetId: string | null;
   assetCount: number;

@@ -3907,6 +3907,137 @@ describe("Trash Timeline Restore", () => {
   });
 });
 
+describe("Photo Timeline Move to Trash", () => {
+  beforeEach(stubImmediateIntersectionObserver);
+
+  const march = "2025-03-01T00:00:00.000Z";
+  const photo = (id: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE" as const, takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false,
+  });
+  const details = {
+    originalFileName: "photo.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  };
+  const moved = async (args?: unknown) => ({ movedAssetIds: (args as { assetIds: string[] }).assetIds });
+
+  function renderPhotos(trash: (args?: unknown) => Promise<unknown>, assetIds = ["photo-1", "photo-2"]) {
+    renderAuthenticatedPage({
+      get_timeline_buckets: async () => [{ timeBucket: march, count: assetIds.length }],
+      get_timeline_bucket_assets: async () => assetIds.map(photo),
+      get_asset_details: async () => details,
+      trash_assets: trash,
+    });
+  }
+
+  async function openFirstPhoto() {
+    await fireEvent.click((await screen.findAllByRole("button", { name: "Open photo" }))[0]);
+    return screen.findByRole("dialog", { name: "Media lightbox" });
+  }
+
+  async function confirmMoveToTrash(lightbox: HTMLElement) {
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Move to Trash" }));
+    const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+  }
+
+  it("offers Move to Trash next to Download in the Lightbox of the Photo Timeline", async () => {
+    renderPhotos(vi.fn(moved));
+    const lightbox = await openFirstPhoto();
+
+    const labels = within(lightbox).getAllByRole("button").map((button) => button.getAttribute("aria-label"));
+    expect(labels.indexOf("Move to Trash")).toBeGreaterThan(-1);
+    expect(labels.indexOf("Move to Trash")).toBe(labels.indexOf("Download original") + 1);
+  });
+
+  it("offers no Move to Trash in the Lightbox of a Filtered Timeline", async () => {
+    renderAuthenticatedPage({
+      "get_filtered_timeline_buckets:favorites": async () => [{ timeBucket: march, count: 1 }],
+      "get_filtered_timeline_bucket_assets:favorites": async () => [photo("fav-1")],
+      get_asset_details: async () => details,
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+    const lightbox = await openFirstPhoto();
+
+    expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+    expect(within(lightbox).queryByRole("button", { name: "Move to Trash" })).not.toBeInTheDocument();
+  });
+
+  it("asks for confirmation naming the count and the way back, and cancelling does nothing", async () => {
+    const trash = vi.fn(moved);
+    renderPhotos(trash);
+    const lightbox = await openFirstPhoto();
+
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Move to Trash" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+    expect(dialog).toHaveTextContent("Move 1 selected to the Immich trash? You can restore them in the Trash.");
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog", { name: "Move to Trash?" })).not.toBeInTheDocument();
+    expect(trash).not.toHaveBeenCalled();
+    await fireEvent.click(within(screen.getByRole("dialog", { name: "Media lightbox" })).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+  });
+
+  it("moves the asset on confirmation, removes it from the timeline and closes the Lightbox", async () => {
+    const trash = vi.fn(moved);
+    renderPhotos(trash);
+    const lightbox = await openFirstPhoto();
+
+    await confirmMoveToTrash(lightbox);
+
+    await waitFor(() => expect(trash).toHaveBeenCalledWith({ assetIds: ["photo-1"] }));
+    expect(trash).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("status")).toHaveTextContent("1 moved to the Immich trash. You can restore them in the Trash.");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+  });
+
+  it("names the missing permission and keeps the asset and the Lightbox when Immich refuses", async () => {
+    renderPhotos(vi.fn(async () => { throw "trash_move_permission_denied:asset.delete"; }));
+    const lightbox = await openFirstPhoto();
+
+    await confirmMoveToTrash(lightbox);
+
+    expect(await within(lightbox).findByRole("alert")).toHaveTextContent("Moving to the trash was refused. Give the API key the asset.delete permission.");
+    expect(screen.queryByRole("dialog", { name: "Move to Trash?" })).not.toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Move to Trash" })).toBeEnabled();
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+  });
+
+  it("shows a credential-free failure for other errors and when Immich did not move the asset", async () => {
+    const trash = vi.fn()
+      .mockRejectedValueOnce(new Error("Failed with key secret-key at https://immich.example"))
+      .mockResolvedValueOnce({ movedAssetIds: [] });
+    renderPhotos(trash);
+    const lightbox = await openFirstPhoto();
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      await confirmMoveToTrash(lightbox);
+      await waitFor(() => expect(trash).toHaveBeenCalledTimes(attempt));
+      const alert = await within(lightbox).findByRole("alert");
+      expect(alert).toHaveTextContent("Could not move to the trash. Please try again.");
+      expect(alert.textContent).not.toContain("secret-key");
+    }
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+  });
+
+  it("disables Move to Trash and closing while the request runs", async () => {
+    let finish!: (value: unknown) => void;
+    renderPhotos(vi.fn(() => new Promise((resolve) => { finish = resolve; })));
+    const lightbox = await openFirstPhoto();
+
+    await confirmMoveToTrash(lightbox);
+
+    await waitFor(() => expect(within(lightbox).getByRole("button", { name: "Move to Trash" })).toBeDisabled());
+    expect(within(lightbox).getByRole("button", { name: "Close lightbox" })).toBeDisabled();
+    finish({ movedAssetIds: ["photo-1"] });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+});
+
 describe("Search", () => {
   const march = "2025-03-01T00:00:00.000Z";
   const found = (id: string) => ({

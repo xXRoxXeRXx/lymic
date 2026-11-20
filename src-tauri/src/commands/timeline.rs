@@ -4,7 +4,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::immich::{
     AlbumTimeline, AssetDetails, FilteredTimeline, ImmichSession, PlaceTimeline, RemoteAssetId,
-    TimelineAsset, TimelineBucket, TrashRestoreResult,
+    TimelineAsset, TimelineBucket, TrashMoveResult, TrashRestoreResult,
 };
 
 #[tauri::command]
@@ -75,15 +75,12 @@ async fn download_archive_with(
     session.save_archive(archive, &destination_path).await
 }
 
-/// Restores Trashed Assets to the Immich Library. Lymic offers no other write to the Immich trash.
-#[tauri::command]
-pub(crate) async fn restore_trashed_assets(
-    asset_ids: Vec<String>,
-) -> Result<TrashRestoreResult, String> {
+/// The non-empty, trimmed Remote Asset IDs of a trash write.
+fn trash_write_asset_ids(asset_ids: Vec<String>) -> Result<Vec<RemoteAssetId>, String> {
     if asset_ids.is_empty() {
         return Err("At least one asset ID is required".to_string());
     }
-    let asset_ids = asset_ids
+    asset_ids
         .iter()
         .map(|asset_id| {
             let asset_id = asset_id.trim();
@@ -93,10 +90,29 @@ pub(crate) async fn restore_trashed_assets(
                 Ok(RemoteAssetId::new(asset_id))
             }
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect()
+}
+
+/// Restores Trashed Assets to the Immich Library. Together with `trash_assets` the only write to the Immich trash.
+#[tauri::command]
+pub(crate) async fn restore_trashed_assets(
+    asset_ids: Vec<String>,
+) -> Result<TrashRestoreResult, String> {
+    let asset_ids = trash_write_asset_ids(asset_ids)?;
     ImmichSession::with_stored_credentials(|client| async move {
         client.restore_trashed_assets(&asset_ids).await
     })
+    .await
+}
+
+/// Moves Remote Assets to the Immich trash (a soft delete, never permanent; ADR-0011) and returns
+/// the IDs Immich confirmed as moved. Every requested asset not listed is still in the library.
+#[tauri::command]
+pub(crate) async fn trash_assets(asset_ids: Vec<String>) -> Result<TrashMoveResult, String> {
+    let asset_ids = trash_write_asset_ids(asset_ids)?;
+    ImmichSession::with_stored_credentials(
+        |client| async move { client.trash_assets(&asset_ids).await },
+    )
     .await
 }
 

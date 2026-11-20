@@ -524,7 +524,7 @@
 
         {#if navigation.mapCreated}<MapView mapState={map} active={currentView === MAP_VIEW} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} />{/if}
         {#if currentView === PHOTOS_VIEW}
-          <TimelineView {timeline} {...sharedTimelineProps} />
+          <TimelineView {timeline} {...sharedTimelineProps} trashAssets={desktop.trashAssets} />
         {:else if isFilteredTimeline(currentView)}
           {@const view = currentView}
           {@const filtered = filteredTimelines[view]}
