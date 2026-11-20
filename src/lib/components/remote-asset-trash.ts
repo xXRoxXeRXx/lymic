@@ -51,7 +51,8 @@ export function trashFeedbackMessage(feedback: TrashFeedback, translate: Transla
 export interface RemoteAssetTrashOptions {
   /** Whatever shows the assets: a timeline, or the Map View's markers. */
   readonly timeline: Pick<TimelineController, "removeAsset">;
-  readonly trashAssets: (assetIds: string[]) => Promise<TrashMoveResult>;
+  /** Absent where the view offers no Move to Trash: `trash` then fails every asset without a request. */
+  readonly trashAssets?: (assetIds: string[]) => Promise<TrashMoveResult>;
   /** Called after a moved Remote Asset left the timeline. */
   onRemoved?: (assetId: string) => void;
 }
@@ -64,9 +65,11 @@ export interface RemoteAssetTrashOptions {
  */
 export function createRemoteAssetTrash(options: RemoteAssetTrashOptions) {
   async function trash(assetIds: string[]): Promise<RemoteAssetTrashOutcome> {
+    const trashAssets = options.trashAssets;
+    if (!trashAssets) return { movedAssetIds: [], failedAssetIds: [...assetIds], failure: "error" };
     let result: TrashMoveResult;
     try {
-      result = await options.trashAssets(assetIds);
+      result = await trashAssets(assetIds);
     } catch (error) {
       // The backend reports a refusal as a credential-free code, so the error text is never shown.
       const refused = classifyRequestFailure(error, "trash_move") === "permission_denied";
