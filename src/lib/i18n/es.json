@@ -320,6 +320,8 @@
   ,"trash_move_success": "{count} movidos a la papelera de Immich. Puedes restaurarlos desde la papelera."
   ,"trash_move_permission": "Se rechazó mover a la papelera. Concede a la clave de API el permiso asset.delete."
   ,"trash_move_failed": "No se pudo mover a la papelera. Inténtalo de nuevo."
+  ,"trash_move_partial": "No se pudieron mover a la papelera {failed} de {count}. Siguen seleccionados para que puedas reintentarlo."
+  ,"trash_move_none": "No se pudieron mover a la papelera {failed} de {count}. Inténtalo de nuevo."
   ,"explore_title": "Explorar"
   ,"explore_view_all": "Ver todo"
   ,"explore_retry": "Reintentar"

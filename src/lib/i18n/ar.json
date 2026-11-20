@@ -320,6 +320,8 @@
   ,"trash_move_success": "تم نقل {count} إلى سلة محذوفات Immich. يمكنك استعادتها من سلة المحذوفات."
   ,"trash_move_permission": "تم رفض النقل إلى سلة المحذوفات. امنح مفتاح API الإذن asset.delete."
   ,"trash_move_failed": "تعذر النقل إلى سلة المحذوفات. يُرجى المحاولة مرة أخرى."
+  ,"trash_move_partial": "تعذر نقل {failed} من أصل {count} إلى سلة المحذوفات. تبقى محددة حتى تتمكن من إعادة المحاولة."
+  ,"trash_move_none": "تعذر نقل {failed} من أصل {count} إلى سلة المحذوفات. يُرجى المحاولة مرة أخرى."
   ,"explore_title": "استكشاف"
   ,"explore_view_all": "عرض الكل"
   ,"explore_retry": "إعادة المحاولة"

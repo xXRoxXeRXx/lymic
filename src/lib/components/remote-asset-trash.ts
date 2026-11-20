@@ -14,22 +14,35 @@ export interface RemoteAssetTrashOutcome {
 /** What the user is told about a Move to Trash. */
 export type TrashFeedback =
   | { kind: "success"; count: number }
+  | { kind: "partial"; failed: number; total: number }
+  | { kind: "none"; failed: number; total: number }
   | { kind: "failed" }
   | { kind: "permission" };
 
-/** Maps a Move to Trash outcome to its feedback, the one place that decides success, permission or failed. */
-export function trashFeedbackFor(outcome: RemoteAssetTrashOutcome): TrashFeedback {
+/**
+ * Maps a Move to Trash outcome for `total` requested Remote Assets to its feedback, the one place that
+ * decides success, partial, none, permission or failed. A single asset that was not moved is `failed`,
+ * since "1 of 1" says nothing more.
+ */
+export function trashFeedbackFor(outcome: RemoteAssetTrashOutcome, total: number): TrashFeedback {
   if (outcome.failure === "permission") return { kind: "permission" };
-  if (outcome.failure === "error" || outcome.failedAssetIds.length > 0) return { kind: "failed" };
-  return { kind: "success", count: outcome.movedAssetIds.length };
+  if (outcome.failure === "error") return { kind: "failed" };
+  if (outcome.failedAssetIds.length === 0) return { kind: "success", count: outcome.movedAssetIds.length };
+  if (outcome.movedAssetIds.length === 0) {
+    return total === 1 ? { kind: "failed" } : { kind: "none", failed: outcome.failedAssetIds.length, total };
+  }
+  return { kind: "partial", failed: outcome.failedAssetIds.length, total };
 }
 
 type Translate = (key: string, options?: { values: Record<string, string | number> }) => string;
 
 /** The localized message for Move to Trash feedback; counts are formatted for `numberLocale`. */
 export function trashFeedbackMessage(feedback: TrashFeedback, translate: Translate, numberLocale: string): string {
+  const count = (value: number) => value.toLocaleString(numberLocale);
   switch (feedback.kind) {
-    case "success": return translate("trash_move_success", { values: { count: feedback.count.toLocaleString(numberLocale) } });
+    case "success": return translate("trash_move_success", { values: { count: count(feedback.count) } });
+    case "partial": return translate("trash_move_partial", { values: { failed: count(feedback.failed), count: count(feedback.total) } });
+    case "none": return translate("trash_move_none", { values: { failed: count(feedback.failed), count: count(feedback.total) } });
     case "permission": return translate("trash_move_permission");
     case "failed": return translate("trash_move_failed");
   }

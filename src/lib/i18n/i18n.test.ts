@@ -264,6 +264,8 @@ describe('i18n catalogs', () => {
       trash_move_success: ['{count}'],
       trash_move_permission: [],
       trash_move_failed: [],
+      trash_move_partial: ['{failed}', '{count}'],
+      trash_move_none: ['{failed}', '{count}'],
     };
     for (const [localeCode, translations] of Object.entries(catalog)) {
       for (const [key, expected] of Object.entries(placeholders)) {

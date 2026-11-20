@@ -4036,6 +4036,156 @@ describe("Photo Timeline Move to Trash", () => {
     finish({ movedAssetIds: ["photo-1"] });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
+
+  describe("multi-selection", () => {
+    const three = ["photo-1", "photo-2", "photo-3"];
+
+    async function select(count: number) {
+      const boxes = await screen.findAllByRole("checkbox", { name: "Select asset" });
+      for (let index = 0; index < count; index += 1) await fireEvent.click(boxes[index]);
+      await screen.findByText(`${count} selected`);
+    }
+
+    /** The selection bar's button; the confirmation dialog has a button of the same name. */
+    const barTrashButton = () => screen.getAllByRole("button", { name: "Move to Trash" }).find((button) => !button.closest("dialog"))!;
+
+    /** Opens the confirmation from the selection bar and returns its dialog. */
+    async function openConfirmation() {
+      await fireEvent.click(screen.getByRole("button", { name: "Move to Trash" }));
+      return screen.findByRole("dialog", { name: "Move to Trash?" });
+    }
+
+    async function confirmSelection() {
+      const dialog = await openConfirmation();
+      await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+    }
+
+    it("asks for confirmation naming the selected count, and cancelling keeps the selection and requests nothing", async () => {
+      const trash = vi.fn(moved);
+      renderPhotos(trash, three);
+      await select(2);
+
+      const dialog = await openConfirmation();
+      expect(dialog).toHaveTextContent("Move 2 selected to the Immich trash? You can restore them in the Trash.");
+      await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+      expect(screen.queryByRole("dialog", { name: "Move to Trash?" })).not.toBeInTheDocument();
+      expect(trash).not.toHaveBeenCalled();
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+    });
+
+    it("moves the selected assets together, removes them at once and announces the count", async () => {
+      const trash = vi.fn(moved);
+      renderPhotos(trash, three);
+      await select(2);
+
+      await confirmSelection();
+
+      await waitFor(() => expect(trash).toHaveBeenCalledWith({ assetIds: ["photo-1", "photo-2"] }));
+      expect(trash).toHaveBeenCalledTimes(1);
+      expect(await screen.findByRole("status")).toHaveTextContent("2 moved to the Immich trash. You can restore them in the Trash.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+      expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("leaves failed assets visible and selected on a partial failure and lets the user retry them", async () => {
+      const trash = vi.fn()
+        .mockResolvedValueOnce({ movedAssetIds: ["photo-1"] })
+        .mockImplementationOnce(moved);
+      renderPhotos(trash, three);
+      await select(3);
+
+      await confirmSelection();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("2 of 3 could not be moved to the trash. They stay selected so you can retry.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+
+      await confirmSelection();
+      await waitFor(() => expect(trash).toHaveBeenLastCalledWith({ assetIds: ["photo-2", "photo-3"] }));
+      expect(await screen.findByText(/^2 moved to the Immich trash/)).toHaveAttribute("role", "status");
+      expect(screen.queryAllByRole("button", { name: "Open photo" })).toHaveLength(0);
+    });
+
+    it("names how many assets failed when none was moved and keeps them selected", async () => {
+      renderPhotos(vi.fn(async () => ({ movedAssetIds: [] })), three);
+      await select(2);
+
+      await confirmSelection();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("2 of 2 could not be moved to the trash. Please try again.");
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+    });
+
+    it("names the missing permission on a refused request and keeps the selection and the view usable", async () => {
+      renderPhotos(vi.fn(async () => { throw "trash_move_permission_denied:asset.delete"; }), three);
+      await select(2);
+
+      await confirmSelection();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Moving to the trash was refused. Give the API key the asset.delete permission.");
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Move to Trash" })).toBeEnabled();
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+    });
+
+    it("shows a credential-free failure for another error", async () => {
+      renderPhotos(vi.fn(async () => { throw new Error("Failed with key secret-key at https://immich.example"); }), three);
+      await select(2);
+
+      await confirmSelection();
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Could not move to the trash. Please try again.");
+      expect(alert.textContent).not.toContain("secret-key");
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+    });
+
+    it("ignores a second bulk action while the Move to Trash runs", async () => {
+      let finish!: (value: unknown) => void;
+      const trash = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+      renderPhotos(trash, three);
+      await select(2);
+
+      await confirmSelection();
+
+      await waitFor(() => expect(barTrashButton()).toHaveAttribute("aria-busy", "true"));
+      expect(barTrashButton()).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Download" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Done" })).toBeDisabled();
+      expect(trash).toHaveBeenCalledTimes(1);
+      finish({ movedAssetIds: ["photo-1", "photo-2"] });
+      expect(await screen.findByRole("status")).toHaveTextContent("2 moved to the Immich trash");
+    });
+
+    it("drops a result that arrives after the timeline was refreshed", async () => {
+      let finish!: (value: unknown) => void;
+      renderPhotos(vi.fn(() => new Promise((resolve) => { finish = resolve; })), three);
+      await select(2);
+      await confirmSelection();
+      await waitFor(() => expect(barTrashButton()).toBeDisabled());
+
+      await fireEvent.click(screen.getByRole("button", { name: "Refresh timeline" }));
+      finish({ movedAssetIds: ["photo-1", "photo-2"] });
+
+      await waitFor(() => expect(screen.queryByText(/selected/)).not.toBeInTheDocument());
+      expect(screen.queryByText(/moved to the Immich trash/)).not.toBeInTheDocument();
+    });
+
+    it("offers no Move to Trash in the selection bar of a Filtered Timeline", async () => {
+      renderAuthenticatedPage({
+        "get_filtered_timeline_buckets:favorites": async () => [{ timeBucket: march, count: 1 }],
+        "get_filtered_timeline_bucket_assets:favorites": async () => [photo("fav-1")],
+        get_asset_details: async () => details,
+      });
+      await fireEvent.click(await screen.findByRole("button", { name: "Favorites" }));
+      await select(1);
+
+      expect(screen.queryByRole("button", { name: "Move to Trash" })).not.toBeInTheDocument();
+    });
+  });
 });
 
 describe("Search", () => {

@@ -564,6 +564,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn aborts_the_trash_fallback_on_a_success_that_is_not_an_empty_204() {
+        let (url, server) = serve_pages(vec![
+            ("400 Bad Request", NOT_FOUND_BODY),
+            ("204 No Content", ""),
+            ("200 OK", r#"{"count":1}"#),
+        ])
+        .await;
+
+        let error = test_client(url, "test-key")
+            .trash_assets(&ids(&["asset-1", "asset-2", "asset-3"]))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error, "trash_move_unavailable");
+        assert_eq!(server.await.unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn reports_no_moved_asset_when_the_batch_and_every_individual_request_are_rejected() {
+        let (url, server) = serve_pages(vec![
+            ("400 Bad Request", NOT_FOUND_BODY),
+            ("400 Bad Request", NOT_FOUND_BODY),
+            ("400 Bad Request", NOT_FOUND_BODY),
+        ])
+        .await;
+
+        let result = test_client(url, "test-key")
+            .trash_assets(&ids(&["gone-1", "gone-2"]))
+            .await
+            .unwrap();
+
+        assert!(result.moved_asset_ids.is_empty());
+        assert_eq!(server.await.unwrap().len(), 3);
+    }
+
+    #[tokio::test]
     async fn aborts_on_a_transport_error() {
         let error = test_client("http://127.0.0.1:9".to_string(), "trash-secret-key")
             .trash_assets(&ids(&["asset-1"]))

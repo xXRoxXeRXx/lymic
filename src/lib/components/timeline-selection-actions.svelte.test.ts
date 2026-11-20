@@ -338,3 +338,123 @@ describe("selection restore", () => {
     expect(stale.restoreFeedback).toBeNull();
   });
 });
+
+describe("selection Move to Trash", () => {
+  type TrashOutcome = { movedAssetIds: string[]; failedAssetIds: string[]; failure: null };
+
+  it("is unavailable without a trash", async () => {
+    const selection = createSelection();
+    selection.toggle("a");
+
+    await selection.trash();
+
+    expect(selection.busyAction).toBeNull();
+    expect(selection.isSelected("a")).toBe(true);
+  });
+
+  it("keeps the assets that were not moved selected and reports partial feedback", async () => {
+    const trash = vi.fn(async () => ({ movedAssetIds: ["a"], failedAssetIds: ["b"], failure: null }));
+    const selection = createSelection({ trash });
+    selection.toggle("a");
+    selection.toggle("b");
+
+    await selection.trash();
+
+    expect(trash).toHaveBeenCalledWith(["a", "b"]);
+    expect([...selection.selectedIds]).toEqual(["b"]);
+    expect(selection.trashFeedback).toEqual({ kind: "partial", failed: 1, total: 2 });
+    expect(selection.busyAction).toBeNull();
+  });
+
+  it("clears the selection and reports success when every asset was moved", async () => {
+    const selection = createSelection({ trash: async (ids) => ({ movedAssetIds: ids, failedAssetIds: [], failure: null }) });
+    selection.toggle("a");
+    selection.toggle("b");
+
+    await selection.trash();
+
+    expect(selection.isSelectionMode).toBe(false);
+    expect(selection.trashFeedback).toEqual({ kind: "success", count: 2 });
+  });
+
+  it("reports none and keeps everything selected when no asset was moved, and a refusal as permission", async () => {
+    const selection = createSelection({ trash: async (ids) => ({ movedAssetIds: [], failedAssetIds: ids, failure: null }) });
+    selection.toggle("a");
+    selection.toggle("b");
+    await selection.trash();
+    expect(selection.trashFeedback).toEqual({ kind: "none", failed: 2, total: 2 });
+    expect([...selection.selectedIds]).toEqual(["a", "b"]);
+
+    const refused = createSelection({ trash: async (ids) => ({ movedAssetIds: [], failedAssetIds: ids, failure: "permission" }) });
+    refused.toggle("a");
+    await refused.trash();
+    expect(refused.trashFeedback).toEqual({ kind: "permission" });
+    expect(refused.isSelected("a")).toBe(true);
+  });
+
+  it("ignores a second bulk action while it runs, and the clear action, and a retry works", async () => {
+    const pending = deferred<TrashOutcome>();
+    const trash = vi.fn((_ids: string[]) => pending.promise);
+    const download = vi.fn(async () => "saved" as const);
+    const selection = createSelection({ trash, download });
+    selection.toggle("a");
+
+    const running = selection.trash();
+    expect(selection.busyAction).toBe("trash");
+    await selection.download();
+    await selection.trash();
+    expect(download).not.toHaveBeenCalled();
+    expect(trash).toHaveBeenCalledTimes(1);
+
+    pending.resolve({ movedAssetIds: [], failedAssetIds: ["a"], failure: null });
+    await running;
+    expect(selection.busyAction).toBeNull();
+    trash.mockImplementation(async (ids) => ({ movedAssetIds: ids, failedAssetIds: [], failure: null }));
+    await selection.trash();
+    expect(trash).toHaveBeenCalledTimes(2);
+    expect(selection.trashFeedback).toEqual({ kind: "success", count: 1 });
+  });
+
+  it("is dropped by reset and leaves no busy state", async () => {
+    const pending = deferred<TrashOutcome>();
+    const selection = createSelection({ trash: () => pending.promise });
+    selection.toggle("a");
+
+    const running = selection.trash();
+    expect(selection.busyAction).toBe("trash");
+    selection.reset();
+    pending.resolve({ movedAssetIds: ["a"], failedAssetIds: [], failure: null });
+    await running;
+
+    expect(selection.trashFeedback).toBeNull();
+    expect(selection.busyAction).toBeNull();
+  });
+
+  it("moves a single asset outside the busy state and reports whether the result still applies", async () => {
+    const trash = vi.fn(async (ids: string[]) => ({ movedAssetIds: ids, failedAssetIds: [], failure: null }));
+    const selection = createSelection({ trash });
+
+    const { outcome, applied } = await selection.trashOne("a");
+
+    expect(outcome.movedAssetIds).toEqual(["a"]);
+    expect(applied).toBe(true);
+    expect(selection.trashFeedback).toEqual({ kind: "success", count: 1 });
+
+    const pending = deferred<TrashOutcome>();
+    const stale = createSelection({ trash: () => pending.promise });
+    const running = stale.trashOne("a");
+    stale.reset();
+    pending.resolve({ movedAssetIds: ["a"], failedAssetIds: [], failure: null });
+    expect((await running).applied).toBe(false);
+    expect(stale.trashFeedback).toBeNull();
+  });
+
+  it("leaves the failure of a single Lightbox move to the Lightbox", async () => {
+    const selection = createSelection({ trash: async (ids) => ({ movedAssetIds: [], failedAssetIds: ids, failure: null }) });
+
+    const { applied } = await selection.trashOne("a");
+
+    expect(applied).toBe(false);
+    expect(selection.trashFeedback).toBeNull();
+  });
+});
