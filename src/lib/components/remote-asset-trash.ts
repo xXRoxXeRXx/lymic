@@ -49,7 +49,8 @@ export function trashFeedbackMessage(feedback: TrashFeedback, translate: Transla
 }
 
 export interface RemoteAssetTrashOptions {
-  readonly timeline: TimelineController;
+  /** Whatever shows the assets: a timeline, or the Map View's markers. */
+  readonly timeline: Pick<TimelineController, "removeAsset">;
   readonly trashAssets: (assetIds: string[]) => Promise<TrashMoveResult>;
   /** Called after a moved Remote Asset left the timeline. */
   onRemoved?: (assetId: string) => void;

@@ -303,7 +303,7 @@
   const filteredTimelineViews: Record<FilteredTimeline, { icon: typeof Heart; options(): Partial<ComponentProps<typeof TimelineView>> }> = {
     favorites: { icon: Heart, options: () => ({ removeUnfavoritedAssets: true, showRefreshButton: false }) },
     archive: { icon: Archive, options: () => ({}) },
-    trash: { icon: Trash2, options: () => ({ allowFavoriteAndAlbum: false, restoreTrashedAssets, hintMessage: $t("trash_hint") }) },
+    trash: { icon: Trash2, options: () => ({ allowFavoriteAndAlbum: false, restoreTrashedAssets, trashAssets: undefined, hintMessage: $t("trash_hint") }) },
   };
   function filteredTimelineEntry(view: FilteredTimeline) {
     return { view, icon: filteredTimelineViews[view].icon, label: `${view}_title`, open: () => navigation.openFilteredTimeline(view) };
@@ -385,6 +385,8 @@
     initialScrollTop: scrollRestore?.view === currentView ? scrollRestore.top : 0,
     onScrollPosition: (scrollTop: number) => { timelineScrollTop = scrollTop; },
     onSelectTag: selectTag,
+    // Move to Trash is offered by every hosting view through this one prop; only the Trash Timeline opts out.
+    trashAssets: desktop.trashAssets,
   });
 </script>
 
@@ -522,9 +524,9 @@
           />
         {/if}
 
-        {#if navigation.mapCreated}<MapView mapState={map} active={currentView === MAP_VIEW} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} />{/if}
+        {#if navigation.mapCreated}<MapView mapState={map} active={currentView === MAP_VIEW} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} trashAssets={desktop.trashAssets} />{/if}
         {#if currentView === PHOTOS_VIEW}
-          <TimelineView {timeline} {...sharedTimelineProps} trashAssets={desktop.trashAssets} />
+          <TimelineView {timeline} {...sharedTimelineProps} />
         {:else if isFilteredTimeline(currentView)}
           {@const view = currentView}
           {@const filtered = filteredTimelines[view]}
