@@ -4037,6 +4037,22 @@ describe("Photo Timeline Move to Trash", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
+  it("still closes the Lightbox and drops the asset when the timeline was refreshed while the move ran", async () => {
+    let finish!: (value: unknown) => void;
+    renderPhotos(vi.fn(() => new Promise((resolve) => { finish = resolve; })), ["photo-1", "photo-2", "photo-3"]);
+    const lightbox = await openFirstPhoto();
+    await confirmMoveToTrash(lightbox);
+    await waitFor(() => expect(within(lightbox).getByRole("button", { name: "Move to Trash" })).toBeDisabled());
+    const bucketRequests = tauri.invoke.mock.calls.filter(([name]) => name === "get_timeline_buckets").length;
+
+    await fireEvent.click(screen.getByRole("button", { name: "Refresh timeline" }));
+    await waitFor(() => expect(tauri.invoke.mock.calls.filter(([name]) => name === "get_timeline_buckets").length).toBeGreaterThan(bucketRequests));
+    finish({ movedAssetIds: ["photo-1"] });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+  });
+
   describe("multi-selection", () => {
     const three = ["photo-1", "photo-2", "photo-3"];
 
@@ -4465,6 +4481,35 @@ describe("Cached views after a Move to Trash", () => {
 
       await waitFor(() => expect(calls("get_timeline_buckets")).toBe(2));
     });
+  });
+
+  it("makes no Explore or Tags request after a move while neither is the open view, and reloads each once when it opens", async () => {
+    renderAuthenticatedPage({
+      ...favorites,
+      get_people: async () => ({ people: [], hasNextPage: false }),
+      get_places: async () => [],
+      get_memories: async () => [],
+      get_tags: async () => [],
+      get_asset_details: async () => details,
+      trash_assets: moved,
+    });
+    await nav("Explore");
+    await waitFor(() => expect(calls("get_places")).toBe(1));
+    await nav("Tags");
+    await waitFor(() => expect(calls("get_tags")).toBe(1));
+    await nav("Favorites");
+    const explore = ["get_people", "get_places", "get_memories"].map(calls);
+    const tags = calls("get_tags");
+
+    await moveFirstToTrash();
+
+    expect(["get_people", "get_places", "get_memories"].map(calls)).toEqual(explore);
+    expect(calls("get_tags")).toBe(tags);
+
+    await nav("Explore");
+    await waitFor(() => expect(calls("get_places")).toBe(2));
+    await nav("Tags");
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
   });
 
   it("reloads the Explore Overview on Back from a Person Timeline after a move there", async () => {

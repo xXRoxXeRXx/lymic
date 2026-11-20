@@ -70,13 +70,7 @@ impl ImmichClient {
                 restored_asset_ids: Vec::new(),
             });
         }
-        for asset_id in asset_ids {
-            Self::validate_path_segment(asset_id.as_str(), "asset ID")?;
-        }
-        let unique: HashSet<&str> = asset_ids.iter().map(|id| id.as_str()).collect();
-        if unique.len() != asset_ids.len() {
-            return Err("Asset IDs for restore must be unique".to_string());
-        }
+        Self::validate_asset_ids(asset_ids, "Asset IDs for restore must be unique")?;
 
         let batch = self.post_restore(asset_ids).await?;
         if let RestoreCall::Counted(count) = batch {
@@ -130,13 +124,7 @@ impl ImmichClient {
                 moved_asset_ids: Vec::new(),
             });
         }
-        for asset_id in asset_ids {
-            Self::validate_path_segment(asset_id.as_str(), "asset ID")?;
-        }
-        let unique: HashSet<&str> = asset_ids.iter().map(|id| id.as_str()).collect();
-        if unique.len() != asset_ids.len() {
-            return Err("Asset IDs for trashing must be unique".to_string());
-        }
+        Self::validate_asset_ids(asset_ids, "Asset IDs for trashing must be unique")?;
 
         if matches!(self.delete_assets(asset_ids).await?, TrashCall::Moved) {
             return Ok(TrashMoveResult {
@@ -160,6 +148,22 @@ impl ImmichClient {
             }
         }
         Ok(TrashMoveResult { moved_asset_ids })
+    }
+
+    /// Rejects IDs that are not path-safe and duplicate IDs (with `duplicate_message`) before any request,
+    /// for the batch calls that Restore and Move to Trash share. The caller handles an empty list.
+    fn validate_asset_ids(
+        asset_ids: &[RemoteAssetId],
+        duplicate_message: &str,
+    ) -> Result<(), String> {
+        for asset_id in asset_ids {
+            Self::validate_path_segment(asset_id.as_str(), "asset ID")?;
+        }
+        let unique: HashSet<&str> = asset_ids.iter().map(|id| id.as_str()).collect();
+        if unique.len() != asset_ids.len() {
+            return Err(duplicate_message.to_string());
+        }
+        Ok(())
     }
 
     async fn delete_assets(&self, asset_ids: &[RemoteAssetId]) -> Result<TrashCall, String> {

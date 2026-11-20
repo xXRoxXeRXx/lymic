@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { locale, t } from "svelte-i18n";
+  import { t } from "svelte-i18n";
   import * as maplibregl from "maplibre-gl";
   import type { GeoJSONSource, Map as MapLibreMap, Marker } from "maplibre-gl";
   import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
@@ -8,11 +8,11 @@
   import type { MapViewState } from "../controllers/map-controller.svelte";
   import type { RemoteAssetDesktopAdapter } from "../tauri/desktop-adapter";
   import type { AssetDetails, AssetTag, TimelineAsset, TrashMoveResult } from "../contracts";
-  import { toBcp47Locale } from "../i18n";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import Lightbox from "./Lightbox.svelte";
+  import TrashFeedbackNotice from "./TrashFeedbackNotice.svelte";
   import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
-  import { createRemoteAssetTrash, trashFeedbackFor, trashFeedbackMessage, type RemoteAssetTrashOutcome, type TrashFeedback } from "./remote-asset-trash";
+  import { createRemoteAssetTrash, trashFeedbackFor, type RemoteAssetTrashOutcome, type TrashFeedback } from "./remote-asset-trash";
   import { protocolSrc } from "../tauri/protocol-src";
 
   interface Props {
@@ -39,9 +39,8 @@
   });
   const trash = createRemoteAssetTrash({
     timeline: { removeAsset: (assetId) => mapState.removeMarker(assetId) },
-    trashAssets: (assetIds) => trashAssets!(assetIds),
+    get trashAssets() { return trashAssets; },
   });
-  const numberLocale = $derived(toBcp47Locale($locale));
   let trashFeedback = $state<TrashFeedback | null>(null);
   let collectionNavigation = $state(false);
   let selectionGeneration = 0;
@@ -274,7 +273,7 @@
   {#if mapState.error}<p role="alert">{mapState.error === "permission_denied" ? $t("map_permission") : $t("map_error")}{mapState.isOffline ? ` ${$t("map_stale")}` : ""}</p>{/if}
   {#if mapState.hasLoaded && !mapState.markers.length}<p role="status">{$t("map_empty")}</p>{/if}
   {#if trashFeedback}
-    <p role={trashFeedback.kind === "success" ? "status" : "alert"}>{trashFeedbackMessage(trashFeedback, $t, numberLocale)}</p>
+    <TrashFeedbackNotice feedback={trashFeedback} class="mb-2 shrink-0" />
   {/if}
   {#if providerError}<p role="alert">{$t("map_provider_error")}</p>{/if}
   <div bind:this={container} class="min-h-0 flex-1 rounded-xl" aria-label={$t("map_title")}></div>

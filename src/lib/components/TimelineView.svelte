@@ -14,8 +14,9 @@
   import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
   import { createRemoteAssetFavorites } from "./remote-asset-favorites.svelte";
   import { createRemoteAssetRestore, restoreFeedbackMessage } from "./remote-asset-restore";
-  import { createRemoteAssetTrash, trashFeedbackMessage, type RemoteAssetTrashOutcome } from "./remote-asset-trash";
+  import { createRemoteAssetTrash, type RemoteAssetTrashOutcome } from "./remote-asset-trash";
   import MoveToTrashDialog from "./MoveToTrashDialog.svelte";
+  import TrashFeedbackNotice from "./TrashFeedbackNotice.svelte";
   import { createTimelineSelectionActions } from "./timeline-selection-actions.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
@@ -41,7 +42,7 @@
     allowFavoriteAndAlbum?: boolean;
     /** Offers Restore in the Lightbox and in multi-selection: Trashed Assets only. */
     restoreTrashedAssets?(assetIds: string[]): Promise<TrashRestoreResult>;
-    /** Offers Move to Trash in the Lightbox, after a confirmation: the Photo Timeline only (ADR-0011). */
+    /** Offers Move to Trash in the Lightbox and in multi-selection, after a confirmation: every hosting view except the Trash Timeline (ADR-0011). */
     trashAssets?(assetIds: string[]): Promise<TrashMoveResult>;
     /** Where to scroll to once the first buckets are shown, for a view that is reopened where the user left it. */
     initialScrollTop?: number;
@@ -123,7 +124,7 @@
   });
   const trash = createRemoteAssetTrash({
     get timeline() { return timeline; },
-    trashAssets: (assetIds) => trashAssets!(assetIds),
+    get trashAssets() { return trashAssets; },
     onRemoved: (assetId) => selection.forget(assetId),
   });
   const selection = createTimelineSelectionActions({
@@ -348,10 +349,14 @@
     return outcome;
   }
 
-  /** Moves the Lightbox's asset to the Immich trash (the Lightbox has asked for confirmation); on success the Lightbox closes because the asset left the timeline. */
+  /**
+   * Moves the Lightbox's asset to the Immich trash (the Lightbox has asked for confirmation); once Immich confirmed the
+   * move the Lightbox closes, because the asset left the timeline. That holds even when the timeline was refreshed
+   * or reset meanwhile, as long as the Lightbox is still on that asset: it must not stay open on a trashed asset.
+   */
   async function trashFromLightbox(assetId: string): Promise<RemoteAssetTrashOutcome> {
     const { outcome, applied } = await selection.trashOne(assetId);
-    if (applied) {
+    if (applied || (outcome.movedAssetIds.includes(assetId) && selectedAsset?.id === assetId)) {
       favorites.close();
       selectedAsset = null;
       opener = null;
@@ -505,10 +510,7 @@
     </p>
   {/if}
   {#if selection.trashFeedback}
-    {@const feedback = selection.trashFeedback}
-    <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {feedback.kind === 'success' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200' : 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200'}" role={feedback.kind === "success" ? "status" : "alert"}>
-      {trashFeedbackMessage(feedback, $t, numberLocale)}
-    </p>
+    <TrashFeedbackNotice feedback={selection.trashFeedback} class="mb-3 mr-16 w-auto shrink-0" />
   {/if}
   {#if hintMessage}
     <p class="mb-3 mr-16 shrink-0 text-sm text-slate-500 dark:text-zinc-400">{hintMessage}</p>
