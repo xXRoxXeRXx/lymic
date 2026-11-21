@@ -3,6 +3,7 @@ pub(crate) mod background;
 pub(crate) mod events;
 pub(crate) mod locale;
 pub(crate) mod package_identity;
+pub(crate) mod release_channel;
 pub(crate) mod startup;
 pub(crate) mod state;
 pub(crate) mod thumbnail_protocol;
