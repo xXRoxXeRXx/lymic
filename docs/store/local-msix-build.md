@@ -7,7 +7,7 @@ Why this exists: the planned read-only Windows Virtual Library ([ADR-0003](../ad
 - [`scripts/package-msix.ps1`](../../scripts/package-msix.ps1) stages the executable and icons, fills [`src-tauri/msix/AppxManifest.template.xml`](../../src-tauri/msix/AppxManifest.template.xml) and runs `makeappx.exe`.
 - [`scripts/validate-msix.ps1`](../../scripts/validate-msix.ps1) checks the manifest of the produced package.
 
-> **Verification status.** The packaging, validation and self-signed signing commands below were run on a Windows Server 2022 machine, using a stand-in executable instead of a real Lymic build. The registration, launch and removal steps (`Add-AppxPackage`, `Remove-AppxPackage`, certificate trust) were **not** run there, because Developer Mode was off on that machine and was not changed. Treat those steps as written from the documented Windows behavior and report any deviation. Nothing here has been verified against a real Lymic build, and the runtime Package Identity check does not exist yet (see [Pending](#pending-runtime-package-identity-check)).
+> **Verification status.** The packaging, validation and self-signed signing commands below were run on a Windows Server 2022 machine, using a stand-in executable instead of a real Lymic build. The registration, launch and removal steps (`Add-AppxPackage`, `Remove-AppxPackage`, certificate trust) were **not** run there, because Developer Mode was off on that machine and was not changed. Treat those steps as written from the documented Windows behavior and report any deviation. Nothing here has been verified against a real Lymic build, and the runtime Package Identity check (#272) has not been run in a registered build either (see [Confirming Package Identity](#confirming-package-identity-at-runtime)).
 
 ## Prerequisites
 
@@ -164,6 +164,13 @@ Also delete `dist/msix/` and `target/msix-staging/` if you want the build output
 | `validate-msix.ps1` says the package was not found | Pass an absolute `-MsixPath`. |
 | `validate-msix.ps1` reports an identity or publisher mismatch | Pass `-ExpectedIdentity` and `-ExpectedPublisher` matching the packaging arguments. |
 
-## Pending: runtime Package Identity check
+## Confirming Package Identity at runtime
 
-One acceptance criterion of ticket #274 is that the runtime Package Identity check from the Virtual Library settings gating ticket (#272) reports an identity in this local build and none in `tauri dev`. That check is not part of this change and does not exist in the codebase yet, so this criterion is **pending #272** and has not been verified. Once #272 lands, run it in a build registered through this guide (expect an identity) and in `npm run tauri dev` (expect none), and record the result here.
+The Virtual Library settings gate (#272) decides availability at runtime and never from the release-channel label alone: Windows, the `store` release channel **and** real Package Identity (`has_package_identity` in `src-tauri/src/app/package_identity.rs`, which calls `GetCurrentPackageFullName`). To confirm the identity in a build registered through this guide:
+
+1. Check that the package is registered: `Get-AppxPackage -Name "Lymic.Dev"` prints it.
+2. Start Lymic from its Start menu entry (or `explorer.exe shell:AppsFolder\<PackageFamilyName>!App`, with the family name from `Get-AppxPackage`), not by running the `.exe` directly.
+3. Open Settings. With an identity, the "Virtual Library" section is shown (the backend command `get_virtual_library_settings` reports `available: true`).
+4. As a negative control, run `npm run tauri dev`, or start the raw `lymic-desktop.exe` from `target/release`. Neither has a package identity, so the "Virtual Library" section must be absent even though the executable was built with `LYMIC_RELEASE_CHANNEL=store`.
+
+The acceptance criterion of ticket #274 (an identity in this local build, none in `tauri dev`) is **not yet verified**: the check exists, but it has not been run in a registered build. Run the steps above and record the result and the Windows version here.

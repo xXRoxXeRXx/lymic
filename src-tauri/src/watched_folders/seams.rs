@@ -86,7 +86,7 @@ pub(crate) struct SqliteFolderPersistence<'a> {
 
 impl FolderPersistence for SqliteFolderPersistence<'_> {
     async fn virtual_library_root(&self) -> Result<Option<PathBuf>, String> {
-        crate::commands::virtual_library::protected_root(self.pool).await
+        crate::virtual_library_root::protected_root(self.pool).await
     }
 
     async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String> {

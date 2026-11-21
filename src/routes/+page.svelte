@@ -26,7 +26,7 @@
   import { createSessionController } from "#lib/controllers/session-controller.svelte.ts";
   import { createPreferencesController } from "#lib/controllers/preferences-controller.svelte.ts";
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
-import { createVirtualLibraryController } from "#lib/controllers/virtual-library-controller.svelte.ts";
+  import { createVirtualLibraryController } from "#lib/controllers/virtual-library-controller.svelte.ts";
   import {
     ALBUMS_VIEW,
     ALBUM_TIMELINE_VIEW,

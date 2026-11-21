@@ -2,6 +2,7 @@
 //! (ADR-0003). Platform-neutral: the Windows Known Folder lookup sits behind [`KnownFolders`] so the
 //! default root and the overlap rule are testable on every platform.
 
+use crate::app::{package_identity, release_channel};
 use crate::media::paths::{
     canonicalize_folder_path, normalize_path_lexical, path_is_within_lexical,
 };
@@ -83,6 +84,45 @@ pub(crate) fn effective_root(
     }
 }
 
+/// The availability rule: Windows, the Store release channel and a real Package Identity together.
+pub(crate) fn is_available(
+    is_windows: bool,
+    release_channel: &str,
+    has_package_identity: bool,
+) -> bool {
+    is_windows && release_channel == "store" && has_package_identity
+}
+
+/// Whether the Virtual Library is available to this process, decided at runtime and never by the
+/// frontend: the compile-time release-channel flag alone does not enable it.
+pub(crate) fn is_available_at_runtime() -> bool {
+    is_available(
+        cfg!(windows),
+        release_channel::effective_release_channel(),
+        package_identity::has_package_identity(),
+    )
+}
+
+/// The effective root: the persisted choice, or else the default.
+pub(crate) async fn load_root(
+    pool: &sqlx::SqlitePool,
+    known_folders: &impl KnownFolders,
+) -> Result<Option<PathBuf>, String> {
+    let chosen = crate::db::get_virtual_library_root(pool)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(effective_root(chosen.as_deref(), known_folders))
+}
+
+/// The Virtual Library root that Watched Folders must stay clear of: `None` while the Virtual
+/// Library is unavailable, so unrelated installs may watch any folder.
+pub(crate) async fn protected_root(pool: &sqlx::SqlitePool) -> Result<Option<PathBuf>, String> {
+    if !is_available_at_runtime() {
+        return Ok(None);
+    }
+    load_root(pool, &SystemKnownFolders).await
+}
+
 /// How a Watched Folder relates to the Virtual Library root when they overlap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RootOverlap {
@@ -156,6 +196,34 @@ mod tests {
 
     fn base() -> PathBuf {
         std::env::temp_dir().join("lymic-root-rules")
+    }
+
+    #[test]
+    fn available_only_on_windows_in_the_store_channel_with_package_identity() {
+        assert!(is_available(true, "store", true));
+        for (is_windows, channel, identity) in [
+            (false, "store", true),
+            (true, "github", true),
+            (true, "store", false),
+            (false, "github", false),
+            (false, "store", false),
+            (true, "github", false),
+        ] {
+            assert!(
+                !is_available(is_windows, channel, identity),
+                "windows={is_windows} channel={channel} identity={identity}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_store_labelled_unpackaged_run_is_unavailable() {
+        // The release-channel flag says store, but the test binary has no Package Identity.
+        assert!(!is_available(
+            cfg!(windows),
+            "store",
+            package_identity::has_package_identity()
+        ));
     }
 
     #[test]

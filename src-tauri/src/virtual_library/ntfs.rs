@@ -52,6 +52,13 @@ pub(super) fn truncate_units(text: &str, max_units: usize) -> &str {
     text
 }
 
+/// `name` split at its last dot into stem and extension (`IMG_0001.HEIC` is `IMG_0001` and
+/// `HEIC`), or `None` when either part would be empty (`.gitignore`, `IMG.`, `IMG`).
+pub(super) fn split_extension(name: &str) -> Option<(&str, &str)> {
+    name.rsplit_once('.')
+        .filter(|(stem, extension)| !stem.is_empty() && !extension.is_empty())
+}
+
 pub(super) fn units(text: &str) -> usize {
     text.encode_utf16().count()
 }
@@ -66,10 +73,8 @@ fn trim_name(name: &str) -> &str {
 
 /// A name over the limit, cut in its stem so that a short extension survives.
 fn shorten(name: &str) -> String {
-    let (stem, extension) = match name.rsplit_once('.') {
-        Some((stem, extension))
-            if !stem.is_empty() && units(extension) < MAX_KEPT_EXTENSION_UNITS =>
-        {
+    let (stem, extension) = match split_extension(name) {
+        Some((stem, extension)) if units(extension) < MAX_KEPT_EXTENSION_UNITS => {
             (stem, Some(extension))
         }
         _ => (name, None),

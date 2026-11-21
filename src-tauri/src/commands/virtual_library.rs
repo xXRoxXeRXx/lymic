@@ -7,11 +7,11 @@
 //! and in `virtual_library_root`; the registration side of the rule is in `watched_folders`.
 
 use crate::{
-    app::package_identity,
-    commands::settings::effective_release_channel,
     db,
     media::paths::canonicalize_folder_path,
-    virtual_library_root::{self, KnownFolders, RootOverlap, SystemKnownFolders},
+    virtual_library_root::{
+        self, is_available_at_runtime, load_root, KnownFolders, RootOverlap, SystemKnownFolders,
+    },
 };
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -29,45 +29,6 @@ pub(crate) struct VirtualLibrarySettings {
     /// The effective Virtual Library folder: the user's choice, or the default. `None` while the
     /// Virtual Library is unavailable or the system cannot say where Pictures is.
     pub(crate) root_folder: Option<String>,
-}
-
-/// The availability rule: Windows, the Store release channel and a real Package Identity together.
-pub(crate) fn is_available(
-    is_windows: bool,
-    release_channel: &str,
-    has_package_identity: bool,
-) -> bool {
-    is_windows && release_channel == "store" && has_package_identity
-}
-
-fn detect_availability() -> bool {
-    is_available(
-        cfg!(windows),
-        effective_release_channel(),
-        package_identity::has_package_identity(),
-    )
-}
-
-async fn load_root(
-    pool: &sqlx::SqlitePool,
-    known_folders: &impl KnownFolders,
-) -> Result<Option<PathBuf>, String> {
-    let chosen = db::get_virtual_library_root(pool)
-        .await
-        .map_err(|error| error.to_string())?;
-    Ok(virtual_library_root::effective_root(
-        chosen.as_deref(),
-        known_folders,
-    ))
-}
-
-/// The Virtual Library root that Watched Folders must stay clear of: `None` while the Virtual
-/// Library is unavailable, so unrelated installs may watch any folder.
-pub(crate) async fn protected_root(pool: &sqlx::SqlitePool) -> Result<Option<PathBuf>, String> {
-    if !detect_availability() {
-        return Ok(None);
-    }
-    load_root(pool, &SystemKnownFolders).await
 }
 
 async fn load_settings(
@@ -217,7 +178,7 @@ fn announce(app: &tauri::AppHandle, settings: &VirtualLibrarySettings) {
 pub(crate) async fn get_virtual_library_settings(
     pool: tauri::State<'_, sqlx::SqlitePool>,
 ) -> Result<VirtualLibrarySettings, String> {
-    load_settings(pool.inner(), detect_availability(), &SystemKnownFolders).await
+    load_settings(pool.inner(), is_available_at_runtime(), &SystemKnownFolders).await
 }
 
 #[tauri::command]
@@ -228,7 +189,7 @@ pub(crate) async fn set_virtual_library_enabled(
 ) -> Result<VirtualLibrarySettings, String> {
     let settings = change_enabled(
         pool.inner(),
-        detect_availability(),
+        is_available_at_runtime(),
         &SystemKnownFolders,
         enabled,
     )
@@ -245,7 +206,7 @@ pub(crate) async fn set_virtual_library_root_folder(
 ) -> Result<VirtualLibrarySettings, String> {
     let settings = change_root_folder(
         pool.inner(),
-        detect_availability(),
+        is_available_at_runtime(),
         &SystemKnownFolders,
         &path,
     )
@@ -288,34 +249,6 @@ mod tests {
         db::add_folder(pool, &path.to_string_lossy(), None)
             .await
             .unwrap();
-    }
-
-    #[test]
-    fn available_only_on_windows_in_the_store_channel_with_package_identity() {
-        assert!(is_available(true, "store", true));
-        for (is_windows, channel, identity) in [
-            (false, "store", true),
-            (true, "github", true),
-            (true, "store", false),
-            (false, "github", false),
-            (false, "store", false),
-            (true, "github", false),
-        ] {
-            assert!(
-                !is_available(is_windows, channel, identity),
-                "windows={is_windows} channel={channel} identity={identity}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_store_labelled_unpackaged_run_is_unavailable() {
-        // The release-channel flag says store, but the test binary has no Package Identity.
-        assert!(!is_available(
-            cfg!(windows),
-            "store",
-            package_identity::has_package_identity()
-        ));
     }
 
     #[tokio::test]
