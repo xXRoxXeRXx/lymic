@@ -3,6 +3,9 @@
 use super::*;
 use crate::immich::test_support::{serve_routes, test_client, RecordedRequest, RoutedServer};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// One Remote Asset of the fake Library.
 #[derive(Clone)]
@@ -18,12 +21,18 @@ struct FakeAsset {
     live_video: Option<&'static str>,
 }
 
+/// An asset captured at `local_date_time` in UTC, so its local and UTC capture time agree. One
+/// without a usable capture time is created at a fixed instant.
 fn asset(id: &'static str, name: &'static str, local_date_time: &'static str) -> FakeAsset {
     FakeAsset {
         id,
         name,
         local_date_time: Some(local_date_time),
-        file_created_at: "2025-01-01T00:00:00.000Z",
+        file_created_at: if DateTime::parse_from_rfc3339(local_date_time).is_ok() {
+            local_date_time
+        } else {
+            "2025-01-01T00:00:00.000Z"
+        },
         size: 1_000,
         visibility: "timeline",
         trashed: false,
@@ -107,12 +116,60 @@ async fn fake_library(assets: Vec<FakeAsset>) -> RoutedServer {
 /// user owns, and with `shared=true` the Albums shared with the user or by the user. A metadata
 /// search with `albumIds` matches the members of those Albums.
 async fn fake_immich(assets: Vec<FakeAsset>, albums: Vec<FakeAlbum>) -> RoutedServer {
+    fake_immich_shared(Arc::new(Mutex::new(assets)), albums, Arc::default()).await
+}
+
+/// The month Immich files `asset` under in its timeline buckets: the components of its local
+/// capture time. Immich has no capture time to bucket an asset without a usable one by, so the
+/// fake reports those under a bucket that names no calendar month.
+fn bucket_name(asset: &FakeAsset) -> String {
+    match asset.local_date_time {
+        Some(local) if local.len() >= 7 && local.as_bytes()[4] == b'-' => {
+            match (local[..4].parse::<u32>(), local[5..7].parse::<u32>()) {
+                (Ok(year), Ok(month)) => format!("{year:04}-{month:02}-01T00:00:00.000Z"),
+                _ => "undated".to_string(),
+            }
+        }
+        _ => "undated".to_string(),
+    }
+}
+
+/// [`fake_immich`] over a Library the test can change while the server runs, which also counts
+/// how many assets the server sent in metadata search pages (`served`). Besides the metadata
+/// search it answers `GET /timeline/buckets` (months with their asset counts) the way Immich
+/// does: by local capture month, for the assets of the requested visibility.
+async fn fake_immich_shared(
+    library: Arc<Mutex<Vec<FakeAsset>>>,
+    albums: Vec<FakeAlbum>,
+    served: Arc<AtomicUsize>,
+) -> RoutedServer {
     serve_routes(move |request: &RecordedRequest| {
+        let assets = library.lock().unwrap().clone();
         if let Some(id) = request.target.strip_prefix("/api/assets/") {
             return match assets.iter().find(|asset| asset.id == id) {
                 Some(asset) => ("200 OK".into(), asset.json().to_string()),
                 None => ("404 Not Found".into(), "{}".into()),
             };
+        }
+        if request.method == "GET" && request.target.starts_with("/api/timeline/buckets") {
+            let timeline_only = request.target.contains("visibility=timeline");
+            let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+            for asset in assets.iter().filter(|asset| {
+                !asset.trashed
+                    && if timeline_only {
+                        asset.visibility == "timeline"
+                    } else {
+                        asset.visibility != "locked"
+                    }
+            }) {
+                *counts.entry(bucket_name(asset)).or_default() += 1;
+            }
+            let buckets: Vec<Value> = counts
+                .into_iter()
+                .rev()
+                .map(|(time_bucket, count)| json!({ "timeBucket": time_bucket, "count": count }))
+                .collect();
+            return ("200 OK".into(), Value::Array(buckets).to_string());
         }
         match (request.method.as_str(), request.target.as_str()) {
             ("GET", "/api/albums") => {
@@ -144,16 +201,44 @@ async fn fake_immich(assets: Vec<FakeAsset>, albums: Vec<FakeAlbum>) -> RoutedSe
                 })
             })
         };
-        let items: Vec<Value> = assets
+        // Immich's `takenAfter` and `takenBefore` bound `fileCreatedAt`, which is UTC.
+        let bound = |key: &str| {
+            body[key].as_str().map(|text| {
+                DateTime::parse_from_rfc3339(text)
+                    .unwrap()
+                    .with_timezone(&Utc)
+            })
+        };
+        let (after, before) = (bound("takenAfter"), bound("takenBefore"));
+        let in_window = |asset: &FakeAsset| {
+            (after.is_none() && before.is_none())
+                || DateTime::parse_from_rfc3339(asset.file_created_at).is_ok_and(|time| {
+                    after.is_none_or(|after| time >= after)
+                        && before.is_none_or(|before| time <= before)
+                })
+        };
+        let matching: Vec<&FakeAsset> = assets
             .iter()
             .filter(|asset| {
                 visibility.map_or(asset.visibility != "locked", |v| asset.visibility == v)
             })
             .filter(|asset| with_deleted || !asset.trashed)
             .filter(|asset| in_albums(asset))
-            .map(FakeAsset::json)
+            .filter(|asset| in_window(asset))
             .collect();
-        let page = json!({ "assets": { "items": items, "nextPage": null, "total": items.len() } });
+        let page = body["page"].as_u64().unwrap_or(1) as usize;
+        let size = body["size"].as_u64().unwrap_or(250) as usize;
+        let start = ((page - 1) * size).min(matching.len());
+        let end = (start + size).min(matching.len());
+        let items: Vec<Value> = matching[start..end]
+            .iter()
+            .map(|asset| asset.json())
+            .collect();
+        served.fetch_add(items.len(), Ordering::SeqCst);
+        let next_page = (end < matching.len()).then(|| (page + 1).to_string());
+        let page = json!({
+            "assets": { "items": items, "nextPage": next_page, "total": matching.len() }
+        });
         ("200 OK".into(), page.to_string())
     })
     .await
@@ -750,5 +835,327 @@ async fn a_live_photo_in_an_album_is_a_still_and_a_video_sharing_one_base_name()
             Ok(RemoteAssetId::new(id)),
             "{path}"
         );
+    }
+}
+
+/// Lazy, bounded listing (#271): a directory is produced from the requests its own contents
+/// need, never from a projection of the whole Library.
+mod lazy_listing {
+    use super::*;
+
+    fn leak(text: String) -> &'static str {
+        Box::leak(text.into_boxed_str())
+    }
+
+    /// `count` assets captured around noon on days 2 to 28 of `year`-`month`.
+    fn month_of(year: i32, month: u32, count: usize) -> Vec<FakeAsset> {
+        (0..count)
+            .map(|index| {
+                let day = 2 + index % 27;
+                asset(
+                    leak(format!("a-{year}-{month:02}-{index:05}")),
+                    leak(format!("IMG_{year}{month:02}_{index:05}.jpg")),
+                    leak(format!("{year}-{month:02}-{day:02}T12:00:00.000Z")),
+                )
+            })
+            .collect()
+    }
+
+    /// 24 months of 500 assets each: 12,000 Remote Assets.
+    fn large_library() -> Vec<FakeAsset> {
+        (2023..=2024)
+            .flat_map(|year| (1..=12).flat_map(move |month| month_of(year, month, 500)))
+            .collect()
+    }
+
+    struct Fixture {
+        server: RoutedServer,
+        library: Arc<Mutex<Vec<FakeAsset>>>,
+        served: Arc<AtomicUsize>,
+    }
+
+    async fn fixture(assets: Vec<FakeAsset>, albums: Vec<FakeAlbum>) -> Fixture {
+        let library = Arc::new(Mutex::new(assets));
+        let served = Arc::new(AtomicUsize::new(0));
+        let server = fake_immich_shared(library.clone(), albums, served.clone()).await;
+        Fixture {
+            server,
+            library,
+            served,
+        }
+    }
+
+    impl Fixture {
+        /// How many assets the server has sent in search pages so far.
+        fn served(&self) -> usize {
+            self.served.load(Ordering::SeqCst)
+        }
+
+        /// The bodies of the metadata searches received so far.
+        fn searches(&self) -> Vec<Value> {
+            self.server
+                .requests()
+                .iter()
+                .filter(|request| request.target == "/api/search/metadata")
+                .map(|request| serde_json::from_str(&request.body).unwrap())
+                .collect()
+        }
+
+        /// The method and target of every request that is not a metadata search.
+        fn other_requests(&self) -> Vec<String> {
+            self.server
+                .requests()
+                .iter()
+                .filter(|request| request.target != "/api/search/metadata")
+                .map(|request| format!("{} {}", request.method, request.target))
+                .collect()
+        }
+    }
+
+    fn window_of(search: &Value) -> chrono::Duration {
+        let bound = |key: &str| {
+            DateTime::parse_from_rfc3339(search[key].as_str().expect(key)).expect("an instant")
+        };
+        bound("takenBefore") - bound("takenAfter")
+    }
+
+    #[tokio::test]
+    async fn listing_one_month_of_a_large_library_fetches_only_that_month() {
+        let fixture = fixture(large_library(), vec![]).await;
+        let client = test_client(fixture.server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        let june = library.list("All Photos/2024/06 June").await.unwrap();
+
+        assert_eq!(june.len(), 500);
+        assert!(june
+            .iter()
+            .all(|entry| entry.name.starts_with("IMG_202406_")));
+        // The server sent that month and nothing else of the 12,000 assets.
+        assert_eq!(fixture.served(), 500);
+        // One search page, bounded to the month (with room for the local-time offset), and no
+        // other request: no other month, no Album, no timeline buckets.
+        let searches = fixture.searches();
+        assert_eq!(searches.len(), 1);
+        assert!(window_of(&searches[0]) <= chrono::Duration::days(33));
+        assert!(searches[0].get("albumIds").is_none());
+        assert!(fixture.other_requests().is_empty());
+    }
+
+    #[tokio::test]
+    async fn resolving_a_file_reads_only_the_directory_that_holds_it() {
+        let fixture = fixture(large_library(), vec![]).await;
+        let client = test_client(fixture.server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        let resolved = library
+            .resolve("All Photos/2023/02 February/IMG_202302_00007.jpg")
+            .await;
+
+        assert_eq!(resolved, Ok(RemoteAssetId::new("a-2023-02-00007")));
+        assert_eq!(fixture.served(), 500);
+        assert_eq!(fixture.searches().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_large_month_is_paginated_and_other_months_stay_unfetched() {
+        let mut assets = month_of(2024, 6, 2_300);
+        assets.extend(month_of(2024, 7, 400));
+        assets.extend(month_of(2023, 1, 400));
+        let fixture = fixture(assets, vec![]).await;
+        let client = test_client(fixture.server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        let june = library.list("All Photos/2024/06 June").await.unwrap();
+
+        assert_eq!(june.len(), 2_300);
+        assert_eq!(fixture.served(), 2_300);
+        let searches = fixture.searches();
+        let pages: Vec<u64> = searches
+            .iter()
+            .map(|search| search["page"].as_u64().unwrap())
+            .collect();
+        assert_eq!(pages, [1, 2, 3]);
+        assert!(searches
+            .iter()
+            .all(|search| search["size"].as_u64().unwrap() <= 1_000));
+    }
+
+    #[tokio::test]
+    async fn years_and_months_come_from_the_timeline_buckets_without_fetching_any_asset() {
+        let fixture = fixture(large_library(), vec![]).await;
+        let client = test_client(fixture.server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        let years = library.list("All Photos").await.unwrap();
+        let months = library.list("All Photos/2024").await.unwrap();
+
+        assert_eq!(names(&years), ["2023", "2024"]);
+        assert_eq!(months.len(), 12);
+        assert_eq!(months[11].name, "12 December");
+        assert_eq!(fixture.served(), 0);
+        assert!(fixture.searches().is_empty());
+        assert!(fixture
+            .other_requests()
+            .iter()
+            .all(|request| request.starts_with("GET /api/timeline/buckets")));
+    }
+
+    #[tokio::test]
+    async fn albums_lists_the_albums_without_fetching_any_asset() {
+        let albums = vec![
+            album("al1", "Holiday", &["a-2024-06-00001"]),
+            album("al2", "Family", &["a-2023-01-00002"]),
+        ];
+        let fixture = fixture(large_library(), albums).await;
+        let client = test_client(fixture.server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        let listed = library.list("Albums").await.unwrap();
+
+        assert_eq!(names(&listed), ["Family", "Holiday"]);
+        assert_eq!(fixture.served(), 0);
+        assert!(fixture.searches().is_empty());
+        assert!(fixture
+            .other_requests()
+            .iter()
+            .all(|request| request.starts_with("GET /api/albums")));
+    }
+
+    #[tokio::test]
+    async fn one_album_folder_fetches_just_the_assets_of_that_album() {
+        let albums = vec![
+            album("al1", "Holiday", &["a-2024-06-00001", "a-2023-01-00002"]),
+            album("al2", "Family", &["a-2024-06-00003"]),
+        ];
+        let fixture = fixture(large_library(), albums).await;
+        let client = test_client(fixture.server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        let holiday = library.list("Albums/Holiday").await.unwrap();
+
+        assert_eq!(
+            names(&holiday),
+            ["IMG_202301_00002.jpg", "IMG_202406_00001.jpg"]
+        );
+        assert_eq!(fixture.served(), 2);
+        let searches = fixture.searches();
+        assert_eq!(searches.len(), 1);
+        assert_eq!(searches[0]["albumIds"], json!(["al1"]));
+        // No timeline bucket, and no look-up of another Album.
+        assert!(fixture
+            .other_requests()
+            .iter()
+            .all(|request| request.starts_with("GET /api/albums")));
+    }
+
+    #[tokio::test]
+    async fn an_album_is_paginated_instead_of_fetched_in_one_piece() {
+        let assets = month_of(2024, 6, 2_100);
+        let ids: Vec<&'static str> = assets.iter().map(|asset| asset.id).collect();
+        let fixture = fixture(assets, vec![album("al1", "Big", &ids)]).await;
+        let client = test_client(fixture.server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        let big = library.list("Albums/Big").await.unwrap();
+
+        assert_eq!(big.len(), 2_100);
+        let pages: Vec<u64> = fixture
+            .searches()
+            .iter()
+            .map(|search| search["page"].as_u64().unwrap())
+            .collect();
+        assert_eq!(pages, [1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn a_directory_can_be_listed_again_and_the_two_listings_diffed_on_their_own() {
+        let fixture = fixture(large_library(), vec![]).await;
+        let client = test_client(fixture.server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+        let june = "All Photos/2024/06 June";
+
+        let before = library.list(june).await.unwrap();
+        assert_eq!(library.list(june).await.unwrap(), before);
+
+        {
+            let mut assets = fixture.library.lock().unwrap();
+            assets.retain(|asset| asset.id != "a-2024-06-00010");
+            assets.extend(month_of(2024, 6, 1).into_iter().map(|asset| FakeAsset {
+                id: "a-new",
+                name: "NEW.jpg",
+                ..asset
+            }));
+        }
+        let after = library.list(june).await.unwrap();
+
+        let gone: Vec<&str> = before
+            .iter()
+            .filter(|entry| !after.contains(entry))
+            .map(|entry| entry.name.as_str())
+            .collect();
+        let added: Vec<&str> = after
+            .iter()
+            .filter(|entry| !before.contains(entry))
+            .map(|entry| entry.name.as_str())
+            .collect();
+        assert_eq!(gone, ["IMG_202406_00010.jpg"]);
+        assert_eq!(added, ["NEW.jpg"]);
+        // Every one of the three listings asked for June alone.
+        assert_eq!(fixture.searches().len(), 3);
+        assert!(fixture.other_requests().is_empty());
+    }
+
+    #[tokio::test]
+    async fn assets_at_the_extreme_utc_offsets_are_listed_in_their_local_month() {
+        let server = fake_library(vec![
+            // 00:30 on 1 April at UTC+14: 10:30 on 31 March in UTC.
+            FakeAsset {
+                file_created_at: "2025-03-31T10:30:00.000Z",
+                ..asset("east", "EAST.jpg", "2025-04-01T00:30:00.000Z")
+            },
+            // 23:30 on 31 March at UTC-12: 11:30 on 1 April in UTC.
+            FakeAsset {
+                file_created_at: "2025-04-01T11:30:00.000Z",
+                ..asset("west", "WEST.jpg", "2025-03-31T23:30:00.000Z")
+            },
+        ])
+        .await;
+        let client = test_client(server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        assert_eq!(
+            names(&library.list("All Photos/2025/03 March").await.unwrap()),
+            ["WEST.jpg"]
+        );
+        assert_eq!(
+            names(&library.list("All Photos/2025/04 April").await.unwrap()),
+            ["EAST.jpg"]
+        );
+    }
+
+    #[tokio::test]
+    async fn undated_assets_are_found_without_projecting_the_whole_library_at_once() {
+        let mut assets = month_of(2024, 6, 2_100);
+        assets.push(FakeAsset {
+            local_date_time: None,
+            ..asset("u1", "scan.png", "")
+        });
+        let fixture = fixture(assets, vec![]).await;
+        let client = test_client(fixture.server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        assert_eq!(
+            names(&library.list("All Photos").await.unwrap()),
+            ["2024", "Undated"]
+        );
+        let undated = library.list("All Photos/Undated").await.unwrap();
+
+        assert_eq!(names(&undated), ["scan.png"]);
+        // Paged through in pieces of at most 1,000 assets.
+        assert!(fixture
+            .searches()
+            .iter()
+            .all(|search| search["size"].as_u64().unwrap() <= 1_000));
     }
 }
