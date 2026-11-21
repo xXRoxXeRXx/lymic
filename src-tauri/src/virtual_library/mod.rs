@@ -6,9 +6,11 @@
 //! Paths are relative to the Virtual Library root, use `/` (a `\` is accepted too) and carry no
 //! platform semantics, so the module behaves the same on every OS.
 
-use crate::immich::{ImmichClient, RemoteAssetId};
+use crate::immich::{ImmichClient, LibraryAlbum, RemoteAssetId};
 use chrono::{DateTime, Utc};
 
+mod albums;
+mod live_photo;
 mod path;
 mod photo_timeline;
 #[cfg(test)]
@@ -106,21 +108,50 @@ impl<'a> VirtualLibrary<'a> {
             .ok_or(VirtualLibraryError::NotFound)
     }
 
+    async fn library_albums(&self) -> Result<Vec<LibraryAlbum>, VirtualLibraryError> {
+        self.client
+            .list_library_albums()
+            .await
+            .map_err(VirtualLibraryError::Remote)
+    }
+
     async fn children(&self, dir: Dir) -> Result<Vec<Entry>, VirtualLibraryError> {
         match dir {
             Dir::Root => Ok(vec![
                 Entry::directory(path::ALL_PHOTOS),
                 Entry::directory(path::ALBUMS),
             ]),
-            // The structure exists; the Album folders arrive with #268.
-            Dir::Albums => Ok(Vec::new()),
+            Dir::Albums => {
+                let albums = self.library_albums().await?;
+                Ok(albums::directories(&albums))
+            }
+            Dir::Album(name) => {
+                let albums = self.library_albums().await?;
+                let album = albums::find(&albums, &name).ok_or(VirtualLibraryError::NotFound)?;
+                let assets = self
+                    .client
+                    .list_album_assets(&album.id)
+                    .await
+                    .map_err(VirtualLibraryError::Remote)?;
+                // An Album lists its hidden members too, so a Live Photo video shows up as an
+                // asset of its own until the still claims it.
+                let assets = live_photo::without_paired_videos(assets);
+                let videos = self.client.list_live_photo_videos(&assets).await;
+                Ok(albums::files(&assets, &videos))
+            }
             Dir::AllPhotos | Dir::Year(_) | Dir::Month(..) | Dir::Undated => {
                 let assets = self
                     .client
                     .list_photo_timeline_assets()
                     .await
                     .map_err(VirtualLibraryError::Remote)?;
-                photo_timeline::children(&assets, dir).ok_or(VirtualLibraryError::NotFound)
+                let assets = live_photo::without_paired_videos(assets);
+                // Only a directory of files shows the videos, so only it looks them up.
+                let videos = self
+                    .client
+                    .list_live_photo_videos(&photo_timeline::assets_in(&assets, dir.clone()))
+                    .await;
+                photo_timeline::children(&assets, &videos, dir).ok_or(VirtualLibraryError::NotFound)
             }
         }
     }
