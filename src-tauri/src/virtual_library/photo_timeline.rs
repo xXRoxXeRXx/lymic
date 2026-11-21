@@ -1,10 +1,11 @@
 //! `All Photos`: the Photo Timeline assets arranged into the date hierarchy.
 
+use super::live_photo;
 use super::path::{month_dir_name, year_dir_name, Dir, UNDATED};
 use super::{Entry, EntryKind};
-use crate::immich::LibraryAsset;
+use crate::immich::{LibraryAsset, LivePhotoVideo, RemoteAssetId};
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 /// Where an asset is filed below `All Photos`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,7 +37,11 @@ fn local_wall_clock(text: &str) -> Option<NaiveDateTime> {
 
 /// The entries of `dir` for the given Photo Timeline `assets`, or `None` when the directory is a
 /// year, month or `Undated` that holds no asset and therefore does not exist.
-pub(super) fn children(assets: &[LibraryAsset], dir: Dir) -> Option<Vec<Entry>> {
+pub(super) fn children(
+    assets: &[LibraryAsset],
+    videos: &HashMap<RemoteAssetId, LivePhotoVideo>,
+    dir: Dir,
+) -> Option<Vec<Entry>> {
     let entries: Vec<Entry> = match dir {
         Dir::AllPhotos => {
             let years: BTreeSet<i32> = assets
@@ -71,23 +76,42 @@ pub(super) fn children(assets: &[LibraryAsset], dir: Dir) -> Option<Vec<Entry>> 
                 .map(|month| Entry::directory(month_dir_name(month)))
                 .collect()
         }
-        Dir::Month(year, month) => files_in(assets, Bucket::Month(year, month)),
-        Dir::Undated => files_in(assets, Bucket::Undated),
+        Dir::Month(year, month) => files_in(assets, videos, Bucket::Month(year, month)),
+        Dir::Undated => files_in(assets, videos, Bucket::Undated),
         Dir::Root | Dir::Albums | Dir::Album(_) => return None,
     };
     (!entries.is_empty()).then_some(entries)
 }
 
-fn files_in(assets: &[LibraryAsset], bucket: Bucket) -> Vec<Entry> {
+fn files_in(
+    assets: &[LibraryAsset],
+    videos: &HashMap<RemoteAssetId, LivePhotoVideo>,
+    bucket: Bucket,
+) -> Vec<Entry> {
     let mut files: Vec<Entry> = assets
         .iter()
         .filter(|asset| bucket_of(asset) == bucket)
-        .map(file_entry)
+        .flat_map(|asset| live_photo::file_entries(asset, videos))
         .collect();
     files.sort_by_cached_key(|entry| (entry.name.to_lowercase(), entry.remote_asset.clone()));
     files
 }
 
+/// The assets filed in the file directory `dir` (a month or `Undated`); none for any other.
+pub(super) fn assets_in(assets: &[LibraryAsset], dir: Dir) -> Vec<LibraryAsset> {
+    let bucket = match dir {
+        Dir::Month(year, month) => Bucket::Month(year, month),
+        Dir::Undated => Bucket::Undated,
+        _ => return Vec::new(),
+    };
+    assets
+        .iter()
+        .filter(|asset| bucket_of(asset) == bucket)
+        .cloned()
+        .collect()
+}
+
+/// The file entry of the still image or plain asset `asset`.
 pub(super) fn file_entry(asset: &LibraryAsset) -> Entry {
     let timestamp = |text: &Option<String>| {
         text.as_deref()

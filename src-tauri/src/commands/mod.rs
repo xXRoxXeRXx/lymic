@@ -12,3 +12,4 @@ pub(crate) mod settings;
 pub(crate) mod sync;
 pub(crate) mod tags;
 pub(crate) mod timeline;
+pub(crate) mod virtual_library;

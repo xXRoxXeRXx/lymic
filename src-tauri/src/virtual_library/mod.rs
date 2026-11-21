@@ -10,6 +10,7 @@ use crate::immich::{ImmichClient, LibraryAlbum, RemoteAssetId};
 use chrono::{DateTime, Utc};
 
 mod albums;
+mod live_photo;
 mod path;
 mod photo_timeline;
 #[cfg(test)]
@@ -132,7 +133,11 @@ impl<'a> VirtualLibrary<'a> {
                     .list_album_assets(&album.id)
                     .await
                     .map_err(VirtualLibraryError::Remote)?;
-                Ok(albums::files(&assets))
+                // An Album lists its hidden members too, so a Live Photo video shows up as an
+                // asset of its own until the still claims it.
+                let assets = live_photo::without_paired_videos(assets);
+                let videos = self.client.list_live_photo_videos(&assets).await;
+                Ok(albums::files(&assets, &videos))
             }
             Dir::AllPhotos | Dir::Year(_) | Dir::Month(..) | Dir::Undated => {
                 let assets = self
@@ -140,7 +145,13 @@ impl<'a> VirtualLibrary<'a> {
                     .list_photo_timeline_assets()
                     .await
                     .map_err(VirtualLibraryError::Remote)?;
-                photo_timeline::children(&assets, dir).ok_or(VirtualLibraryError::NotFound)
+                let assets = live_photo::without_paired_videos(assets);
+                // Only a directory of files shows the videos, so only it looks them up.
+                let videos = self
+                    .client
+                    .list_live_photo_videos(&photo_timeline::assets_in(&assets, dir.clone()))
+                    .await;
+                photo_timeline::children(&assets, &videos, dir).ok_or(VirtualLibraryError::NotFound)
             }
         }
     }

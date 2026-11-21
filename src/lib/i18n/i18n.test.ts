@@ -202,6 +202,19 @@ describe('i18n catalogs', () => {
     }
   });
 
+  it('translates the Virtual Library settings strings in every locale', () => {
+    const keys = ['virtual_library', 'virtual_library_subtitle', 'virtual_library_enable', 'virtual_library_disable'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
+        expect((translations as Record<string, string>)[key].trim(), `${localeCode}.${key}`).not.toBe('');
+      }
+    }
+    expect(en.virtual_library).toBe('Virtual Library');
+    expect(en.virtual_library_enable).toBe('Enable Virtual Library');
+    expect(de.virtual_library).toBe('Virtuelle Bibliothek');
+  });
+
   it('translates the Archive Timeline strings in every locale', () => {
     const keys = ['archive_title', 'archive_loading', 'archive_empty', 'archive_error', 'archive_offline', 'archive_permission_error'];
     for (const [localeCode, translations] of Object.entries(catalog)) {

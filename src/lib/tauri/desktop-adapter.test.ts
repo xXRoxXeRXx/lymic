@@ -46,6 +46,7 @@ import {
   type SyncDesktopAdapter,
   type TimelineDesktopAdapter,
   type UpdateDesktopAdapter,
+  type VirtualLibraryDesktopAdapter,
   type WatchedFoldersDesktopAdapter,
 } from "./desktop-adapter";
 
@@ -64,6 +65,7 @@ describe("tauriDesktopAdapter", () => {
   const albumTimelineAdapter: AlbumTimelineDesktopAdapter = tauriDesktopAdapter;
   const placeTimelineAdapter: PlaceTimelineDesktopAdapter = tauriDesktopAdapter;
   const preferencesAdapter: PreferencesDesktopAdapter = tauriDesktopAdapter;
+  const virtualLibraryAdapter: VirtualLibraryDesktopAdapter = tauriDesktopAdapter;
   const updateAdapter: UpdateDesktopAdapter = tauriDesktopAdapter;
   const removableVolumeAdapter: RemovableVolumeDesktopAdapter = tauriDesktopAdapter;
 
@@ -219,6 +221,25 @@ describe("tauriDesktopAdapter", () => {
       ["removable-volume-removed", expect.any(Function)],
       ["removable-volume-remounted", expect.any(Function)],
     ]);
+  });
+
+  it("reads and persists the Virtual Library settings and forwards the backend's change announcements", async () => {
+    const settings = { available: true, enabled: true };
+    invoke.mockResolvedValueOnce(settings).mockResolvedValueOnce(settings);
+    listen.mockImplementationOnce(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+      handler({ payload: settings });
+      return () => {};
+    });
+    const listener = vi.fn();
+
+    await expect(virtualLibraryAdapter.getVirtualLibrarySettings()).resolves.toEqual(settings);
+    await expect(virtualLibraryAdapter.setVirtualLibraryEnabled(true)).resolves.toEqual(settings);
+    await virtualLibraryAdapter.subscribeToVirtualLibrarySettings(listener);
+
+    expect(invoke).toHaveBeenCalledWith("get_virtual_library_settings");
+    expect(invoke).toHaveBeenCalledWith("set_virtual_library_enabled", { enabled: true });
+    expect(listen).toHaveBeenCalledWith("virtual-library-settings-changed", expect.any(Function));
+    expect(listener).toHaveBeenCalledWith(settings);
   });
 
   it("returns the partial result of Move to Trash with its failure code as the backend reports it", async () => {
