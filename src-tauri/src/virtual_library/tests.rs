@@ -14,6 +14,8 @@ struct FakeAsset {
     size: u64,
     visibility: &'static str,
     trashed: bool,
+    /// Immich's `livePhotoVideoId`: the hidden video asset paired with this still.
+    live_video: Option<&'static str>,
 }
 
 fn asset(id: &'static str, name: &'static str, local_date_time: &'static str) -> FakeAsset {
@@ -25,6 +27,16 @@ fn asset(id: &'static str, name: &'static str, local_date_time: &'static str) ->
         size: 1_000,
         visibility: "timeline",
         trashed: false,
+        live_video: None,
+    }
+}
+
+/// A Live Photo's video half: a separate asset Immich hides from the timeline.
+fn live_video(id: &'static str, name: &'static str, size: u64) -> FakeAsset {
+    FakeAsset {
+        size,
+        visibility: "hidden",
+        ..asset(id, name, "2025-03-10T10:00:00.000Z")
     }
 }
 
@@ -43,6 +55,9 @@ impl FakeAsset {
         if let Some(local) = self.local_date_time {
             item["localDateTime"] = local.into();
         }
+        if let Some(video) = self.live_video {
+            item["livePhotoVideoId"] = video.into();
+        }
         item
     }
 }
@@ -52,6 +67,12 @@ impl FakeAsset {
 /// ones too), Trashed Assets only match with `withDeleted`.
 async fn fake_library(assets: Vec<FakeAsset>) -> RoutedServer {
     serve_routes(move |request: &RecordedRequest| {
+        if let Some(id) = request.target.strip_prefix("/api/assets/") {
+            return match assets.iter().find(|asset| asset.id == id) {
+                Some(asset) => ("200 OK".into(), asset.json().to_string()),
+                None => ("404 Not Found".into(), "{}".into()),
+            };
+        }
         if request.method != "POST" || request.target != "/api/search/metadata" {
             return ("404 Not Found".into(), "{}".into());
         }
@@ -291,4 +312,183 @@ async fn an_unreachable_or_refusing_server_is_reported_without_credentials() {
     assert!(!message.contains("secret-api-key"));
     // The root and Albums structure need no server.
     assert!(library.list("").await.is_ok());
+}
+
+/// A Live Photo: the still, and the hidden video its `livePhotoVideoId` names.
+fn live_photo_library() -> Vec<FakeAsset> {
+    vec![
+        FakeAsset {
+            live_video: Some("v-live"),
+            size: 3_000,
+            ..asset("s-live", "IMG_0001.HEIC", "2025-03-10T10:00:00.000Z")
+        },
+        live_video("v-live", "IMG_0001.MOV", 9_000),
+        asset("p1", "IMG_0002.jpg", "2025-03-11T10:00:00.000Z"),
+    ]
+}
+
+#[tokio::test]
+async fn a_live_photo_is_listed_as_a_still_and_a_video_sharing_one_base_name() {
+    let server = fake_library(live_photo_library()).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+
+    assert_eq!(
+        names(&march),
+        ["IMG_0001.HEIC", "IMG_0001.MOV", "IMG_0002.jpg"]
+    );
+    let (still, video) = (&march[0], &march[1]);
+    assert_eq!(still.kind, EntryKind::File);
+    assert_eq!(video.kind, EntryKind::File);
+    assert_eq!(still.size, Some(3_000));
+    assert_eq!(video.size, Some(9_000));
+    assert_eq!(video.created, still.created);
+    assert_eq!(video.modified, still.modified);
+}
+
+#[tokio::test]
+async fn resolving_each_half_of_a_live_photo_returns_its_own_remote_asset() {
+    let server = fake_library(live_photo_library()).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(
+        library
+            .resolve("All Photos/2025/03 March/IMG_0001.HEIC")
+            .await,
+        Ok(RemoteAssetId::new("s-live"))
+    );
+    assert_eq!(
+        library
+            .resolve("All Photos/2025/03 March/img_0001.mov")
+            .await,
+        Ok(RemoteAssetId::new("v-live"))
+    );
+}
+
+#[tokio::test]
+async fn the_video_of_a_live_photo_is_not_also_listed_as_an_asset_of_its_own() {
+    let server = fake_library(live_photo_library()).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+
+    let video_entries = march
+        .iter()
+        .filter(|entry| entry.remote_asset == Some(RemoteAssetId::new("v-live")))
+        .count();
+    assert_eq!(video_entries, 1);
+    // The Immich-side file name of the hidden video does not leak into any other directory.
+    assert_eq!(
+        names(&library.list("All Photos/2025").await.unwrap()),
+        ["03 March"]
+    );
+}
+
+#[tokio::test]
+async fn the_video_takes_the_base_name_of_the_still_and_the_extension_of_its_own_file() {
+    let server = fake_library(vec![
+        // An Android motion photo: the video's own name has another base and extension.
+        FakeAsset {
+            live_video: Some("v-motion"),
+            ..asset("s-motion", "PXL_20250310.jpg", "2025-03-10T10:00:00.000Z")
+        },
+        live_video("v-motion", "MVIMG_20250310.mp4", 7_000),
+        // A Live Photo of an asset that has no extension at all, and no capture time.
+        FakeAsset {
+            live_video: Some("v-bare"),
+            local_date_time: None,
+            ..asset("s-bare", "scan", "")
+        },
+        live_video("v-bare", "clip", 5_000),
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+    assert_eq!(names(&march), ["PXL_20250310.jpg", "PXL_20250310.mp4"]);
+    let undated = library.list("All Photos/Undated").await.unwrap();
+    assert_eq!(names(&undated), ["scan", "scan.mov"]);
+    assert_eq!(
+        library.resolve("All Photos/Undated/scan.mov").await,
+        Ok(RemoteAssetId::new("v-bare"))
+    );
+}
+
+#[tokio::test]
+async fn a_still_whose_video_cannot_be_found_is_listed_alone() {
+    let server = fake_library(vec![
+        FakeAsset {
+            live_video: Some("gone"),
+            ..asset("s1", "IMG_0001.HEIC", "2025-03-10T10:00:00.000Z")
+        },
+        asset("p1", "IMG_0002.jpg", "2025-03-11T10:00:00.000Z"),
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+
+    assert_eq!(names(&march), ["IMG_0001.HEIC", "IMG_0002.jpg"]);
+}
+
+#[tokio::test]
+async fn directories_that_hold_no_files_do_not_look_up_live_photo_videos() {
+    let server = fake_library(live_photo_library()).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    library.list("All Photos").await.unwrap();
+    library.list("All Photos/2025").await.unwrap();
+
+    assert!(server
+        .requests()
+        .iter()
+        .all(|request| !request.target.starts_with("/api/assets/")));
+}
+
+/// The step Album folders call on their asset list: Immich lists an Album's hidden members, so
+/// the video must be dropped from the list when its still is there, and kept as a plain file
+/// when it is not (a video added to the Album without its still is an ordinary asset).
+mod album_style_lists {
+    use super::*;
+    use crate::immich::LibraryAsset;
+
+    fn library_asset(id: &str, name: &str, video: Option<&str>) -> LibraryAsset {
+        LibraryAsset {
+            id: RemoteAssetId::new(id),
+            original_file_name: Some(name.to_string()),
+            local_date_time: None,
+            file_created_at: None,
+            file_modified_at: None,
+            file_size: None,
+            live_photo_video_id: video.map(RemoteAssetId::new),
+        }
+    }
+
+    #[test]
+    fn a_paired_video_among_the_assets_is_not_a_standalone_asset() {
+        let assets = vec![
+            library_asset("still", "IMG_0001.HEIC", Some("video")),
+            library_asset("video", "IMG_0001.MOV", None),
+            library_asset("other", "IMG_0002.jpg", None),
+        ];
+
+        let kept = live_photo::without_paired_videos(assets);
+
+        let ids: Vec<&str> = kept.iter().map(|asset| asset.id.as_str()).collect();
+        assert_eq!(ids, ["still", "other"]);
+    }
+
+    #[test]
+    fn an_unpaired_video_stays_an_asset() {
+        let assets = vec![library_asset("video", "clip.mov", None)];
+
+        assert_eq!(live_photo::without_paired_videos(assets).len(), 1);
+    }
 }

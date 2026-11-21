@@ -9,6 +9,7 @@
 use crate::immich::{ImmichClient, RemoteAssetId};
 use chrono::{DateTime, Utc};
 
+mod live_photo;
 mod path;
 mod photo_timeline;
 #[cfg(test)]
@@ -120,7 +121,13 @@ impl<'a> VirtualLibrary<'a> {
                     .list_photo_timeline_assets()
                     .await
                     .map_err(VirtualLibraryError::Remote)?;
-                photo_timeline::children(&assets, dir).ok_or(VirtualLibraryError::NotFound)
+                let assets = live_photo::without_paired_videos(assets);
+                // Only a directory of files shows the videos, so only it looks them up.
+                let videos = self
+                    .client
+                    .list_live_photo_videos(&photo_timeline::assets_in(&assets, dir))
+                    .await;
+                photo_timeline::children(&assets, &videos, dir).ok_or(VirtualLibraryError::NotFound)
             }
         }
     }
