@@ -9,6 +9,8 @@ use super::ids::{AlbumId, RemoteAssetId};
 use super::response::{
     non_empty, read_response_body_limited, send_checked, MAX_SUCCESS_RESPONSE_BYTES,
 };
+use super::timeline::TimelineBucket;
+use chrono::{DateTime, SecondsFormat, Utc};
 use futures::{stream, StreamExt};
 use reqwest::Method;
 use serde::Deserialize;
@@ -88,12 +90,42 @@ struct SearchPageAssets {
 }
 
 impl ImmichClient {
-    /// Every Remote Asset of the Photo Timeline: Immich's `visibility=timeline`, which leaves out
-    /// Archived Assets, locked-folder assets and Live Photo videos (#242). Trashed Assets are
-    /// excluded by the search default and dropped again here, so a server that leaks one cannot
-    /// make it appear in the Virtual Library.
-    pub(crate) async fn list_photo_timeline_assets(&self) -> Result<Vec<LibraryAsset>, String> {
-        self.search_library_assets(json!({ "visibility": "timeline" }), true)
+    /// The months of the Photo Timeline with their asset counts: Immich's `timeline/buckets` with
+    /// `visibility=timeline`, which leaves out Archived Assets, locked-folder assets and Live
+    /// Photo videos (#242). One small response however many assets the Library holds, so the year
+    /// and month directories of `All Photos` need no asset at all. Immich buckets by local
+    /// capture time, like the projection.
+    pub(crate) async fn list_photo_timeline_months(&self) -> Result<Vec<TimelineBucket>, String> {
+        self.get_timeline_buckets().await
+    }
+
+    /// The Photo Timeline assets whose `fileCreatedAt` (UTC) lies in `[after, before]`, paginated.
+    /// Immich's `takenAfter` and `takenBefore` bound that UTC instant, not the local capture time
+    /// the projection files assets by, so the caller widens the window by the largest UTC offset
+    /// and drops what falls outside its local month. Trashed Assets are excluded by the search
+    /// default and dropped again here, so a server that leaks one cannot make it appear in the
+    /// Virtual Library.
+    pub(crate) async fn list_photo_timeline_assets_created_between(
+        &self,
+        after: DateTime<Utc>,
+        before: DateTime<Utc>,
+    ) -> Result<Vec<LibraryAsset>, String> {
+        let filter = json!({
+            "visibility": "timeline",
+            "takenAfter": after.to_rfc3339_opts(SecondsFormat::Millis, true),
+            "takenBefore": before.to_rfc3339_opts(SecondsFormat::Millis, true),
+        });
+        self.search_library_assets(filter, true, &|_| true).await
+    }
+
+    /// The Photo Timeline assets `keep` accepts, found by paging through the whole timeline and
+    /// holding on to nothing else: memory stays proportional to the result and one page, but the
+    /// work is a full pass. Only for what Immich cannot filter on, such as a missing capture time.
+    pub(crate) async fn find_photo_timeline_assets(
+        &self,
+        keep: &dyn Fn(&LibraryAsset) -> bool,
+    ) -> Result<Vec<LibraryAsset>, String> {
+        self.search_library_assets(json!({ "visibility": "timeline" }), true, keep)
             .await
     }
 
@@ -103,7 +135,7 @@ impl ImmichClient {
         &self,
         album_id: &AlbumId,
     ) -> Result<Vec<LibraryAsset>, String> {
-        self.search_library_assets(json!({ "albumIds": [album_id] }), false)
+        self.search_library_assets(json!({ "albumIds": [album_id] }), false, &|_| true)
             .await
     }
 
@@ -158,13 +190,15 @@ impl ImmichClient {
             .await
     }
 
-    /// Pages through the flat metadata search with `filter` until the result is complete.
-    /// `timeline_only` drops what is not in the Photo Timeline (Archived, hidden); Trashed
-    /// Assets are always dropped.
+    /// Pages through the flat metadata search with `filter` until the result is complete, one
+    /// page of at most `PAGE_SIZE` assets at a time. `timeline_only` drops what is not in the
+    /// Photo Timeline (Archived, hidden); Trashed Assets are always dropped; `keep` drops the
+    /// rest of each page before the next one is requested.
     async fn search_library_assets(
         &self,
         filter: serde_json::Value,
         timeline_only: bool,
+        keep: &dyn Fn(&LibraryAsset) -> bool,
     ) -> Result<Vec<LibraryAsset>, String> {
         let mut page = 1_u64;
         let mut assets = Vec::new();
@@ -187,7 +221,8 @@ impl ImmichClient {
                     .assets
                     .items
                     .into_iter()
-                    .filter_map(|item| library_asset(item, timeline_only)),
+                    .filter_map(|item| library_asset(item, timeline_only))
+                    .filter(|asset| keep(asset)),
             );
             match payload.assets.next_page {
                 Some(next_page) if next_page > page => page = next_page,
