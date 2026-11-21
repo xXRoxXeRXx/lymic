@@ -752,3 +752,353 @@ async fn a_live_photo_in_an_album_is_a_still_and_a_video_sharing_one_base_name()
         );
     }
 }
+
+#[tokio::test]
+async fn names_illegal_on_ntfs_are_listed_as_safe_readable_names_that_resolve() {
+    let in_march = |id, name| asset(id, name, "2025-03-10T10:00:00.000Z");
+    let server = fake_library(vec![
+        in_march("i1", "a<b>:c\"d|e?f*.jpg"),
+        in_march("i2", "tab\there.jpg"),
+        in_march("r1", "CON.txt"),
+        in_march("r2", "nul"),
+        in_march("r3", "Com1.jpg"),
+        in_march("r4", "LPT9.tar.gz"),
+        in_march("t1", "holiday.jpg. "),
+        in_march("t2", "notes "),
+        in_march("e1", ".."),
+        // Names that merely contain a reserved word stay as they are.
+        in_march("k1", "console.jpg"),
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+
+    assert_eq!(
+        names(&march),
+        [
+            "_",
+            "_Com1.jpg",
+            "_CON.txt",
+            "_LPT9.tar.gz",
+            "_nul",
+            "a_b__c_d_e_f_.jpg",
+            "console.jpg",
+            "holiday.jpg",
+            "notes",
+            "tab_here.jpg",
+        ]
+    );
+    for (path, id) in [
+        ("All Photos/2025/03 March/_CON.txt", "r1"),
+        ("All Photos/2025/03 March/a_b__c_d_e_f_.jpg", "i1"),
+        ("All Photos/2025/03 March/holiday.jpg", "t1"),
+        ("All Photos/2025/03 March/_", "e1"),
+    ] {
+        assert_eq!(
+            library.resolve(path).await,
+            Ok(RemoteAssetId::new(id)),
+            "{path}"
+        );
+    }
+}
+
+/// Immich ids are UUIDs; the name suffix is the last six characters of one.
+const ID_A1B2C3: &str = "01930000-0000-7000-8000-0000000a1b2c3";
+const ID_D4E5F6: &str = "01930000-0000-7000-8000-0000000d4e5f6";
+
+#[tokio::test]
+async fn assets_with_one_name_on_one_day_are_listed_with_a_suffix_from_their_id() {
+    let in_march = |id, name| asset(id, name, "2025-03-10T10:00:00.000Z");
+    let server = fake_library(vec![
+        in_march(ID_A1B2C3, "IMG_0001.jpg"),
+        in_march(ID_D4E5F6, "IMG_0001.jpg"),
+        // Windows names compare without regard to case.
+        in_march("c1", "img_0001.JPG"),
+        in_march("p1", "IMG_0002.jpg"),
+        // The same name on another day is no collision.
+        asset("o1", "IMG_0002.jpg", "2025-04-10T10:00:00.000Z"),
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+
+    assert_eq!(
+        names(&march),
+        [
+            "IMG_0001 (a1b2c3).jpg",
+            "img_0001 (c1).JPG",
+            "IMG_0001 (d4e5f6).jpg",
+            "IMG_0002.jpg"
+        ]
+    );
+    assert_eq!(
+        library
+            .resolve("All Photos/2025/03 March/IMG_0001 (d4e5f6).jpg")
+            .await,
+        Ok(RemoteAssetId::new(ID_D4E5F6))
+    );
+    assert_eq!(
+        names(&library.list("All Photos/2025/04 April").await.unwrap()),
+        ["IMG_0002.jpg"]
+    );
+}
+
+#[tokio::test]
+async fn albums_with_one_name_are_listed_with_a_suffix_and_open_to_their_own_assets() {
+    let in_march = |id, name| asset(id, name, "2025-03-10T10:00:00.000Z");
+    let server = fake_immich(
+        vec![in_march("p1", "mine.jpg"), in_march("p2", "yours.jpg")],
+        vec![
+            album(ID_A1B2C3, "Trip 2.0", &["p1"]),
+            // Owned by someone else and shared with the user.
+            FakeAlbum {
+                owned: false,
+                shared: true,
+                ..album(ID_D4E5F6, "trip 2.0", &["p2"])
+            },
+            album("al3", "Holiday", &[]),
+        ],
+    )
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let listed = library.list("Albums").await.unwrap();
+
+    // A name held once stays plain; the suffix goes at the end, a folder has no extension.
+    assert_eq!(
+        names(&listed),
+        ["Holiday", "Trip 2.0 (a1b2c3)", "trip 2.0 (d4e5f6)"]
+    );
+    assert_eq!(
+        names(&library.list("Albums/Trip 2.0 (a1b2c3)").await.unwrap()),
+        ["mine.jpg"]
+    );
+    assert_eq!(
+        names(&library.list(r"Albums\trip 2.0 (d4e5f6)").await.unwrap()),
+        ["yours.jpg"]
+    );
+    assert_eq!(
+        library.list("Albums/Trip 2.0").await,
+        Err(VirtualLibraryError::NotFound)
+    );
+}
+
+#[tokio::test]
+async fn album_names_illegal_on_ntfs_are_listed_and_opened_by_their_safe_name() {
+    let server = fake_immich(
+        vec![asset("p1", "a.jpg", "2025-03-10T10:00:00.000Z")],
+        vec![
+            album("al1", "Trip: Italy/2025?", &["p1"]),
+            album("al2", "Summer.", &[]),
+            album("al3", "CON", &[]),
+            album("al4", "  ", &[]),
+        ],
+    )
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let listed = library.list("Albums").await.unwrap();
+
+    assert_eq!(names(&listed), ["_", "_CON", "Summer", "Trip_ Italy_2025_"]);
+    assert_eq!(
+        names(&library.list("Albums/Trip_ Italy_2025_").await.unwrap()),
+        ["a.jpg"]
+    );
+    assert_eq!(
+        library.resolve("Albums/Trip_ Italy_2025_/a.jpg").await,
+        Ok(RemoteAssetId::new("p1"))
+    );
+    assert_eq!(
+        library.list("Albums/_CON").await.unwrap(),
+        Vec::<Entry>::new()
+    );
+}
+
+#[tokio::test]
+async fn names_stay_the_same_across_listings_and_when_unrelated_assets_are_added() {
+    let in_march = |id, name| asset(id, name, "2025-03-10T10:00:00.000Z");
+    let before = vec![
+        in_march(ID_A1B2C3, "IMG_0001.jpg"),
+        in_march(ID_D4E5F6, "IMG_0001.jpg"),
+        in_march("p1", "IMG_0002.jpg"),
+    ];
+    // Unrelated arrivals, some sorting before the existing ones by id, name and date.
+    let mut after = before.clone();
+    after.extend([
+        in_march("00000000-0000-7000-8000-000000000001", "IMG_0000.jpg"),
+        in_march("ffffffff-0000-7000-8000-ffffffffffff", "IMG_9999.jpg"),
+        asset("n1", "IMG_0001.jpg", "2025-02-01T10:00:00.000Z"),
+    ]);
+    let listed = |assets: Vec<FakeAsset>| async move {
+        let server = fake_library(assets).await;
+        let client = test_client(server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+        let first = library.list("All Photos/2025/03 March").await.unwrap();
+        let second = library.list("All Photos/2025/03 March").await.unwrap();
+        assert_eq!(first, second);
+        first
+    };
+
+    let before = listed(before).await;
+    let after = listed(after).await;
+
+    for entry in &before {
+        assert!(after.contains(entry), "{} changed", entry.name);
+    }
+    assert_eq!(
+        names(&before),
+        [
+            "IMG_0001 (a1b2c3).jpg",
+            "IMG_0001 (d4e5f6).jpg",
+            "IMG_0002.jpg"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn the_order_immich_returns_assets_in_does_not_change_the_names() {
+    let in_march = |id, name| asset(id, name, "2025-03-10T10:00:00.000Z");
+    let one = vec![
+        in_march(ID_A1B2C3, "IMG_0001.jpg"),
+        in_march(ID_D4E5F6, "img_0001.jpg"),
+    ];
+    let mut other = one.clone();
+    other.reverse();
+    let listed = |assets: Vec<FakeAsset>| async move {
+        let server = fake_library(assets).await;
+        let client = test_client(server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+        library.list("All Photos/2025/03 March").await.unwrap()
+    };
+
+    assert_eq!(listed(one).await, listed(other).await);
+}
+
+#[tokio::test]
+async fn a_suffixed_name_that_clashes_with_another_asset_takes_a_longer_suffix() {
+    let in_march = |id, name| asset(id, name, "2025-03-10T10:00:00.000Z");
+    let server = fake_library(vec![
+        in_march(ID_A1B2C3, "IMG_0001.jpg"),
+        in_march(ID_D4E5F6, "IMG_0001.jpg"),
+        in_march("lit", "IMG_0001 (a1b2c3).jpg"),
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+
+    assert_eq!(
+        names(&march),
+        [
+            "IMG_0001 (00a1b2c3).jpg",
+            // The asset that is literally called this keeps it.
+            "IMG_0001 (a1b2c3).jpg",
+            "IMG_0001 (d4e5f6).jpg",
+        ]
+    );
+    assert_eq!(
+        library
+            .resolve("All Photos/2025/03 March/IMG_0001 (a1b2c3).jpg")
+            .await,
+        Ok(RemoteAssetId::new("lit"))
+    );
+}
+
+#[tokio::test]
+async fn a_live_photo_pair_keeps_one_base_name_when_its_name_collides() {
+    let in_march = |id, name| asset(id, name, "2025-03-10T10:00:00.000Z");
+    let live = |id, video, name| FakeAsset {
+        live_video: Some(video),
+        ..in_march(id, name)
+    };
+    let server = fake_library(vec![
+        live(ID_A1B2C3, "va", "IMG_0001.HEIC"),
+        live(ID_D4E5F6, "vd", "IMG_0001.HEIC"),
+        live_video("va", "x.MOV", 1),
+        live_video("vd", "y.MOV", 2),
+        // A paired video's name also collides with a standalone video of that name.
+        live("s3", "v3", "IMG_0002.HEIC"),
+        live_video("v3", "z.MOV", 3),
+        FakeAsset {
+            file_created_at: "2025-03-10T10:00:00.000Z",
+            ..in_march("m1", "IMG_0002.MOV")
+        },
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+
+    assert_eq!(
+        names(&march),
+        [
+            "IMG_0001 (a1b2c3).HEIC",
+            "IMG_0001 (a1b2c3).MOV",
+            "IMG_0001 (d4e5f6).HEIC",
+            "IMG_0001 (d4e5f6).MOV",
+            "IMG_0002 (m1).MOV",
+            "IMG_0002 (s3).MOV",
+            "IMG_0002.HEIC",
+        ]
+    );
+    assert_eq!(
+        library
+            .resolve("All Photos/2025/03 March/IMG_0001 (d4e5f6).MOV")
+            .await,
+        Ok(RemoteAssetId::new("vd"))
+    );
+    assert_eq!(
+        library
+            .resolve("All Photos/2025/03 March/IMG_0002 (m1).MOV")
+            .await,
+        Ok(RemoteAssetId::new("m1"))
+    );
+}
+
+#[tokio::test]
+async fn very_long_names_are_shortened_to_fit_with_their_extension_and_suffix() {
+    let long = format!("{}.jpeg", "x".repeat(300));
+    let emoji = format!("{}.png", "\u{1F600}".repeat(200));
+    // The fake Library takes `'static` names; leaking two test strings is harmless.
+    let long: &'static str = Box::leak(long.into_boxed_str());
+    let emoji: &'static str = Box::leak(emoji.into_boxed_str());
+    let in_march = |id, name| asset(id, name, "2025-03-10T10:00:00.000Z");
+    let server = fake_library(vec![
+        in_march(ID_A1B2C3, long),
+        in_march(ID_D4E5F6, long),
+        in_march("e1", emoji),
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+
+    let units = |name: &str| name.encode_utf16().count();
+    assert_eq!(march.len(), 3);
+    for entry in &march {
+        assert!(units(&entry.name) <= 255, "{}", entry.name);
+    }
+    let suffixed: Vec<&str> = names(&march)
+        .into_iter()
+        .filter(|name| name.starts_with('x'))
+        .collect();
+    assert_eq!(suffixed.len(), 2);
+    assert!(suffixed[0].ends_with(" (a1b2c3).jpeg"), "{}", suffixed[0]);
+    assert!(suffixed[1].ends_with(" (d4e5f6).jpeg"), "{}", suffixed[1]);
+    assert!(march.iter().any(|entry| entry.name.ends_with(".png")));
+    assert_eq!(
+        library
+            .resolve(&format!("All Photos/2025/03 March/{}", suffixed[1]))
+            .await,
+        Ok(RemoteAssetId::new(ID_D4E5F6))
+    );
+}
