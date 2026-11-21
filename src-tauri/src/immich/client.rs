@@ -384,11 +384,28 @@ impl ImmichClient {
         Ok(())
     }
 
+    /// Rejects IDs that are not path-safe and duplicate IDs (with `duplicate_message`) before any request,
+    /// for the bulk calls that Restore, Move to Trash and visibility updates share. The caller handles an empty list.
+    pub(super) fn validate_asset_ids(
+        asset_ids: &[super::ids::RemoteAssetId],
+        duplicate_message: &str,
+    ) -> Result<(), String> {
+        for asset_id in asset_ids {
+            Self::validate_path_segment(asset_id.as_str(), "asset ID")?;
+        }
+        let unique: std::collections::HashSet<&str> =
+            asset_ids.iter().map(|id| id.as_str()).collect();
+        if unique.len() != asset_ids.len() {
+            return Err(duplicate_message.to_string());
+        }
+        Ok(())
+    }
+
     /// Validates that every Remote Asset ID is path-safe and appears at most once, then runs a bulk
     /// request and falls back to one request per asset when the batch did not confirm all of them.
     /// An empty slice succeeds without sending a request, and a single asset is never requested twice.
     pub(super) async fn run_bulk_with_per_asset_fallback<'a, B, S>(
-        asset_ids: &'a [ super::ids::RemoteAssetId],
+        asset_ids: &'a [super::ids::RemoteAssetId],
         duplicate_error: &str,
         bulk: impl FnOnce(&'a [super::ids::RemoteAssetId]) -> B,
         single: impl FnMut(&'a super::ids::RemoteAssetId) -> S,
@@ -400,14 +417,7 @@ impl ImmichClient {
         if asset_ids.is_empty() {
             return Ok(Vec::new());
         }
-        for asset_id in asset_ids {
-            Self::validate_path_segment(asset_id.as_str(), "asset ID")?;
-        }
-        let unique: std::collections::HashSet<&str> =
-            asset_ids.iter().map(|id| id.as_str()).collect();
-        if unique.len() != asset_ids.len() {
-            return Err(duplicate_error.to_string());
-        }
+        Self::validate_asset_ids(asset_ids, duplicate_error)?;
 
         if bulk(asset_ids).await? {
             return Ok(asset_ids.iter().map(|id| id.as_str().to_string()).collect());

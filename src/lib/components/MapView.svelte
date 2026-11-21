@@ -7,10 +7,12 @@
   import "maplibre-gl/dist/maplibre-gl.css";
   import type { MapViewState } from "../controllers/map-controller.svelte";
   import type { RemoteAssetDesktopAdapter } from "../tauri/desktop-adapter";
-  import type { AssetDetails, AssetTag, TimelineAsset } from "../contracts";
+  import type { AssetDetails, AssetTag, TimelineAsset, TrashMoveResult } from "../contracts";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import Lightbox from "./Lightbox.svelte";
+  import TrashFeedbackNotice from "./TrashFeedbackNotice.svelte";
   import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
+  import { createRemoteAssetTrash, trashFeedbackFor, type RemoteAssetTrashOutcome, type TrashFeedback } from "./remote-asset-trash";
   import { protocolSrc } from "../tauri/protocol-src";
 
   interface Props {
@@ -21,8 +23,10 @@
     albumCatalogue: TargetAlbumCatalogue;
     /** Opens the Tag Timeline of a Tag chip selected in the Lightbox, which has been closed by then. */
     onSelectTag?(tag: AssetTag): void;
+    /** Moves Remote Assets to the Immich trash (the Lightbox sends one asset, so a result never stops midway). Without it the Lightbox offers no Move to Trash. */
+    trashAssets?(assetIds: string[]): Promise<TrashMoveResult>;
   }
-  let { mapState, active, serverUrl, desktop, albumCatalogue, onSelectTag }: Props = $props();
+  let { mapState, active, serverUrl, desktop, albumCatalogue, onSelectTag, trashAssets }: Props = $props();
   let container: HTMLDivElement;
   let map: MapLibreMap | undefined;
   let providerError = $state(false);
@@ -33,6 +37,11 @@
     get downloadAsset() { return desktop.downloadAsset; },
     get downloadArchive() { return desktop.downloadArchive; },
   });
+  const trash = createRemoteAssetTrash({
+    timeline: { removeAsset: (assetId) => mapState.removeMarker(assetId) },
+    get trashAssets() { return trashAssets; },
+  });
+  let trashFeedback = $state<TrashFeedback | null>(null);
   let collectionNavigation = $state(false);
   let selectionGeneration = 0;
   const pageSize = 100;
@@ -87,8 +96,24 @@
     }
     return null;
   }
+  /**
+   * Moves the Lightbox's asset. When Immich moved it, its marker is gone, the Lightbox closes and the view says so;
+   * the location results being paged were built from the old markers, so they close too and the map rebuilds.
+   */
+  async function trashFromLightbox(assetId: string): Promise<RemoteAssetTrashOutcome> {
+    trashFeedback = null;
+    const outcome = await trash.trash([assetId]);
+    if (outcome.movedAssetIds.includes(assetId)) {
+      trashFeedback = trashFeedbackFor(outcome, 1);
+      selectedAsset = null;
+      selectionGeneration++;
+      if (collection) closeResults();
+    }
+    return outcome;
+  }
   async function openResult(index: number, button: HTMLButtonElement) {
     resultButton = button;
+    trashFeedback = null;
     const asset = await assetAt(index);
     if (asset) { collectionNavigation = true; selectedIndex = index; selectedAsset = asset; }
   }
@@ -143,6 +168,7 @@
   }
   async function openAsset(id: string, button: HTMLButtonElement) {
     resultButton = button;
+    trashFeedback = null;
     const generation = ++selectionGeneration;
     try {
       const details = (await assetActions.loadDetails(id)).details;
@@ -246,6 +272,9 @@
   {#if mapState.isLoading && !mapState.hasLoaded}<p role="status">{$t("map_loading")}</p>{/if}
   {#if mapState.error}<p role="alert">{mapState.error === "permission_denied" ? $t("map_permission") : $t("map_error")}{mapState.isOffline ? ` ${$t("map_stale")}` : ""}</p>{/if}
   {#if mapState.hasLoaded && !mapState.markers.length}<p role="status">{$t("map_empty")}</p>{/if}
+  {#if trashFeedback}
+    <TrashFeedbackNotice feedback={trashFeedback} class="mb-2 shrink-0" />
+  {/if}
   {#if providerError}<p role="alert">{$t("map_provider_error")}</p>{/if}
   <div bind:this={container} class="min-h-0 flex-1 rounded-xl" aria-label={$t("map_title")}></div>
   {#if collection}
@@ -262,7 +291,7 @@
     </section>
   {/if}
   {#if selectedAsset}
-    <Lightbox asset={selectedAsset} navigateAsset={collectionNavigation ? navigateCollection : undefined} {assetActions} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={assetActions.reflectFavorite} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={desktop.setAssetFavorite} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} {onSelectTag} />
+    <Lightbox asset={selectedAsset} navigateAsset={collectionNavigation ? navigateCollection : undefined} {assetActions} onClose={() => { selectedAsset = null; queueMicrotask(() => resultButton?.focus()); }} onFavoriteChange={assetActions.reflectFavorite} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={desktop.setAssetFavorite} {albumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} onTrash={trashAssets ? trashFromLightbox : undefined} {onSelectTag} />
   {/if}
 </div>
 

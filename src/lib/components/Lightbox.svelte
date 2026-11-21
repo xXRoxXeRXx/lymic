@@ -1,7 +1,7 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
   import { flushSync, onDestroy, untrack } from "svelte";
-  import { Album, Archive, ArchiveRestore, ArchiveX, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, X } from "lucide-svelte";
+  import { Album, Archive, ArchiveRestore, ArchiveX, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, Trash2, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { AlbumAssignmentResult, AssetDetails, AssetTag, TimelineAsset } from "../contracts";
@@ -11,6 +11,8 @@
   import { archiveActionForVisibility, archiveFeedbackFor, archiveFeedbackMessage, archiveLabel, archiveStaysMessage, visibilityAfter, type ArchiveAction, type ArchiveMode, type RemoteAssetArchiveOutcome } from "./remote-asset-archive";
   import { restoreFeedbackFor, restoreFeedbackMessage, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
+  import MoveToTrashDialog from "./MoveToTrashDialog.svelte";
+  import { trashFeedbackFor, trashFeedbackMessage, type RemoteAssetTrashOutcome } from "./remote-asset-trash";
   interface Props {
     asset: TimelineAsset;
     assetActions: RemoteAssetActions;
@@ -27,6 +29,8 @@
     allowFavorite?: boolean;
     /** Offers Restore for a Trashed Asset; reports what happened and never rejects. */
     onRestore?(assetId: string): Promise<RemoteAssetRestoreOutcome>;
+    /** Offers Move to Trash (after a confirmation the Lightbox asks for); reports what happened and never rejects. */
+    onTrash?(assetId: string): Promise<RemoteAssetTrashOutcome>;
     /**
      * The Archive action the Lightbox offers for the open asset; leave it out where there is none. Needs `onChangeArchive`.
      * `archive` or `unarchive` offer that action. `by-visibility` is for a view that shows archived and other assets together:
@@ -40,7 +44,7 @@
     /** Shows the Tags of the asset as chips; selecting one closes the Lightbox first, then calls this to open that Tag's Tag Timeline. */
     onSelectTag?(tag: AssetTag): void;
   }
-  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, archiveMode, onChangeArchive, onSelectTag }: Props = $props();
+  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, onTrash, archiveMode, onChangeArchive, onSelectTag }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   let selectedAsset = $state<TimelineAsset | null>(untrack(() => asset));
   let assetDetails = $state<AssetDetails | null>(null);
@@ -57,6 +61,9 @@
   let addToAlbumError = $state("");
   let isRestoring = $state(false);
   let restoreError = $state("");
+  let isTrashConfirmOpen = $state(false);
+  let isTrashing = $state(false);
+  let trashError = $state("");
   let isChangingArchive = $state(false);
   let archiveFeedback = $state<{ message: string; isSuccess: boolean } | null>(null);
   let addToAlbumMessageTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -183,6 +190,32 @@
     }
   }
 
+  function openTrashConfirm() {
+    if (!selectedAsset || !onTrash || isBusy) return;
+    trashError = "";
+    isTrashConfirmOpen = true;
+  }
+
+  function cancelTrash() {
+    if (!isTrashing) isTrashConfirmOpen = false;
+  }
+
+  async function trashAsset() {
+    if (!selectedAsset || !onTrash || isTrashing) return;
+    const assetId = selectedAsset.id;
+    trashError = "";
+    isTrashing = true;
+    try {
+      const outcome = await onTrash(assetId);
+      if (isDestroyed) return;
+      isTrashConfirmOpen = false;
+      if (outcome.movedAssetIds.includes(assetId)) return;
+      trashError = trashFeedbackMessage(trashFeedbackFor(outcome, 1), $t, numberLocale);
+    } finally {
+      if (!isDestroyed) isTrashing = false;
+    }
+  }
+
   const ARCHIVE_ICONS = { archive: Archive, unarchive: ArchiveX };
 
   async function changeArchiveStatus(action: ArchiveAction) {
@@ -280,7 +313,7 @@
     if (isBusy) return;
     onClose();
   }
-  const isBusy = $derived(downloadingAssetId !== null || isAddingToAlbum || isRestoring || isChangingArchive);
+  const isBusy = $derived(downloadingAssetId !== null || isAddingToAlbum || isRestoring || isTrashing || isChangingArchive);
   function selectTag(tag: AssetTag) {
     if (!onSelectTag || isBusy) return;
     onClose();
@@ -307,6 +340,8 @@
       downloadMessage = "";
       downloadError = "";
       restoreError = "";
+      trashError = "";
+      isTrashConfirmOpen = false;
       archiveFeedback = null;
       isAddToAlbumOpen = false;
       clearAddToAlbumMessage();
@@ -315,7 +350,7 @@
     loadAssetDetails(nextAsset);
   }
   function handleKeydown(event: KeyboardEvent) {
-    if (isAddToAlbumOpen) return;
+    if (isAddToAlbumOpen || isTrashConfirmOpen) return;
     if (event.key === "Escape") { event.preventDefault(); if (isInfoOpen) isInfoOpen = false; else closeLightbox(); }
     else if (event.key === "ArrowLeft") { event.preventDefault(); navigate(-1); }
     else if (event.key === "ArrowRight") { event.preventDefault(); navigate(1); }
@@ -345,6 +380,9 @@
         {/if}
         <div class="absolute right-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-wrap justify-end gap-2">
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:cursor-not-allowed" title={$t("timeline_download_original")} aria-label={$t("timeline_download_original")} aria-busy={downloadingAssetId === selectedAsset.id} disabled={!assetDetails?.originalFileName || downloadingAssetId !== null || isChangingArchive} onclick={() => void downloadOriginal()}><Download class="h-5 w-5 {downloadingAssetId === selectedAsset.id ? 'animate-spin' : ''}" /></button>
+          {#if onTrash}
+            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("trash_move")} aria-label={$t("trash_move")} aria-busy={isTrashing} disabled={isBusy} onclick={openTrashConfirm}><Trash2 class="h-5 w-5 {isTrashing ? 'animate-pulse' : ''}" /></button>
+          {/if}
           {#if onRestore}
             <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={isRestoring} disabled={isRestoring} onclick={() => void restoreAsset()}><ArchiveRestore class="h-5 w-5 {isRestoring ? 'animate-pulse' : ''}" /></button>
           {/if}
@@ -427,6 +465,7 @@
           {#if downloadMessage}<p class="rounded bg-emerald-950/90 px-3 py-2 text-emerald-200" role="status">{downloadMessage}</p>{/if}
           {#if downloadError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{downloadError}</p>{/if}
           {#if restoreError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{restoreError}</p>{/if}
+          {#if trashError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{trashError}</p>{/if}
           {#if archiveFeedback}<p class="rounded px-3 py-2 {archiveFeedback.isSuccess ? 'bg-emerald-950/90 text-emerald-200' : 'bg-red-950/90 text-red-200'}" role={archiveFeedback.isSuccess ? "status" : "alert"}>{archiveFeedback.message}</p>{/if}
           {#if addToAlbumMessage}<p class="rounded bg-emerald-950/90 px-3 py-2 text-emerald-200" role="status">{addToAlbumMessage}</p>{/if}
         </div>
@@ -437,4 +476,8 @@
 
 {#if albumCatalogue}
   <AddToAlbumModal isOpen={isAddToAlbumOpen} catalogue={albumCatalogue} isAssigning={isAddingToAlbum} assignmentError={addToAlbumError} onConfirm={(id) => void assignSelectedAssetToAlbum(id)} onCancel={() => { if (!isAddingToAlbum) { isAddToAlbumOpen = false; addToAlbumError = ""; } }} />
+{/if}
+
+{#if onTrash}
+  <MoveToTrashDialog isOpen={isTrashConfirmOpen} count={1} isMoving={isTrashing} onConfirm={() => void trashAsset()} onCancel={cancelTrash} />
 {/if}

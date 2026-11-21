@@ -27,7 +27,7 @@ vi.mock("maplibre-gl", () => ({
   NavigationControl: class {},
 }));
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 it("shows permission errors from the desktop adapter separately from an empty library", async () => {
   const state = createMapController({ getMapMarkers: vi.fn().mockRejectedValue("map_permission_denied:map.read") });
@@ -199,4 +199,90 @@ it("closes the Lightbox and reports a selected Tag chip so the page can open its
   expect(onSelectTag).toHaveBeenCalledWith(rome);
   expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument();
   mapHarness.features = [];
+});
+
+it("moves an asset to the trash from the Lightbox, removes its marker and closes the Lightbox", async () => {
+  const { fireEvent, waitFor, within } = await import("@testing-library/svelte");
+  // Removing a marker rebuilds the clustered source in a worker, which jsdom lacks.
+  vi.stubGlobal("Worker", class { postMessage() {} terminate() {} });
+  mapHarness.features = [{ properties: { id: "asset-1" }, geometry: { type: "Point", coordinates: [13, 52] } }];
+  const state = createMapController({ getMapMarkers: vi.fn().mockResolvedValue([{ id: "asset-1", lat: 52, lon: 13 }, { id: "asset-2", lat: 51, lon: 12 }]) });
+  await state.refresh();
+  const details = { assetType: "IMAGE", imageWidth: 10, imageHeight: 10, cameraMake: null, cameraModel: null, fileSize: null, isFavorite: false, originalFileName: "a.jpg", city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null };
+  const desktop = { getAssetDetails: vi.fn().mockResolvedValue(details), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
+  const trashAssets = vi.fn(async (assetIds: string[]) => ({ movedAssetIds: assetIds }));
+  render(MapView, { mapState: state, active: true, desktop, trashAssets, albumCatalogue: createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() }), serverUrl: "" });
+  mapHarness.handlers.get("moveend")?.();
+  await fireEvent.click(await screen.findByRole("button", { name: "Open asset" }));
+  const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+
+  await fireEvent.click(within(lightbox).getByRole("button", { name: "Move to Trash" }));
+  const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+  await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+
+  await waitFor(() => expect(trashAssets).toHaveBeenCalledWith(["asset-1"]));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(state.markers.map((marker) => marker.id)).toEqual(["asset-2"]);
+  expect(await screen.findByRole("status")).toHaveTextContent("1 moved to the Immich trash. You can restore them in the Trash.");
+  mapHarness.features = [];
+});
+
+it("keeps the Lightbox and the marker when Immich does not move the asset", async () => {
+  const { fireEvent, within } = await import("@testing-library/svelte");
+  mapHarness.features = [{ properties: { id: "asset-1" }, geometry: { type: "Point", coordinates: [13, 52] } }];
+  const state = createMapController({ getMapMarkers: vi.fn().mockResolvedValue([{ id: "asset-1", lat: 52, lon: 13 }]) });
+  await state.refresh();
+  const details = { assetType: "IMAGE", imageWidth: 10, imageHeight: 10, cameraMake: null, cameraModel: null, fileSize: null, isFavorite: false, originalFileName: "a.jpg", city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null };
+  const desktop = { getAssetDetails: vi.fn().mockResolvedValue(details), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
+  const trashAssets = vi.fn(async () => ({ movedAssetIds: [] as string[] }));
+  render(MapView, { mapState: state, active: true, desktop, trashAssets, albumCatalogue: createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() }), serverUrl: "" });
+  mapHarness.handlers.get("moveend")?.();
+  await fireEvent.click(await screen.findByRole("button", { name: "Open asset" }));
+  const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+
+  await fireEvent.click(within(lightbox).getByRole("button", { name: "Move to Trash" }));
+  await fireEvent.click(within(await screen.findByRole("dialog", { name: "Move to Trash?" })).getByRole("button", { name: "Move to Trash" }));
+
+  expect(await within(lightbox).findByRole("alert")).toHaveTextContent("Could not move to the trash. Please try again.");
+  expect(state.markers.map((marker) => marker.id)).toEqual(["asset-1"]);
+  mapHarness.features = [];
+});
+
+it("offers no Move to Trash in the Map View Lightbox without a trash adapter", async () => {
+  const { fireEvent, within } = await import("@testing-library/svelte");
+  mapHarness.features = [{ properties: { id: "asset-1" }, geometry: { type: "Point", coordinates: [13, 52] } }];
+  const details = { assetType: "IMAGE", imageWidth: 10, imageHeight: 10, cameraMake: null, cameraModel: null, fileSize: null, isFavorite: false, originalFileName: "a.jpg", city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null };
+  const desktop = { getAssetDetails: vi.fn().mockResolvedValue(details), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
+  render(MapView, { mapState: createMapController({ getMapMarkers: vi.fn() }), active: true, desktop, albumCatalogue: createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() }), serverUrl: "" });
+  mapHarness.handlers.get("moveend")?.();
+  await fireEvent.click(await screen.findByRole("button", { name: "Open asset" }));
+  const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+
+  expect(within(lightbox).queryByRole("button", { name: "Move to Trash" })).not.toBeInTheDocument();
+  mapHarness.features = [];
+});
+
+it("closes the location results when a trashed asset came from them, so the map rebuilds without it", async () => {
+  const { fireEvent, waitFor, within } = await import("@testing-library/svelte");
+  vi.stubGlobal("Worker", class { postMessage() {} terminate() {} });
+  mapHarness.leaves.mockImplementation(async (_cluster: number, limit: number, offset: number) =>
+    Array.from({ length: Math.min(limit, 3 - offset) }, (_, i) => ({ properties: { id: `asset-${offset + i}` } })));
+  const state = createMapController({ getMapMarkers: vi.fn().mockResolvedValue([0, 1, 2].map((i) => ({ id: `asset-${i}`, lat: 52, lon: 13 }))) });
+  await state.refresh();
+  const details = { assetType: "IMAGE", imageWidth: 10, imageHeight: 10, cameraMake: null, cameraModel: null, fileSize: null, isFavorite: false, originalFileName: "a.jpg", city: null, state: null, country: null, fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null };
+  const desktop = { getAssetDetails: vi.fn().mockResolvedValue(details), setAssetFavorite: vi.fn(), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn(), addAssetsToAlbum: vi.fn(), openExternalUrl: vi.fn() };
+  const trashAssets = vi.fn(async (assetIds: string[]) => ({ movedAssetIds: assetIds }));
+  render(MapView, { mapState: state, active: true, desktop, trashAssets, albumCatalogue: createTargetAlbumCatalogue({ getAlbums: vi.fn(), createAlbum: vi.fn() }), serverUrl: "" });
+  mapHarness.clusterClick?.({ features: [{ properties: { cluster_id: 1, point_count: 3 }, geometry: { type: "Point", coordinates: [0, 0] } }] });
+  await screen.findByText("1 / 1");
+  await fireEvent.click(screen.getAllByRole("button", { name: "Open asset" })[1]);
+  const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+
+  await fireEvent.click(within(lightbox).getByRole("button", { name: "Move to Trash" }));
+  await fireEvent.click(within(await screen.findByRole("dialog", { name: "Move to Trash?" })).getByRole("button", { name: "Move to Trash" }));
+
+  await waitFor(() => expect(trashAssets).toHaveBeenCalledWith(["asset-1"]));
+  await waitFor(() => expect(screen.queryByRole("region", { name: "Location results" })).not.toBeInTheDocument());
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(state.markers.map((marker) => marker.id)).toEqual(["asset-0", "asset-2"]);
 });

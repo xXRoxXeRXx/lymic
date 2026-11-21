@@ -33,7 +33,7 @@ pub(crate) use tags::Tag;
 pub(crate) use timeline::{
     AlbumTimeline, FilteredTimeline, PlaceTimeline, TimelineAsset, TimelineBucket,
 };
-pub(crate) use trash::TrashRestoreResult;
+pub(crate) use trash::{TrashMoveResult, TrashRestoreResult};
 pub(crate) use upload::SidecarDirectoryCache;
 
 mod map;

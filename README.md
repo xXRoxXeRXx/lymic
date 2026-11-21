@@ -12,7 +12,7 @@
 
 **Lymic** is an unofficial, cross-platform desktop client for uploading and synchronizing local media with [Immich](https://immich.app/). It watches selected local folders, detects supported media, avoids uploading assets that already exist on Immich, and streams missing files from disk.
 
-> Lymic is an upload-oriented client, not a two-way filesystem mirror. It does not download remote assets automatically, mirror remote deletions or rename local files. Browsing your library is read-only; the only changes Lymic makes in Immich are uploads, target-album assignments, album creation, the Favorite flag and Trash restores.
+> Lymic is an upload-oriented client, not a two-way filesystem mirror. It does not download remote assets automatically, mirror remote deletions or rename local files. Browsing your library is read-only; the only changes Lymic makes in Immich are uploads, target-album assignments, album creation, the Favorite flag, Archive and Unarchive, Move to Trash and Trash restores.
 
 <p align="center">
   <img src="docs/assets/login.png" alt="Lymic Login" width="100%">
@@ -39,12 +39,12 @@
 
 **Browsing your Immich library**
 
-- **Photos and Albums** — Masonry timeline with date scrubber, thumbnail cache and Lightbox. In the Lightbox you can view details, set Favorite, download and add to an album.
+- **Photos and Albums** — Masonry timeline with date scrubber, thumbnail cache and Lightbox. In the Lightbox you can view details, set Favorite, download, add to an album and **Move to Trash**.
 - **Explore** — Recognized people, places (cities) and memories, each opening as a timeline.
 - **People and Tags** — Filter the timeline by person; browse Tags as a hierarchy tree. Tags are never created or changed.
 - **Map** — Geotagged photos and videos as clusters and thumbnails. Map tiles come from OpenFreeMap, not from your Immich server.
 - **Archive** — View archived items and **Unarchive** them (from the Lightbox or a multi-selection) so they return to your Photos. In Photos and Favorites you can **Archive** the open photo in the Lightbox or a multi-selection, which hides it there as in Immich's web app; Albums, People, Places, Memories, Tags and Search results offer Archive too and keep the assets in the list. Lymic only switches an asset between archived and not archived: never the locked folder, hidden assets or the trash.
-- **Trash** — View, download and **Restore** trashed items (single or multi-selection). Lymic never deletes anything or empties the trash. A local file whose copy is in the Immich trash counts as synced and is not uploaded again.
+- **Trash** — View, download and **Restore** trashed items (single or multi-selection). **Move to Trash** is offered in the Lightbox and in multi-selection of every view that shows photos (including Search results), and in the Lightbox of the Map; it asks for confirmation first and puts the items in the Immich trash, from where Restore brings them back. Move to Trash is a soft delete: Lymic never deletes permanently, never empties the trash, never trashes on its own and never touches local files. Views that may still show a moved item reload the next time you open them. A local file whose copy is in the Immich trash counts as synced and is not uploaded again.
 - **Search** — Search bar on every view: by Context, Filename, Description, Folder Path or OCR, with filters for people, Tags, dates, location, media type, camera, rating, Favorites, Archived and Unfiled Assets. Requires **Immich 3.2 or later**; Context search needs Smart Search and OCR needs OCR enabled in Immich.
 
 ---
@@ -76,7 +76,7 @@ Create the API key in Immich under **Account Settings → API Keys**. The simple
 | `asset.view` | Thumbnails, previews and video playback |
 | `asset.download` | Downloading originals |
 | `asset.update` | Setting or clearing Favorite; Archive and Unarchive |
-| `asset.delete` | Trash: Restore only. Lymic never deletes anything. |
+| `asset.delete` | Trash: **Restore** and **Move to Trash** (both need it). Lymic never deletes permanently and never empties the trash. |
 | `person.read` | People, Explore people, Search: Recognized People filter |
 | `memory.read` | Explore: memories |
 | `tag.read` | Tags tree, Search: Tag filter |

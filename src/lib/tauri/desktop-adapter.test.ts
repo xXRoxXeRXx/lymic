@@ -27,6 +27,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch }));
 vi.mock("@tauri-apps/plugin-updater", () => ({ check }));
 
+import type { TrashMoveResult } from "../contracts";
 import {
   tauriDesktopAdapter,
   type AlbumAssignmentDesktopAdapter,
@@ -37,6 +38,7 @@ import {
   type AuthDesktopAdapter,
   type FilteredTimelineDesktopAdapter,
   type TrashRestoreDesktopAdapter,
+  type TrashMoveDesktopAdapter,
   type AssetVisibilityDesktopAdapter,
   type PreferencesDesktopAdapter,
   type SearchDesktopAdapter,
@@ -57,6 +59,7 @@ describe("tauriDesktopAdapter", () => {
   const timelineAdapter: TimelineDesktopAdapter = tauriDesktopAdapter;
   const filteredTimelineAdapter: FilteredTimelineDesktopAdapter = tauriDesktopAdapter;
   const trashRestoreAdapter: TrashRestoreDesktopAdapter = tauriDesktopAdapter;
+  const trashMoveAdapter: TrashMoveDesktopAdapter = tauriDesktopAdapter;
   const assetVisibilityAdapter: AssetVisibilityDesktopAdapter = tauriDesktopAdapter;
   const albumTimelineAdapter: AlbumTimelineDesktopAdapter = tauriDesktopAdapter;
   const placeTimelineAdapter: PlaceTimelineDesktopAdapter = tauriDesktopAdapter;
@@ -108,6 +111,7 @@ describe("tauriDesktopAdapter", () => {
     await filteredTimelineAdapter.getFilteredTimelineBuckets("trash");
     await filteredTimelineAdapter.getFilteredTimelineBucketAssets("trash", "2025-03-01T00:00:00.000Z");
     await trashRestoreAdapter.restoreTrashedAssets(["trash-1", "trash-2"]);
+    await trashMoveAdapter.trashAssets(["asset-1", "asset-2"]);
     await assetVisibilityAdapter.setAssetsVisibility(["archived-1", "archived-2"], "timeline");
     await tauriDesktopAdapter.getAssetDetails("asset-1");
     await tauriDesktopAdapter.setAssetFavorite("asset-1", true);
@@ -179,6 +183,7 @@ describe("tauriDesktopAdapter", () => {
       ["get_filtered_timeline_buckets", { timeline: "trash" }],
       ["get_filtered_timeline_bucket_assets", { timeline: "trash", timeBucket: "2025-03-01T00:00:00.000Z" }],
       ["restore_trashed_assets", { assetIds: ["trash-1", "trash-2"] }],
+      ["trash_assets", { assetIds: ["asset-1", "asset-2"] }],
       ["set_assets_visibility", { assetIds: ["archived-1", "archived-2"], visibility: "timeline" }],
       ["get_asset_details", { assetId: "asset-1" }],
       ["set_asset_favorite", { assetId: "asset-1", isFavorite: true }],
@@ -214,6 +219,17 @@ describe("tauriDesktopAdapter", () => {
       ["removable-volume-removed", expect.any(Function)],
       ["removable-volume-remounted", expect.any(Function)],
     ]);
+  });
+
+  it("returns the partial result of Move to Trash with its failure code as the backend reports it", async () => {
+    const partial: TrashMoveResult = { movedAssetIds: ["asset-1"], failureCode: "trash_move_permission_denied:asset.delete" };
+    invoke.mockClear();
+    invoke.mockResolvedValueOnce(partial);
+
+    const result = await trashMoveAdapter.trashAssets(["asset-1", "asset-2"]);
+
+    expect(invoke).toHaveBeenCalledWith("trash_assets", { assetIds: ["asset-1", "asset-2"] });
+    expect(result).toEqual({ movedAssetIds: ["asset-1"], failureCode: "trash_move_permission_denied:asset.delete" });
   });
 
   it("invokes the Search commands with the request as one argument", async () => {

@@ -4,7 +4,8 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::immich::{
     AlbumTimeline, AssetDetails, AssetVisibility, AssetVisibilityResult, FilteredTimeline,
-    ImmichSession, PlaceTimeline, RemoteAssetId, TimelineAsset, TimelineBucket, TrashRestoreResult,
+    ImmichSession, PlaceTimeline, RemoteAssetId, TimelineAsset, TimelineBucket, TrashMoveResult,
+    TrashRestoreResult,
 };
 
 #[tauri::command]
@@ -93,7 +94,7 @@ fn remote_asset_ids(asset_ids: &[String]) -> Result<Vec<RemoteAssetId>, String> 
         .collect()
 }
 
-/// Restores Trashed Assets to the Immich Library. Lymic offers no other write to the Immich trash.
+/// Restores Trashed Assets to the Immich Library. Together with `trash_assets` the only write to the Immich trash.
 #[tauri::command]
 pub(crate) async fn restore_trashed_assets(
     asset_ids: Vec<String>,
@@ -102,6 +103,19 @@ pub(crate) async fn restore_trashed_assets(
     ImmichSession::with_stored_credentials(|client| async move {
         client.restore_trashed_assets(&asset_ids).await
     })
+    .await
+}
+
+/// Moves Remote Assets to the Immich trash (a soft delete, never permanent; ADR-0011) and returns
+/// the IDs Immich confirmed as moved. Every requested asset not listed is still in the library.
+/// When the per-asset fallback was aborted after some assets were moved, the result also carries the
+/// credential-free `failureCode`; a failure before any asset was moved is an error code.
+#[tauri::command]
+pub(crate) async fn trash_assets(asset_ids: Vec<String>) -> Result<TrashMoveResult, String> {
+    let asset_ids = remote_asset_ids(&asset_ids)?;
+    ImmichSession::with_stored_credentials(
+        |client| async move { client.trash_assets(&asset_ids).await },
+    )
     .await
 }
 

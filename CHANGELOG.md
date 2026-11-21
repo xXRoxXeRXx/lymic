@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Select archived assets in the Archive and choose Unarchive. It runs at once without a confirmation: the assets that changed leave the view, the ones that did not stay selected, and the message gives the counts. A key without the `asset.update` permission gets a message that names it. The Photo Timeline shows the unarchived assets the next time it is opened from another view.
   - The Lightbox of the Archive has an Unarchive button for the open photo or video with the same behaviour: it runs at once, shows the next archived asset and closes only when none is left.
   - Lymic only switches visibility between `timeline` and `archive` (ADR-0012); Synchronization never touches the archive status. Available in all supported languages.
+- **Move to Trash**:
+  - Move photos and videos to the Immich trash from the Lightbox, and from the multi-selection of every view that shows them: Photos, Favorites, Archive, Albums, People, Places, Memories, Tags and Search results. The Map View offers it in its Lightbox. The Trash view does not offer it; it keeps Restore and Download.
+  - Asks for confirmation naming the count and says the items can be restored in the Trash. Moved items leave the view at once; items Immich refuses (for example in a shared Album you do not own) stay visible and selected so you can retry, and the message says how many could not be moved.
+  - It is a soft delete: Lymic never deletes permanently, never empties the trash and never trashes on its own, and local files are never touched. A local file whose copy was moved to the trash is reported as a Trashed Duplicate in the activity log and is not uploaded again.
+  - Needs the `asset.delete` API key permission, the same one Restore needs; a key without it gets a message naming the permission. Verified against Immich v3.4.1 only; no minimum Immich version is claimed.
+  - Photos, Explore, Tags and the Albums list reload the next time you open them (or return to them, including Back from an Album) after something was moved, so a trashed item no longer shows or counts there. If Moving to Trash stops partway (for example the server becomes unavailable), the items that were already moved leave the view, the rest stay, and the message says why it stopped. Available in all supported languages.
+
+### Changed
+- The README, the documentation and the permission table no longer say that Lymic never deletes anything; they describe Move to Trash and name `asset.delete` for both Restore and Move to Trash.
 
 ## [0.30.0] - 2026-11-17
 

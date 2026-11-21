@@ -12,6 +12,7 @@ import type {
   Album,
   AlbumAssignmentResult,
   TrashRestoreResult,
+  TrashMoveResult,
   AssetVisibility,
   AssetVisibilityResult,
   FilteredTimeline,
@@ -104,6 +105,15 @@ export interface FilteredTimelineDesktopAdapter {
 
 export interface TrashRestoreDesktopAdapter {
   restoreTrashedAssets(assetIds: string[]): Promise<TrashRestoreResult>;
+}
+
+export interface TrashMoveDesktopAdapter {
+  /**
+   * Moves Remote Assets to the Immich trash (a soft delete); the result lists those Immich confirmed as moved and,
+   * when the per-asset fallback stopped after some were moved, the credential-free `failureCode` that says why.
+   * A failure before any asset was moved rejects with that code.
+   */
+  trashAssets(assetIds: string[]): Promise<TrashMoveResult>;
 }
 
 /** The one write that Archives or Unarchives Remote Assets; Lymic sends only `archive` and `timeline`. */
@@ -215,6 +225,7 @@ export interface DesktopAdapter
     TimelineDesktopAdapter,
     FilteredTimelineDesktopAdapter,
     TrashRestoreDesktopAdapter,
+    TrashMoveDesktopAdapter,
     AssetVisibilityDesktopAdapter,
     MapDesktopAdapter,
     AssetDesktopAdapter,
@@ -274,6 +285,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getFilteredTimelineBuckets: (timeline) => invoke<TimelineBucket[]>("get_filtered_timeline_buckets", { timeline }),
   getFilteredTimelineBucketAssets: (timeline, timeBucket) => invoke<TimelineAsset[]>("get_filtered_timeline_bucket_assets", { timeline, timeBucket }),
   restoreTrashedAssets: (assetIds) => invoke<TrashRestoreResult>("restore_trashed_assets", { assetIds }),
+  trashAssets: (assetIds) => invoke<TrashMoveResult>("trash_assets", { assetIds }),
   setAssetsVisibility: (assetIds, visibility) => invoke<AssetVisibilityResult>("set_assets_visibility", { assetIds, visibility }),
   getAssetDetails: (assetId) => invoke<AssetDetails>("get_asset_details", { assetId }),
   setAssetFavorite: (assetId, isFavorite) => invoke<void>("set_asset_favorite", { assetId, isFavorite }),

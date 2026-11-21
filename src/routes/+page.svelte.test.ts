@@ -3909,6 +3909,784 @@ describe("Trash Timeline Restore", () => {
   });
 });
 
+describe("Photo Timeline Move to Trash", () => {
+  beforeEach(stubImmediateIntersectionObserver);
+
+  const march = "2025-03-01T00:00:00.000Z";
+  const photo = (id: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE" as const, takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false,
+  });
+  const details = {
+    originalFileName: "photo.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  };
+  const moved = async (args?: unknown) => ({ movedAssetIds: (args as { assetIds: string[] }).assetIds });
+
+  function renderPhotos(trash: (args?: unknown) => Promise<unknown>, assetIds = ["photo-1", "photo-2"]) {
+    renderAuthenticatedPage({
+      get_timeline_buckets: async () => [{ timeBucket: march, count: assetIds.length }],
+      get_timeline_bucket_assets: async () => assetIds.map(photo),
+      get_asset_details: async () => details,
+      trash_assets: trash,
+    });
+  }
+
+  async function openFirstPhoto() {
+    await fireEvent.click((await screen.findAllByRole("button", { name: "Open photo" }))[0]);
+    return screen.findByRole("dialog", { name: "Media lightbox" });
+  }
+
+  async function confirmMoveToTrash(lightbox: HTMLElement) {
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Move to Trash" }));
+    const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+  }
+
+  it("offers Move to Trash next to Download in the Lightbox of the Photo Timeline", async () => {
+    renderPhotos(vi.fn(moved));
+    const lightbox = await openFirstPhoto();
+
+    const labels = within(lightbox).getAllByRole("button").map((button) => button.getAttribute("aria-label"));
+    expect(labels.indexOf("Move to Trash")).toBeGreaterThan(-1);
+    expect(labels.indexOf("Move to Trash")).toBe(labels.indexOf("Download original") + 1);
+  });
+
+  it("offers no Move to Trash in the Lightbox of the Trash Timeline", async () => {
+    renderAuthenticatedPage({
+      "get_filtered_timeline_buckets:trash": async () => [{ timeBucket: march, count: 1 }],
+      "get_filtered_timeline_bucket_assets:trash": async () => [photo("trash-1")],
+      get_asset_details: async () => details,
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+    const lightbox = await openFirstPhoto();
+
+    expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+    expect(within(lightbox).queryByRole("button", { name: "Move to Trash" })).not.toBeInTheDocument();
+  });
+
+  it("asks for confirmation naming the count and the way back, and cancelling does nothing", async () => {
+    const trash = vi.fn(moved);
+    renderPhotos(trash);
+    const lightbox = await openFirstPhoto();
+
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Move to Trash" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+    expect(dialog).toHaveTextContent("Move 1 selected to the Immich trash? You can restore them in the Trash.");
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog", { name: "Move to Trash?" })).not.toBeInTheDocument();
+    expect(trash).not.toHaveBeenCalled();
+    await fireEvent.click(within(screen.getByRole("dialog", { name: "Media lightbox" })).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+  });
+
+  it("moves the asset on confirmation, removes it from the timeline and closes the Lightbox", async () => {
+    const trash = vi.fn(moved);
+    renderPhotos(trash);
+    const lightbox = await openFirstPhoto();
+
+    await confirmMoveToTrash(lightbox);
+
+    await waitFor(() => expect(trash).toHaveBeenCalledWith({ assetIds: ["photo-1"] }));
+    expect(trash).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("status")).toHaveTextContent("1 moved to the Immich trash. You can restore them in the Trash.");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+  });
+
+  it("names the missing permission and keeps the asset and the Lightbox when Immich refuses", async () => {
+    renderPhotos(vi.fn(async () => { throw "trash_move_permission_denied:asset.delete"; }));
+    const lightbox = await openFirstPhoto();
+
+    await confirmMoveToTrash(lightbox);
+
+    expect(await within(lightbox).findByRole("alert")).toHaveTextContent("Moving to the trash was refused. Give the API key the asset.delete permission.");
+    expect(screen.queryByRole("dialog", { name: "Move to Trash?" })).not.toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Move to Trash" })).toBeEnabled();
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+  });
+
+  it("shows a credential-free failure for other errors and when Immich did not move the asset", async () => {
+    const trash = vi.fn()
+      .mockRejectedValueOnce(new Error("Failed with key secret-key at https://immich.example"))
+      .mockResolvedValueOnce({ movedAssetIds: [] });
+    renderPhotos(trash);
+    const lightbox = await openFirstPhoto();
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      await confirmMoveToTrash(lightbox);
+      await waitFor(() => expect(trash).toHaveBeenCalledTimes(attempt));
+      const alert = await within(lightbox).findByRole("alert");
+      expect(alert).toHaveTextContent("Could not move to the trash. Please try again.");
+      expect(alert.textContent).not.toContain("secret-key");
+    }
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+  });
+
+  it("disables Move to Trash and closing while the request runs", async () => {
+    let finish!: (value: unknown) => void;
+    renderPhotos(vi.fn(() => new Promise((resolve) => { finish = resolve; })));
+    const lightbox = await openFirstPhoto();
+
+    await confirmMoveToTrash(lightbox);
+
+    await waitFor(() => expect(within(lightbox).getByRole("button", { name: "Move to Trash" })).toBeDisabled());
+    expect(within(lightbox).getByRole("button", { name: "Close lightbox" })).toBeDisabled();
+    finish({ movedAssetIds: ["photo-1"] });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("still closes the Lightbox and drops the asset when the timeline was refreshed while the move ran", async () => {
+    let finish!: (value: unknown) => void;
+    renderPhotos(vi.fn(() => new Promise((resolve) => { finish = resolve; })), ["photo-1", "photo-2", "photo-3"]);
+    const lightbox = await openFirstPhoto();
+    await confirmMoveToTrash(lightbox);
+    await waitFor(() => expect(within(lightbox).getByRole("button", { name: "Move to Trash" })).toBeDisabled());
+    const bucketRequests = tauri.invoke.mock.calls.filter(([name]) => name === "get_timeline_buckets").length;
+
+    await fireEvent.click(screen.getByRole("button", { name: "Refresh timeline" }));
+    await waitFor(() => expect(tauri.invoke.mock.calls.filter(([name]) => name === "get_timeline_buckets").length).toBeGreaterThan(bucketRequests));
+    finish({ movedAssetIds: ["photo-1"] });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+  });
+
+  describe("multi-selection", () => {
+    const three = ["photo-1", "photo-2", "photo-3"];
+
+    async function select(count: number) {
+      const boxes = await screen.findAllByRole("checkbox", { name: "Select asset" });
+      for (let index = 0; index < count; index += 1) await fireEvent.click(boxes[index]);
+      await screen.findByText(`${count} selected`);
+    }
+
+    /** The selection bar's button; the confirmation dialog has a button of the same name. */
+    const barTrashButton = () => screen.getAllByRole("button", { name: "Move to Trash" }).find((button) => !button.closest("dialog"))!;
+
+    /** Opens the confirmation from the selection bar and returns its dialog. */
+    async function openConfirmation() {
+      await fireEvent.click(screen.getByRole("button", { name: "Move to Trash" }));
+      return screen.findByRole("dialog", { name: "Move to Trash?" });
+    }
+
+    async function confirmSelection() {
+      const dialog = await openConfirmation();
+      await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+    }
+
+    it("asks for confirmation naming the selected count, and cancelling keeps the selection and requests nothing", async () => {
+      const trash = vi.fn(moved);
+      renderPhotos(trash, three);
+      await select(2);
+
+      const dialog = await openConfirmation();
+      expect(dialog).toHaveTextContent("Move 2 selected to the Immich trash? You can restore them in the Trash.");
+      await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+      expect(screen.queryByRole("dialog", { name: "Move to Trash?" })).not.toBeInTheDocument();
+      expect(trash).not.toHaveBeenCalled();
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+    });
+
+    it("moves the selected assets together, removes them at once and announces the count", async () => {
+      const trash = vi.fn(moved);
+      renderPhotos(trash, three);
+      await select(2);
+
+      await confirmSelection();
+
+      await waitFor(() => expect(trash).toHaveBeenCalledWith({ assetIds: ["photo-1", "photo-2"] }));
+      expect(trash).toHaveBeenCalledTimes(1);
+      expect(await screen.findByRole("status")).toHaveTextContent("2 moved to the Immich trash. You can restore them in the Trash.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+      // The dialog closes right after the move finished, one tick after the feedback appeared.
+      await waitFor(() => expect(screen.queryByText(/selected/)).not.toBeInTheDocument());
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("leaves failed assets visible and selected on a partial failure and lets the user retry them", async () => {
+      const trash = vi.fn()
+        .mockResolvedValueOnce({ movedAssetIds: ["photo-1"] })
+        .mockImplementationOnce(moved);
+      renderPhotos(trash, three);
+      await select(3);
+
+      await confirmSelection();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("2 of 3 could not be moved to the trash. They stay selected so you can retry.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      await confirmSelection();
+      await waitFor(() => expect(trash).toHaveBeenLastCalledWith({ assetIds: ["photo-2", "photo-3"] }));
+      expect(await screen.findByText(/^2 moved to the Immich trash/)).toHaveAttribute("role", "status");
+      expect(screen.queryAllByRole("button", { name: "Open photo" })).toHaveLength(0);
+    });
+
+    it("removes the assets moved before the request stopped, keeps the others selected and still names the refusal", async () => {
+      const trash = vi.fn(async () => ({ movedAssetIds: ["photo-1"], failureCode: "trash_move_permission_denied:asset.delete" }));
+      renderPhotos(trash, three);
+      await select(3);
+
+      await confirmSelection();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Moving to the trash was refused. Give the API key the asset.delete permission.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    });
+
+    it("shows the failure message when the request stopped after some assets were moved for another reason", async () => {
+      renderPhotos(vi.fn(async () => ({ movedAssetIds: ["photo-1", "photo-2"], failureCode: "trash_move_unavailable" })), three);
+      await select(3);
+
+      await confirmSelection();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Could not move to the trash. Please try again.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+    });
+
+    it("names how many assets failed when none was moved and keeps them selected", async () => {
+      renderPhotos(vi.fn(async () => ({ movedAssetIds: [] })), three);
+      await select(2);
+
+      await confirmSelection();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("2 of 2 could not be moved to the trash. Please try again.");
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+    });
+
+    it("names the missing permission on a refused request and keeps the selection and the view usable", async () => {
+      renderPhotos(vi.fn(async () => { throw "trash_move_permission_denied:asset.delete"; }), three);
+      await select(2);
+
+      await confirmSelection();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Moving to the trash was refused. Give the API key the asset.delete permission.");
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(screen.getByRole("button", { name: "Move to Trash" })).toBeEnabled();
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+    });
+
+    it("shows a credential-free failure for another error", async () => {
+      renderPhotos(vi.fn(async () => { throw new Error("Failed with key secret-key at https://immich.example"); }), three);
+      await select(2);
+
+      await confirmSelection();
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Could not move to the trash. Please try again.");
+      expect(alert.textContent).not.toContain("secret-key");
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+    });
+
+    it("ignores a second bulk action while the Move to Trash runs", async () => {
+      let finish!: (value: unknown) => void;
+      const trash = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+      renderPhotos(trash, three);
+      await select(2);
+
+      await confirmSelection();
+
+      await waitFor(() => expect(barTrashButton()).toHaveAttribute("aria-busy", "true"));
+      expect(barTrashButton()).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Download" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Done" })).toBeDisabled();
+      expect(trash).toHaveBeenCalledTimes(1);
+      finish({ movedAssetIds: ["photo-1", "photo-2"] });
+      expect(await screen.findByRole("status")).toHaveTextContent("2 moved to the Immich trash");
+    });
+
+    it("drops a result that arrives after the timeline was refreshed", async () => {
+      let finish!: (value: unknown) => void;
+      renderPhotos(vi.fn(() => new Promise((resolve) => { finish = resolve; })), three);
+      await select(2);
+      await confirmSelection();
+      await waitFor(() => expect(barTrashButton()).toBeDisabled());
+
+      await fireEvent.click(screen.getByRole("button", { name: "Refresh timeline" }));
+      finish({ movedAssetIds: ["photo-1", "photo-2"] });
+
+      await waitFor(() => expect(screen.queryByText(/selected/)).not.toBeInTheDocument());
+      expect(screen.queryByText(/moved to the Immich trash/)).not.toBeInTheDocument();
+    });
+
+    it("offers no Move to Trash in the selection bar of the Trash Timeline", async () => {
+      renderAuthenticatedPage({
+        "get_filtered_timeline_buckets:trash": async () => [{ timeBucket: march, count: 1 }],
+        "get_filtered_timeline_bucket_assets:trash": async () => [photo("trash-1")],
+        get_asset_details: async () => details,
+      });
+      await fireEvent.click(await screen.findByRole("button", { name: "Trash" }));
+      await select(1);
+
+      expect(screen.queryByRole("button", { name: "Move to Trash" })).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("Move to Trash in every hosting view", () => {
+  beforeEach(stubImmediateIntersectionObserver);
+
+  const march = "2025-03-01T00:00:00.000Z";
+  const asset = (id: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE" as const, takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false,
+  });
+  const details = {
+    originalFileName: "photo.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  };
+  const timelineOf = (ids: string[]) => ({ buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(asset) }, truncated: false });
+  const nav = async (name: string) => fireEvent.click(await screen.findByRole("button", { name }));
+  const moved = async (args?: unknown) => ({ movedAssetIds: (args as { assetIds: string[] }).assetIds });
+
+  interface HostingView {
+    name: string;
+    handlers(ids: string[]): Record<string, (args?: unknown) => Promise<unknown>>;
+    open(): Promise<void>;
+  }
+  const hostingViews: HostingView[] = [
+    {
+      name: "Favorites",
+      handlers: (ids) => ({ "get_filtered_timeline_buckets:favorites": async () => [{ timeBucket: march, count: ids.length }], "get_filtered_timeline_bucket_assets:favorites": async () => ids.map(asset) }),
+      open: async () => { await nav("Favorites"); },
+    },
+    {
+      name: "Archive",
+      handlers: (ids) => ({ "get_filtered_timeline_buckets:archive": async () => [{ timeBucket: march, count: ids.length }], "get_filtered_timeline_bucket_assets:archive": async () => ids.map(asset) }),
+      open: async () => { await nav("Archive"); },
+    },
+    {
+      name: "an Album Timeline",
+      handlers: (ids) => ({
+        get_album_catalogue: async () => [{ id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: ids.length, isShared: true, order: null }],
+        get_album_timeline: async () => timelineOf(ids),
+      }),
+      open: async () => { await nav("Albums"); await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ })); },
+    },
+    {
+      name: "a Person Timeline",
+      handlers: (ids) => ({
+        get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+        get_person_timeline_buckets: async () => [{ timeBucket: march, count: ids.length }],
+        get_person_timeline_bucket_assets: async () => ids.map(asset),
+      }),
+      open: async () => { await nav("Explore"); await fireEvent.click(await screen.findByRole("button", { name: "Ada" })); },
+    },
+    {
+      name: "a Place Timeline",
+      handlers: (ids) => ({ get_places: async () => [{ city: "Paris", thumbnailAssetId: ids[0] }], get_place_timeline: async () => timelineOf(ids) }),
+      open: async () => { await nav("Explore"); await fireEvent.click(await screen.findByRole("button", { name: "Paris" })); },
+    },
+    {
+      name: "a Memory Timeline",
+      handlers: (ids) => ({
+        get_memories: async () => [{ id: "m-1", kind: "onThisDay", memoryAt: "2019-01-02T00:00:00.000Z", year: 2019, personName: null, coverAssetId: ids[0], timeline: timelineOf(ids) }],
+      }),
+      open: async () => { await nav("Explore"); await fireEvent.click(await screen.findByRole("button", { name: "Jan 2, 2019" })); },
+    },
+    {
+      name: "a Tag Timeline",
+      handlers: (ids) => ({
+        get_tags: async () => [{ id: "t-family", name: "Family", value: "Family", parentId: null, color: null }],
+        get_tag_timeline_buckets: async () => [{ timeBucket: march, count: ids.length }],
+        get_tag_timeline_bucket_assets: async () => ids.map(asset),
+      }),
+      open: async () => { await nav("Tags"); await fireEvent.click(await screen.findByRole("treeitem", { name: "Family" })); },
+    },
+    {
+      name: "Search Results",
+      handlers: (ids) => ({
+        get_search_support: async () => ({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
+        search_assets: async () => timelineOf(ids),
+      }),
+      open: async () => {
+        await fireEvent.input(await screen.findByRole("searchbox", { name: "Search your Immich library" }), { target: { value: "IMG_" } });
+        await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+      },
+    },
+  ];
+
+  async function renderView(view: HostingView, trash: (args?: unknown) => Promise<unknown>, ids = ["a-1", "a-2", "a-3"]) {
+    renderAuthenticatedPage({ ...view.handlers(ids), get_asset_details: async () => details, trash_assets: trash });
+    await view.open();
+    await screen.findAllByRole("button", { name: "Open photo" });
+  }
+
+  /** The selection bar's button; the confirmation dialog has a button of the same name. */
+  const barTrashButton = () => screen.getAllByRole("button", { name: "Move to Trash" }).find((button) => !button.closest("dialog"))!;
+
+  async function select(count: number) {
+    const boxes = await screen.findAllByRole("checkbox", { name: "Select asset" });
+    for (let index = 0; index < count; index += 1) await fireEvent.click(boxes[index]);
+    await screen.findByText(`${count} selected`);
+  }
+
+  async function confirmInDialog() {
+    const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+  }
+
+  describe.each(hostingViews)("in $name", (view) => {
+    it("moves the asset from the Lightbox and removes it from the view", async () => {
+      const trash = vi.fn(moved);
+      await renderView(view, trash);
+
+      await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+      const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+      await fireEvent.click(within(lightbox).getByRole("button", { name: "Move to Trash" }));
+      await confirmInDialog();
+
+      await waitFor(() => expect(trash).toHaveBeenCalledWith({ assetIds: ["a-1"] }));
+      expect(await screen.findByRole("status")).toHaveTextContent("1 moved to the Immich trash. You can restore them in the Trash.");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+    });
+
+    it("moves the multi-selection and removes the assets from the view", async () => {
+      const trash = vi.fn(moved);
+      await renderView(view, trash);
+      await select(2);
+
+      await fireEvent.click(barTrashButton());
+      await confirmInDialog();
+
+      await waitFor(() => expect(trash).toHaveBeenCalledWith({ assetIds: ["a-1", "a-2"] }));
+      expect(await screen.findByRole("status")).toHaveTextContent("2 moved to the Immich trash");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+      // The dialog closes right after the move finished, one tick after the feedback appeared.
+      await waitFor(() => expect(screen.queryByText(/selected/)).not.toBeInTheDocument());
+    });
+
+    it("keeps an asset the server refuses visible and selected with a partial-failure message", async () => {
+      // The server's answer decides: the second asset is, for example, owned by someone else in a shared Album.
+      const trash = vi.fn(async () => ({ movedAssetIds: ["a-1"] }));
+      await renderView(view, trash);
+      await select(2);
+
+      await fireEvent.click(barTrashButton());
+      await confirmInDialog();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("1 of 2 could not be moved to the trash. They stay selected so you can retry.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+    });
+
+    it("keeps an asset the server refuses in the Lightbox with a message", async () => {
+      await renderView(view, vi.fn(async () => ({ movedAssetIds: [] })));
+
+      await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+      const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+      await fireEvent.click(within(lightbox).getByRole("button", { name: "Move to Trash" }));
+      await confirmInDialog();
+
+      expect(await within(lightbox).findByRole("alert")).toHaveTextContent("Could not move to the trash. Please try again.");
+      await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+    });
+  });
+
+  it("offers no Move to Trash in the Trash Timeline, which keeps Restore and Download", async () => {
+    renderAuthenticatedPage({
+      "get_filtered_timeline_buckets:trash": async () => [{ timeBucket: march, count: 2 }],
+      "get_filtered_timeline_bucket_assets:trash": async () => ["t-1", "t-2"].map(asset),
+      get_asset_details: async () => details,
+      trash_assets: moved,
+    });
+    await nav("Trash");
+    await select(1);
+    expect(screen.queryByRole("button", { name: "Move to Trash" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Restore" })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    expect(within(lightbox).queryByRole("button", { name: "Move to Trash" })).not.toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Restore" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "Download original" })).toBeInTheDocument();
+  });
+});
+
+describe("Cached views after a Move to Trash", () => {
+  beforeEach(stubImmediateIntersectionObserver);
+
+  const march = "2025-03-01T00:00:00.000Z";
+  const asset = (id: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE" as const, takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false,
+  });
+  const details = {
+    originalFileName: "photo.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  };
+  const timelineOf = (ids: string[]) => ({ buckets: [{ timeBucket: march, count: ids.length }], assetsByBucket: { [march]: ids.map(asset) }, truncated: false });
+  const moved = async (args?: unknown) => ({ movedAssetIds: (args as { assetIds: string[] }).assetIds });
+  const nav = async (name: string) => fireEvent.click(await screen.findByRole("button", { name }));
+  const calls = (command: string) => tauri.invoke.mock.calls.filter(([name]) => name === command).length;
+
+  async function openFirstPhotoAndConfirmMove() {
+    await fireEvent.click((await screen.findAllByRole("button", { name: "Open photo" }))[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    await fireEvent.click(within(lightbox).getByRole("button", { name: "Move to Trash" }));
+    const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+    return lightbox;
+  }
+
+  /** Moves the first asset of the open view to the trash from its Lightbox and waits until the Lightbox closed. */
+  async function moveFirstToTrash() {
+    await openFirstPhotoAndConfirmMove();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  }
+
+  const favorites = {
+    "get_filtered_timeline_buckets:favorites": async () => [{ timeBucket: march, count: 2 }],
+    "get_filtered_timeline_bucket_assets:favorites": async () => ["fav-1", "fav-2"].map(asset),
+  };
+
+  describe("the Photo Timeline", () => {
+    it("reloads the next time it opens after a move from another view", async () => {
+      renderAuthenticatedPage({ ...favorites, get_asset_details: async () => details, trash_assets: moved });
+      await waitFor(() => expect(calls("get_timeline_buckets")).toBe(1));
+      await nav("Favorites");
+      await moveFirstToTrash();
+
+      await nav("Photos");
+
+      await waitFor(() => expect(calls("get_timeline_buckets")).toBe(2));
+    });
+
+    it("is not marked stale by a move inside it", async () => {
+      renderAuthenticatedPage({
+        get_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
+        get_timeline_bucket_assets: async () => ["photo-1", "photo-2"].map(asset),
+        get_asset_details: async () => details,
+        trash_assets: moved,
+      });
+      await waitFor(() => expect(calls("get_timeline_buckets")).toBe(1));
+      await moveFirstToTrash();
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+
+      await nav("Favorites");
+      await nav("Photos");
+
+      expect(calls("get_timeline_buckets")).toBe(1);
+    });
+
+    it("stays as it is when the request moved nothing", async () => {
+      renderAuthenticatedPage({ ...favorites, get_asset_details: async () => details, trash_assets: async () => ({ movedAssetIds: [] }) });
+      await waitFor(() => expect(calls("get_timeline_buckets")).toBe(1));
+      await nav("Favorites");
+      const lightbox = await openFirstPhotoAndConfirmMove();
+      await within(lightbox).findByRole("alert");
+      await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
+
+      await nav("Photos");
+
+      expect(calls("get_timeline_buckets")).toBe(1);
+    });
+
+    it("reloads when Back from a Search started in it follows a move from the results", async () => {
+      renderAuthenticatedPage({
+        get_search_support: async () => ({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
+        search_assets: async () => timelineOf(["found-1", "found-2"]),
+        get_asset_details: async () => details,
+        trash_assets: moved,
+      });
+      await waitFor(() => expect(calls("get_timeline_buckets")).toBe(1));
+      await fireEvent.input(await screen.findByRole("searchbox", { name: "Search your Immich library" }), { target: { value: "IMG_" } });
+      await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+      await moveFirstToTrash();
+
+      await fireEvent.click(await screen.findByRole("button", { name: "Back to Photos" }));
+
+      await waitFor(() => expect(calls("get_timeline_buckets")).toBe(2));
+    });
+  });
+
+  it("makes no Explore or Tags request after a move while neither is the open view, and reloads each once when it opens", async () => {
+    renderAuthenticatedPage({
+      ...favorites,
+      get_people: async () => ({ people: [], hasNextPage: false }),
+      get_places: async () => [],
+      get_memories: async () => [],
+      get_tags: async () => [],
+      get_asset_details: async () => details,
+      trash_assets: moved,
+    });
+    await nav("Explore");
+    await waitFor(() => expect(calls("get_places")).toBe(1));
+    await nav("Tags");
+    await waitFor(() => expect(calls("get_tags")).toBe(1));
+    await nav("Favorites");
+    const explore = ["get_people", "get_places", "get_memories"].map(calls);
+    const tags = calls("get_tags");
+
+    await moveFirstToTrash();
+
+    expect(["get_people", "get_places", "get_memories"].map(calls)).toEqual(explore);
+    expect(calls("get_tags")).toBe(tags);
+
+    await nav("Explore");
+    await waitFor(() => expect(calls("get_places")).toBe(2));
+    await nav("Tags");
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
+  });
+
+  it("reloads the Explore Overview on Back from a Person Timeline after a move there", async () => {
+    renderAuthenticatedPage({
+      get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+      get_person_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
+      get_person_timeline_bucket_assets: async () => ["p-1", "p-2"].map(asset),
+      get_asset_details: async () => details,
+      trash_assets: moved,
+    });
+    await nav("Explore");
+    await fireEvent.click(await screen.findByRole("button", { name: "Ada" }));
+    await waitFor(() => expect(calls("get_places")).toBe(1));
+    await moveFirstToTrash();
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Explore" }));
+
+    await waitFor(() => expect(calls("get_places")).toBe(2));
+  });
+
+  it("keeps the Explore Overview as it is on Back when nothing was moved", async () => {
+    renderAuthenticatedPage({
+      get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+      get_person_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
+      get_person_timeline_bucket_assets: async () => ["p-1", "p-2"].map(asset),
+    });
+    await nav("Explore");
+    await fireEvent.click(await screen.findByRole("button", { name: "Ada" }));
+    await waitFor(() => expect(calls("get_places")).toBe(1));
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Explore" }));
+    await screen.findByRole("button", { name: "Ada" });
+
+    expect(calls("get_places")).toBe(1);
+  });
+
+  it("reloads the Tags tree on Back from a Tag Timeline after a move there", async () => {
+    renderAuthenticatedPage({
+      get_tags: async () => [{ id: "t-family", name: "Family", value: "Family", parentId: null, color: null }],
+      get_tag_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
+      get_tag_timeline_bucket_assets: async () => ["t-1", "t-2"].map(asset),
+      get_asset_details: async () => details,
+      trash_assets: moved,
+    });
+    await nav("Tags");
+    await fireEvent.click(await screen.findByRole("treeitem", { name: "Family" }));
+    await waitFor(() => expect(calls("get_tags")).toBe(1));
+    await moveFirstToTrash();
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Back to Tags" }));
+
+    await waitFor(() => expect(calls("get_tags")).toBe(2));
+  });
+
+  describe("a request that stopped after some assets were moved", () => {
+    const stopped = async () => ({ movedAssetIds: ["fav-1"], failureCode: "trash_move_unavailable" });
+
+    async function selectFirstAndConfirmMove() {
+      await fireEvent.click((await screen.findAllByRole("checkbox", { name: "Select asset" }))[0]);
+      await fireEvent.click((await screen.findAllByRole("button", { name: "Move to Trash" })).find((button) => !button.closest("dialog"))!);
+      const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+      await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    }
+
+    it("marks Photos, Explore and Tags stale exactly as for a complete move", async () => {
+      renderAuthenticatedPage({
+        ...favorites,
+        get_people: async () => ({ people: [], hasNextPage: false }),
+        get_places: async () => [],
+        get_memories: async () => [],
+        get_tags: async () => [],
+        trash_assets: stopped,
+      });
+      await waitFor(() => expect(calls("get_timeline_buckets")).toBe(1));
+      await nav("Explore");
+      await waitFor(() => expect(calls("get_places")).toBe(1));
+      await nav("Tags");
+      await waitFor(() => expect(calls("get_tags")).toBe(1));
+      await nav("Favorites");
+
+      await selectFirstAndConfirmMove();
+      expect(await screen.findByRole("alert")).toHaveTextContent("Could not move to the trash. Please try again.");
+      expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1);
+
+      await nav("Photos");
+      await waitFor(() => expect(calls("get_timeline_buckets")).toBe(2));
+      await nav("Explore");
+      await waitFor(() => expect(calls("get_places")).toBe(2));
+      await nav("Tags");
+      await waitFor(() => expect(calls("get_tags")).toBe(2));
+    });
+  });
+
+  describe("the Albums catalogue", () => {
+    const holiday = (assetCount: number) => ({ id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount, isShared: false, order: null });
+    const albumPages = (trash_assets: (args?: unknown) => Promise<unknown>) => ({
+      get_album_catalogue: vi.fn().mockResolvedValueOnce([holiday(2)]).mockResolvedValue([holiday(1)]),
+      get_album_timeline: async () => timelineOf(["a-1", "a-2"]),
+      get_asset_details: async () => details,
+      trash_assets,
+    });
+
+    it("reloads on Back from an Album Timeline after a move there", async () => {
+      renderAuthenticatedPage(albumPages(moved));
+      await nav("Albums");
+      await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+      await waitFor(() => expect(calls("get_album_catalogue")).toBe(1));
+      await moveFirstToTrash();
+
+      await fireEvent.click(await screen.findByRole("button", { name: "Back to Albums" }));
+
+      await waitFor(() => expect(calls("get_album_catalogue")).toBe(2));
+    });
+
+    it("reloads on Back after a move from Search Results started in an Album Timeline", async () => {
+      renderAuthenticatedPage({
+        ...albumPages(moved),
+        get_search_support: async () => ({ supported: true, version: "3.4.1", requiredVersion: "3.2" }),
+        search_assets: async () => timelineOf(["found-1", "found-2"]),
+      });
+      await nav("Albums");
+      await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+      await waitFor(() => expect(calls("get_album_catalogue")).toBe(1));
+      await fireEvent.input(await screen.findByRole("searchbox", { name: "Search your Immich library" }), { target: { value: "IMG_" } });
+      await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+      await moveFirstToTrash();
+      await fireEvent.click(await screen.findByRole("button", { name: "Back to Holiday" }));
+
+      await fireEvent.click(await screen.findByRole("button", { name: "Back to Albums" }));
+
+      await waitFor(() => expect(calls("get_album_catalogue")).toBe(2));
+    });
+
+    it("keeps the cached catalogue on Back when nothing was moved", async () => {
+      renderAuthenticatedPage(albumPages(async () => ({ movedAssetIds: [] })));
+      await nav("Albums");
+      await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+      await waitFor(() => expect(calls("get_album_timeline")).toBe(1));
+      await screen.findAllByRole("button", { name: "Open photo" });
+
+      await fireEvent.click(await screen.findByRole("button", { name: "Back to Albums" }));
+      await screen.findByRole("heading", { name: "Albums", level: 1 });
+
+      expect(calls("get_album_catalogue")).toBe(1);
+    });
+  });
+});
+
 describe("Archive Timeline Unarchive", () => {
   beforeEach(stubImmediateIntersectionObserver);
 
@@ -5188,6 +5966,76 @@ describe("Archive in views that show archived and other assets together", () => 
 
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(1));
     expect(photosBuckets).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Archive, Unarchive and Move to Trash together", () => {
+  beforeEach(stubImmediateIntersectionObserver);
+
+  const march = "2025-03-01T00:00:00.000Z";
+  const asset = (id: string) => ({
+    id, width: 1600, height: 1200, type: "IMAGE" as const, takenAt: "2025-03-05T12:00:00.000Z", cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false,
+  });
+  const details = {
+    originalFileName: "photo.jpg", isFavorite: false, cameraMake: null, cameraModel: null, city: null, state: null, country: null,
+    fNumber: null, exposureTime: null, iso: null, focalLength: null, lensModel: null, imageWidth: 1600, imageHeight: 1200, fileSize: 1024,
+  };
+  const handlers = {
+    get_timeline_buckets: async () => [{ timeBucket: march, count: 2 }],
+    get_timeline_bucket_assets: async () => ["a-1", "a-2"].map(asset),
+    "get_filtered_timeline_buckets:archive": async () => [{ timeBucket: march, count: 2 }],
+    "get_filtered_timeline_bucket_assets:archive": async () => ["a-1", "a-2"].map(asset),
+    "get_filtered_timeline_buckets:trash": async () => [{ timeBucket: march, count: 2 }],
+    "get_filtered_timeline_bucket_assets:trash": async () => ["a-1", "a-2"].map(asset),
+    get_asset_details: async () => ({ ...details, visibility: "timeline" }),
+    set_assets_visibility: async (args?: unknown) => ({ changedAssetIds: (args as { assetIds: string[] }).assetIds }),
+    trash_assets: async (args?: unknown) => ({ movedAssetIds: (args as { assetIds: string[] }).assetIds }),
+  };
+
+  /** The selection toolbar's and the Lightbox's action buttons; a navigation entry of the same name has no `aria-busy`. */
+  const action = (name: string) => screen.queryAllByRole("button", { name }).filter((button) => button.hasAttribute("aria-busy"));
+
+  async function open(name: string) {
+    await fireEvent.click(await screen.findByRole("button", { name }));
+    await screen.findAllByRole("button", { name: "Open photo" });
+  }
+
+  async function selectFirst() {
+    await fireEvent.click(screen.getAllByRole("checkbox", { name: "Select asset" })[0]);
+    await screen.findByText("1 selected");
+  }
+
+  it("offers Archive and Move to Trash in the selection and the Lightbox of the Photo Timeline", async () => {
+    renderAuthenticatedPage(handlers);
+    await open("Photos");
+
+    await selectFirst();
+    expect(action("Archive")).toHaveLength(1);
+    expect(action("Move to Trash")).toHaveLength(1);
+    expect(action("Unarchive")).toHaveLength(0);
+    await fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Open photo" })[0]);
+    const lightbox = await screen.findByRole("dialog", { name: "Media lightbox" });
+    expect(within(lightbox).getByRole("button", { name: "Archive" })).toBeEnabled();
+    expect(within(lightbox).getByRole("button", { name: "Move to Trash" })).toBeEnabled();
+  });
+
+  it("offers Unarchive and Move to Trash in the Archive Timeline, and neither Archive nor Unarchive nor Move to Trash in the Trash Timeline", async () => {
+    renderAuthenticatedPage(handlers);
+    await open("Archive");
+    await selectFirst();
+    expect(action("Unarchive")).toHaveLength(1);
+    expect(action("Move to Trash")).toHaveLength(1);
+    expect(action("Archive")).toHaveLength(0);
+    await fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    await open("Trash");
+    await selectFirst();
+    expect(screen.getByRole("button", { name: "Restore" })).toBeInTheDocument();
+    expect(action("Archive")).toHaveLength(0);
+    expect(action("Unarchive")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Move to Trash" })).not.toBeInTheDocument();
   });
 });
 

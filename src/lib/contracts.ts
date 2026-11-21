@@ -53,6 +53,17 @@ export interface TrashRestoreResult {
   restoredAssetIds: string[];
 }
 
+/**
+ * The requested Remote Assets a Move to Trash put into the Immich trash; every other requested asset is still in the library.
+ * `failureCode` (credential-free, for example `trash_move_permission_denied:asset.delete`) is present only when the
+ * per-asset fallback was aborted after at least one asset had been moved: it says why the rest was not moved. A failure
+ * before any asset was moved rejects with the code instead.
+ */
+export interface TrashMoveResult {
+  movedAssetIds: string[];
+  failureCode?: string;
+}
+
 /** The only visibilities Lymic writes: Archive sends `archive`, Unarchive sends `timeline`. Never `locked` or `hidden`. */
 export type AssetVisibility = "archive" | "timeline";
 

@@ -1,12 +1,12 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
   import { tick, untrack, type Snippet } from "svelte";
-  import { Album, Archive, ArchiveRestore, ArchiveX, Check, Download, Heart, HeartOff, Play, RefreshCw, X } from "lucide-svelte";
+  import { Album, Archive, ArchiveRestore, ArchiveX, Check, Download, Heart, HeartOff, Play, RefreshCw, Trash2, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineController } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
-  import type { AssetTag, AssetVisibility, AssetVisibilityResult, TimelineAsset, TrashRestoreResult } from "../contracts";
+  import type { AssetTag, AssetVisibility, AssetVisibilityResult, TimelineAsset, TrashMoveResult, TrashRestoreResult } from "../contracts";
   import type { RemoteAssetDesktopAdapter } from "../tauri/desktop-adapter";
   import { calculateMasonryLayout } from "./timeline-masonry";
   import Lightbox from "./Lightbox.svelte";
@@ -15,6 +15,9 @@
   import { createRemoteAssetFavorites } from "./remote-asset-favorites.svelte";
   import { archiveFeedbackMessage, createRemoteAssetArchive, type ArchiveAction, type ArchiveMode } from "./remote-asset-archive";
   import { createRemoteAssetRestore, restoreFeedbackMessage } from "./remote-asset-restore";
+  import { createRemoteAssetTrash, type RemoteAssetTrashOutcome } from "./remote-asset-trash";
+  import MoveToTrashDialog from "./MoveToTrashDialog.svelte";
+  import TrashFeedbackNotice from "./TrashFeedbackNotice.svelte";
   import { createTimelineSelectionActions } from "./timeline-selection-actions.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
 
@@ -40,6 +43,11 @@
     allowFavoriteAndAlbum?: boolean;
     /** Offers Restore in the Lightbox and in multi-selection: Trashed Assets only. */
     restoreTrashedAssets?(assetIds: string[]): Promise<TrashRestoreResult>;
+    /**
+     * Offers Move to Trash in the Lightbox and in multi-selection, after a confirmation: every hosting view except the Trash Timeline (ADR-0011).
+     * The result lists the assets moved; its optional `failureCode` says why a request stopped after some were moved.
+     */
+    trashAssets?(assetIds: string[]): Promise<TrashMoveResult>;
     /** Writes the visibility for an Archive or Unarchive; needed together with `archiveMode`. */
     setAssetsVisibility?(assetIds: string[], visibility: AssetVisibility): Promise<AssetVisibilityResult>;
     /**
@@ -79,6 +87,7 @@
     hintMessage = "",
     allowFavoriteAndAlbum = true,
     restoreTrashedAssets,
+    trashAssets,
     setAssetsVisibility,
     archiveMode,
     initialScrollTop = 0,
@@ -105,6 +114,7 @@
   let selectedAsset = $state<TimelineAsset | null>(null);
   let updatingFavoriteAssetIds = $state<Record<string, true>>({});
   let isAddToAlbumOpen = $state(false);
+  let isTrashConfirmOpen = $state(false);
   let opener = $state<HTMLElement | null>(null);
   const assetActions = createRemoteAssetActions({
     get getAssetDetails() { return desktop.getAssetDetails; },
@@ -126,6 +136,11 @@
     restoreTrashedAssets: (assetIds) => restoreTrashedAssets!(assetIds),
     onRemoved: (assetId) => selection.forget(assetId),
   });
+  const trash = createRemoteAssetTrash({
+    get timeline() { return timeline; },
+    get trashAssets() { return trashAssets; },
+    onRemoved: (assetId) => selection.forget(assetId),
+  });
   const archive = createRemoteAssetArchive({
     get timeline() { return timeline; },
     setAssetsVisibility: (assetIds, visibility) => setAssetsVisibility!(assetIds, visibility),
@@ -145,6 +160,7 @@
     download: (assetIds, isCurrent) => assetActions.download(assetIds, isCurrent),
     addAssetsToAlbum: (assetIds, albumId) => desktop.addAssetsToAlbum(assetIds, albumId),
     get restore() { return restoreTrashedAssets ? (assetIds: string[]) => restore.restore(assetIds) : undefined; },
+    get trash() { return trashAssets ? (assetIds: string[]) => trash.trash(assetIds) : undefined; },
     get archive() { return offersArchive ? (assetIds: string[]) => archive.apply("archive", assetIds) : undefined; },
     get unarchive() { return offersUnarchive || offeredArchiveMode === "by-visibility" ? (assetIds: string[]) => archive.apply("unarchive", assetIds) : undefined; },
   });
@@ -155,6 +171,7 @@
   function resetSelectionAndModals() {
     selection.reset();
     isAddToAlbumOpen = false;
+    isTrashConfirmOpen = false;
   }
 
   function resetLightbox() {
@@ -361,6 +378,21 @@
     return outcome;
   }
 
+  /**
+   * Moves the Lightbox's asset to the Immich trash (the Lightbox has asked for confirmation); once Immich confirmed the
+   * move the Lightbox closes, because the asset left the timeline. That holds even when the timeline was refreshed
+   * or reset meanwhile, as long as the Lightbox is still on that asset: it must not stay open on a trashed asset.
+   */
+  async function trashFromLightbox(assetId: string): Promise<RemoteAssetTrashOutcome> {
+    const { outcome, applied } = await selection.trashOne(assetId);
+    if (applied || (outcome.movedAssetIds.includes(assetId) && selectedAsset?.id === assetId)) {
+      favorites.close();
+      selectedAsset = null;
+      opener = null;
+    }
+    return outcome;
+  }
+
   /** Archives or unarchives the Lightbox's asset; the Lightbox moves on from where the asset was, so it is remembered before the asset leaves the timeline. */
   async function changeArchiveFromLightbox(action: ArchiveAction, assetId: string) {
     if (offeredArchiveMode === "by-visibility") return selection.archiveOne(action, assetId);
@@ -376,12 +408,25 @@
     isAddToAlbumOpen = true;
   }
 
+  function openTrashConfirmation() {
+    if (selection.count === 0 || !trashAssets || selection.isBusy) return;
+    selection.clearResult();
+    isTrashConfirmOpen = true;
+  }
+
+  /** Moves the confirmed selection; whatever the outcome, the page feedback reports it and the failed assets stay selected. */
+  async function trashSelection() {
+    await selection.trash();
+    isTrashConfirmOpen = false;
+  }
+
   async function assignSelectedAssetToAlbum(albumId: string) {
     if (await selection.addToAlbum(albumId)) isAddToAlbumOpen = false;
   }
 
   function openAsset(asset: TimelineAsset, source: HTMLElement) {
     if (selection.isSelectionMode) return;
+    selection.clearTrashFeedback();
     favorites.open(asset.id);
     selectedAsset = { ...asset, isFavorite: favorites.isFavorite(asset) };
     opener = source;
@@ -392,7 +437,7 @@
     queueMicrotask(() => opener?.focus());
   }
   function handleKeydown(event: KeyboardEvent) {
-    if (!selectedAsset && selection.isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen) {
+    if (!selectedAsset && selection.isSelectionMode && event.key === "Escape" && !isAddToAlbumOpen && !isTrashConfirmOpen && !event.defaultPrevented) {
       event.preventDefault();
       selection.clear();
     }
@@ -472,6 +517,9 @@
         {#if targetAlbumCatalogue}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={selection.isBusy} onclick={openAddSelectionToAlbum}><Album class="h-4 w-4" /></button>
         {/if}
+        {#if trashAssets}
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("trash_move")} aria-label={$t("trash_move")} aria-busy={selection.busyAction === 'trash'} disabled={selection.isBusy} onclick={openTrashConfirmation}><Trash2 class="h-4 w-4 {selection.busyAction === 'trash' ? 'animate-pulse' : ''}" /></button>
+        {/if}
         <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_selection_finish")} aria-label={$t("timeline_selection_finish")} disabled={selection.isBusy} onclick={() => selection.clear()}><X class="h-4 w-4" /></button>
       </div>
     </div>
@@ -504,6 +552,9 @@
     <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {isSuccess ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200' : 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200'}" role={isSuccess ? "status" : "alert"}>
       {restoreFeedbackMessage(restoreFeedback, $t, numberLocale)}
     </p>
+  {/if}
+  {#if selection.trashFeedback}
+    <TrashFeedbackNotice feedback={selection.trashFeedback} class="mb-3 mr-16 w-auto shrink-0" />
   {/if}
   {#if selection.archiveFeedback}
     {@const archiveFeedback = selection.archiveFeedback}
@@ -612,7 +663,10 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} archiveMode={offeredArchiveMode} onChangeArchive={changeArchiveFromLightbox} {onSelectTag} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} onTrash={trashAssets ? trashFromLightbox : undefined} archiveMode={offeredArchiveMode} onChangeArchive={changeArchiveFromLightbox} {onSelectTag} />
+{/if}
+{#if trashAssets}
+  <MoveToTrashDialog isOpen={isTrashConfirmOpen} count={selection.count} isMoving={selection.busyAction === 'trash'} onConfirm={() => void trashSelection()} onCancel={() => { if (selection.busyAction !== 'trash') isTrashConfirmOpen = false; }} />
 {/if}
 {#if targetAlbumCatalogue}
   <AddToAlbumModal

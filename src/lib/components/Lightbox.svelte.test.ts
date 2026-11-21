@@ -1,10 +1,10 @@
 ﻿import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, expect, it, vi } from "vitest";
 import "../i18n";
 import Lightbox from "./Lightbox.svelte";
 import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
-import type { AssetDetails, TimelineAsset } from "../contracts";
+import type { AlbumAssignmentResult, AssetDetails, TimelineAsset } from "../contracts";
 
 const photo: TimelineAsset = { id: "map-photo", width: 100, height: 80, type: "IMAGE", takenAt: null, cameraMake: null, cameraModel: null, fileSize: null, duration: null, isFavorite: false };
 const video: TimelineAsset = { ...photo, id: "map-video", type: "VIDEO" };
@@ -115,4 +115,110 @@ it("closes the Lightbox before it reports the selected Tag chip, and offers no c
   await fireEvent.click(screen.getByRole("button", { name: "Info" }));
   await screen.findByText("IMG_0001.jpg");
   expect(screen.queryByRole("heading", { name: "Tags" })).not.toBeInTheDocument();
+});
+
+const moveToTrash = () => screen.getByRole("button", { name: "Move to Trash" });
+const trashOutcome = { movedAssetIds: [], failedAssetIds: [], failure: null };
+
+it("keeps Move to Trash disabled while a Download runs", async () => {
+  let chooseDestination!: (path: string | null) => void;
+  const actions = createRemoteAssetActions({
+    getAssetDetails: vi.fn().mockResolvedValue(photoDetails),
+    chooseDownloadDestination: vi.fn(() => new Promise<string | null>((resolve) => { chooseDestination = resolve; })),
+    downloadAsset: vi.fn(async () => {}), downloadArchive: vi.fn(),
+  });
+  render(Lightbox, { ...lightboxProps(actions), onTrash: vi.fn(async () => trashOutcome) });
+  expect(moveToTrash()).toBeEnabled();
+  const download = await screen.findByRole("button", { name: "Download original" });
+  await waitFor(() => expect(download).toBeEnabled());
+
+  await fireEvent.click(download);
+
+  await waitFor(() => expect(moveToTrash()).toBeDisabled());
+  chooseDestination(null);
+  await waitFor(() => expect(moveToTrash()).toBeEnabled());
+});
+
+it("keeps Move to Trash disabled while an Album assignment runs", async () => {
+  let finishAssignment!: (result: AlbumAssignmentResult) => void;
+  const addAssetsToAlbum = vi.fn(() => new Promise<AlbumAssignmentResult>((resolve) => { finishAssignment = resolve; }));
+  const album = { id: "album-1", albumName: "Holiday", albumThumbnailAssetId: null, assetCount: 1, isShared: false, order: null };
+  const albumCatalogue = { albums: [album], isLoading: false, error: null, hasRequested: true, refresh: vi.fn(), clear: vi.fn(), create: vi.fn(), nameFor: () => "Holiday" };
+  render(Lightbox, { ...lightboxProps(assetActions()), addAssetsToAlbum, albumCatalogue, onTrash: vi.fn(async () => trashOutcome) });
+  await fireEvent.click(screen.getByRole("button", { name: "Add to album" }));
+  await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+
+  const albumDialog = await screen.findByRole("dialog", { name: "Add to album" });
+  await fireEvent.click(within(albumDialog).getByRole("button", { name: "Add to album" }));
+
+  await waitFor(() => expect(addAssetsToAlbum).toHaveBeenCalled());
+  expect(moveToTrash()).toBeDisabled();
+  finishAssignment({ succeeded: 1, failed: 0 });
+  await waitFor(() => expect(moveToTrash()).toBeEnabled());
+});
+
+it("keeps Move to Trash disabled while a Restore runs", async () => {
+  let finishRestore!: (outcome: { changedAssetIds: string[]; failedAssetIds: string[]; failure: null }) => void;
+  const onRestore = vi.fn(() => new Promise<{ changedAssetIds: string[]; failedAssetIds: string[]; failure: null }>((resolve) => { finishRestore = resolve; }));
+  render(Lightbox, { ...lightboxProps(assetActions()), onRestore, onTrash: vi.fn(async () => trashOutcome) });
+
+  await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+  await waitFor(() => expect(moveToTrash()).toBeDisabled());
+  finishRestore({ changedAssetIds: [], failedAssetIds: ["map-photo"], failure: null });
+  await waitFor(() => expect(moveToTrash()).toBeEnabled());
+});
+
+it("ignores a Tag chip while a Move to Trash runs", async () => {
+  let finishTrash!: (outcome: typeof trashOutcome) => void;
+  const onTrash = vi.fn(() => new Promise<typeof trashOutcome>((resolve) => { finishTrash = resolve; }));
+  const onClose = vi.fn();
+  const onSelectTag = vi.fn();
+  const rome = { id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", color: null };
+  const actions = createRemoteAssetActions({ getAssetDetails: vi.fn().mockResolvedValue({ ...photoDetails, tags: [rome] }), chooseDownloadDestination: vi.fn(), downloadAsset: vi.fn(), downloadArchive: vi.fn() });
+  render(Lightbox, { ...lightboxProps(actions), onClose, onSelectTag, onTrash });
+  await fireEvent.click(screen.getByRole("button", { name: "Info" }));
+  const chip = await screen.findByRole("button", { name: "Show photos tagged Travel/Italy/Rome" });
+  await fireEvent.click(moveToTrash());
+  const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+  await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+  await waitFor(() => expect(onTrash).toHaveBeenCalledWith("map-photo"));
+
+  await fireEvent.click(chip);
+
+  expect(chip).toBeDisabled();
+  expect(onSelectTag).not.toHaveBeenCalled();
+  expect(onClose).not.toHaveBeenCalled();
+  finishTrash(trashOutcome);
+  await waitFor(() => expect(chip).toBeEnabled());
+});
+
+it("keeps Move to Trash and Archive disabled while the other runs", async () => {
+  let finishArchive!: (outcome: { changedAssetIds: string[]; failedAssetIds: string[]; failure: null }) => void;
+  const onChangeArchive = vi.fn(() => new Promise<{ changedAssetIds: string[]; failedAssetIds: string[]; failure: null }>((resolve) => { finishArchive = resolve; }));
+  let finishTrash!: (outcome: typeof trashOutcome) => void;
+  const onTrash = vi.fn(() => new Promise<typeof trashOutcome>((resolve) => { finishTrash = resolve; }));
+  render(Lightbox, { ...lightboxProps(assetActions()), archiveMode: "archive", onChangeArchive, onTrash });
+  const archive = () => screen.getByRole("button", { name: "Archive" });
+  expect(archive()).toBeEnabled();
+  expect(moveToTrash()).toBeEnabled();
+
+  await fireEvent.click(archive());
+
+  await waitFor(() => expect(onChangeArchive).toHaveBeenCalledWith("archive", "map-photo"));
+  expect(moveToTrash()).toBeDisabled();
+  expect(archive()).toBeDisabled();
+  finishArchive({ changedAssetIds: [], failedAssetIds: ["map-photo"], failure: null });
+  await waitFor(() => expect(moveToTrash()).toBeEnabled());
+  await waitFor(() => expect(archive()).toBeEnabled());
+
+  await fireEvent.click(moveToTrash());
+  const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+  await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+  await waitFor(() => expect(onTrash).toHaveBeenCalledWith("map-photo"));
+
+  expect(archive()).toBeDisabled();
+  expect(onChangeArchive).toHaveBeenCalledTimes(1);
+  finishTrash(trashOutcome);
+  await waitFor(() => expect(archive()).toBeEnabled());
 });

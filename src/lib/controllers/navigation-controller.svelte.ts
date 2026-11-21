@@ -82,8 +82,13 @@ export function createNavigationController(options: NavigationOptions) {
   let peopleScrollTop = 0;
   let exploreScrollTop = 0;
   // Favorites, Archive and Trash reload every time they open. The Photo Timeline keeps its cache, so a change
-  // that affects it (a Restore) marks it stale and the next visit to Photos refreshes it once.
+  // that affects it (a Restore, a Move to Trash from another view) marks it stale and the next visit to Photos
+  // refreshes it once.
   let photosStale = false;
+  // The Albums catalogue is reloaded whenever Albums opens from another view, but Back from an Album Timeline
+  // restores the cached catalogue. A Move to Trash inside the Album Timeline marks it stale (Immich stops counting
+  // the trashed member), so that one Back reloads it.
+  let albumsStale = false;
 
   function show(next: ViewId) {
     if (view === EXPLORE_VIEW) exploreScrollTop = scroll.read();
@@ -96,12 +101,17 @@ export function createNavigationController(options: NavigationOptions) {
     void load();
   }
 
-  function openPhotos() {
-    if (view === PHOTOS_VIEW) return;
-    view = PHOTOS_VIEW;
+  /** Refreshes the Photo Timeline once when something marked it stale since it last loaded. */
+  function refreshPhotosIfStale() {
     if (!photosStale) return;
     photosStale = false;
     void refresh.photos();
+  }
+
+  function openPhotos() {
+    if (view === PHOTOS_VIEW) return;
+    view = PHOTOS_VIEW;
+    refreshPhotosIfStale();
   }
 
   function openFilteredTimeline(timeline: FilteredTimeline) {
@@ -117,7 +127,11 @@ export function createNavigationController(options: NavigationOptions) {
 
   const openExplore = () => openAndRefresh(EXPLORE_VIEW, refresh.explore);
   const openPeople = () => openAndRefresh(PEOPLE_VIEW, refresh.people);
-  const openAlbums = () => openAndRefresh(ALBUMS_VIEW, refresh.albums);
+  function openAlbums() {
+    // Opening Albums from another view reloads it, which also settles a stale mark.
+    if (view !== ALBUMS_VIEW) albumsStale = false;
+    openAndRefresh(ALBUMS_VIEW, refresh.albums);
+  }
 
   function selectAlbum(album: AlbumCatalogueItem) {
     albumsScrollTop = scroll.read();
@@ -133,9 +147,14 @@ export function createNavigationController(options: NavigationOptions) {
     selectedAlbum = null;
   }
 
+  /** Back from an Album Timeline: the cached catalogue stays, unless something marked it stale. */
   function returnToAlbums() {
     closeAlbumTimeline();
     view = ALBUMS_VIEW;
+    if (albumsStale) {
+      albumsStale = false;
+      void refresh.albums();
+    }
     scroll.restore(albumsScrollTop);
   }
 
@@ -179,6 +198,7 @@ export function createNavigationController(options: NavigationOptions) {
     albumsScrollTop = 0;
     personOrigin = PEOPLE_VIEW;
     photosStale = false;
+    albumsStale = false;
     closeAlbumTimeline();
     closePersonTimeline();
     view = PHOTOS_VIEW;
@@ -195,6 +215,8 @@ export function createNavigationController(options: NavigationOptions) {
     show,
     openPhotos,
     markPhotosStale() { photosStale = true; },
+    markAlbumsStale() { albumsStale = true; },
+    refreshPhotosIfStale,
     openFilteredTimeline,
     openMap,
     openExplore,

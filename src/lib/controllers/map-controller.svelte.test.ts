@@ -74,3 +74,17 @@ it("reports an empty snapshot as loaded and resets it on clear", async () => {
   map.clear();
   expect(map.hasLoaded).toBe(false);
 });
+
+it("removes a marker whose asset left the library without touching the others", async () => {
+  const adapter = { getMapMarkers: vi.fn().mockResolvedValueOnce([{ id: "one", lat: 0, lon: 0 }, { id: "two", lat: 1, lon: 1 }]) };
+  const map = createMapController(adapter);
+  await map.refresh();
+  const before = map.markers;
+
+  map.removeMarker("one");
+
+  expect(map.markers.map((marker) => marker.id)).toEqual(["two"]);
+  expect(before).toHaveLength(2);
+  map.removeMarker("unknown");
+  expect(map.markers.map((marker) => marker.id)).toEqual(["two"]);
+});
