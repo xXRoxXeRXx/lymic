@@ -73,7 +73,7 @@ pub(super) fn children(assets: &[LibraryAsset], dir: Dir) -> Option<Vec<Entry>> 
         }
         Dir::Month(year, month) => files_in(assets, Bucket::Month(year, month)),
         Dir::Undated => files_in(assets, Bucket::Undated),
-        Dir::Root | Dir::Albums => return None,
+        Dir::Root | Dir::Albums | Dir::Album(_) => return None,
     };
     (!entries.is_empty()).then_some(entries)
 }
@@ -88,7 +88,7 @@ fn files_in(assets: &[LibraryAsset], bucket: Bucket) -> Vec<Entry> {
     files
 }
 
-fn file_entry(asset: &LibraryAsset) -> Entry {
+pub(super) fn file_entry(asset: &LibraryAsset) -> Entry {
     let timestamp = |text: &Option<String>| {
         text.as_deref()
             .and_then(|text| DateTime::parse_from_rfc3339(text).ok())

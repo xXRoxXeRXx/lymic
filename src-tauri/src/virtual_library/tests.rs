@@ -47,23 +47,89 @@ impl FakeAsset {
     }
 }
 
+/// One Album of the fake Library.
+#[derive(Clone)]
+struct FakeAlbum {
+    id: &'static str,
+    name: &'static str,
+    /// Whether the user owns it; otherwise it is shared with the user.
+    owned: bool,
+    /// Whether it is shared with other users (an owned Album can be).
+    shared: bool,
+    assets: Vec<&'static str>,
+}
+
+fn album(id: &'static str, name: &'static str, assets: &[&'static str]) -> FakeAlbum {
+    FakeAlbum {
+        id,
+        name,
+        owned: true,
+        shared: false,
+        assets: assets.to_vec(),
+    }
+}
+
+impl FakeAlbum {
+    fn json(&self) -> Value {
+        json!({
+            "id": self.id,
+            "albumName": self.name,
+            "assetCount": self.assets.len(),
+            "shared": self.shared,
+            "albumThumbnailAssetId": null,
+        })
+    }
+}
+
 /// An Immich server that holds `assets` and answers metadata searches the way Immich does:
 /// without a `visibility` filter every asset outside the locked folder matches (Archived
 /// ones too), Trashed Assets only match with `withDeleted`.
 async fn fake_library(assets: Vec<FakeAsset>) -> RoutedServer {
+    fake_immich(assets, vec![]).await
+}
+
+/// [`fake_library`] with Albums. `GET /albums` answers the way Immich does: only the Albums the
+/// user owns, and with `shared=true` the Albums shared with the user or by the user. A metadata
+/// search with `albumIds` matches the members of those Albums.
+async fn fake_immich(assets: Vec<FakeAsset>, albums: Vec<FakeAlbum>) -> RoutedServer {
     serve_routes(move |request: &RecordedRequest| {
-        if request.method != "POST" || request.target != "/api/search/metadata" {
-            return ("404 Not Found".into(), "{}".into());
+        match (request.method.as_str(), request.target.as_str()) {
+            ("GET", "/api/albums") => {
+                let owned: Vec<Value> = albums
+                    .iter()
+                    .filter(|album| album.owned)
+                    .map(FakeAlbum::json)
+                    .collect();
+                return ("200 OK".into(), Value::Array(owned).to_string());
+            }
+            ("GET", "/api/albums?shared=true") => {
+                let shared: Vec<Value> = albums
+                    .iter()
+                    .filter(|album| !album.owned || album.shared)
+                    .map(FakeAlbum::json)
+                    .collect();
+                return ("200 OK".into(), Value::Array(shared).to_string());
+            }
+            ("POST", "/api/search/metadata") => {}
+            _ => return ("404 Not Found".into(), "{}".into()),
         }
         let body: Value = serde_json::from_str(&request.body).unwrap();
         let visibility = body["visibility"].as_str();
         let with_deleted = body["withDeleted"] == json!(true);
+        let in_albums = |asset: &FakeAsset| {
+            body["albumIds"].as_array().is_none_or(|ids| {
+                albums.iter().any(|album| {
+                    ids.iter().any(|id| id == album.id) && album.assets.contains(&asset.id)
+                })
+            })
+        };
         let items: Vec<Value> = assets
             .iter()
             .filter(|asset| {
                 visibility.map_or(asset.visibility != "locked", |v| asset.visibility == v)
             })
             .filter(|asset| with_deleted || !asset.trashed)
+            .filter(|asset| in_albums(asset))
             .map(FakeAsset::json)
             .collect();
         let page = json!({ "assets": { "items": items, "nextPage": null, "total": items.len() } });
@@ -291,4 +357,140 @@ async fn an_unreachable_or_refusing_server_is_reported_without_credentials() {
     assert!(!message.contains("secret-api-key"));
     // The root and Albums structure need no server.
     assert!(library.list("").await.is_ok());
+}
+
+fn album_library() -> (Vec<FakeAsset>, Vec<FakeAlbum>) {
+    let in_march = |id, name| asset(id, name, "2025-03-10T10:00:00.000Z");
+    let assets = vec![
+        in_march("p1", "beach.jpg"),
+        in_march("p2", "sunset.jpg"),
+        FakeAsset {
+            visibility: "archive",
+            ..in_march("p3", "archived.jpg")
+        },
+        FakeAsset {
+            trashed: true,
+            ..in_march("p4", "trashed.jpg")
+        },
+        in_march("p5", "unfiled.jpg"),
+    ];
+    let albums = vec![album("al1", "Holiday", &["p1", "p2", "p3", "p4"])];
+    (assets, albums)
+}
+
+#[tokio::test]
+async fn albums_lists_owned_and_shared_albums_once_each() {
+    let (assets, mut albums) = album_library();
+    albums.extend([
+        // Owned and shared out: Immich lists it both with and without `shared=true`.
+        FakeAlbum {
+            shared: true,
+            ..album("al2", "Family", &[])
+        },
+        // Owned by someone else and shared with the user: only `shared=true` lists it.
+        FakeAlbum {
+            owned: false,
+            shared: true,
+            ..album("al3", "From Anna", &[])
+        },
+    ]);
+    let server = fake_immich(assets, albums).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let listed = library.list("Albums").await.unwrap();
+
+    assert_eq!(names(&listed), ["Family", "From Anna", "Holiday"]);
+    assert!(listed
+        .iter()
+        .all(|entry| entry.kind == EntryKind::Directory));
+    assert!(listed.iter().all(|entry| entry.remote_asset.is_none()));
+}
+
+#[tokio::test]
+async fn an_album_folder_holds_exactly_the_assets_immich_returns_for_it() {
+    let (assets, albums) = album_library();
+    let server = fake_immich(assets, albums).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let holiday = library.list("Albums/Holiday").await.unwrap();
+
+    // Archived Assets are included, Trashed ones never, and an Asset of no Album stays out.
+    assert_eq!(names(&holiday), ["archived.jpg", "beach.jpg", "sunset.jpg"]);
+    assert!(holiday.iter().all(|entry| entry.kind == EntryKind::File));
+    assert_eq!(holiday[1].remote_asset, Some(RemoteAssetId::new("p1")));
+    assert_eq!(holiday[1].size, Some(1_000));
+    assert_eq!(
+        library.resolve("Albums/Holiday/archived.jpg").await,
+        Ok(RemoteAssetId::new("p3"))
+    );
+    for absent in ["trashed.jpg", "unfiled.jpg"] {
+        assert_eq!(
+            library.resolve(&format!("Albums/Holiday/{absent}")).await,
+            Err(VirtualLibraryError::NotFound),
+            "{absent}"
+        );
+    }
+    // All Photos keeps following the Photo Timeline: the Archived Asset is not mixed in.
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+    assert_eq!(names(&march), ["beach.jpg", "sunset.jpg", "unfiled.jpg"]);
+}
+
+#[tokio::test]
+async fn shared_albums_open_like_owned_ones() {
+    let (assets, mut albums) = album_library();
+    albums.push(FakeAlbum {
+        owned: false,
+        shared: true,
+        ..album("al3", "From Anna", &["p5"])
+    });
+    let server = fake_immich(assets, albums).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(
+        names(&library.list("Albums/From Anna").await.unwrap()),
+        ["unfiled.jpg"]
+    );
+    // Windows hands out backslash paths and compares names without regard to case.
+    assert_eq!(
+        library.resolve(r"albums\from anna\UNFILED.jpg").await,
+        Ok(RemoteAssetId::new("p5"))
+    );
+}
+
+#[tokio::test]
+async fn an_empty_album_is_an_empty_folder_and_an_unknown_one_does_not_exist() {
+    let server = fake_immich(vec![], vec![album("al9", "Empty", &[])]).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(library.list("Albums/Empty").await, Ok(vec![]));
+    assert_eq!(
+        library.list("Albums/Missing").await,
+        Err(VirtualLibraryError::NotFound)
+    );
+    assert_eq!(
+        library.resolve("Albums/Empty").await,
+        Err(VirtualLibraryError::NotAFile)
+    );
+    assert_eq!(
+        library.list("Albums/Empty/a.jpg/deeper").await,
+        Err(VirtualLibraryError::NotFound)
+    );
+}
+
+#[tokio::test]
+async fn albums_report_an_unreachable_server_without_credentials() {
+    let server = serve_routes(|_: &RecordedRequest| ("401 Unauthorized".into(), "{}".into())).await;
+    let client = test_client(server.url.clone(), "secret-api-key");
+    let library = VirtualLibrary::new(&client);
+
+    for path in ["Albums", "Albums/Holiday"] {
+        let Err(VirtualLibraryError::Remote(message)) = library.list(path).await else {
+            panic!("expected a remote error for {path}");
+        };
+        assert!(!message.contains("secret-api-key"));
+    }
 }

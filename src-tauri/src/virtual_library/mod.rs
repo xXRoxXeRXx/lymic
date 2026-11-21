@@ -6,9 +6,10 @@
 //! Paths are relative to the Virtual Library root, use `/` (a `\` is accepted too) and carry no
 //! platform semantics, so the module behaves the same on every OS.
 
-use crate::immich::{ImmichClient, RemoteAssetId};
+use crate::immich::{ImmichClient, LibraryAlbum, RemoteAssetId};
 use chrono::{DateTime, Utc};
 
+mod albums;
 mod path;
 mod photo_timeline;
 #[cfg(test)]
@@ -106,14 +107,33 @@ impl<'a> VirtualLibrary<'a> {
             .ok_or(VirtualLibraryError::NotFound)
     }
 
+    async fn library_albums(&self) -> Result<Vec<LibraryAlbum>, VirtualLibraryError> {
+        self.client
+            .list_library_albums()
+            .await
+            .map_err(VirtualLibraryError::Remote)
+    }
+
     async fn children(&self, dir: Dir) -> Result<Vec<Entry>, VirtualLibraryError> {
         match dir {
             Dir::Root => Ok(vec![
                 Entry::directory(path::ALL_PHOTOS),
                 Entry::directory(path::ALBUMS),
             ]),
-            // The structure exists; the Album folders arrive with #268.
-            Dir::Albums => Ok(Vec::new()),
+            Dir::Albums => {
+                let albums = self.library_albums().await?;
+                Ok(albums::directories(&albums))
+            }
+            Dir::Album(name) => {
+                let albums = self.library_albums().await?;
+                let album = albums::find(&albums, &name).ok_or(VirtualLibraryError::NotFound)?;
+                let assets = self
+                    .client
+                    .list_album_assets(&album.id)
+                    .await
+                    .map_err(VirtualLibraryError::Remote)?;
+                Ok(albums::files(&assets))
+            }
             Dir::AllPhotos | Dir::Year(_) | Dir::Month(..) | Dir::Undated => {
                 let assets = self
                     .client

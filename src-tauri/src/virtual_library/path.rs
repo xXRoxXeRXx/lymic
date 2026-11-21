@@ -1,7 +1,7 @@
 //! The shape of the Virtual Library tree: which paths name which directory.
 
 /// A directory of the tree that can be named without asking Immich.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Dir {
     Root,
     AllPhotos,
@@ -9,12 +9,15 @@ pub(super) enum Dir {
     Month(i32, u32),
     Undated,
     Albums,
+    /// `Albums/<name>`: the folder name as written in the path; which Album it is is for the
+    /// listing to say.
+    Album(String),
 }
 
 impl Dir {
     /// Whether the directory holds files (asset entries) rather than only directories.
-    fn holds_files(self) -> bool {
-        matches!(self, Self::Month(..) | Self::Undated)
+    fn holds_files(&self) -> bool {
+        matches!(self, Self::Month(..) | Self::Undated | Self::Album(_))
     }
 }
 
@@ -79,6 +82,9 @@ fn parse_dir(segments: &[&str]) -> Option<Dir> {
     match segments {
         [] => Some(Dir::Root),
         [first] if first.eq_ignore_ascii_case(ALBUMS) => Some(Dir::Albums),
+        [first, name] if first.eq_ignore_ascii_case(ALBUMS) => {
+            Some(Dir::Album((*name).to_string()))
+        }
         [first, rest @ ..] if first.eq_ignore_ascii_case(ALL_PHOTOS) => match rest {
             [] => Some(Dir::AllPhotos),
             [undated] if undated.eq_ignore_ascii_case(UNDATED) => Some(Dir::Undated),
