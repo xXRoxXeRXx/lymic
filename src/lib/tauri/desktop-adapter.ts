@@ -195,6 +195,9 @@ export interface VirtualLibraryDesktopAdapter {
   getVirtualLibrarySettings(): Promise<VirtualLibrarySettings>;
   /** Persists the toggle and resolves to the settings as stored. Rejects when the Virtual Library is unavailable. */
   setVirtualLibraryEnabled(enabled: boolean): Promise<VirtualLibrarySettings>;
+  /** Persists the chosen folder. Rejects, naming the Watched Folder, when it would overlap one. */
+  setVirtualLibraryRootFolder(path: string): Promise<VirtualLibrarySettings>;
+  openFolderDialog(options: { directory: true; multiple: false; defaultPath?: string; title: string }): Promise<string | string[] | null>;
   /** Backend announcements of changed Virtual Library settings. */
   subscribeToVirtualLibrarySettings(listener: (settings: VirtualLibrarySettings) => void): Promise<() => void>;
 }
@@ -327,6 +330,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   setAutostartEnabled: (enabled) => enabled ? enable() : disable(),
   getVirtualLibrarySettings: () => invoke<VirtualLibrarySettings>("get_virtual_library_settings"),
   setVirtualLibraryEnabled: (enabled) => invoke<VirtualLibrarySettings>("set_virtual_library_enabled", { enabled }),
+  setVirtualLibraryRootFolder: (path) => invoke<VirtualLibrarySettings>("set_virtual_library_root_folder", { path }),
   subscribeToVirtualLibrarySettings: (listener) => listen<VirtualLibrarySettings>(
     "virtual-library-settings-changed",
     (event) => listener(event.payload),

@@ -92,6 +92,8 @@
   "virtual_library_subtitle": "عرض مكتبة Immich الخاصة بك كمجلدات للقراءة فقط في مستكشف ملفات Windows.",
   "virtual_library_enable": "تفعيل المكتبة الافتراضية",
   "virtual_library_disable": "تعطيل المكتبة الافتراضية",
+  "virtual_library_folder": "المجلد",
+  "virtual_library_change_folder": "تغيير المجلد",
   "language": "اللغة",
   "language_subtitle": "اختر لغتك المفضلة.",
   "appearance": "المظهر",

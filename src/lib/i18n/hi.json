@@ -92,6 +92,8 @@
   "virtual_library_subtitle": "अपनी Immich लाइब्रेरी को Windows फ़ाइल एक्सप्लोरर में केवल-पढ़ने योग्य फ़ोल्डर के रूप में दिखाएं।",
   "virtual_library_enable": "वर्चुअल लाइब्रेरी सक्षम करें",
   "virtual_library_disable": "वर्चुअल लाइब्रेरी अक्षम करें",
+  "virtual_library_folder": "फ़ोल्डर",
+  "virtual_library_change_folder": "फ़ोल्डर बदलें",
   "language": "भाषा",
   "language_subtitle": "अपनी पसंदीदा भाषा चुनें।",
   "appearance": "दिखावट",

@@ -92,6 +92,8 @@
   "virtual_library_subtitle": "Mostrar tu biblioteca de Immich como carpetas de solo lectura en el Explorador de archivos de Windows.",
   "virtual_library_enable": "Activar la biblioteca virtual",
   "virtual_library_disable": "Desactivar la biblioteca virtual",
+  "virtual_library_folder": "Carpeta",
+  "virtual_library_change_folder": "Cambiar carpeta",
   "language": "Idioma",
   "language_subtitle": "Elige tu idioma preferido.",
   "appearance": "Apariencia",

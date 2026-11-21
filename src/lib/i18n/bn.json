@@ -92,6 +92,8 @@
   "virtual_library_subtitle": "আপনার Immich লাইব্রেরি Windows ফাইল এক্সপ্লোরারে শুধু-পঠনযোগ্য ফোল্ডার হিসেবে দেখান।",
   "virtual_library_enable": "ভার্চুয়াল লাইব্রেরি সক্রিয় করুন",
   "virtual_library_disable": "ভার্চুয়াল লাইব্রেরি নিষ্ক্রিয় করুন",
+  "virtual_library_folder": "ফোল্ডার",
+  "virtual_library_change_folder": "ফোল্ডার পরিবর্তন করুন",
   "language": "ভাষা",
   "language_subtitle": "আপনার পছন্দের ভাষা নির্বাচন করুন।",
   "appearance": "চেহারা",

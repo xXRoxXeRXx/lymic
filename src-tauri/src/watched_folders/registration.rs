@@ -5,6 +5,7 @@ use crate::media::paths::{
     canonicalize_folder_path, normalize_path_lexical, path_is_within_lexical,
 };
 use crate::removable::{ActiveRemovableVolumes, VolumeInfo};
+use crate::virtual_library_root;
 use crate::watcher::WatchRegistration;
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -53,6 +54,27 @@ fn check_folder_conflict(
     }
 
     Ok(normalized_path)
+}
+
+/// A Watched Folder must never contain, equal or lie inside the Virtual Library root, or
+/// Synchronization would scan placeholders. The root is only set while the Virtual Library is
+/// available.
+fn check_virtual_library_overlap(
+    normalized_path: &Path,
+    virtual_library_root: Option<&Path>,
+) -> Result<(), String> {
+    let Some(root) = virtual_library_root else {
+        return Ok(());
+    };
+    let canonical_root = canonicalize_folder_path(root);
+    match virtual_library_root::overlap(&canonical_root, normalized_path) {
+        Some(relation) => Err(virtual_library_root::registration_refusal(
+            normalized_path,
+            &canonical_root,
+            relation,
+        )),
+        None => Ok(()),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,6 +189,7 @@ where
     }
 
     let folders = persistence.list_folders().await?;
+    let virtual_library_root = persistence.virtual_library_root().await?;
     let path_for_normalization = PathBuf::from(&input.path);
     let existing_paths = folders
         .into_iter()
@@ -174,7 +197,9 @@ where
         .collect::<Vec<_>>();
 
     let normalized_path = tokio::task::spawn_blocking(move || {
-        check_folder_conflict(&path_for_normalization, &existing_paths)
+        let normalized = check_folder_conflict(&path_for_normalization, &existing_paths)?;
+        check_virtual_library_overlap(&normalized, virtual_library_root.as_deref())?;
+        Ok::<_, String>(normalized)
     })
     .await
     .map_err(|error| format!("Could not normalize folder '{}': {}", input.path, error))??;

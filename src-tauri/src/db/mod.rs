@@ -148,8 +148,8 @@ pub use queue::{
     enqueue_sync_assets, next_sync_queue_block, update_upload_unit_remote_id, QueueAsset,
 };
 pub use settings::{
-    get_upload_parallelism, get_virtual_library_enabled, set_upload_parallelism,
-    set_virtual_library_enabled,
+    get_upload_parallelism, get_virtual_library_enabled, get_virtual_library_root,
+    set_upload_parallelism, set_virtual_library_enabled, set_virtual_library_root,
 };
 pub use sync_state::{
     discard_failed_sync_paths, discard_sync_data_in_folder, get_cached_hash, get_failed_syncs,

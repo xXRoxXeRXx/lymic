@@ -11,6 +11,7 @@ mod sync;
 // the settings surface (#272) consume it; `immich::library_listing` is its only other user.
 #[allow(dead_code)]
 mod virtual_library;
+mod virtual_library_root;
 mod watched_folders;
 mod watcher;
 

@@ -373,7 +373,7 @@ import { createVirtualLibraryController } from "#lib/controllers/virtual-library
     setLocale: (value) => $locale = value,
   });
   const updater = createUpdateController(() => sync.isActive, desktop);
-  const virtualLibrary = createVirtualLibraryController({ adapter: desktop, reportError: feedback.report });
+  const virtualLibrary = createVirtualLibraryController({ adapter: desktop, reportError: feedback.report, t: (key) => $t(key) });
   const targetAlbumDialog = $derived(watchedFolders.targetAlbumDialog);
 
   // Leaving the Trash Timeline drops its assets and selection; returning shows a fresh load.
@@ -653,9 +653,11 @@ import { createVirtualLibraryController } from "#lib/controllers/virtual-library
             isVirtualLibraryAvailable={virtualLibrary.isAvailable}
             isVirtualLibraryEnabled={virtualLibrary.isEnabled}
             isSavingVirtualLibrary={virtualLibrary.isSaving}
+            virtualLibraryRootFolder={virtualLibrary.rootFolder}
             locales={preferences.locales}
             onToggleAutostart={preferences.toggleAutostart}
             onToggleVirtualLibrary={virtualLibrary.toggle}
+            onChangeVirtualLibraryFolder={virtualLibrary.chooseRootFolder}
             onLocaleChange={preferences.setLocale}
             onThemeChange={preferences.setThemePreference}
             onUploadParallelismChange={preferences.changeUploadParallelism}

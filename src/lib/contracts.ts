@@ -256,11 +256,14 @@ export type ReleaseChannel = "github" | "store";
  * The Virtual Library section of the settings (ADR-0003). Mirrors `VirtualLibrarySettings` in
  * `src-tauri/src/commands/virtual_library.rs`. `available` is decided by the backend at runtime
  * (Windows, Store release channel and real Package Identity); `enabled` is the persisted toggle
- * and is always false while the Virtual Library is unavailable.
+ * and is always false while the Virtual Library is unavailable. `root_folder` defaults to `Lymic` inside
+ * the Windows Known Folder Pictures.
  */
 export interface VirtualLibrarySettings {
   available: boolean;
   enabled: boolean;
+  /** The effective Virtual Library folder (the user's choice or the default); null when unavailable or unknown. */
+  root_folder: string | null;
 }
 
 export interface MapMarker { id: string; lat: number; lon: number; }

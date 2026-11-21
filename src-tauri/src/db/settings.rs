@@ -44,6 +44,7 @@ pub async fn set_upload_parallelism(pool: &SqlitePool, value: usize) -> Result<(
 }
 
 const VIRTUAL_LIBRARY_ENABLED_KEY: &str = "virtual_library_enabled";
+const VIRTUAL_LIBRARY_ROOT_KEY: &str = "virtual_library_root";
 
 async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, sqlx::Error> {
     sqlx::query_scalar::<_, String>("SELECT value FROM app_settings WHERE key = ?")
@@ -81,4 +82,15 @@ pub async fn set_virtual_library_enabled(
         if enabled { "1" } else { "0" },
     )
     .await
+}
+
+/// The root folder the user chose for the Virtual Library, or `None` while the default applies.
+pub async fn get_virtual_library_root(pool: &SqlitePool) -> Result<Option<String>, sqlx::Error> {
+    Ok(get_setting(pool, VIRTUAL_LIBRARY_ROOT_KEY)
+        .await?
+        .filter(|root| !root.trim().is_empty()))
+}
+
+pub async fn set_virtual_library_root(pool: &SqlitePool, root: &str) -> Result<(), sqlx::Error> {
+    set_setting(pool, VIRTUAL_LIBRARY_ROOT_KEY, root).await
 }

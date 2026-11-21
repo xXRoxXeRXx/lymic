@@ -92,6 +92,8 @@
   "virtual_library_subtitle": "Mostrar sua biblioteca do Immich como pastas somente leitura no Explorador de Arquivos do Windows.",
   "virtual_library_enable": "Ativar a biblioteca virtual",
   "virtual_library_disable": "Desativar a biblioteca virtual",
+  "virtual_library_folder": "Pasta",
+  "virtual_library_change_folder": "Alterar pasta",
   "language": "Idioma",
   "language_subtitle": "Escolha seu idioma de preferência.",
   "appearance": "Aparência",

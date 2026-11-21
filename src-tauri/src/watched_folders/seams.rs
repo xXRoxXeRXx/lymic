@@ -2,6 +2,7 @@ use crate::audit::AuditEvent;
 use crate::db::{self, RemovableFolderBinding, WatchedFolder};
 use crate::immich::AlbumId;
 use crate::watcher::{self, WatchRegistration, WatcherState};
+use std::path::PathBuf;
 use tauri::Manager;
 
 /// Validated, trimmed, and case-insensitively deduplicated exclusion patterns for a Watched Folder.
@@ -19,6 +20,9 @@ impl ExclusionPatterns {
 }
 
 pub(crate) trait FolderPersistence {
+    /// The folder a Watched Folder must stay clear of: the Virtual Library root, or `None` while the
+    /// Virtual Library is unavailable and any folder may be watched.
+    async fn virtual_library_root(&self) -> Result<Option<PathBuf>, String>;
     async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String>;
     async fn list_removable_bindings_by_volume(
         &self,
@@ -81,6 +85,10 @@ pub(crate) struct SqliteFolderPersistence<'a> {
 }
 
 impl FolderPersistence for SqliteFolderPersistence<'_> {
+    async fn virtual_library_root(&self) -> Result<Option<PathBuf>, String> {
+        crate::commands::virtual_library::protected_root(self.pool).await
+    }
+
     async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String> {
         db::get_folders(self.pool)
             .await

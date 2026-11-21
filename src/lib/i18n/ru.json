@@ -92,6 +92,8 @@
   "virtual_library_subtitle": "Показывать вашу библиотеку Immich как папки только для чтения в проводнике Windows.",
   "virtual_library_enable": "Включить виртуальную библиотеку",
   "virtual_library_disable": "Отключить виртуальную библиотеку",
+  "virtual_library_folder": "Папка",
+  "virtual_library_change_folder": "Изменить папку",
   "language": "Язык",
   "language_subtitle": "Выберите предпочитаемый язык.",
   "appearance": "Оформление",
