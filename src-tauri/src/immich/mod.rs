@@ -3,6 +3,7 @@ mod archive;
 mod bulk_check;
 mod client;
 pub(crate) mod ids;
+mod library_listing;
 mod people;
 mod places;
 mod response;
@@ -22,6 +23,7 @@ pub(crate) use archive::{AssetVisibility, AssetVisibilityResult};
 pub(crate) use bulk_check::{BulkCheckDuplicate, DuplicateRemoteAsset};
 pub(crate) use client::{AssetDetails, AssetResponse, ImmichClient};
 pub(crate) use ids::{AlbumId, RemoteAssetId};
+pub(crate) use library_listing::LibraryAsset;
 pub(crate) use people::PeoplePage;
 pub(crate) use places::Place;
 pub(crate) use search::{
