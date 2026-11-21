@@ -106,7 +106,11 @@ export interface TrashRestoreDesktopAdapter {
 }
 
 export interface TrashMoveDesktopAdapter {
-  /** Moves Remote Assets to the Immich trash (a soft delete); the result lists those Immich confirmed as moved. */
+  /**
+   * Moves Remote Assets to the Immich trash (a soft delete); the result lists those Immich confirmed as moved and,
+   * when the per-asset fallback stopped after some were moved, the credential-free `failureCode` that says why.
+   * A failure before any asset was moved rejects with that code.
+   */
   trashAssets(assetIds: string[]): Promise<TrashMoveResult>;
 }
 
