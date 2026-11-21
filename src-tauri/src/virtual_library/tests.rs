@@ -1130,8 +1130,8 @@ async fn a_live_photo_pair_keeps_one_base_name_when_its_name_collides() {
             "IMG_0001 (d4e5f6).HEIC",
             "IMG_0001 (d4e5f6).MOV",
             "IMG_0002 (m1).MOV",
+            "IMG_0002 (s3).HEIC",
             "IMG_0002 (s3).MOV",
-            "IMG_0002.HEIC",
         ]
     );
     assert_eq!(
@@ -1145,6 +1145,40 @@ async fn a_live_photo_pair_keeps_one_base_name_when_its_name_collides() {
             .resolve("All Photos/2025/03 March/IMG_0002 (m1).MOV")
             .await,
         Ok(RemoteAssetId::new("m1"))
+    );
+}
+
+#[tokio::test]
+async fn a_live_photo_pair_shares_its_suffix_when_only_its_still_collides() {
+    let in_march = |id, name| asset(id, name, "2025-03-10T10:00:00.000Z");
+    let server = fake_library(vec![
+        // The still shares its name with a plain photo; the video's own name is free.
+        FakeAsset {
+            live_video: Some("v1"),
+            ..in_march(ID_A1B2C3, "IMG_0003.HEIC")
+        },
+        live_video("v1", "clip.MOV", 1),
+        in_march(ID_D4E5F6, "IMG_0003.HEIC"),
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let march = library.list("All Photos/2025/03 March").await.unwrap();
+
+    assert_eq!(
+        names(&march),
+        [
+            "IMG_0003 (a1b2c3).HEIC",
+            "IMG_0003 (a1b2c3).MOV",
+            "IMG_0003 (d4e5f6).HEIC",
+        ]
+    );
+    assert_eq!(
+        library
+            .resolve("All Photos/2025/03 March/IMG_0003 (a1b2c3).MOV")
+            .await,
+        Ok(RemoteAssetId::new("v1"))
     );
 }
 

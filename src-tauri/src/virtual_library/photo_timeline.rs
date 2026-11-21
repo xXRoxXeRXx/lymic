@@ -4,9 +4,9 @@
 //! come from Immich's timeline buckets ([`Calendar`]) without fetching an asset; a month directory
 //! fetches the assets created in its [`creation_window`] and no other.
 
+use super::live_photo;
 use super::path::{month_dir_name, year_dir_name, Dir, UNDATED};
-use super::{live_photo, ntfs};
-use super::{Entry, EntryKind};
+use super::Entry;
 use crate::immich::{LibraryAsset, LivePhotoVideo, RemoteAssetId, TimelineBucket};
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, Utc};
 use std::collections::{BTreeSet, HashMap};
@@ -153,27 +153,4 @@ pub(super) fn files(
 ) -> Option<Vec<Entry>> {
     let files = live_photo::files(assets, videos);
     (!files.is_empty()).then_some(files)
-}
-
-/// The file entry of the still image or plain asset `asset`.
-pub(super) fn file_entry(asset: &LibraryAsset) -> Entry {
-    let timestamp = |text: &Option<String>| {
-        text.as_deref()
-            .and_then(|text| DateTime::parse_from_rfc3339(text).ok())
-            .map(|time| time.with_timezone(&Utc))
-    };
-    Entry {
-        name: ntfs::sanitize(
-            asset
-                .original_file_name
-                .as_deref()
-                .filter(|name| !name.trim().is_empty())
-                .unwrap_or(asset.id.as_str()),
-        ),
-        kind: EntryKind::File,
-        remote_asset: Some(asset.id.clone()),
-        size: asset.file_size,
-        created: timestamp(&asset.file_created_at),
-        modified: timestamp(&asset.file_modified_at),
-    }
 }
