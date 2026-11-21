@@ -1,10 +1,14 @@
 //! `All Photos`: the Photo Timeline assets arranged into the date hierarchy.
+//!
+//! Each directory is produced from what it alone needs (#271). The year and month directories
+//! come from Immich's timeline buckets ([`Calendar`]) without fetching an asset; a month directory
+//! fetches the assets created in its [`creation_window`] and no other.
 
 use super::live_photo;
 use super::path::{month_dir_name, year_dir_name, Dir, UNDATED};
 use super::{Entry, EntryKind};
-use crate::immich::{LibraryAsset, LivePhotoVideo, RemoteAssetId};
-use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
+use crate::immich::{LibraryAsset, LivePhotoVideo, RemoteAssetId, TimelineBucket};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, Utc};
 use std::collections::{BTreeSet, HashMap};
 
 /// Where an asset is filed below `All Photos`.
@@ -35,80 +39,124 @@ fn local_wall_clock(text: &str) -> Option<NaiveDateTime> {
         .filter(|time| (1..=9999).contains(&time.year()))
 }
 
-/// The entries of `dir` for the given Photo Timeline `assets`, or `None` when the directory is a
-/// year, month or `Undated` that holds no asset and therefore does not exist.
-pub(super) fn children(
-    assets: &[LibraryAsset],
-    videos: &HashMap<RemoteAssetId, LivePhotoVideo>,
-    dir: Dir,
-) -> Option<Vec<Entry>> {
-    let entries: Vec<Entry> = match dir {
-        Dir::AllPhotos => {
-            let years: BTreeSet<i32> = assets
-                .iter()
-                .filter_map(|asset| match bucket_of(asset) {
-                    Bucket::Month(year, _) => Some(year),
-                    Bucket::Undated => None,
-                })
-                .collect();
-            let has_undated = assets
-                .iter()
-                .any(|asset| bucket_of(asset) == Bucket::Undated);
-            let mut entries: Vec<Entry> = years
-                .into_iter()
-                .map(|year| Entry::directory(year_dir_name(year)))
-                .collect();
-            if has_undated {
-                entries.push(Entry::directory(UNDATED));
+/// Which months, and whether `Undated`, the Photo Timeline has assets in: all that the year and
+/// month directories need, read from Immich's timeline buckets without fetching an asset.
+pub(super) struct Calendar {
+    months: BTreeSet<(i32, u32)>,
+    has_undated: bool,
+}
+
+impl Calendar {
+    /// A bucket names its month in its first seven characters (`2025-03-01T00:00:00.000Z`, or
+    /// `2025-03-01`); one that names no calendar month holds assets without a usable capture
+    /// time. Empty buckets hold nothing.
+    pub(super) fn from_buckets(buckets: &[TimelineBucket]) -> Self {
+        let mut calendar = Self {
+            months: BTreeSet::new(),
+            has_undated: false,
+        };
+        for bucket in buckets.iter().filter(|bucket| bucket.count > 0) {
+            match bucket_month(&bucket.time_bucket) {
+                Some(month) => {
+                    calendar.months.insert(month);
+                }
+                None => calendar.has_undated = true,
             }
-            return Some(entries);
         }
-        Dir::Year(year) => {
-            let months: BTreeSet<u32> = assets
-                .iter()
-                .filter_map(|asset| match bucket_of(asset) {
-                    Bucket::Month(asset_year, month) if asset_year == year => Some(month),
-                    _ => None,
-                })
-                .collect();
-            months
-                .into_iter()
-                .map(|month| Entry::directory(month_dir_name(month)))
-                .collect()
+        calendar
+    }
+
+    /// The entries of `All Photos`: the years, then `Undated` when there is such an asset.
+    pub(super) fn years(&self) -> Vec<Entry> {
+        let years: BTreeSet<i32> = self.months.iter().map(|(year, _)| *year).collect();
+        let mut entries: Vec<Entry> = years
+            .into_iter()
+            .map(|year| Entry::directory(year_dir_name(year)))
+            .collect();
+        if self.has_undated {
+            entries.push(Entry::directory(UNDATED));
         }
-        Dir::Month(year, month) => files_in(assets, videos, Bucket::Month(year, month)),
-        Dir::Undated => files_in(assets, videos, Bucket::Undated),
-        Dir::Root | Dir::Albums | Dir::Album(_) => return None,
+        entries
+    }
+
+    /// The month directories of `year`, or `None` when no asset is filed under it.
+    pub(super) fn months(&self, year: i32) -> Option<Vec<Entry>> {
+        let entries: Vec<Entry> = self
+            .months
+            .iter()
+            .filter(|(month_year, _)| *month_year == year)
+            .map(|(_, month)| Entry::directory(month_dir_name(*month)))
+            .collect();
+        (!entries.is_empty()).then_some(entries)
+    }
+}
+
+fn bucket_month(time_bucket: &str) -> Option<(i32, u32)> {
+    let (year, month) = time_bucket.get(..7)?.split_once('-')?;
+    let year: i32 = year.parse().ok().filter(|year| (1..=9999).contains(year))?;
+    let month: u32 = month
+        .parse()
+        .ok()
+        .filter(|month| (1..=12).contains(month))?;
+    Some((year, month))
+}
+
+/// The widest gap between a capture's UTC instant and its local wall-clock time is UTC-12 to
+/// UTC+14; a day covers it with room to spare.
+const LOCAL_OFFSET_MARGIN: Duration = Duration::days(1);
+
+/// The UTC range `[after, before]` in which every asset captured in the local month lies. It is
+/// wider than the month by [`LOCAL_OFFSET_MARGIN`] on both sides, since Immich can only filter on
+/// the UTC instant; [`assets_in`] then keeps the assets whose local month it is.
+pub(super) fn creation_window(year: i32, month: u32) -> (DateTime<Utc>, DateTime<Utc>) {
+    let (next_year, next_month) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
     };
-    (!entries.is_empty()).then_some(entries)
+    (
+        month_start(year, month) - LOCAL_OFFSET_MARGIN,
+        month_start(next_year, next_month) + LOCAL_OFFSET_MARGIN,
+    )
 }
 
-fn files_in(
-    assets: &[LibraryAsset],
-    videos: &HashMap<RemoteAssetId, LivePhotoVideo>,
-    bucket: Bucket,
-) -> Vec<Entry> {
-    let mut files: Vec<Entry> = assets
-        .iter()
-        .filter(|asset| bucket_of(asset) == bucket)
-        .flat_map(|asset| live_photo::file_entries(asset, videos))
-        .collect();
-    files.sort_by_cached_key(|entry| (entry.name.to_lowercase(), entry.remote_asset.clone()));
-    files
+fn month_start(year: i32, month: u32) -> DateTime<Utc> {
+    NaiveDate::from_ymd_opt(year, month, 1)
+        .and_then(|date| date.and_hms_opt(0, 0, 0))
+        .map_or(DateTime::<Utc>::MIN_UTC, |time| time.and_utc())
 }
 
-/// The assets filed in the file directory `dir` (a month or `Undated`); none for any other.
-pub(super) fn assets_in(assets: &[LibraryAsset], dir: Dir) -> Vec<LibraryAsset> {
+/// Whether the asset has no usable local capture time.
+pub(super) fn is_undated(asset: &LibraryAsset) -> bool {
+    bucket_of(asset) == Bucket::Undated
+}
+
+/// The assets of `assets` filed in the file directory `dir` (a month or `Undated`); none for any
+/// other.
+pub(super) fn assets_in(assets: Vec<LibraryAsset>, dir: &Dir) -> Vec<LibraryAsset> {
     let bucket = match dir {
-        Dir::Month(year, month) => Bucket::Month(year, month),
+        Dir::Month(year, month) => Bucket::Month(*year, *month),
         Dir::Undated => Bucket::Undated,
         _ => return Vec::new(),
     };
     assets
-        .iter()
+        .into_iter()
         .filter(|asset| bucket_of(asset) == bucket)
-        .cloned()
         .collect()
+}
+
+/// The file entries for the `assets` of a month or `Undated` directory, or `None` when the
+/// directory holds no asset and therefore does not exist.
+pub(super) fn files(
+    assets: &[LibraryAsset],
+    videos: &HashMap<RemoteAssetId, LivePhotoVideo>,
+) -> Option<Vec<Entry>> {
+    let mut files: Vec<Entry> = assets
+        .iter()
+        .flat_map(|asset| live_photo::file_entries(asset, videos))
+        .collect();
+    files.sort_by_cached_key(|entry| (entry.name.to_lowercase(), entry.remote_asset.clone()));
+    (!files.is_empty()).then_some(files)
 }
 
 /// The file entry of the still image or plain asset `asset`.

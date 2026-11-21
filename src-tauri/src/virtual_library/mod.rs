@@ -6,7 +6,7 @@
 //! Paths are relative to the Virtual Library root, use `/` (a `\` is accepted too) and carry no
 //! platform semantics, so the module behaves the same on every OS.
 
-use crate::immich::{ImmichClient, LibraryAlbum, RemoteAssetId};
+use crate::immich::{ImmichClient, LibraryAlbum, LibraryAsset, RemoteAssetId};
 use chrono::{DateTime, Utc};
 
 mod albums;
@@ -139,20 +139,54 @@ impl<'a> VirtualLibrary<'a> {
                 let videos = self.client.list_live_photo_videos(&assets).await;
                 Ok(albums::files(&assets, &videos))
             }
-            Dir::AllPhotos | Dir::Year(_) | Dir::Month(..) | Dir::Undated => {
+            Dir::AllPhotos => Ok(self.calendar().await?.years()),
+            Dir::Year(year) => self
+                .calendar()
+                .await?
+                .months(year)
+                .ok_or(VirtualLibraryError::NotFound),
+            Dir::Month(year, month) => {
+                // Immich can only filter on the UTC instant of a capture, so the window is wider
+                // than the month and the local month is applied to what comes back.
+                let (after, before) = photo_timeline::creation_window(year, month);
                 let assets = self
                     .client
-                    .list_photo_timeline_assets()
+                    .list_photo_timeline_assets_created_between(after, before)
                     .await
                     .map_err(VirtualLibraryError::Remote)?;
-                let assets = live_photo::without_paired_videos(assets);
-                // Only a directory of files shows the videos, so only it looks them up.
-                let videos = self
+                self.timeline_files(photo_timeline::assets_in(assets, &dir))
+                    .await
+            }
+            Dir::Undated => {
+                // Immich cannot filter on a missing capture time: page through the timeline and
+                // keep only the undated assets.
+                let assets = self
                     .client
-                    .list_live_photo_videos(&photo_timeline::assets_in(&assets, dir.clone()))
-                    .await;
-                photo_timeline::children(&assets, &videos, dir).ok_or(VirtualLibraryError::NotFound)
+                    .find_photo_timeline_assets(&photo_timeline::is_undated)
+                    .await
+                    .map_err(VirtualLibraryError::Remote)?;
+                self.timeline_files(assets).await
             }
         }
+    }
+
+    /// The months of the Photo Timeline, from Immich's timeline buckets: no asset is fetched.
+    async fn calendar(&self) -> Result<photo_timeline::Calendar, VirtualLibraryError> {
+        let buckets = self
+            .client
+            .list_photo_timeline_months()
+            .await
+            .map_err(VirtualLibraryError::Remote)?;
+        Ok(photo_timeline::Calendar::from_buckets(&buckets))
+    }
+
+    /// The files of a month or `Undated` directory holding `assets`.
+    async fn timeline_files(
+        &self,
+        assets: Vec<LibraryAsset>,
+    ) -> Result<Vec<Entry>, VirtualLibraryError> {
+        let assets = live_photo::without_paired_videos(assets);
+        let videos = self.client.list_live_photo_videos(&assets).await;
+        photo_timeline::files(&assets, &videos).ok_or(VirtualLibraryError::NotFound)
     }
 }
