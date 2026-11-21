@@ -562,6 +562,51 @@ describe("SettingsView", () => {
     expect(screen.queryByRole("button", { name: "Check for updates" })).toBeNull();
     expect(screen.queryByText("Updates")).toBeNull();
   });
+
+  describe("Virtual Library section", () => {
+    function renderSettings(overrides: Record<string, unknown> = {}) {
+      return render(SettingsView, {
+        currentUserName: "Meyer",
+        serverUrl: "https://immich.example",
+        isAutostartEnabled: false,
+        themePreference: "system",
+        uploadParallelism: 3,
+        isSavingUploadParallelism: false,
+        updateStatus: "unknown",
+        isCheckingForUpdates: false,
+        locales: localeCatalog,
+        onToggleAutostart: vi.fn(),
+        onLocaleChange: vi.fn(),
+        onThemeChange: vi.fn(),
+        onUploadParallelismChange: vi.fn(),
+        onCheckForUpdates: vi.fn(),
+        onLogout: vi.fn(),
+        ...overrides,
+      });
+    }
+
+    it("is absent unless the backend reports the Virtual Library as available", () => {
+      renderSettings();
+      expect(screen.queryByText("Virtual Library")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Enable Virtual Library" })).toBeNull();
+    });
+
+    it("shows the persisted toggle state and forwards a click when available", async () => {
+      const onToggleVirtualLibrary = vi.fn();
+      const { rerender } = renderSettings({ isVirtualLibraryAvailable: true, isVirtualLibraryEnabled: false, onToggleVirtualLibrary });
+
+      const enable = screen.getByRole("button", { name: "Enable Virtual Library" });
+      expect(enable).toHaveAttribute("aria-pressed", "false");
+      await fireEvent.click(enable);
+      expect(onToggleVirtualLibrary).toHaveBeenCalledOnce();
+
+      await rerender({ isVirtualLibraryEnabled: true });
+      expect(screen.getByRole("button", { name: "Disable Virtual Library" })).toHaveAttribute("aria-pressed", "true");
+
+      await rerender({ isSavingVirtualLibrary: true });
+      expect(screen.getByRole("button", { name: "Disable Virtual Library" })).toBeDisabled();
+    });
+  });
 });
 
 describe("TargetAlbumModal", () => {

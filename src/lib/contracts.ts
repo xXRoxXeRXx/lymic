@@ -252,6 +252,17 @@ export interface LoginRequest {
 
 export type ReleaseChannel = "github" | "store";
 
+/**
+ * The Virtual Library section of the settings (ADR-0003). Mirrors `VirtualLibrarySettings` in
+ * `src-tauri/src/commands/virtual_library.rs`. `available` is decided by the backend at runtime
+ * (Windows, Store release channel and real Package Identity); `enabled` is the persisted toggle
+ * and is always false while the Virtual Library is unavailable.
+ */
+export interface VirtualLibrarySettings {
+  available: boolean;
+  enabled: boolean;
+}
+
 export interface MapMarker { id: string; lat: number; lon: number; }
 
 // Search (ADR-0008, ADR-0009). Mirrors `src-tauri/src/immich/search.rs`.

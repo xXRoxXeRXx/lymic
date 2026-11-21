@@ -271,6 +271,8 @@ Lymic supports two Windows distribution channels via the build input `LYMIC_RELE
 
 Maintainers can configure this build input at build time via `LYMIC_RELEASE_CHANNEL=store` (or `VITE_LYMIC_RELEASE_CHANNEL=store` for frontend builds). At runtime, the active channel is exposed via the `get_release_channel` IPC command.
 
+The optional Virtual Library settings section needs more than the channel label: the backend offers it (`get_virtual_library_settings`) only on Windows, in the `store` channel and when the process has real Package Identity. A Store-labelled build that is not running as an installed or registered MSIX package, and `tauri dev`, therefore show no Virtual Library section.
+
 To build and register a local MSIX with Package Identity (needed to exercise Store-only features such as the planned Virtual Library, which is unavailable in `tauri dev`), see [`docs/store/local-msix-build.md`](store/local-msix-build.md).
 
 ### Canonical Snap Store (Linux)

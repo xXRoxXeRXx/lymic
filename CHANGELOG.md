@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Virtual Library settings section**:
+  - Settings gain a Virtual Library section with an enable toggle whose state is kept across restarts. The section appears only in the Microsoft Store version of Lymic on Windows when it runs as an installed package; it is absent on macOS, Linux, the GitHub installer and unpackaged runs. The toggle has no effect on files yet.
 - **Archive from Photos and Favorites**:
   - Select photos and videos in Photos or Favorites and choose Archive. It runs at once without a confirmation: the assets that changed leave the view and Photos, the ones that did not stay selected, and the message gives the counts. A key without the `asset.update` permission gets a message that names it. Archived assets show in the Archive the next time it is opened; a Favorite that is archived stays a Favorite but is hidden in Photos and Favorites, as in Immich's web app. Available in all supported languages.
 - **Archive from Albums, People, Places, Memories, Tags and Search**:
