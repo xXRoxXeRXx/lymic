@@ -1,10 +1,11 @@
 import type { AlbumAssignmentResult } from "../contracts";
 import type { RemoteAssetDownloadOutcome } from "./remote-asset-actions.svelte";
+import { archiveFeedbackFor, type ArchiveAction, type ArchiveFeedback, type RemoteAssetArchiveOutcome } from "./remote-asset-archive";
 import { restoreFeedbackFor, type RemoteAssetRestoreOutcome, type RestoreFeedback } from "./remote-asset-restore";
 import { trashFeedbackFor, type RemoteAssetTrashOutcome, type TrashFeedback } from "./remote-asset-trash";
 
 /** The bulk actions of a timeline selection; at most one runs at a time. */
-export type SelectionAction = "favorite" | "album" | "download" | "restore" | "trash";
+export type SelectionAction = "favorite" | "album" | "download" | "restore" | "trash" | "archive" | "unarchive";
 
 /** How many of the selected Remote Assets a bulk action handled. */
 export interface SelectionCounts {
@@ -12,9 +13,15 @@ export interface SelectionCounts {
   total: number;
 }
 
-/** What a finished favorite, add-to-Album or Download bulk action reports (Restore and Move to Trash report through `restoreFeedback` and `trashFeedback`). */
+/** What a finished favorite, add-to-Album or Download bulk action reports (Restore, Move to Trash, Archive and Unarchive report through their own feedback). */
 export interface SelectionResult extends SelectionCounts {
-  action: Exclude<SelectionAction, "restore" | "trash">;
+  action: Exclude<SelectionAction, "restore" | "trash" | "archive" | "unarchive">;
+}
+
+/** What the user is told about the last Archive or Unarchive of the selection. */
+export interface SelectionArchiveFeedback {
+  action: ArchiveAction;
+  feedback: ArchiveFeedback;
 }
 
 export interface TimelineSelectionActionsOptions {
@@ -32,10 +39,14 @@ export interface TimelineSelectionActionsOptions {
   readonly restore?: (assetIds: string[]) => Promise<RemoteAssetRestoreOutcome>;
   /** Move to Trash (the caller has asked for confirmation); leave it out where the timeline offers none. Never rejects. */
   readonly trash?: (assetIds: string[]) => Promise<RemoteAssetTrashOutcome>;
+  /** Archive of Remote Assets; leave it out where the timeline offers no Archive. Never rejects. */
+  readonly archive?: (assetIds: string[]) => Promise<RemoteAssetArchiveOutcome>;
+  /** Unarchive of Archived Assets; leave it out where the timeline offers no Unarchive. Never rejects. */
+  readonly unarchive?: (assetIds: string[]) => Promise<RemoteAssetArchiveOutcome>;
 }
 
 /**
- * Owns the multi-selection of a timeline and its bulk actions (favorite, add to Album, Download, Restore, Move to Trash):
+ * Owns the multi-selection of a timeline and its bulk actions (favorite, add to Album, Download, Restore, Move to Trash, Archive, Unarchive):
  * the selected set, which single action is running, and the last result. Call `reset` when the timeline
  * refreshed or was replaced: it ends the running action and drops its result when it arrives.
  */
@@ -45,6 +56,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
   let result = $state<SelectionResult | null>(null);
   let restoreFeedback = $state<RestoreFeedback | null>(null);
   let trashFeedback = $state<TrashFeedback | null>(null);
+  let archiveFeedback = $state<SelectionArchiveFeedback | null>(null);
   let generation = 0;
 
   function select(assetIds: Iterable<string>) {
@@ -88,6 +100,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     clearResult();
     restoreFeedback = null;
     trashFeedback = null;
+    archiveFeedback = null;
     clear();
   }
 
@@ -146,42 +159,84 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     });
   }
 
-  /** Restores the selection; Trashed Assets that were not restored stay selected so the user can retry. */
-  async function restore() {
-    const restoreAssets = options.restore;
-    if (!restoreAssets) return;
-    await run("restore", async (assetIds, isCurrent) => {
-      restoreFeedback = null;
-      const outcome = await restoreAssets(assetIds);
+  /** Runs a bulk write that shrinks the selection to the failed assets and reports its outcome. */
+  async function runBulkWrite<TOutcome extends { failedAssetIds: string[] }, TFeedback>(
+    action: "restore" | "trash" | ArchiveAction,
+    write: ((assetIds: string[]) => Promise<TOutcome>) | undefined,
+    setFeedback: (value: TFeedback | null) => void,
+    toFeedback: (outcome: TOutcome, total: number) => TFeedback,
+  ) {
+    if (!write) return;
+    await run(action, async (assetIds, isCurrent) => {
+      setFeedback(null);
+      const outcome = await write(assetIds);
       if (!isCurrent()) return;
       select(outcome.failedAssetIds);
-      restoreFeedback = restoreFeedbackFor(outcome, assetIds.length);
+      setFeedback(toFeedback(outcome, assetIds.length));
     });
   }
 
+  /** Runs a single-asset write (from the Lightbox) outside the selection busy state and tells whether its result still applies. */
+  async function runSingleWrite<TOutcome extends { changedAssetIds: string[] }, TFeedback>(
+    label: string,
+    assetId: string,
+    write: ((assetIds: string[]) => Promise<TOutcome>) | undefined,
+    setFeedback: (value: TFeedback | null) => void,
+    toFeedback: ((outcome: TOutcome) => TFeedback) | null,
+  ) {
+    if (!write) throw new Error(`This timeline offers no ${label}.`);
+    const isCurrent = currentGeneration();
+    if (toFeedback) setFeedback(null);
+    const outcome = await write([assetId]);
+    const applied = isCurrent() && outcome.changedAssetIds.includes(assetId);
+    if (applied && toFeedback) setFeedback(toFeedback(outcome));
+    return { outcome, applied };
+  }
+
+  /** Restores the selection; Trashed Assets that were not restored stay selected so the user can retry. */
+  async function restore() {
+    await runBulkWrite("restore", options.restore, (value) => { restoreFeedback = value; }, restoreFeedbackFor);
+  }
+
+  /** Archives or unarchives the selection; Remote Assets that did not change stay selected so the user can retry. */
+  async function changeSelectionArchive(action: ArchiveAction, change: ((assetIds: string[]) => Promise<RemoteAssetArchiveOutcome>) | undefined) {
+    await runBulkWrite(
+      action,
+      change,
+      (value: SelectionArchiveFeedback | null) => { archiveFeedback = value; },
+      (outcome, total) => ({ action, feedback: archiveFeedbackFor(outcome, total) }),
+    );
+  }
+
+  const archive = () => changeSelectionArchive("archive", options.archive);
+  const unarchive = () => changeSelectionArchive("unarchive", options.unarchive);
+
   /** Restores one Remote Asset (from the Lightbox). `applied` is false when the timeline changed meanwhile. */
   async function restoreOne(assetId: string) {
-    const restoreAssets = options.restore;
-    if (!restoreAssets) throw new Error("This timeline offers no Restore.");
-    const isCurrent = currentGeneration();
-    restoreFeedback = null;
-    const outcome = await restoreAssets([assetId]);
-    const applied = isCurrent() && outcome.restoredAssetIds.includes(assetId);
-    if (applied) restoreFeedback = restoreFeedbackFor(outcome, 1);
-    return { outcome, applied };
+    return runSingleWrite(
+      "Restore",
+      assetId,
+      options.restore,
+      (value: RestoreFeedback | null) => { restoreFeedback = value; },
+      (outcome) => restoreFeedbackFor(outcome, 1),
+    );
+  }
+
+  /** Archives or unarchives one Remote Asset (from the Lightbox). The Lightbox reports its own single-asset message while open. */
+  async function archiveOne(action: ArchiveAction, assetId: string) {
+    const { outcome } = await runSingleWrite(
+      action === "archive" ? "Archive" : "Unarchive",
+      assetId,
+      options[action],
+      (value: SelectionArchiveFeedback | null) => { archiveFeedback = value; },
+      null,
+    );
+    return outcome;
   }
 
   /** Moves the selection to the Immich trash; Remote Assets that were not moved stay selected so the user can retry. */
   async function trash() {
-    const trashAssets = options.trash;
-    if (!trashAssets) return;
-    await run("trash", async (assetIds, isCurrent) => {
-      trashFeedback = null;
-      const outcome = await trashAssets(assetIds);
-      if (!isCurrent()) return;
-      select(outcome.failedAssetIds);
-      trashFeedback = trashFeedbackFor(outcome, assetIds.length);
-    });
+    await runBulkWrite("trash", options.trash, (value) => { trashFeedback = value; }, trashFeedbackFor);
   }
 
   /**
@@ -208,6 +263,7 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     get result() { return result; },
     get restoreFeedback() { return restoreFeedback; },
     get trashFeedback() { return trashFeedback; },
+    get archiveFeedback() { return archiveFeedback; },
     clearResult,
     clearTrashFeedback: () => { trashFeedback = null; },
     isSelected: (assetId: string) => selectedIds.has(assetId),
@@ -222,5 +278,8 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     restoreOne,
     trash,
     trashOne,
+    archive,
+    unarchive,
+    archiveOne,
   };
 }

@@ -291,7 +291,7 @@ describe("selection restore", () => {
   });
 
   it("keeps the assets that were not restored selected and reports partial feedback", async () => {
-    const restore = vi.fn(async () => ({ restoredAssetIds: ["a"], failedAssetIds: ["b"], failure: null }));
+    const restore = vi.fn(async () => ({ changedAssetIds: ["a"], failedAssetIds: ["b"], failure: null }));
     const selection = createSelection({ restore });
     selection.toggle("a");
     selection.toggle("b");
@@ -305,14 +305,14 @@ describe("selection restore", () => {
   });
 
   it("is dropped by reset and leaves no busy state", async () => {
-    const pending = deferred<{ restoredAssetIds: string[]; failedAssetIds: string[]; failure: null }>();
+    const pending = deferred<{ changedAssetIds: string[]; failedAssetIds: string[]; failure: null }>();
     const selection = createSelection({ restore: () => pending.promise });
     selection.toggle("a");
 
     const running = selection.restore();
     expect(selection.busyAction).toBe("restore");
     selection.reset();
-    pending.resolve({ restoredAssetIds: ["a"], failedAssetIds: [], failure: null });
+    pending.resolve({ changedAssetIds: ["a"], failedAssetIds: [], failure: null });
     await running;
 
     expect(selection.restoreFeedback).toBeNull();
@@ -320,20 +320,20 @@ describe("selection restore", () => {
   });
 
   it("restores a single asset outside the busy state and reports whether the result still applies", async () => {
-    const restore = vi.fn(async (ids: string[]) => ({ restoredAssetIds: ids, failedAssetIds: [], failure: null }));
+    const restore = vi.fn(async (ids: string[]) => ({ changedAssetIds: ids, failedAssetIds: [], failure: null }));
     const selection = createSelection({ restore });
 
     const { outcome, applied } = await selection.restoreOne("a");
 
-    expect(outcome.restoredAssetIds).toEqual(["a"]);
+    expect(outcome.changedAssetIds).toEqual(["a"]);
     expect(applied).toBe(true);
     expect(selection.restoreFeedback).toEqual({ kind: "success", count: 1 });
 
-    const pending = deferred<{ restoredAssetIds: string[]; failedAssetIds: string[]; failure: null }>();
+    const pending = deferred<{ changedAssetIds: string[]; failedAssetIds: string[]; failure: null }>();
     const stale = createSelection({ restore: () => pending.promise });
     const running = stale.restoreOne("a");
     stale.reset();
-    pending.resolve({ restoredAssetIds: ["a"], failedAssetIds: [], failure: null });
+    pending.resolve({ changedAssetIds: ["a"], failedAssetIds: [], failure: null });
     expect((await running).applied).toBe(false);
     expect(stale.restoreFeedback).toBeNull();
   });
@@ -456,5 +456,180 @@ describe("selection Move to Trash", () => {
 
     expect(applied).toBe(false);
     expect(selection.trashFeedback).toBeNull();
+  });
+});
+
+describe("selection unarchive", () => {
+  const outcome = (changedAssetIds: string[], failedAssetIds: string[]) => ({ changedAssetIds, failedAssetIds, failure: null });
+
+  it("is unavailable without an unarchive", async () => {
+    const selection = createSelection();
+    selection.toggle("a");
+
+    await selection.unarchive();
+
+    expect(selection.busyAction).toBeNull();
+    expect(selection.isSelected("a")).toBe(true);
+    expect(selection.archiveFeedback).toBeNull();
+  });
+
+  it("keeps the assets that were not unarchived selected and reports partial feedback for the action", async () => {
+    const unarchive = vi.fn(async () => outcome(["a"], ["b"]));
+    const selection = createSelection({ unarchive });
+    selection.toggle("a");
+    selection.toggle("b");
+
+    await selection.unarchive();
+
+    expect(unarchive).toHaveBeenCalledWith(["a", "b"]);
+    expect([...selection.selectedIds]).toEqual(["b"]);
+    expect(selection.archiveFeedback).toEqual({ action: "unarchive", feedback: { kind: "partial", failed: 1, total: 2 } });
+    expect(selection.busyAction).toBeNull();
+  });
+
+  it("ignores a second action while one runs", async () => {
+    const pending = deferred<ReturnType<typeof outcome>>();
+    const unarchive = vi.fn(() => pending.promise);
+    const selection = createSelection({ unarchive });
+    selection.toggle("a");
+
+    const running = selection.unarchive();
+    expect(selection.busyAction).toBe("unarchive");
+    expect(selection.isBusy).toBe(true);
+    await selection.unarchive();
+    await selection.download();
+    expect(unarchive).toHaveBeenCalledTimes(1);
+
+    pending.resolve(outcome(["a"], []));
+    await running;
+    expect(selection.archiveFeedback).toEqual({ action: "unarchive", feedback: { kind: "success", count: 1 } });
+  });
+
+  it("clears the previous feedback when a new action starts and when the selection is reset", async () => {
+    const pending = deferred<ReturnType<typeof outcome>>();
+    const unarchive = vi.fn()
+      .mockResolvedValueOnce(outcome([], ["a"]))
+      .mockImplementationOnce(() => pending.promise);
+    const selection = createSelection({ unarchive });
+    selection.toggle("a");
+    await selection.unarchive();
+    expect(selection.archiveFeedback?.feedback).toEqual({ kind: "none", failed: 1, total: 1 });
+
+    const running = selection.unarchive();
+    expect(selection.archiveFeedback).toBeNull();
+    selection.reset();
+    pending.resolve(outcome(["a"], []));
+    await running;
+
+    expect(selection.archiveFeedback).toBeNull();
+    expect(selection.busyAction).toBeNull();
+  });
+
+  it("archives a single asset with the archive callback outside the selection feedback", async () => {
+    const archive = vi.fn(async (ids: string[]) => outcome(ids, []));
+    const unarchive = vi.fn(async (ids: string[]) => outcome(ids, []));
+    const selection = createSelection({ archive, unarchive });
+
+    const result = await selection.archiveOne("archive", "a");
+
+    expect(archive).toHaveBeenCalledWith(["a"]);
+    expect(unarchive).not.toHaveBeenCalled();
+    expect(result.changedAssetIds).toEqual(["a"]);
+    expect(selection.busyAction).toBeNull();
+    expect(selection.archiveFeedback).toBeNull();
+    await expect(createSelection({ unarchive }).archiveOne("archive", "a")).rejects.toThrow("This timeline offers no Archive.");
+  });
+
+  it("unarchives a single asset outside the busy state and leaves the selection feedback untouched", async () => {
+    const unarchive = vi.fn(async (ids: string[]) => outcome(ids, []));
+    const selection = createSelection({ unarchive });
+
+    const result = await selection.archiveOne("unarchive", "a");
+
+    expect(unarchive).toHaveBeenCalledWith(["a"]);
+    expect(result.changedAssetIds).toEqual(["a"]);
+    expect(selection.busyAction).toBeNull();
+    expect(selection.archiveFeedback).toBeNull();
+
+    const failing = createSelection({ unarchive: async () => outcome([], ["a"]) });
+    await failing.archiveOne("unarchive", "a");
+    expect(failing.archiveFeedback).toBeNull();
+  });
+});
+
+describe("selection archive", () => {
+  const outcome = (changedAssetIds: string[], failedAssetIds: string[]) => ({ changedAssetIds, failedAssetIds, failure: null });
+
+  it("is unavailable without an archive", async () => {
+    const selection = createSelection();
+    selection.toggle("a");
+
+    await selection.archive();
+
+    expect(selection.busyAction).toBeNull();
+    expect(selection.isSelected("a")).toBe(true);
+    expect(selection.archiveFeedback).toBeNull();
+  });
+
+  it("keeps the assets that were not archived selected and reports partial feedback for the action", async () => {
+    const archive = vi.fn(async () => outcome(["a"], ["b"]));
+    const selection = createSelection({ archive });
+    selection.toggle("a");
+    selection.toggle("b");
+
+    await selection.archive();
+
+    expect(archive).toHaveBeenCalledWith(["a", "b"]);
+    expect([...selection.selectedIds]).toEqual(["b"]);
+    expect(selection.archiveFeedback).toEqual({ action: "archive", feedback: { kind: "partial", failed: 1, total: 2 } });
+    expect(selection.busyAction).toBeNull();
+  });
+
+  it("ignores a second action while one runs and resets its feedback with the selection", async () => {
+    const pending = deferred<ReturnType<typeof outcome>>();
+    const archive = vi.fn(() => pending.promise);
+    const selection = createSelection({ archive });
+    selection.toggle("a");
+
+    const running = selection.archive();
+    expect(selection.busyAction).toBe("archive");
+    expect(selection.isBusy).toBe(true);
+    await selection.archive();
+    await selection.download();
+    expect(archive).toHaveBeenCalledTimes(1);
+
+    pending.resolve(outcome(["a"], []));
+    await running;
+    expect(selection.archiveFeedback).toEqual({ action: "archive", feedback: { kind: "success", count: 1 } });
+    selection.reset();
+    expect(selection.archiveFeedback).toBeNull();
+  });
+});
+
+describe("selection Move to Trash together with Archive and Unarchive", () => {
+  it("runs one bulk action at a time across Move to Trash, Archive and Unarchive and keeps their feedback apart", async () => {
+    const pending = deferred<{ movedAssetIds: string[]; failedAssetIds: string[]; failure: null }>();
+    const trash = vi.fn((_ids: string[]) => pending.promise);
+    const archive = vi.fn(async (ids: string[]) => ({ changedAssetIds: ids, failedAssetIds: [], failure: null }));
+    const unarchive = vi.fn(async (ids: string[]) => ({ changedAssetIds: ids, failedAssetIds: [], failure: null }));
+    const selection = createSelection({ trash, archive, unarchive });
+    selection.toggle("a");
+
+    const running = selection.trash();
+    expect(selection.busyAction).toBe("trash");
+    await selection.archive();
+    await selection.unarchive();
+    expect(archive).not.toHaveBeenCalled();
+    expect(unarchive).not.toHaveBeenCalled();
+
+    pending.resolve({ movedAssetIds: [], failedAssetIds: ["a"], failure: null });
+    await running;
+    expect(selection.trashFeedback).toEqual({ kind: "failed" });
+    expect(selection.archiveFeedback).toBeNull();
+    expect(selection.busyAction).toBeNull();
+
+    await selection.archive();
+    expect(archive).toHaveBeenCalledWith(["a"]);
+    expect(selection.archiveFeedback).toEqual({ action: "archive", feedback: { kind: "success", count: 1 } });
   });
 });

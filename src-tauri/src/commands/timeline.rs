@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::immich::{
-    AlbumTimeline, AssetDetails, FilteredTimeline, ImmichSession, PlaceTimeline, RemoteAssetId,
-    TimelineAsset, TimelineBucket, TrashMoveResult, TrashRestoreResult,
+    AlbumTimeline, AssetDetails, AssetVisibility, AssetVisibilityResult, FilteredTimeline,
+    ImmichSession, PlaceTimeline, RemoteAssetId, TimelineAsset, TimelineBucket, TrashMoveResult,
+    TrashRestoreResult,
 };
 
 #[tauri::command]
@@ -75,8 +76,8 @@ async fn download_archive_with(
     session.save_archive(archive, &destination_path).await
 }
 
-/// The non-empty, trimmed Remote Asset IDs of a trash write.
-fn trash_write_asset_ids(asset_ids: Vec<String>) -> Result<Vec<RemoteAssetId>, String> {
+/// Turns the IDs a command received into Remote Asset IDs: at least one, each trimmed and non-empty.
+fn remote_asset_ids(asset_ids: &[String]) -> Result<Vec<RemoteAssetId>, String> {
     if asset_ids.is_empty() {
         return Err("At least one asset ID is required".to_string());
     }
@@ -98,7 +99,7 @@ fn trash_write_asset_ids(asset_ids: Vec<String>) -> Result<Vec<RemoteAssetId>, S
 pub(crate) async fn restore_trashed_assets(
     asset_ids: Vec<String>,
 ) -> Result<TrashRestoreResult, String> {
-    let asset_ids = trash_write_asset_ids(asset_ids)?;
+    let asset_ids = remote_asset_ids(&asset_ids)?;
     ImmichSession::with_stored_credentials(|client| async move {
         client.restore_trashed_assets(&asset_ids).await
     })
@@ -111,10 +112,24 @@ pub(crate) async fn restore_trashed_assets(
 /// credential-free `failureCode`; a failure before any asset was moved is an error code.
 #[tauri::command]
 pub(crate) async fn trash_assets(asset_ids: Vec<String>) -> Result<TrashMoveResult, String> {
-    let asset_ids = trash_write_asset_ids(asset_ids)?;
+    let asset_ids = remote_asset_ids(&asset_ids)?;
     ImmichSession::with_stored_credentials(
         |client| async move { client.trash_assets(&asset_ids).await },
     )
+    .await
+}
+
+/// Archives or Unarchives Remote Assets. `visibility` accepts only `archive` and `timeline`, so
+/// Lymic can never write `locked` or `hidden`.
+#[tauri::command]
+pub(crate) async fn set_assets_visibility(
+    asset_ids: Vec<String>,
+    visibility: AssetVisibility,
+) -> Result<AssetVisibilityResult, String> {
+    let asset_ids = remote_asset_ids(&asset_ids)?;
+    ImmichSession::with_stored_credentials(|client| async move {
+        client.set_assets_visibility(&asset_ids, visibility).await
+    })
     .await
 }
 

@@ -63,6 +63,9 @@ it("opens the selected video thumbnail using the shared Lightbox", async () => {
   expect(desktop.getAssetDetails).toHaveBeenCalledWith("video-1");
   await fireEvent.click(screen.getByRole("button", { name: "Info" }));
   expect(screen.getByText("Date")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Unarchive" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
   await fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
   await screen.findByRole("button", { name: "Remove from favorites" });
   await fireEvent.click(screen.getByRole("button", { name: "Close lightbox" }));

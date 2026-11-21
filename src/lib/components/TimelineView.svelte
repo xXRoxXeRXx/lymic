@@ -1,18 +1,19 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
   import { tick, untrack, type Snippet } from "svelte";
-  import { Album, ArchiveRestore, Check, Download, Heart, HeartOff, Play, RefreshCw, Trash2, X } from "lucide-svelte";
+  import { Album, Archive, ArchiveRestore, ArchiveX, Check, Download, Heart, HeartOff, Play, RefreshCw, Trash2, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { TimelineController } from "../controllers/timeline-controller.svelte";
   import { buildTimelineScrubberIndex } from "./timeline-scrubber";
-  import type { AssetTag, TimelineAsset, TrashMoveResult, TrashRestoreResult } from "../contracts";
+  import type { AssetTag, AssetVisibility, AssetVisibilityResult, TimelineAsset, TrashMoveResult, TrashRestoreResult } from "../contracts";
   import type { RemoteAssetDesktopAdapter } from "../tauri/desktop-adapter";
   import { calculateMasonryLayout } from "./timeline-masonry";
   import Lightbox from "./Lightbox.svelte";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   import { createRemoteAssetActions } from "./remote-asset-actions.svelte";
   import { createRemoteAssetFavorites } from "./remote-asset-favorites.svelte";
+  import { archiveFeedbackMessage, createRemoteAssetArchive, type ArchiveAction, type ArchiveMode } from "./remote-asset-archive";
   import { createRemoteAssetRestore, restoreFeedbackMessage } from "./remote-asset-restore";
   import { createRemoteAssetTrash, type RemoteAssetTrashOutcome } from "./remote-asset-trash";
   import MoveToTrashDialog from "./MoveToTrashDialog.svelte";
@@ -47,6 +48,14 @@
      * The result lists the assets moved; its optional `failureCode` says why a request stopped after some were moved.
      */
     trashAssets?(assetIds: string[]): Promise<TrashMoveResult>;
+    /** Writes the visibility for an Archive or Unarchive; needed together with `archiveMode`. */
+    setAssetsVisibility?(assetIds: string[], visibility: AssetVisibility): Promise<AssetVisibilityResult>;
+    /**
+     * How the multi-selection and the Lightbox offer Archive; leave it out where there is none. `archive` (Photo and Favorites Timelines) and
+     * `unarchive` (Archive Timeline) offer that one action and a changed asset leaves the list. `by-visibility` is for a view that shows archived
+     * and other assets together: the Lightbox follows the open asset's visibility, the selection offers Archive, and a changed asset stays in the list.
+     */
+    archiveMode?: ArchiveMode;
     /** Where to scroll to once the first buckets are shown, for a view that is reopened where the user left it. */
     initialScrollTop?: number;
     /** Reports the scroll position when the view opens and whenever the user scrolls. */
@@ -79,6 +88,8 @@
     allowFavoriteAndAlbum = true,
     restoreTrashedAssets,
     trashAssets,
+    setAssetsVisibility,
+    archiveMode,
     initialScrollTop = 0,
     onScrollPosition,
     onSelectTag,
@@ -130,6 +141,19 @@
     get trashAssets() { return trashAssets; },
     onRemoved: (assetId) => selection.forget(assetId),
   });
+  const archive = createRemoteAssetArchive({
+    get timeline() { return timeline; },
+    setAssetsVisibility: (assetIds, visibility) => setAssetsVisibility!(assetIds, visibility),
+    get assetsStayInView() { return offeredArchiveMode === "by-visibility"; },
+    // A hidden asset (a Live Photo's video) is not archivable: Immich would accept it and make it a standalone asset (#287).
+    isArchivable: (assetId) => lightboxAssets.find((asset) => asset.id === assetId)?.visibility !== "hidden",
+    onChanged: (assetId, visibility) => assetActions.reflectVisibility(assetId, visibility),
+    onRemoved: (assetId) => selection.forget(assetId),
+  });
+  const offeredArchiveMode = $derived(setAssetsVisibility ? archiveMode : undefined);
+  /** The selection toolbar's buttons; in a `by-visibility` view it offers Archive only, the Lightbox decides per asset. */
+  const offersArchive = $derived(offeredArchiveMode === "archive" || offeredArchiveMode === "by-visibility");
+  const offersUnarchive = $derived(offeredArchiveMode === "unarchive");
   const selection = createTimelineSelectionActions({
     updateFavorites: (assetIds, isFavorite, isCurrent) => favorites.updateMany(assetIds, isFavorite, isCurrent),
     clearFavoriteError: () => favorites.clearError(),
@@ -137,6 +161,8 @@
     addAssetsToAlbum: (assetIds, albumId) => desktop.addAssetsToAlbum(assetIds, albumId),
     get restore() { return restoreTrashedAssets ? (assetIds: string[]) => restore.restore(assetIds) : undefined; },
     get trash() { return trashAssets ? (assetIds: string[]) => trash.trash(assetIds) : undefined; },
+    get archive() { return offersArchive ? (assetIds: string[]) => archive.apply("archive", assetIds) : undefined; },
+    get unarchive() { return offersUnarchive || offeredArchiveMode === "by-visibility" ? (assetIds: string[]) => archive.apply("unarchive", assetIds) : undefined; },
   });
   const selectedTimelineAssets = $derived(lightboxAssets.filter((asset) => selection.isSelected(asset.id)));
   const hasFavoriteSelection = $derived(selectedTimelineAssets.some((asset) => favorites.isFavorite(asset)));
@@ -367,6 +393,15 @@
     return outcome;
   }
 
+  /** Archives or unarchives the Lightbox's asset; the Lightbox moves on from where the asset was, so it is remembered before the asset leaves the timeline. */
+  async function changeArchiveFromLightbox(action: ArchiveAction, assetId: string) {
+    if (offeredArchiveMode === "by-visibility") return selection.archiveOne(action, assetId);
+    favorites.expectRemoval(assetId);
+    const outcome = await selection.archiveOne(action, assetId);
+    if (!outcome.changedAssetIds.includes(assetId)) favorites.cancelExpectedRemoval();
+    return outcome;
+  }
+
   function openAddSelectionToAlbum() {
     if (selection.count === 0 || !targetAlbumCatalogue || selection.isBusy) return;
     selection.clearResult();
@@ -467,6 +502,12 @@
         {#if restoreTrashedAssets}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={selection.busyAction === 'restore'} disabled={selection.isBusy} onclick={() => void selection.restore()}><ArchiveRestore class="h-4 w-4 {selection.busyAction === 'restore' ? 'animate-pulse' : ''}" /></button>
         {/if}
+        {#if offersArchive}
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("archive_archive")} aria-label={$t("archive_archive")} aria-busy={selection.busyAction === 'archive'} disabled={selection.isBusy} onclick={() => void selection.archive()}><Archive class="h-4 w-4 {selection.busyAction === 'archive' ? 'animate-pulse' : ''}" /></button>
+        {/if}
+        {#if offersUnarchive}
+          <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("archive_unarchive")} aria-label={$t("archive_unarchive")} aria-busy={selection.busyAction === 'unarchive'} disabled={selection.isBusy} onclick={() => void selection.unarchive()}><ArchiveX class="h-4 w-4 {selection.busyAction === 'unarchive' ? 'animate-pulse' : ''}" /></button>
+        {/if}
         {#if allowFavoriteAndAlbum && hasNonFavoriteSelection}
           <button type="button" class="rounded-md p-2 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:text-blue-200 dark:hover:bg-blue-950/70" title={$t("timeline_add_favorite")} aria-label={$t("timeline_add_favorite")} disabled={selection.isBusy} onclick={() => void selection.setFavorite(true)}><Heart class="h-4 w-4" /></button>
         {/if}
@@ -514,6 +555,13 @@
   {/if}
   {#if selection.trashFeedback}
     <TrashFeedbackNotice feedback={selection.trashFeedback} class="mb-3 mr-16 w-auto shrink-0" />
+  {/if}
+  {#if selection.archiveFeedback}
+    {@const archiveFeedback = selection.archiveFeedback}
+    {@const isSuccess = archiveFeedback.feedback.kind === "success"}
+    <p class="mb-3 mr-16 w-auto shrink-0 break-words rounded-lg px-3 py-2 text-sm leading-5 {isSuccess ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200' : 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200'}" role={isSuccess ? "status" : "alert"}>
+      {archiveFeedbackMessage(archiveFeedback.action, archiveFeedback.feedback, $t, numberLocale)}
+    </p>
   {/if}
   {#if hintMessage}
     <p class="mb-3 mr-16 shrink-0 text-sm text-slate-500 dark:text-zinc-400">{hintMessage}</p>
@@ -615,7 +663,7 @@
 </div>
 
 {#if selectedAsset}
-  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} onTrash={trashAssets ? trashFromLightbox : undefined} {onSelectTag} />
+  <Lightbox asset={selectedAsset} {assetActions} bind:updatingFavoriteAssetIds navigateAsset={favorites.navigate} onClose={closeLightbox} onFavoriteChange={favorites.reflect} {serverUrl} onOpenExternalUrl={desktop.openExternalUrl} setAssetFavorite={favorites.updateOne} albumCatalogue={targetAlbumCatalogue} addAssetsToAlbum={desktop.addAssetsToAlbum} allowFavorite={allowFavoriteAndAlbum} onRestore={restoreTrashedAssets ? restoreFromLightbox : undefined} onTrash={trashAssets ? trashFromLightbox : undefined} archiveMode={offeredArchiveMode} onChangeArchive={changeArchiveFromLightbox} {onSelectTag} />
 {/if}
 {#if trashAssets}
   <MoveToTrashDialog isOpen={isTrashConfirmOpen} count={selection.count} isMoving={selection.busyAction === 'trash'} onConfirm={() => void trashSelection()} onCancel={() => { if (selection.busyAction !== 'trash') isTrashConfirmOpen = false; }} />

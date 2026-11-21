@@ -8,7 +8,6 @@ use super::response::{
 use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashSet;
 
 /// The requested Trashed Assets Immich confirmed as restored; every other requested asset is still in the trash.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -71,38 +70,23 @@ impl ImmichClient {
         &self,
         asset_ids: &[RemoteAssetId],
     ) -> Result<TrashRestoreResult, String> {
-        if asset_ids.is_empty() {
-            return Ok(TrashRestoreResult {
-                restored_asset_ids: Vec::new(),
-            });
-        }
-        Self::validate_asset_ids(asset_ids, "Asset IDs for restore must be unique")?;
-
-        let batch = self.post_restore(asset_ids).await?;
-        if let RestoreCall::Counted(count) = batch {
-            if count == asset_ids.len() {
-                return Ok(TrashRestoreResult {
-                    restored_asset_ids: asset_ids
-                        .iter()
-                        .map(|id| id.as_str().to_string())
-                        .collect(),
-                });
-            }
-        }
-        if asset_ids.len() == 1 {
-            // The batch already was the individual request.
-            return Ok(TrashRestoreResult {
-                restored_asset_ids: Vec::new(),
-            });
-        }
-
-        let mut restored_asset_ids = Vec::new();
-        for asset_id in asset_ids {
-            let outcome = self.post_restore(std::slice::from_ref(asset_id)).await?;
-            if matches!(outcome, RestoreCall::Counted(1)) {
-                restored_asset_ids.push(asset_id.as_str().to_string());
-            }
-        }
+        let restored_asset_ids = Self::run_bulk_with_per_asset_fallback(
+            asset_ids,
+            "Asset IDs for restore must be unique",
+            |ids| async move {
+                Ok(matches!(
+                    self.post_restore(ids).await?,
+                    RestoreCall::Counted(count) if count == ids.len()
+                ))
+            },
+            |asset_id| async move {
+                Ok(matches!(
+                    self.post_restore(std::slice::from_ref(asset_id)).await?,
+                    RestoreCall::Counted(1)
+                ))
+            },
+        )
+        .await?;
         Ok(TrashRestoreResult { restored_asset_ids })
     }
 
@@ -170,22 +154,6 @@ impl ImmichClient {
             moved_asset_ids,
             failure_code: None,
         })
-    }
-
-    /// Rejects IDs that are not path-safe and duplicate IDs (with `duplicate_message`) before any request,
-    /// for the batch calls that Restore and Move to Trash share. The caller handles an empty list.
-    fn validate_asset_ids(
-        asset_ids: &[RemoteAssetId],
-        duplicate_message: &str,
-    ) -> Result<(), String> {
-        for asset_id in asset_ids {
-            Self::validate_path_segment(asset_id.as_str(), "asset ID")?;
-        }
-        let unique: HashSet<&str> = asset_ids.iter().map(|id| id.as_str()).collect();
-        if unique.len() != asset_ids.len() {
-            return Err(duplicate_message.to_string());
-        }
-        Ok(())
     }
 
     async fn delete_assets(&self, asset_ids: &[RemoteAssetId]) -> Result<TrashCall, String> {

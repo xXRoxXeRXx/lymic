@@ -149,6 +149,22 @@ describe("Remote Asset favorite status", () => {
     expect(actions.cachedDetails("a")?.isFavorite).toBe(true);
   });
 
+  it("reflects a visibility change in cached and later-loaded details until the next invalidate", async () => {
+    const request = deferred<AssetDetails | null>();
+    const actions = createActions({ getAssetDetails: () => request.promise });
+    const loading = actions.loadDetails("a");
+
+    actions.reflectVisibility("a", "archive");
+    request.resolve(details("a", { visibility: "timeline" }));
+
+    expect((await loading).details?.visibility).toBe("archive");
+    actions.reflectVisibility("a", "timeline");
+    expect(actions.cachedDetails("a")?.visibility).toBe("timeline");
+
+    actions.invalidate();
+    expect(actions.cachedDetails("a")).toBeUndefined();
+  });
+
   it("forgets overrides on invalidate except for assets still being updated", async () => {
     const actions = createActions();
     actions.reflectFavorite("done", true);

@@ -280,6 +280,47 @@ describe('i18n catalogs', () => {
     expect(de.trash_move).toBe('In den Papierkorb verschieben');
   });
 
+  it.each([
+    ['Archive Timeline Unarchive', 'archive_unarchive', 'Unarchive', 'Dearchivieren'],
+    ['Photo and Favorites Timeline Archive', 'archive_archive', 'Archive', 'Archivieren'],
+  ] as const)('translates the %s strings in every locale with their placeholders', (_label, prefix, englishButton, germanButton) => {
+    const placeholders: Record<string, string[]> = {
+      [prefix]: [],
+      [`${prefix}_success`]: ['{count}'],
+      [`${prefix}_partial`]: ['{failed}', '{count}'],
+      [`${prefix}_none`]: ['{failed}', '{count}'],
+      [`${prefix}_failed`]: [],
+      [`${prefix}_permission`]: [],
+    };
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const [key, expected] of Object.entries(placeholders)) {
+        const value = (translations as Record<string, string>)[key];
+        expect(value, `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+        for (const placeholder of expected) expect(value, `${localeCode}.${key}`).toContain(placeholder);
+      }
+      // A refused Archive or Unarchive names the permission to grant, never a credential.
+      expect((translations as Record<string, string>)[`${prefix}_permission`], localeCode).toContain('asset.update');
+    }
+    expect(en[prefix]).toBe(englishButton);
+    expect(de[prefix]).toBe(germanButton);
+  });
+
+  it('translates the Lightbox Archive and Unarchive messages for views that keep the asset in the list in every locale', () => {
+    const keys = ['archive_archive_stays', 'archive_unarchive_stays'];
+    for (const [localeCode, translations] of Object.entries(catalog)) {
+      for (const key of keys) {
+        const value = (translations as Record<string, string>)[key];
+        expect(value, `Locale ${localeCode} is missing ${key}`).toBeTruthy();
+        expect(value.trim(), `${localeCode}.${key}`).not.toBe('');
+        // A fixed message about one asset: no count to fill in.
+        expect(value, `${localeCode}.${key}`).not.toContain('{');
+      }
+    }
+    expect(en.archive_archive_stays).toBe('Archived. It stays in this list.');
+    expect(en.archive_unarchive_stays).toBe('Unarchived. It stays in this list.');
+    expect(de.archive_archive_stays).toBe('Archiviert. Es bleibt in dieser Liste.');
+  });
+
   it('uses consistent timeline and video terminology in favorites strings', () => {
     expect(de.favorites_offline).toContain('Zeitachse');
     expect(de.favorites_offline).not.toContain('Timeline');

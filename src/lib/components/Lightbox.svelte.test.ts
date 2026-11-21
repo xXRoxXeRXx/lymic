@@ -158,14 +158,14 @@ it("keeps Move to Trash disabled while an Album assignment runs", async () => {
 });
 
 it("keeps Move to Trash disabled while a Restore runs", async () => {
-  let finishRestore!: (outcome: { restoredAssetIds: string[]; failedAssetIds: string[]; failure: null }) => void;
-  const onRestore = vi.fn(() => new Promise<{ restoredAssetIds: string[]; failedAssetIds: string[]; failure: null }>((resolve) => { finishRestore = resolve; }));
+  let finishRestore!: (outcome: { changedAssetIds: string[]; failedAssetIds: string[]; failure: null }) => void;
+  const onRestore = vi.fn(() => new Promise<{ changedAssetIds: string[]; failedAssetIds: string[]; failure: null }>((resolve) => { finishRestore = resolve; }));
   render(Lightbox, { ...lightboxProps(assetActions()), onRestore, onTrash: vi.fn(async () => trashOutcome) });
 
   await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
 
   await waitFor(() => expect(moveToTrash()).toBeDisabled());
-  finishRestore({ restoredAssetIds: [], failedAssetIds: ["map-photo"], failure: null });
+  finishRestore({ changedAssetIds: [], failedAssetIds: ["map-photo"], failure: null });
   await waitFor(() => expect(moveToTrash()).toBeEnabled());
 });
 
@@ -191,4 +191,34 @@ it("ignores a Tag chip while a Move to Trash runs", async () => {
   expect(onClose).not.toHaveBeenCalled();
   finishTrash(trashOutcome);
   await waitFor(() => expect(chip).toBeEnabled());
+});
+
+it("keeps Move to Trash and Archive disabled while the other runs", async () => {
+  let finishArchive!: (outcome: { changedAssetIds: string[]; failedAssetIds: string[]; failure: null }) => void;
+  const onChangeArchive = vi.fn(() => new Promise<{ changedAssetIds: string[]; failedAssetIds: string[]; failure: null }>((resolve) => { finishArchive = resolve; }));
+  let finishTrash!: (outcome: typeof trashOutcome) => void;
+  const onTrash = vi.fn(() => new Promise<typeof trashOutcome>((resolve) => { finishTrash = resolve; }));
+  render(Lightbox, { ...lightboxProps(assetActions()), archiveMode: "archive", onChangeArchive, onTrash });
+  const archive = () => screen.getByRole("button", { name: "Archive" });
+  expect(archive()).toBeEnabled();
+  expect(moveToTrash()).toBeEnabled();
+
+  await fireEvent.click(archive());
+
+  await waitFor(() => expect(onChangeArchive).toHaveBeenCalledWith("archive", "map-photo"));
+  expect(moveToTrash()).toBeDisabled();
+  expect(archive()).toBeDisabled();
+  finishArchive({ changedAssetIds: [], failedAssetIds: ["map-photo"], failure: null });
+  await waitFor(() => expect(moveToTrash()).toBeEnabled());
+  await waitFor(() => expect(archive()).toBeEnabled());
+
+  await fireEvent.click(moveToTrash());
+  const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+  await fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+  await waitFor(() => expect(onTrash).toHaveBeenCalledWith("map-photo"));
+
+  expect(archive()).toBeDisabled();
+  expect(onChangeArchive).toHaveBeenCalledTimes(1);
+  finishTrash(trashOutcome);
+  await waitFor(() => expect(archive()).toBeEnabled());
 });

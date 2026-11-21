@@ -94,6 +94,10 @@ pub(crate) struct AssetDetails {
     /// The Tags of the Remote Asset. `None` when the server does not report them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<AssetTag>>,
+    /// The Immich visibility as reported (`timeline`, `archive`, `locked`, `hidden`, or a value this
+    /// version does not know). `None` when the server omits it or sends something that is not text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -111,6 +115,9 @@ struct AssetDetailsResponse {
     /// Kept raw so a malformed field or entry is skipped instead of failing the request.
     #[serde(default)]
     tags: Option<serde_json::Value>,
+    /// Kept raw so a value that is not text is treated as absent instead of failing the request.
+    #[serde(default)]
+    visibility: Option<serde_json::Value>,
 }
 
 #[derive(Default, Deserialize)]
@@ -234,6 +241,10 @@ impl From<AssetDetailsResponse> for AssetDetails {
             image_height: exif.image_height,
             file_size: exif.file_size,
             tags: response.tags.and_then(asset_tags_from_value),
+            visibility: non_empty(match response.visibility {
+                Some(serde_json::Value::String(value)) => Some(value),
+                _ => None,
+            }),
         }
     }
 }
@@ -371,6 +382,59 @@ impl ImmichClient {
         }
 
         Ok(())
+    }
+
+    /// Rejects IDs that are not path-safe and duplicate IDs (with `duplicate_message`) before any request,
+    /// for the bulk calls that Restore, Move to Trash and visibility updates share. The caller handles an empty list.
+    pub(super) fn validate_asset_ids(
+        asset_ids: &[super::ids::RemoteAssetId],
+        duplicate_message: &str,
+    ) -> Result<(), String> {
+        for asset_id in asset_ids {
+            Self::validate_path_segment(asset_id.as_str(), "asset ID")?;
+        }
+        let unique: std::collections::HashSet<&str> =
+            asset_ids.iter().map(|id| id.as_str()).collect();
+        if unique.len() != asset_ids.len() {
+            return Err(duplicate_message.to_string());
+        }
+        Ok(())
+    }
+
+    /// Validates that every Remote Asset ID is path-safe and appears at most once, then runs a bulk
+    /// request and falls back to one request per asset when the batch did not confirm all of them.
+    /// An empty slice succeeds without sending a request, and a single asset is never requested twice.
+    pub(super) async fn run_bulk_with_per_asset_fallback<'a, B, S>(
+        asset_ids: &'a [super::ids::RemoteAssetId],
+        duplicate_error: &str,
+        bulk: impl FnOnce(&'a [super::ids::RemoteAssetId]) -> B,
+        single: impl FnMut(&'a super::ids::RemoteAssetId) -> S,
+    ) -> Result<Vec<String>, String>
+    where
+        B: std::future::Future<Output = Result<bool, String>>,
+        S: std::future::Future<Output = Result<bool, String>>,
+    {
+        if asset_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        Self::validate_asset_ids(asset_ids, duplicate_error)?;
+
+        if bulk(asset_ids).await? {
+            return Ok(asset_ids.iter().map(|id| id.as_str().to_string()).collect());
+        }
+        if asset_ids.len() == 1 {
+            // The batch already was the individual request.
+            return Ok(Vec::new());
+        }
+
+        let mut single = single;
+        let mut changed_asset_ids = Vec::new();
+        for asset_id in asset_ids {
+            if single(asset_id).await? {
+                changed_asset_ids.push(asset_id.as_str().to_string());
+            }
+        }
+        Ok(changed_asset_ids)
     }
 
     pub(crate) async fn validate_connection(&self) -> Result<(), String> {

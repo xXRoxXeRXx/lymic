@@ -53,7 +53,7 @@
   import { defaultTagOrigin, recordTagOrigin } from "#lib/controllers/tag-origin.ts";
   import { TAG_TIMELINE_VIEW, TAGS_VIEW, type ViewPosition } from "#lib/controllers/view-position.ts";
   import { localizedMemoryTitle } from "#lib/memory-title.ts";
-  import { FILTERED_TIMELINES, type AssetTag, type FilteredTimeline, type Memory, type Place } from "#lib/contracts.ts";
+  import { FILTERED_TIMELINES, type AssetTag, type AssetVisibility, type FilteredTimeline, type Memory, type Place } from "#lib/contracts.ts";
   import { tauriDesktopAdapter } from "#lib/tauri/desktop-adapter.ts";
 
   /** Whether `view` is a Filtered Timeline: a main view that shows its own filtered timeline and reloads it every time it opens. */
@@ -200,6 +200,17 @@
     return result;
   }
 
+  /**
+   * Writes an Archive or Unarchive. An Unarchive that changed something marks the Photo Timeline stale; an Archive
+   * removes the archived assets from the Photo Timeline's cache (the view it was started from removes them itself).
+   */
+  async function setAssetsVisibility(assetIds: string[], visibility: AssetVisibility) {
+    const result = await desktop.setAssetsVisibility(assetIds, visibility);
+    if (visibility === "timeline" && result.changedAssetIds.length > 0) navigation.markPhotosStale();
+    if (visibility === "archive") for (const assetId of result.changedAssetIds) timeline.removeAsset(assetId);
+    return result;
+  }
+
   function openTags() {
     if (currentView === TAGS_VIEW) return;
     navigation.show(TAGS_VIEW);
@@ -323,8 +334,8 @@
    * `_permission_error` when its controller reports a missing permission (only Archive does).
    */
   const filteredTimelineViews: Record<FilteredTimeline, { icon: typeof Heart; options(): Partial<ComponentProps<typeof TimelineView>> }> = {
-    favorites: { icon: Heart, options: () => ({ removeUnfavoritedAssets: true, showRefreshButton: false }) },
-    archive: { icon: Archive, options: () => ({}) },
+    favorites: { icon: Heart, options: () => ({ removeUnfavoritedAssets: true, showRefreshButton: false, setAssetsVisibility, archiveMode: "archive" }) },
+    archive: { icon: Archive, options: () => ({ setAssetsVisibility, archiveMode: "unarchive" }) },
     trash: { icon: Trash2, options: () => ({ allowFavoriteAndAlbum: false, restoreTrashedAssets, trashAssets: undefined, hintMessage: $t("trash_hint") }) },
   };
   function filteredTimelineEntry(view: FilteredTimeline) {
@@ -410,6 +421,9 @@
     // Move to Trash is offered by every hosting view through this one prop; only the Trash Timeline opts out.
     trashAssets,
   });
+  /** What the views that show archived and other assets together add: the selection offers Archive and the assets stay in the list. */
+  const mixedViewArchiveProps = { setAssetsVisibility, archiveMode: "by-visibility" } as const;
+  const mixedTimelineProps = $derived({ ...sharedTimelineProps, ...mixedViewArchiveProps });
 </script>
 
 <div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60">
@@ -548,7 +562,7 @@
 
         {#if navigation.mapCreated}<MapView mapState={map} active={currentView === MAP_VIEW} serverUrl={auth.serverUrl} {desktop} albumCatalogue={targetAlbumCatalogue} onSelectTag={selectTag} {trashAssets} />{/if}
         {#if currentView === PHOTOS_VIEW}
-          <TimelineView {timeline} {...sharedTimelineProps} />
+          <TimelineView {timeline} {...sharedTimelineProps} {setAssetsVisibility} archiveMode="archive" />
         {:else if isFilteredTimeline(currentView)}
           {@const view = currentView}
           {@const filtered = filteredTimelines[view]}
@@ -584,25 +598,25 @@
           <AlbumCatalogueView catalogue={albumCatalogue} onSelect={navigation.selectAlbum} />
         {:else if currentView === ALBUM_TIMELINE_VIEW && navigation.albumTimeline}
           <BackBarView label={$t('albums_return')} onBack={navigation.returnToAlbums}>
-            <TimelineView timeline={navigation.albumTimeline} {...sharedTimelineProps} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
+            <TimelineView timeline={navigation.albumTimeline} {...mixedTimelineProps} emptyMessage={$t('albums_timeline_empty')} loadErrorMessage={$t('albums_error')} />
           </BackBarView>
         {:else if currentView === PLACE_TIMELINE_VIEW && placeTimeline}
           <BackBarView label={$t(placeOrigin === PLACES_VIEW ? 'places_return' : 'explore_return')} onBack={returnFromPlaceTimeline}>
-            <TimelineView timeline={placeTimeline} {...sharedTimelineProps} emptyMessage={$t('places_timeline_empty')} loadErrorMessage={$t('places_timeline_error')} />
+            <TimelineView timeline={placeTimeline} {...mixedTimelineProps} emptyMessage={$t('places_timeline_empty')} loadErrorMessage={$t('places_timeline_error')} />
           </BackBarView>
         {:else if currentView === PERSON_TIMELINE_VIEW && navigation.personTimeline}
           <BackBarView label={$t(navigation.personOrigin === EXPLORE_VIEW ? 'explore_return' : 'people_return')} onBack={navigation.returnFromPersonTimeline}>
-            <TimelineView timeline={navigation.personTimeline} {...sharedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
+            <TimelineView timeline={navigation.personTimeline} {...mixedTimelineProps} emptyMessage={$t('people_timeline_empty')} />
           </BackBarView>
         {:else if currentView === MEMORY_TIMELINE_VIEW && memoryTimeline}
           <BackBarView label={$t(memoryOrigin === ALL_MEMORIES_VIEW ? 'memories_all_return' : 'explore_return')} onBack={returnFromMemoryTimeline}>
-            <TimelineView timeline={memoryTimeline} {...sharedTimelineProps} emptyMessage={$t('memories_timeline_empty')} />
+            <TimelineView timeline={memoryTimeline} {...mixedTimelineProps} emptyMessage={$t('memories_timeline_empty')} />
           </BackBarView>
         {:else if currentView === TAG_TIMELINE_VIEW && tagTimeline}
           <BackBarView label={$t("tags_timeline_return", { values: { view: viewTitle(tagOrigin.view) } })} onBack={returnFromTagTimeline}>
             <!-- A Tag chip in the Lightbox opens another Tag Timeline in this same place: start it afresh, at its top. -->
             {#key tagTimeline}
-              <TimelineView timeline={tagTimeline} {...sharedTimelineProps} emptyMessage={$t('tags_timeline_empty')} loadErrorMessage={$t('tags_timeline_error')} />
+              <TimelineView timeline={tagTimeline} {...mixedTimelineProps} emptyMessage={$t('tags_timeline_empty')} loadErrorMessage={$t('tags_timeline_error')} />
             {/key}
           </BackBarView>
         {:else if currentView === SEARCH_VIEW}
@@ -610,7 +624,7 @@
             {search}
             backLabel={$t("search_return", { values: { view: viewTitle(searchOrigin?.view ?? PHOTOS_VIEW) } })}
             onBack={returnFromSearch}
-            timelineProps={sharedTimelineProps}
+            timelineProps={mixedTimelineProps}
           />
         {:else if currentView === DASHBOARD_VIEW}
           <DashboardView

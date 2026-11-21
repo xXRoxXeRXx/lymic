@@ -1,13 +1,14 @@
 <script lang="ts">
   import { protocolSrc } from "../tauri/protocol-src";
   import { flushSync, onDestroy, untrack } from "svelte";
-  import { Album, ArchiveRestore, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, Trash2, X } from "lucide-svelte";
+  import { Album, Archive, ArchiveRestore, ArchiveX, ChevronLeft, ChevronRight, Download, ExternalLink, Heart, Info, Trash2, X } from "lucide-svelte";
   import { locale, t } from "svelte-i18n";
   import { toBcp47Locale } from "../i18n";
   import type { AlbumAssignmentResult, AssetDetails, AssetTag, TimelineAsset } from "../contracts";
   import TagColorDot from "./TagColorDot.svelte";
   import type { TargetAlbumCatalogue } from "../controllers/target-album-catalogue.svelte";
   import type { RemoteAssetActions } from "./remote-asset-actions.svelte";
+  import { archiveActionForVisibility, archiveFeedbackFor, archiveFeedbackMessage, archiveLabel, archiveStaysMessage, visibilityAfter, type ArchiveAction, type ArchiveMode, type RemoteAssetArchiveOutcome } from "./remote-asset-archive";
   import { restoreFeedbackFor, restoreFeedbackMessage, type RemoteAssetRestoreOutcome } from "./remote-asset-restore";
   import AddToAlbumModal from "./AddToAlbumModal.svelte";
   import MoveToTrashDialog from "./MoveToTrashDialog.svelte";
@@ -30,10 +31,20 @@
     onRestore?(assetId: string): Promise<RemoteAssetRestoreOutcome>;
     /** Offers Move to Trash (after a confirmation the Lightbox asks for); reports what happened and never rejects. */
     onTrash?(assetId: string): Promise<RemoteAssetTrashOutcome>;
+    /**
+     * The Archive action the Lightbox offers for the open asset; leave it out where there is none. Needs `onChangeArchive`.
+     * `archive` or `unarchive` offer that action. `by-visibility` is for a view that shows archived and other assets together:
+     * the action follows the open asset's `visibility` from its details (Archive for `timeline`, Unarchive for `archive`, none for
+     * `locked`, `hidden`, an unknown or missing value), and the asset stays in the list, so after a success the Lightbox stays
+     * on it and the button flips.
+     */
+    archiveMode?: ArchiveMode;
+    /** Performs an Archive action for an asset; reports what happened and never rejects. After a success the Lightbox moves on to the next asset, or closes when there is none. */
+    onChangeArchive?(action: ArchiveAction, assetId: string): Promise<RemoteAssetArchiveOutcome>;
     /** Shows the Tags of the asset as chips; selecting one closes the Lightbox first, then calls this to open that Tag's Tag Timeline. */
     onSelectTag?(tag: AssetTag): void;
   }
-  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, onTrash, onSelectTag }: Props = $props();
+  let { asset, assetActions, updatingFavoriteAssetIds = $bindable({}), navigateAsset, onClose, onFavoriteChange, serverUrl, onOpenExternalUrl, setAssetFavorite, albumCatalogue, addAssetsToAlbum, allowFavorite = true, onRestore, onTrash, archiveMode, onChangeArchive, onSelectTag }: Props = $props();
   const numberLocale = $derived(toBcp47Locale($locale));
   let selectedAsset = $state<TimelineAsset | null>(untrack(() => asset));
   let assetDetails = $state<AssetDetails | null>(null);
@@ -53,6 +64,8 @@
   let isTrashConfirmOpen = $state(false);
   let isTrashing = $state(false);
   let trashError = $state("");
+  let isChangingArchive = $state(false);
+  let archiveFeedback = $state<{ message: string; isSuccess: boolean } | null>(null);
   let addToAlbumMessageTimeout: ReturnType<typeof setTimeout> | null = null;
   const exifDetails = $derived.by(() => {
     if (!assetDetails) return [];
@@ -79,6 +92,7 @@
     }).join(", ");
   }
 
+  const shownArchiveAction = $derived(archiveMode === "by-visibility" ? archiveActionForVisibility(assetDetails?.visibility) : archiveMode);
   const cameraName = $derived(cameraLabel(assetDetails?.cameraMake, assetDetails?.cameraModel));
   const locationName = $derived(locationLabel(assetDetails?.city, assetDetails?.state, assetDetails?.country));
   const imageWidth = $derived(assetDetails?.imageWidth ?? selectedAsset?.width ?? null);
@@ -121,7 +135,7 @@
   }
 
   async function toggleFavorite() {
-    if (!selectedAsset) return;
+    if (!selectedAsset || isChangingArchive) return;
 
     const assetId = selectedAsset.id;
     if (updatingFavoriteAssetIds[assetId]) return;
@@ -145,7 +159,7 @@
   }
 
   async function downloadOriginal() {
-    if (!selectedAsset || !assetDetails?.originalFileName || downloadingAssetId) return;
+    if (!selectedAsset || !assetDetails?.originalFileName || downloadingAssetId || isChangingArchive) return;
 
     const assetId = selectedAsset.id;
     downloadMessage = "";
@@ -169,7 +183,7 @@
     isRestoring = true;
     try {
       const outcome = await onRestore(assetId);
-      if (isDestroyed || selectedAsset?.id !== assetId || outcome.restoredAssetIds.includes(assetId)) return;
+      if (isDestroyed || selectedAsset?.id !== assetId || outcome.changedAssetIds.includes(assetId)) return;
       restoreError = restoreFeedbackMessage(restoreFeedbackFor(outcome, 1), $t, numberLocale);
     } finally {
       if (!isDestroyed) isRestoring = false;
@@ -202,8 +216,53 @@
     }
   }
 
+  const ARCHIVE_ICONS = { archive: Archive, unarchive: ArchiveX };
+
+  async function changeArchiveStatus(action: ArchiveAction) {
+    if (!selectedAsset || !onChangeArchive || isBusy) return;
+    const current = selectedAsset;
+    archiveFeedback = null;
+    isChangingArchive = true;
+    try {
+      const outcome = await onChangeArchive(action, current.id);
+      if (isDestroyed || selectedAsset !== current) return;
+      const changed = outcome.changedAssetIds.includes(current.id);
+      if (changed && archiveMode === "by-visibility") {
+        // The asset stays in the list: stay on it, and show the opposite action from now on.
+        const visibility = visibilityAfter(action);
+        assetDetails = assetActions.cachedDetails(current.id) ?? (assetDetails ? { ...assetDetails, visibility } : assetDetails);
+        archiveFeedback = { message: archiveStaysMessage(action, $t), isSuccess: true };
+      } else {
+        const message = archiveFeedbackMessage(action, archiveFeedbackFor(outcome, 1), $t, numberLocale);
+        if (changed) {
+          // The asset left the Archive Timeline: show its neighbour, or close when none is left. Busy until then.
+          const moved = await moveOnFrom(current);
+          if (isDestroyed) return;
+          if (moved) archiveFeedback = { message, isSuccess: true };
+        } else {
+          archiveFeedback = { message, isSuccess: false };
+        }
+      }
+    } finally {
+      if (!isDestroyed) isChangingArchive = false;
+    }
+  }
+
+  /** Shows the asset after `current`, which left the timeline; closes the Lightbox when there is none. False when it closed or the Lightbox was left meanwhile. */
+  async function moveOnFrom(current: TimelineAsset) {
+    const generation = ++navigationGeneration;
+    const nextAsset = navigateAsset ? await navigateAsset(1, current) : null;
+    if (isDestroyed || generation !== navigationGeneration || selectedAsset !== current) return false;
+    if (!nextAsset) {
+      onClose();
+      return false;
+    }
+    showAsset(nextAsset);
+    return true;
+  }
+
   function openAddToAlbum() {
-    if (!selectedAsset || !albumCatalogue) return;
+    if (!selectedAsset || !albumCatalogue || isChangingArchive) return;
     clearAddToAlbumMessage();
     addToAlbumError = "";
     isAddToAlbumOpen = true;
@@ -254,7 +313,7 @@
     if (isBusy) return;
     onClose();
   }
-  const isBusy = $derived(downloadingAssetId !== null || isAddingToAlbum || isRestoring || isTrashing);
+  const isBusy = $derived(downloadingAssetId !== null || isAddingToAlbum || isRestoring || isTrashing || isChangingArchive);
   function selectTag(tag: AssetTag) {
     if (!onSelectTag || isBusy) return;
     onClose();
@@ -271,6 +330,9 @@
     const nextAsset = await navigateAsset(delta, current);
     if (generation !== navigationGeneration || selectedAsset !== current) return;
     if (!nextAsset) return;
+    showAsset(nextAsset);
+  }
+  function showAsset(nextAsset: TimelineAsset) {
     flushSync(() => {
       selectedAsset = nextAsset;
       assetDetails = null;
@@ -280,6 +342,7 @@
       restoreError = "";
       trashError = "";
       isTrashConfirmOpen = false;
+      archiveFeedback = null;
       isAddToAlbumOpen = false;
       clearAddToAlbumMessage();
       addToAlbumError = "";
@@ -316,18 +379,23 @@
           <button type="button" tabindex="-1" class="absolute inset-0 z-10 cursor-default" aria-label={$t("timeline_close_info")} onclick={() => isInfoOpen = false}></button>
         {/if}
         <div class="absolute right-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-wrap justify-end gap-2">
-          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:cursor-not-allowed" title={$t("timeline_download_original")} aria-label={$t("timeline_download_original")} aria-busy={downloadingAssetId === selectedAsset.id} disabled={!assetDetails?.originalFileName || downloadingAssetId !== null} onclick={() => void downloadOriginal()}><Download class="h-5 w-5 {downloadingAssetId === selectedAsset.id ? 'animate-spin' : ''}" /></button>
+          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:cursor-not-allowed" title={$t("timeline_download_original")} aria-label={$t("timeline_download_original")} aria-busy={downloadingAssetId === selectedAsset.id} disabled={!assetDetails?.originalFileName || downloadingAssetId !== null || isChangingArchive} onclick={() => void downloadOriginal()}><Download class="h-5 w-5 {downloadingAssetId === selectedAsset.id ? 'animate-spin' : ''}" /></button>
           {#if onTrash}
             <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("trash_move")} aria-label={$t("trash_move")} aria-busy={isTrashing} disabled={isBusy} onclick={openTrashConfirm}><Trash2 class="h-5 w-5 {isTrashing ? 'animate-pulse' : ''}" /></button>
           {/if}
           {#if onRestore}
             <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("trash_restore")} aria-label={$t("trash_restore")} aria-busy={isRestoring} disabled={isRestoring} onclick={() => void restoreAsset()}><ArchiveRestore class="h-5 w-5 {isRestoring ? 'animate-pulse' : ''}" /></button>
           {/if}
+          {#if shownArchiveAction && onChangeArchive}
+            {@const archiveText = archiveLabel(shownArchiveAction, $t)}
+            {@const ArchiveIcon = ARCHIVE_ICONS[shownArchiveAction]}
+            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={archiveText} aria-label={archiveText} aria-busy={isChangingArchive} disabled={isBusy} onclick={() => void changeArchiveStatus(shownArchiveAction)}><ArchiveIcon class="h-5 w-5 {isChangingArchive ? 'animate-pulse' : ''}" /></button>
+          {/if}
           {#if albumCatalogue}
-            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isAddingToAlbum} onclick={openAddToAlbum}><Album class="h-5 w-5" /></button>
+            <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_add_to_album")} aria-label={$t("timeline_add_to_album")} disabled={isAddingToAlbum || isChangingArchive} onclick={openAddToAlbum}><Album class="h-5 w-5" /></button>
           {/if}
           {#if allowFavorite}
-          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-label={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={isFavorite(selectedAsset)} disabled={Boolean(updatingFavoriteAssetIds[selectedAsset.id])} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {isFavorite(selectedAsset) ? 'fill-current' : ''}" /></button>
+          <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-label={isFavorite(selectedAsset) ? $t("timeline_remove_favorite") : $t("timeline_add_favorite")} aria-pressed={isFavorite(selectedAsset)} disabled={Boolean(updatingFavoriteAssetIds[selectedAsset.id]) || isChangingArchive} onclick={() => void toggleFavorite()}><Heart class="h-5 w-5 {isFavorite(selectedAsset) ? 'fill-current' : ''}" /></button>
           {/if}
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80" title={$t("timeline_info")} aria-label={$t("timeline_info")} aria-pressed={isInfoOpen} onclick={() => isInfoOpen = !isInfoOpen}><Info class="h-5 w-5" /></button>
           <button type="button" class="rounded-full bg-black/60 p-3 text-white hover:bg-black/80 disabled:opacity-50" title={$t("timeline_close_lightbox")} aria-label={$t("timeline_close_lightbox")} disabled={isBusy} onclick={closeLightbox}><X class="h-5 w-5" /></button>
@@ -398,6 +466,7 @@
           {#if downloadError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{downloadError}</p>{/if}
           {#if restoreError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{restoreError}</p>{/if}
           {#if trashError}<p class="rounded bg-red-950/90 px-3 py-2 text-red-200" role="alert">{trashError}</p>{/if}
+          {#if archiveFeedback}<p class="rounded px-3 py-2 {archiveFeedback.isSuccess ? 'bg-emerald-950/90 text-emerald-200' : 'bg-red-950/90 text-red-200'}" role={archiveFeedback.isSuccess ? "status" : "alert"}>{archiveFeedback.message}</p>{/if}
           {#if addToAlbumMessage}<p class="rounded bg-emerald-950/90 px-3 py-2 text-emerald-200" role="status">{addToAlbumMessage}</p>{/if}
         </div>
       </div>
