@@ -8,7 +8,8 @@
 //! 2. the caller looks the videos up with `ImmichClient::list_live_photo_videos`;
 //! 3. [`file_entries`] turns each asset into its file entries: one, or two for a Live Photo.
 
-use super::{photo_timeline, Entry};
+use super::names::{self, Candidate, Shape};
+use super::{ntfs, photo_timeline, Entry};
 use crate::immich::{LibraryAsset, LivePhotoVideo, RemoteAssetId};
 use std::collections::{HashMap, HashSet};
 
@@ -29,6 +30,35 @@ pub(super) fn without_paired_videos(assets: Vec<LibraryAsset>) -> Vec<LibraryAss
         .collect()
 }
 
+/// The files of a directory holding `assets`, each Live Photo as its still and its video, with
+/// names unique within the directory (see [`names`]) and ordered by name.
+pub(super) fn files<'a>(
+    assets: impl IntoIterator<Item = &'a LibraryAsset>,
+    videos: &HashMap<RemoteAssetId, LivePhotoVideo>,
+) -> Vec<Entry> {
+    // A video takes its still's ID for the suffix, so that the pair stays recognizable.
+    let (mut files, candidates): (Vec<Entry>, Vec<Candidate>) = assets
+        .into_iter()
+        .flat_map(|asset| {
+            file_entries(asset, videos).into_iter().map(|entry| {
+                let candidate = Candidate {
+                    name: entry.name.clone(),
+                    id: asset.id.to_string(),
+                };
+                (entry, candidate)
+            })
+        })
+        .unzip();
+    for (file, name) in files
+        .iter_mut()
+        .zip(names::unique(&candidates, Shape::File))
+    {
+        file.name = name;
+    }
+    files.sort_by_cached_key(|entry| (entry.name.to_lowercase(), entry.remote_asset.clone()));
+    files
+}
+
 /// The file entries of `asset`: the still, followed by its video when `videos` knows it.
 pub(super) fn file_entries(
     asset: &LibraryAsset,
@@ -42,11 +72,11 @@ pub(super) fn file_entries(
     else {
         return vec![still];
     };
-    let name = format!(
+    let name = ntfs::sanitize(&format!(
         "{}.{}",
         base_name(&still.name),
         extension(video.original_file_name.as_deref()).unwrap_or(FALLBACK_VIDEO_EXTENSION)
-    );
+    ));
     let video = Entry {
         name,
         remote_asset: Some(video_id.clone()),

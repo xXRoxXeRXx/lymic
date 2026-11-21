@@ -11,6 +11,8 @@ use chrono::{DateTime, Utc};
 
 mod albums;
 mod live_photo;
+mod names;
+mod ntfs;
 mod path;
 mod photo_timeline;
 #[cfg(test)]

@@ -4,8 +4,8 @@
 //! come from Immich's timeline buckets ([`Calendar`]) without fetching an asset; a month directory
 //! fetches the assets created in its [`creation_window`] and no other.
 
-use super::live_photo;
 use super::path::{month_dir_name, year_dir_name, Dir, UNDATED};
+use super::{live_photo, ntfs};
 use super::{Entry, EntryKind};
 use crate::immich::{LibraryAsset, LivePhotoVideo, RemoteAssetId, TimelineBucket};
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, Utc};
@@ -151,11 +151,7 @@ pub(super) fn files(
     assets: &[LibraryAsset],
     videos: &HashMap<RemoteAssetId, LivePhotoVideo>,
 ) -> Option<Vec<Entry>> {
-    let mut files: Vec<Entry> = assets
-        .iter()
-        .flat_map(|asset| live_photo::file_entries(asset, videos))
-        .collect();
-    files.sort_by_cached_key(|entry| (entry.name.to_lowercase(), entry.remote_asset.clone()));
+    let files = live_photo::files(assets, videos);
     (!files.is_empty()).then_some(files)
 }
 
@@ -167,10 +163,13 @@ pub(super) fn file_entry(asset: &LibraryAsset) -> Entry {
             .map(|time| time.with_timezone(&Utc))
     };
     Entry {
-        name: asset
-            .original_file_name
-            .clone()
-            .unwrap_or_else(|| asset.id.to_string()),
+        name: ntfs::sanitize(
+            asset
+                .original_file_name
+                .as_deref()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or(asset.id.as_str()),
+        ),
         kind: EntryKind::File,
         remote_asset: Some(asset.id.clone()),
         size: asset.file_size,
