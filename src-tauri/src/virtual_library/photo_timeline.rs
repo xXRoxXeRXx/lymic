@@ -78,7 +78,7 @@ pub(super) fn children(
         }
         Dir::Month(year, month) => files_in(assets, videos, Bucket::Month(year, month)),
         Dir::Undated => files_in(assets, videos, Bucket::Undated),
-        Dir::Root | Dir::Albums => return None,
+        Dir::Root | Dir::Albums | Dir::Album(_) => return None,
     };
     (!entries.is_empty()).then_some(entries)
 }
