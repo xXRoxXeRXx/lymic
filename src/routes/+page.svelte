@@ -26,6 +26,7 @@
   import { createSessionController } from "#lib/controllers/session-controller.svelte.ts";
   import { createPreferencesController } from "#lib/controllers/preferences-controller.svelte.ts";
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
+import { createVirtualLibraryController } from "#lib/controllers/virtual-library-controller.svelte.ts";
   import {
     ALBUMS_VIEW,
     ALBUM_TIMELINE_VIEW,
@@ -372,6 +373,7 @@
     setLocale: (value) => $locale = value,
   });
   const updater = createUpdateController(() => sync.isActive, desktop);
+  const virtualLibrary = createVirtualLibraryController({ adapter: desktop, reportError: feedback.report });
   const targetAlbumDialog = $derived(watchedFolders.targetAlbumDialog);
 
   // Leaving the Trash Timeline drops its assets and selection; returning shows a fresh load.
@@ -399,16 +401,19 @@
     session.startLifecycle();
     updater.startLifecycle();
     preferences.startLifecycle();
+    void virtualLibrary.startLifecycle();
 
     void auth.hydrate()
       .catch((error) => console.error("Failed to hydrate authentication", error));
     void preferences.hydrate().catch((error) => console.error("Failed to hydrate preferences", error));
+    void virtualLibrary.hydrate().catch((error) => console.error("Failed to hydrate Virtual Library settings", error));
     updater.startup();
 
     return () => {
       session.destroy();
       updater.destroy();
       preferences.stopLifecycle();
+      virtualLibrary.stopLifecycle();
     };
   });
   const sharedTimelineProps = $derived({
@@ -645,8 +650,12 @@
             updateStatus={updater.updateStatus}
             isCheckingForUpdates={updater.isCheckingForUpdates}
             isUpdatesSupported={updater.isUpdatesSupported}
+            isVirtualLibraryAvailable={virtualLibrary.isAvailable}
+            isVirtualLibraryEnabled={virtualLibrary.isEnabled}
+            isSavingVirtualLibrary={virtualLibrary.isSaving}
             locales={preferences.locales}
             onToggleAutostart={preferences.toggleAutostart}
+            onToggleVirtualLibrary={virtualLibrary.toggle}
             onLocaleChange={preferences.setLocale}
             onThemeChange={preferences.setThemePreference}
             onUploadParallelismChange={preferences.changeUploadParallelism}

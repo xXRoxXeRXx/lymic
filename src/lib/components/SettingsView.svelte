@@ -11,6 +11,7 @@
     Power,
     Languages,
     Cpu,
+    HardDrive,
     LogOut
   } from "lucide-svelte";
   import { t, locale } from "svelte-i18n";
@@ -27,8 +28,12 @@
     updateStatus: "unknown" | "current" | "available";
     isCheckingForUpdates: boolean;
     isUpdatesSupported?: boolean;
+    isVirtualLibraryAvailable?: boolean;
+    isVirtualLibraryEnabled?: boolean;
+    isSavingVirtualLibrary?: boolean;
     locales: readonly LocaleCatalogEntry[];
     onToggleAutostart: () => void;
+    onToggleVirtualLibrary?: () => void;
     onLocaleChange: (locale: string) => void;
     onThemeChange: (preference: ThemePreference) => void;
     onUploadParallelismChange: (event: Event) => void;
@@ -46,8 +51,12 @@
     updateStatus,
     isCheckingForUpdates,
     isUpdatesSupported = true,
+    isVirtualLibraryAvailable = false,
+    isVirtualLibraryEnabled = false,
+    isSavingVirtualLibrary = false,
     locales,
     onToggleAutostart,
+    onToggleVirtualLibrary,
     onLocaleChange,
     onThemeChange,
     onUploadParallelismChange,
@@ -230,6 +239,39 @@
           disabled={isCheckingForUpdates}
         >
           {isCheckingForUpdates ? $t('update_checking') : $t('check_for_updates')}
+        </button>
+      </div>
+    </section>
+  {/if}
+
+  <!-- Category 4b: Virtual Library (only when the backend reports it available: Windows, Store channel, Package Identity) -->
+  {#if isVirtualLibraryAvailable}
+    <section class="space-y-3">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 flex items-center gap-2">
+        <HardDrive class="w-3.5 h-3.5" />
+        <span>{$t('virtual_library')}</span>
+      </h2>
+
+      <div class="settings-card flex items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+          <div class="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-sky-400 shrink-0 mt-0.5">
+            <HardDrive class="w-4 h-4" />
+          </div>
+          <div class="space-y-0.5">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm">{$t('virtual_library')}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-lg">{$t('virtual_library_subtitle')}</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="desktop-toggle {isVirtualLibraryEnabled ? 'enabled' : ''}"
+          onclick={onToggleVirtualLibrary}
+          disabled={isSavingVirtualLibrary}
+          aria-label={isVirtualLibraryEnabled ? $t('virtual_library_disable') : $t('virtual_library_enable')}
+          aria-pressed={isVirtualLibraryEnabled}
+        >
+          <div class="desktop-toggle-knob"></div>
         </button>
       </div>
     </section>

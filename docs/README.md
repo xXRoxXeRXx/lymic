@@ -271,6 +271,8 @@ Lymic supports two Windows distribution channels via the build input `LYMIC_RELE
 
 Maintainers can configure this build input at build time via `LYMIC_RELEASE_CHANNEL=store` (or `VITE_LYMIC_RELEASE_CHANNEL=store` for frontend builds). At runtime, the active channel is exposed via the `get_release_channel` IPC command.
 
+The optional Virtual Library settings section needs more than the channel label: the backend offers it (`get_virtual_library_settings`) only on Windows, in the `store` channel and when the process has real Package Identity. A Store-labelled build that is not running as an installed or registered MSIX package, and `tauri dev`, therefore show no Virtual Library section.
+
 ### Canonical Snap Store (Linux)
 
 Lymic is packaged as a strictly confined Snap package for Ubuntu and other Snap-enabled distributions (`snap/snapcraft.yaml`). The Snap declares the following interface plugs:

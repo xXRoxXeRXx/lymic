@@ -2,6 +2,7 @@ mod asset_protocol;
 pub(crate) mod background;
 pub(crate) mod events;
 pub(crate) mod locale;
+pub(crate) mod package_identity;
 pub(crate) mod startup;
 pub(crate) mod state;
 pub(crate) mod thumbnail_protocol;
@@ -147,6 +148,8 @@ pub(crate) fn run() {
             crate::commands::settings::record_webview_startup_phase_probe,
             crate::commands::settings::get_database_recovery_notice,
             crate::commands::settings::get_release_channel,
+            crate::commands::virtual_library::get_virtual_library_settings,
+            crate::commands::virtual_library::set_virtual_library_enabled,
         ])
         .on_window_event(tray::hide_on_close)
         .build(tauri::generate_context!())
@@ -245,6 +248,8 @@ mod tests {
             "get_database_recovery_notice",
             "record_webview_startup_phase_probe",
             "get_release_channel",
+            "get_virtual_library_settings",
+            "set_virtual_library_enabled",
         ] {
             assert!(
                 adapter.contains(&format!("\"{command}\"")),

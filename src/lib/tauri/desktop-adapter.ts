@@ -28,6 +28,7 @@ import type {
   RemoveFolderResult,
   SyncSnapshot,
   SyncSummary,
+  VirtualLibrarySettings,
   WebviewStartupPhase,
   DetectedVolume,
   WatchedFolder,
@@ -189,6 +190,15 @@ export interface PreferencesDesktopAdapter {
   setAutostartEnabled(enabled: boolean): Promise<void>;
 }
 
+export interface VirtualLibraryDesktopAdapter {
+  /** Whether this run can offer the Virtual Library, and whether the user switched it on. */
+  getVirtualLibrarySettings(): Promise<VirtualLibrarySettings>;
+  /** Persists the toggle and resolves to the settings as stored. Rejects when the Virtual Library is unavailable. */
+  setVirtualLibraryEnabled(enabled: boolean): Promise<VirtualLibrarySettings>;
+  /** Backend announcements of changed Virtual Library settings. */
+  subscribeToVirtualLibrarySettings(listener: (settings: VirtualLibrarySettings) => void): Promise<() => void>;
+}
+
 export interface UpdateDesktopAdapter {
   recordWebviewStartupPhaseProbe(phase: WebviewStartupPhase): Promise<void>;
   getReleaseChannel(): Promise<ReleaseChannel>;
@@ -239,6 +249,7 @@ export interface DesktopAdapter
     AllMemoriesDesktopAdapter,
     SearchDesktopAdapter,
     PreferencesDesktopAdapter,
+    VirtualLibraryDesktopAdapter,
     UpdateDesktopAdapter,
     RemovableVolumeDesktopAdapter {}
 
@@ -314,6 +325,12 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getDatabaseRecoveryNotice: () => invoke<DatabaseRecoveryNotice | null>("get_database_recovery_notice"),
   isAutostartEnabled: () => isEnabled(),
   setAutostartEnabled: (enabled) => enabled ? enable() : disable(),
+  getVirtualLibrarySettings: () => invoke<VirtualLibrarySettings>("get_virtual_library_settings"),
+  setVirtualLibraryEnabled: (enabled) => invoke<VirtualLibrarySettings>("set_virtual_library_enabled", { enabled }),
+  subscribeToVirtualLibrarySettings: (listener) => listen<VirtualLibrarySettings>(
+    "virtual-library-settings-changed",
+    (event) => listener(event.payload),
+  ),
   recordWebviewStartupPhaseProbe: (phase) => invoke<void>("record_webview_startup_phase_probe", { phase }),
   getReleaseChannel: () => invoke<ReleaseChannel>("get_release_channel"),
   getAppVersion: getVersion,
