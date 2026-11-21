@@ -1397,6 +1397,35 @@ describe("removable volume setup flow", () => {
     expect(screen.queryByRole("button", { name: "Check for updates" })).toBeNull();
     expect(screen.queryByText("Updates")).toBeNull();
   });
+
+  it("omits the Virtual Library section even in a Store-labelled run when the backend reports it unavailable", async () => {
+    renderAuthenticatedPage({
+      get_release_channel: () => Promise.resolve("store"),
+      get_virtual_library_settings: () => Promise.resolve({ available: false, enabled: false }),
+    });
+    await openDashboard();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await screen.findByText("Language");
+    expect(screen.queryByText("Virtual Library")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Enable Virtual Library" })).toBeNull();
+  });
+
+  it("offers the Virtual Library toggle when the backend reports it available and persists a change", async () => {
+    const setEnabled = vi.fn().mockResolvedValue({ available: true, enabled: true });
+    renderAuthenticatedPage({
+      get_release_channel: () => Promise.resolve("store"),
+      get_virtual_library_settings: () => Promise.resolve({ available: true, enabled: false }),
+      set_virtual_library_enabled: setEnabled,
+    });
+    await openDashboard();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Enable Virtual Library" }));
+
+    expect(setEnabled).toHaveBeenCalledWith({ enabled: true });
+    expect(await screen.findByRole("button", { name: "Disable Virtual Library" })).toHaveAttribute("aria-pressed", "true");
+  });
 });
 
 describe("watched folder setup flow with target album", () => {

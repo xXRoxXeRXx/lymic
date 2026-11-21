@@ -734,6 +734,33 @@ mod database_tests {
     }
 
     #[tokio::test]
+    async fn virtual_library_is_disabled_until_enabled_and_the_choice_persists() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        assert!(!get_virtual_library_enabled(&pool).await.unwrap());
+        set_virtual_library_enabled(&pool, true).await.unwrap();
+        assert!(get_virtual_library_enabled(&pool).await.unwrap());
+        set_virtual_library_enabled(&pool, false).await.unwrap();
+        assert!(!get_virtual_library_enabled(&pool).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn invalid_stored_virtual_library_choice_counts_as_disabled() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO app_settings (key, value) VALUES ('virtual_library_enabled', 'maybe')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert!(!get_virtual_library_enabled(&pool).await.unwrap());
+    }
+
+    #[tokio::test]
     async fn cached_hash_misses_when_mtime_differs_within_a_second() {
         let pool = test_pool().await;
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();

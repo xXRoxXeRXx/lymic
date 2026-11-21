@@ -87,7 +87,7 @@ _Avoid_: failed file, upload error
 ## Virtual Library
 
 **Virtual Library**:
-A planned, Windows-only read-only projection of the Immich Library into the Windows filesystem using the Windows Cloud Files API, separate from Synchronization. It is available only in the Microsoft Store (MSIX) release channel (ADR-0003). Remote Assets appear as on-demand Virtual Placeholders and undergo Hydration when opened.
+A planned, Windows-only read-only projection of the Immich Library into the Windows filesystem using the Windows Cloud Files API, separate from Synchronization. It is available only in the Microsoft Store (MSIX) release channel and only when the app runs with real Package Identity (ADR-0003). Remote Assets appear as on-demand Virtual Placeholders and undergo Hydration when opened.
 _Avoid_: sync drive, cloud mirror, network share
 
 **Virtual Placeholder**:
