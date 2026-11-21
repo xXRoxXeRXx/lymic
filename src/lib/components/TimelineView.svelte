@@ -42,7 +42,10 @@
     allowFavoriteAndAlbum?: boolean;
     /** Offers Restore in the Lightbox and in multi-selection: Trashed Assets only. */
     restoreTrashedAssets?(assetIds: string[]): Promise<TrashRestoreResult>;
-    /** Offers Move to Trash in the Lightbox and in multi-selection, after a confirmation: every hosting view except the Trash Timeline (ADR-0011). */
+    /**
+     * Offers Move to Trash in the Lightbox and in multi-selection, after a confirmation: every hosting view except the Trash Timeline (ADR-0011).
+     * The result lists the assets moved; its optional `failureCode` says why a request stopped after some were moved.
+     */
     trashAssets?(assetIds: string[]): Promise<TrashMoveResult>;
     /** Where to scroll to once the first buckets are shown, for a view that is reopened where the user left it. */
     initialScrollTop?: number;

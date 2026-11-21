@@ -107,6 +107,8 @@ pub(crate) async fn restore_trashed_assets(
 
 /// Moves Remote Assets to the Immich trash (a soft delete, never permanent; ADR-0011) and returns
 /// the IDs Immich confirmed as moved. Every requested asset not listed is still in the library.
+/// When the per-asset fallback was aborted after some assets were moved, the result also carries the
+/// credential-free `failureCode`; a failure before any asset was moved is an error code.
 #[tauri::command]
 pub(crate) async fn trash_assets(asset_ids: Vec<String>) -> Result<TrashMoveResult, String> {
     let asset_ids = trash_write_asset_ids(asset_ids)?;

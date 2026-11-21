@@ -27,6 +27,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch }));
 vi.mock("@tauri-apps/plugin-updater", () => ({ check }));
 
+import type { TrashMoveResult } from "../contracts";
 import {
   tauriDesktopAdapter,
   type AlbumAssignmentDesktopAdapter,
@@ -214,6 +215,17 @@ describe("tauriDesktopAdapter", () => {
       ["removable-volume-removed", expect.any(Function)],
       ["removable-volume-remounted", expect.any(Function)],
     ]);
+  });
+
+  it("returns the partial result of Move to Trash with its failure code as the backend reports it", async () => {
+    const partial: TrashMoveResult = { movedAssetIds: ["asset-1"], failureCode: "trash_move_permission_denied:asset.delete" };
+    invoke.mockClear();
+    invoke.mockResolvedValueOnce(partial);
+
+    const result = await trashMoveAdapter.trashAssets(["asset-1", "asset-2"]);
+
+    expect(invoke).toHaveBeenCalledWith("trash_assets", { assetIds: ["asset-1", "asset-2"] });
+    expect(result).toEqual({ movedAssetIds: ["asset-1"], failureCode: "trash_move_permission_denied:asset.delete" });
   });
 
   it("invokes the Search commands with the request as one argument", async () => {

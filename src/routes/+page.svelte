@@ -182,6 +182,7 @@
   /**
    * Move to Trash for every view that offers it (selection actions, the Lightbox and the Map View all receive this).
    * The one place that runs after a move: cached views that may still show a moved asset reload when they next open.
+   * A request that stopped midway (`failureCode`) still reports the assets moved before it stopped, so it counts the same.
    * The Photo Timeline already dropped it when the move ran inside it, and Explore and Tags only mark themselves
    * stale while they are not the open view.
    */
@@ -190,6 +191,9 @@
     const result = await desktop.trashAssets(assetIds);
     if (result.movedAssetIds.length > 0) {
       if (origin !== PHOTOS_VIEW) navigation.markPhotosStale();
+      // Back from an Album Timeline restores the cached catalogue, whose count may still include the moved asset
+      // (the move can also have run in a Search started there). Opening Albums from another view reloads it anyway.
+      navigation.markAlbumsStale();
       void explore.refreshIfActive();
       void tags.refreshIfActive();
     }

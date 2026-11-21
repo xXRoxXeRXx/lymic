@@ -23,7 +23,7 @@
     albumCatalogue: TargetAlbumCatalogue;
     /** Opens the Tag Timeline of a Tag chip selected in the Lightbox, which has been closed by then. */
     onSelectTag?(tag: AssetTag): void;
-    /** Moves Remote Assets to the Immich trash. Without it the Lightbox offers no Move to Trash. */
+    /** Moves Remote Assets to the Immich trash (the Lightbox sends one asset, so a result never stops midway). Without it the Lightbox offers no Move to Trash. */
     trashAssets?(assetIds: string[]): Promise<TrashMoveResult>;
   }
   let { mapState, active, serverUrl, desktop, albumCatalogue, onSelectTag, trashAssets }: Props = $props();

@@ -2,12 +2,15 @@ import type { TrashMoveResult } from "../contracts";
 import { classifyRequestFailure } from "../controllers/request-failure";
 import type { TimelineController } from "../controllers/timeline-controller.svelte";
 
-/** What a Move to Trash did. `failure` is set only when the whole request failed. */
+/** What a Move to Trash did. `failure` is set when the request failed or stopped before it was done. */
 export interface RemoteAssetTrashOutcome {
   movedAssetIds: string[];
-  /** Remote Assets that are still in the library; every requested asset when the request failed. */
+  /** Remote Assets that are still in the library; every requested asset when the request failed before any was moved. */
   failedAssetIds: string[];
-  /** `permission` when Immich refused the Move to Trash (HTTP 403), `error` for any other failed request. */
+  /**
+   * `permission` when Immich refused the Move to Trash (HTTP 403), `error` for any other failed request. It is also
+   * set when the request stopped after some assets were already moved: `movedAssetIds` then lists them.
+   */
   failure: "permission" | "error" | null;
 }
 
@@ -21,7 +24,9 @@ export type TrashFeedback =
 
 /**
  * Maps a Move to Trash outcome for `total` requested Remote Assets to its feedback, the one place that
- * decides success, partial, none, permission or failed. A single asset that was not moved is `failed`,
+ * decides success, partial, none, permission or failed. A request that failed or stopped (`failure`) is always
+ * `permission` or `failed`, also when some assets were moved before it stopped: why it stopped matters more
+ * than the counts, and the moved assets have already left the view. A single asset that was not moved is `failed`,
  * since "1 of 1" says nothing more.
  */
 export function trashFeedbackFor(outcome: RemoteAssetTrashOutcome, total: number): TrashFeedback {
@@ -48,10 +53,17 @@ export function trashFeedbackMessage(feedback: TrashFeedback, translate: Transla
   }
 }
 
+function failureOf(reason: unknown): "permission" | "error" {
+  return classifyRequestFailure(reason, "trash_move") === "permission_denied" ? "permission" : "error";
+}
+
 export interface RemoteAssetTrashOptions {
   /** Whatever shows the assets: a timeline, or the Map View's markers. */
   readonly timeline: Pick<TimelineController, "removeAsset">;
-  /** Absent where the view offers no Move to Trash: `trash` then fails every asset without a request. */
+  /**
+   * Absent where the view offers no Move to Trash: `trash` then fails every asset without a request.
+   * Rejects with a credential-free code when nothing was moved; resolves with `failureCode` when it stopped midway.
+   */
   readonly trashAssets?: (assetIds: string[]) => Promise<TrashMoveResult>;
   /** Called after a moved Remote Asset left the timeline. */
   onRemoved?: (assetId: string) => void;
@@ -72,8 +84,7 @@ export function createRemoteAssetTrash(options: RemoteAssetTrashOptions) {
       result = await trashAssets(assetIds);
     } catch (error) {
       // The backend reports a refusal as a credential-free code, so the error text is never shown.
-      const refused = classifyRequestFailure(error, "trash_move") === "permission_denied";
-      return { movedAssetIds: [], failedAssetIds: [...assetIds], failure: refused ? "permission" : "error" };
+      return { movedAssetIds: [], failedAssetIds: [...assetIds], failure: failureOf(error) };
     }
     const requested = new Set(assetIds);
     const movedAssetIds = result.movedAssetIds.filter((assetId) => requested.has(assetId));
@@ -84,7 +95,8 @@ export function createRemoteAssetTrash(options: RemoteAssetTrashOptions) {
       options.timeline.removeAsset(assetId);
       options.onRemoved?.(assetId);
     }
-    return { movedAssetIds, failedAssetIds, failure: null };
+    // A request that stopped after some assets were moved still reports why; those assets left the view above.
+    return { movedAssetIds, failedAssetIds, failure: result.failureCode ? failureOf(result.failureCode) : null };
   }
 
   return { trash };

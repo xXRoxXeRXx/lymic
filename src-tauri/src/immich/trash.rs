@@ -31,10 +31,16 @@ enum RestoreCall {
 }
 
 /// The requested Remote Assets Immich confirmed as moved to the trash; every other requested asset is still in the library.
+///
+/// `failure_code` is set only when the per-asset fallback was aborted after at least one asset had been moved:
+/// the credential-free code says why it stopped, and the assets that were not confirmed were not attempted
+/// or not moved. It is left out of the serialized result otherwise.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct TrashMoveResult {
     pub moved_asset_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<String>,
 }
 
 /// What one `DELETE assets` call told us.
@@ -111,10 +117,14 @@ impl ImmichClient {
     /// and 400 means that asset was not moved. A single asset is never requested twice. The
     /// permission is `asset.delete`.
     ///
-    /// Failures abort the whole call with a credential-free code: `trash_move_authentication_required`
+    /// Failures abort the call with a credential-free code: `trash_move_authentication_required`
     /// (401), `trash_move_permission_denied:asset.delete` (403) and `trash_move_unavailable`
     /// otherwise (including transport errors and any success that is not 204); the response body is
-    /// never forwarded. Moving is idempotent, so retrying after an abort is safe.
+    /// never forwarded. An abort of the batch request, or of the per-asset fallback before any asset
+    /// was moved, is an `Err` with that code. An abort of the fallback after some assets were
+    /// moved is an `Ok` that lists them together with the code in `failure_code`, so the caller can
+    /// remove what moved and still tell the user why it stopped. Moving is idempotent, so retrying
+    /// after an abort is safe.
     pub async fn trash_assets(
         &self,
         asset_ids: &[RemoteAssetId],
@@ -122,6 +132,7 @@ impl ImmichClient {
         if asset_ids.is_empty() {
             return Ok(TrashMoveResult {
                 moved_asset_ids: Vec::new(),
+                failure_code: None,
             });
         }
         Self::validate_asset_ids(asset_ids, "Asset IDs for trashing must be unique")?;
@@ -129,25 +140,36 @@ impl ImmichClient {
         if matches!(self.delete_assets(asset_ids).await?, TrashCall::Moved) {
             return Ok(TrashMoveResult {
                 moved_asset_ids: asset_ids.iter().map(|id| id.as_str().to_string()).collect(),
+                failure_code: None,
             });
         }
         if asset_ids.len() == 1 {
             // The batch already was the individual request.
             return Ok(TrashMoveResult {
                 moved_asset_ids: Vec::new(),
+                failure_code: None,
             });
         }
 
         let mut moved_asset_ids = Vec::new();
         for asset_id in asset_ids {
-            if matches!(
-                self.delete_assets(std::slice::from_ref(asset_id)).await?,
-                TrashCall::Moved
-            ) {
-                moved_asset_ids.push(asset_id.as_str().to_string());
+            match self.delete_assets(std::slice::from_ref(asset_id)).await {
+                Ok(TrashCall::Moved) => moved_asset_ids.push(asset_id.as_str().to_string()),
+                Ok(TrashCall::Rejected) => {}
+                // Report what is already in the trash instead of losing it behind the error.
+                Err(code) if !moved_asset_ids.is_empty() => {
+                    return Ok(TrashMoveResult {
+                        moved_asset_ids,
+                        failure_code: Some(code),
+                    });
+                }
+                Err(code) => return Err(code),
             }
         }
-        Ok(TrashMoveResult { moved_asset_ids })
+        Ok(TrashMoveResult {
+            moved_asset_ids,
+            failure_code: None,
+        })
     }
 
     /// Rejects IDs that are not path-safe and duplicate IDs (with `duplicate_message`) before any request,
@@ -433,6 +455,7 @@ mod tests {
             result,
             TrashMoveResult {
                 moved_asset_ids: vec!["asset-1".into()],
+                failure_code: None,
             }
         );
         let requests = server.await.unwrap();
@@ -544,7 +567,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn aborts_the_trash_fallback_on_credential_or_server_failures() {
+    async fn reports_the_assets_moved_before_the_fallback_aborted_with_the_failure_code() {
         for (status, code) in [
             ("401 Unauthorized", "trash_move_authentication_required"),
             ("403 Forbidden", "trash_move_permission_denied:asset.delete"),
@@ -557,18 +580,112 @@ mod tests {
             ])
             .await;
 
-            let error = test_client(url, "trash-secret-key")
+            let result = test_client(url, "trash-secret-key")
                 .trash_assets(&ids(&["asset-1", "asset-2", "asset-3"]))
                 .await
-                .unwrap_err();
+                .unwrap();
 
-            assert_eq!(error, code);
+            assert_eq!(
+                result,
+                TrashMoveResult {
+                    moved_asset_ids: vec!["asset-1".into()],
+                    failure_code: Some(code.into()),
+                }
+            );
             assert_eq!(server.await.unwrap().len(), 3);
         }
     }
 
     #[tokio::test]
-    async fn aborts_the_trash_fallback_on_a_success_that_is_not_an_empty_204() {
+    async fn the_partial_result_never_carries_a_body_or_the_api_key() {
+        let (url, server) = serve_pages(vec![
+            ("400 Bad Request", NOT_FOUND_BODY),
+            ("204 No Content", ""),
+            ("500 Internal Server Error", "internal secret stacktrace"),
+        ])
+        .await;
+
+        let result = test_client(url, "trash-secret-key")
+            .trash_assets(&ids(&["asset-1", "asset-2"]))
+            .await
+            .unwrap();
+        server.await.unwrap();
+
+        assert_eq!(
+            serde_json::to_string(&result).unwrap(),
+            r#"{"movedAssetIds":["asset-1"],"failureCode":"trash_move_unavailable"}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn a_complete_result_has_no_failure_code() {
+        let (url, server) = serve_pages(vec![("204 No Content", "")]).await;
+
+        let result = test_client(url, "test-key")
+            .trash_assets(&ids(&["asset-1", "asset-2"]))
+            .await
+            .unwrap();
+        server.await.unwrap();
+
+        assert_eq!(result.failure_code, None);
+        assert_eq!(
+            serde_json::to_string(&result).unwrap(),
+            r#"{"movedAssetIds":["asset-1","asset-2"]}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn still_fails_with_only_the_code_when_the_fallback_aborts_before_any_asset_was_moved() {
+        for responses in [
+            // The first individual request aborts.
+            vec![
+                ("400 Bad Request", NOT_FOUND_BODY),
+                ("403 Forbidden", "internal secret stacktrace"),
+            ],
+            // Earlier individual requests were refused with 400, so nothing was moved either.
+            vec![
+                ("400 Bad Request", NOT_FOUND_BODY),
+                ("400 Bad Request", NOT_FOUND_BODY),
+                ("403 Forbidden", "internal secret stacktrace"),
+            ],
+        ] {
+            let requests = responses.len();
+            let (url, server) = serve_pages(responses).await;
+
+            let error = test_client(url, "trash-secret-key")
+                .trash_assets(&ids(&["asset-1", "asset-2", "asset-3"]))
+                .await
+                .unwrap_err();
+
+            assert_eq!(error, "trash_move_permission_denied:asset.delete");
+            assert_eq!(server.await.unwrap().len(), requests);
+        }
+    }
+
+    #[tokio::test]
+    async fn reports_the_moved_assets_when_a_transport_error_ends_the_fallback() {
+        // The server answers the batch and the first individual request, then goes away.
+        let (url, server) = serve_pages(vec![
+            ("400 Bad Request", NOT_FOUND_BODY),
+            ("204 No Content", ""),
+        ])
+        .await;
+
+        let result = test_client(url, "trash-secret-key")
+            .trash_assets(&ids(&["asset-1", "asset-2", "asset-3"]))
+            .await
+            .unwrap();
+
+        assert_eq!(result.moved_asset_ids, vec!["asset-1"]);
+        assert_eq!(
+            result.failure_code.as_deref(),
+            Some("trash_move_unavailable")
+        );
+        assert_eq!(server.await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn reports_the_moved_assets_when_a_success_that_is_not_an_empty_204_ends_the_fallback() {
         let (url, server) = serve_pages(vec![
             ("400 Bad Request", NOT_FOUND_BODY),
             ("204 No Content", ""),
@@ -576,12 +693,16 @@ mod tests {
         ])
         .await;
 
-        let error = test_client(url, "test-key")
+        let result = test_client(url, "test-key")
             .trash_assets(&ids(&["asset-1", "asset-2", "asset-3"]))
             .await
-            .unwrap_err();
+            .unwrap();
 
-        assert_eq!(error, "trash_move_unavailable");
+        assert_eq!(result.moved_asset_ids, vec!["asset-1"]);
+        assert_eq!(
+            result.failure_code.as_deref(),
+            Some("trash_move_unavailable")
+        );
         assert_eq!(server.await.unwrap().len(), 3);
     }
 
@@ -646,7 +767,8 @@ mod tests {
         assert_eq!(
             client.trash_assets(&[]).await.unwrap(),
             TrashMoveResult {
-                moved_asset_ids: vec![]
+                moved_asset_ids: vec![],
+                failure_code: None,
             }
         );
     }

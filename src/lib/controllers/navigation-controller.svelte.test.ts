@@ -122,6 +122,51 @@ describe("navigation controller", () => {
     });
   });
 
+  describe("Albums catalogue after a move in an Album Timeline", () => {
+    function openAlbumTimeline() {
+      const ctx = setup();
+      ctx.navigation.openAlbums();
+      ctx.navigation.selectAlbum(album);
+      return ctx;
+    }
+
+    it("keeps the cached catalogue on Back when nothing marked it stale", () => {
+      const { navigation, refresh } = openAlbumTimeline();
+      navigation.returnToAlbums();
+      expect(refresh.albums).toHaveBeenCalledTimes(1);
+    });
+
+    it("reloads the catalogue once on Back after it was marked stale", () => {
+      const { navigation, refresh } = openAlbumTimeline();
+      navigation.markAlbumsStale();
+      navigation.returnToAlbums();
+      expect(refresh.albums).toHaveBeenCalledTimes(2);
+      navigation.selectAlbum(album);
+      navigation.returnToAlbums();
+      expect(refresh.albums).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not reload again when Albums opens from another view, which already reloads it", () => {
+      const { navigation, refresh } = openAlbumTimeline();
+      navigation.markAlbumsStale();
+      navigation.openPeople();
+      navigation.openAlbums();
+      expect(refresh.albums).toHaveBeenCalledTimes(2);
+      navigation.selectAlbum(album);
+      navigation.returnToAlbums();
+      expect(refresh.albums).toHaveBeenCalledTimes(2);
+    });
+
+    it("forgets a stale mark when signing out", () => {
+      const { navigation, refresh } = openAlbumTimeline();
+      navigation.markAlbumsStale();
+      navigation.reset();
+      navigation.selectAlbum(album);
+      navigation.returnToAlbums();
+      expect(refresh.albums).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("Person drill-down", () => {
     it("opened from People, returns to People at its scroll position and drops the timeline", () => {
       const { navigation, refresh, adapter, restoreScroll, scrollTo } = setup();
