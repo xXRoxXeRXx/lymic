@@ -197,7 +197,6 @@
       if (changed && archiveMode === "by-visibility") {
         // The asset stays in the list: stay on it, and show the opposite action from now on.
         const visibility = visibilityAfter(action);
-        assetActions.reflectVisibility(current.id, visibility);
         assetDetails = assetActions.cachedDetails(current.id) ?? (assetDetails ? { ...assetDetails, visibility } : assetDetails);
         archiveFeedback = { message: archiveStaysMessage(action, $t), isSuccess: true };
       } else {

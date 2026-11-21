@@ -101,6 +101,8 @@ export function archiveStaysMessage(action: ArchiveAction, translate: Translate)
 export interface RemoteAssetArchiveOptions {
   readonly timeline: TimelineController;
   readonly setAssetsVisibility: (assetIds: string[], visibility: AssetVisibility) => Promise<AssetVisibilityResult>;
+  /** Called with the written visibility for every Remote Asset the request confirmed as changed. */
+  onChanged?: (assetId: string, visibility: AssetVisibility) => void;
   /** Called after a changed Remote Asset left the view. */
   onRemoved?: (assetId: string) => void;
   /**
@@ -122,9 +124,10 @@ export function createRemoteAssetArchive(options: RemoteAssetArchiveOptions) {
     const writable = action === "archive" && options.isArchivable ? assetIds.filter(options.isArchivable) : assetIds;
     const skipped = new Set(assetIds.filter((assetId) => !writable.includes(assetId)));
     if (writable.length === 0) return { changedAssetIds: [], failedAssetIds: [...assetIds], failure: null };
+    const visibility = visibilityAfter(action);
     let result: AssetVisibilityResult;
     try {
-      result = await options.setAssetsVisibility(writable, visibilityAfter(action));
+      result = await options.setAssetsVisibility(writable, visibility);
     } catch (error) {
       return bulkAssetOutcomeFromFailure(assetIds, error, "archive");
     }
@@ -134,6 +137,7 @@ export function createRemoteAssetArchive(options: RemoteAssetArchiveOptions) {
       ...written,
       failedAssetIds: assetIds.filter((assetId) => skipped.has(assetId) || written.failedAssetIds.includes(assetId)),
     };
+    for (const assetId of outcome.changedAssetIds) options.onChanged?.(assetId, visibility);
     if (options.assetsStayInView) return outcome;
     for (const assetId of outcome.changedAssetIds) {
       options.timeline.removeAsset(assetId);

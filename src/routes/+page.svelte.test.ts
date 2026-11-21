@@ -4143,7 +4143,7 @@ describe("Archive Timeline Unarchive", () => {
       await waitFor(() => expect(within(lightbox).getByRole("button", { name: "Unarchive" })).toBeEnabled());
       await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
       expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
-      expect(await screen.findByRole("status")).toHaveTextContent("1 unarchived.");
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
 
     it("wraps to the first asset when the last one was unarchived", async () => {
@@ -4166,8 +4166,8 @@ describe("Archive Timeline Unarchive", () => {
       await fireEvent.click(within(lightbox).getByRole("button", { name: "Unarchive" }));
 
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-      expect(screen.getByText("Your archive is empty.")).toBeInTheDocument();
-      expect(await screen.findByText("1 unarchived.")).toHaveAttribute("role", "status");
+      expect(screen.getByText("Your archive is empty.")).toHaveAttribute("role", "status");
+      expect(screen.queryByText("1 unarchived.")).not.toBeInTheDocument();
     });
 
     it("keeps the asset in the Lightbox and names the missing asset.update permission when refused", async () => {
@@ -4499,7 +4499,7 @@ describe("Photo and Favorites Timeline Archive", () => {
       await waitFor(() => expect(lightboxArchive(lightbox)).toBeEnabled());
       await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
       expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(2);
-      expect(await screen.findByRole("status")).toHaveTextContent("1 archived.");
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
 
     it("wraps to the first asset when the last one was archived", async () => {
@@ -4523,7 +4523,7 @@ describe("Photo and Favorites Timeline Archive", () => {
 
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
       expect(screen.queryByRole("button", { name: "Open photo" })).not.toBeInTheDocument();
-      expect(await screen.findByText("1 archived.")).toHaveAttribute("role", "status");
+      expect(screen.queryByText("1 archived.")).not.toBeInTheDocument();
     });
 
     it("keeps the asset in the Lightbox and names the missing asset.update permission when refused", async () => {
@@ -4741,6 +4741,55 @@ describe("Archive in views that show archived and other assets together", () => 
       async open() {
         await fireEvent.click(await screen.findByRole("button", { name: "Albums" }));
         await fireEvent.click(await screen.findByRole("button", { name: /Holiday/ }));
+        await screen.findAllByRole("button", { name: "Open photo" });
+      },
+    },
+    {
+      name: "Person Timeline",
+      handlers: (assets: ReturnType<typeof asset>[]) => ({
+        get_people: async () => ({ people: [{ id: "person-1", name: "Ada", thumbnailPath: null }], hasNextPage: false }),
+        get_person_timeline_buckets: async () => [{ timeBucket: march, count: assets.length }],
+        get_person_timeline_bucket_assets: async () => assets,
+      }),
+      async open() {
+        await fireEvent.click(await screen.findByRole("button", { name: "People" }));
+        await fireEvent.click(await screen.findByRole("button", { name: "Ada" }));
+        await screen.findAllByRole("button", { name: "Open photo" });
+      },
+    },
+    {
+      name: "Place Timeline",
+      handlers: (assets: ReturnType<typeof asset>[]) => ({
+        get_places: async () => [{ city: "Paris", thumbnailAssetId: assets[0]?.id ?? "a-1" }],
+        get_place_timeline: async () => timelineOf(assets),
+      }),
+      async open() {
+        await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+        await fireEvent.click(await screen.findByRole("button", { name: "Paris" }));
+        await screen.findAllByRole("button", { name: "Open photo" });
+      },
+    },
+    {
+      name: "Memory Timeline",
+      handlers: (assets: ReturnType<typeof asset>[]) => ({
+        get_memories: async () => [{ id: "m-1", kind: "onThisDay", memoryAt: "2019-01-02T00:00:00.000Z", year: 2019, personName: null, coverAssetId: assets[0]?.id ?? "a-1", timeline: timelineOf(assets) }],
+      }),
+      async open() {
+        await fireEvent.click(await screen.findByRole("button", { name: "Explore" }));
+        await fireEvent.click(await screen.findByRole("button", { name: "Jan 2, 2019" }));
+        await screen.findAllByRole("button", { name: "Open photo" });
+      },
+    },
+    {
+      name: "Tag Timeline",
+      handlers: (assets: ReturnType<typeof asset>[]) => ({
+        get_tags: async () => [{ id: "t-rome", name: "Rome", value: "Travel/Italy/Rome", parentId: null, color: null }],
+        get_tag_timeline_buckets: async () => [{ timeBucket: march, count: assets.length }],
+        get_tag_timeline_bucket_assets: async () => assets,
+      }),
+      async open() {
+        await fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
+        await fireEvent.click(await screen.findByRole("treeitem", { name: "Rome" }));
         await screen.findAllByRole("button", { name: "Open photo" });
       },
     },
@@ -4971,6 +5020,7 @@ describe("Archive in views that show archived and other assets together", () => 
       expect(within(lightbox).getByRole("status")).toHaveTextContent("Archived. It stays in this list.");
       await fireEvent.click(within(lightbox).getByRole("button", { name: "Close lightbox" }));
       expect(screen.getAllByRole("button", { name: "Open photo" })).toHaveLength(3);
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
 
     it("unarchives an archived asset the same way and flips the button back", async () => {
@@ -5006,6 +5056,24 @@ describe("Archive in views that show archived and other assets together", () => 
 
       const reopened = await openLightbox(0);
 
+      expect(await within(reopened).findByRole("button", { name: "Unarchive" })).toBeInTheDocument();
+      expect(within(reopened).queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+    });
+
+    it("shows Unarchive in the Lightbox after the asset was archived from the multi-selection", async () => {
+      render({ "a-1": "timeline" });
+      await open();
+
+      const firstOpen = await openLightbox(0);
+      expect(await within(firstOpen).findByRole("button", { name: "Archive" })).toBeInTheDocument();
+      await fireEvent.click(within(firstOpen).getByRole("button", { name: "Close lightbox" }));
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Media lightbox" })).not.toBeInTheDocument());
+
+      await select(1);
+      await fireEvent.click(archiveButton());
+      expect(await screen.findByRole("status")).toHaveTextContent("1 archived.");
+
+      const reopened = await openLightbox(0);
       expect(await within(reopened).findByRole("button", { name: "Unarchive" })).toBeInTheDocument();
       expect(within(reopened).queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
     });

@@ -154,29 +154,53 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
     });
   }
 
-  /** Restores the selection; Trashed Assets that were not restored stay selected so the user can retry. */
-  async function restore() {
-    const restoreAssets = options.restore;
-    if (!restoreAssets) return;
-    await run("restore", async (assetIds, isCurrent) => {
-      restoreFeedback = null;
-      const outcome = await restoreAssets(assetIds);
+  /** Runs a bulk write that shrinks the selection to the failed assets and reports its outcome. */
+  async function runBulkWrite<TOutcome extends { failedAssetIds: string[] }, TFeedback>(
+    action: "restore" | ArchiveAction,
+    write: ((assetIds: string[]) => Promise<TOutcome>) | undefined,
+    setFeedback: (value: TFeedback | null) => void,
+    toFeedback: (outcome: TOutcome, total: number) => TFeedback,
+  ) {
+    if (!write) return;
+    await run(action, async (assetIds, isCurrent) => {
+      setFeedback(null);
+      const outcome = await write(assetIds);
       if (!isCurrent()) return;
       select(outcome.failedAssetIds);
-      restoreFeedback = restoreFeedbackFor(outcome, assetIds.length);
+      setFeedback(toFeedback(outcome, assetIds.length));
     });
+  }
+
+  /** Runs a single-asset write (from the Lightbox) outside the selection busy state and tells whether its result still applies. */
+  async function runSingleWrite<TOutcome extends { changedAssetIds: string[] }, TFeedback>(
+    label: string,
+    assetId: string,
+    write: ((assetIds: string[]) => Promise<TOutcome>) | undefined,
+    setFeedback: (value: TFeedback | null) => void,
+    toFeedback: ((outcome: TOutcome) => TFeedback) | null,
+  ) {
+    if (!write) throw new Error(`This timeline offers no ${label}.`);
+    const isCurrent = currentGeneration();
+    if (toFeedback) setFeedback(null);
+    const outcome = await write([assetId]);
+    const applied = isCurrent() && outcome.changedAssetIds.includes(assetId);
+    if (applied && toFeedback) setFeedback(toFeedback(outcome));
+    return { outcome, applied };
+  }
+
+  /** Restores the selection; Trashed Assets that were not restored stay selected so the user can retry. */
+  async function restore() {
+    await runBulkWrite("restore", options.restore, (value) => { restoreFeedback = value; }, restoreFeedbackFor);
   }
 
   /** Archives or unarchives the selection; Remote Assets that did not change stay selected so the user can retry. */
   async function changeSelectionArchive(action: ArchiveAction, change: ((assetIds: string[]) => Promise<RemoteAssetArchiveOutcome>) | undefined) {
-    if (!change) return;
-    await run(action, async (assetIds, isCurrent) => {
-      archiveFeedback = null;
-      const outcome = await change(assetIds);
-      if (!isCurrent()) return;
-      select(outcome.failedAssetIds);
-      archiveFeedback = { action, feedback: archiveFeedbackFor(outcome, assetIds.length) };
-    });
+    await runBulkWrite(
+      action,
+      change,
+      (value) => { archiveFeedback = value; },
+      (outcome, total) => ({ action, feedback: archiveFeedbackFor(outcome, total) }),
+    );
   }
 
   const archive = () => changeSelectionArchive("archive", options.archive);
@@ -184,24 +208,24 @@ export function createTimelineSelectionActions(options: TimelineSelectionActions
 
   /** Restores one Remote Asset (from the Lightbox). `applied` is false when the timeline changed meanwhile. */
   async function restoreOne(assetId: string) {
-    const restoreAssets = options.restore;
-    if (!restoreAssets) throw new Error("This timeline offers no Restore.");
-    const isCurrent = currentGeneration();
-    restoreFeedback = null;
-    const outcome = await restoreAssets([assetId]);
-    const applied = isCurrent() && outcome.changedAssetIds.includes(assetId);
-    if (applied) restoreFeedback = restoreFeedbackFor(outcome, 1);
-    return { outcome, applied };
+    return runSingleWrite(
+      "Restore",
+      assetId,
+      options.restore,
+      (value) => { restoreFeedback = value; },
+      (outcome) => restoreFeedbackFor(outcome, 1),
+    );
   }
 
-  /** Archives or unarchives one Remote Asset (from the Lightbox). Its feedback is kept only when the change was applied to the current timeline. */
+  /** Archives or unarchives one Remote Asset (from the Lightbox). The Lightbox reports its own single-asset message while open. */
   async function archiveOne(action: ArchiveAction, assetId: string) {
-    const change = options[action];
-    if (!change) throw new Error(`This timeline offers no ${action === "archive" ? "Archive" : "Unarchive"}.`);
-    const isCurrent = currentGeneration();
-    archiveFeedback = null;
-    const outcome = await change([assetId]);
-    if (isCurrent() && outcome.changedAssetIds.includes(assetId)) archiveFeedback = { action, feedback: archiveFeedbackFor(outcome, 1) };
+    const { outcome } = await runSingleWrite(
+      action === "archive" ? "Archive" : "Unarchive",
+      assetId,
+      options[action],
+      (value) => { archiveFeedback = value; },
+      null,
+    );
     return outcome;
   }
 

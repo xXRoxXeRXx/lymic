@@ -255,14 +255,17 @@ describe('i18n catalogs', () => {
     expect(de.trash_restore).toBe('Wiederherstellen');
   });
 
-  it('translates the Archive Timeline Unarchive strings in every locale with their placeholders', () => {
+  it.each([
+    ['Archive Timeline Unarchive', 'archive_unarchive', 'Unarchive', 'Dearchivieren'],
+    ['Photo and Favorites Timeline Archive', 'archive_archive', 'Archive', 'Archivieren'],
+  ] as const)('translates the %s strings in every locale with their placeholders', (_label, prefix, englishButton, germanButton) => {
     const placeholders: Record<string, string[]> = {
-      archive_unarchive: [],
-      archive_unarchive_success: ['{count}'],
-      archive_unarchive_partial: ['{failed}', '{count}'],
-      archive_unarchive_none: ['{failed}', '{count}'],
-      archive_unarchive_failed: [],
-      archive_unarchive_permission: [],
+      [prefix]: [],
+      [`${prefix}_success`]: ['{count}'],
+      [`${prefix}_partial`]: ['{failed}', '{count}'],
+      [`${prefix}_none`]: ['{failed}', '{count}'],
+      [`${prefix}_failed`]: [],
+      [`${prefix}_permission`]: [],
     };
     for (const [localeCode, translations] of Object.entries(catalog)) {
       for (const [key, expected] of Object.entries(placeholders)) {
@@ -270,11 +273,11 @@ describe('i18n catalogs', () => {
         expect(value, `Locale ${localeCode} is missing ${key}`).toBeTruthy();
         for (const placeholder of expected) expect(value, `${localeCode}.${key}`).toContain(placeholder);
       }
-      // A refused Unarchive names the permission to grant, never a credential.
-      expect((translations as Record<string, string>).archive_unarchive_permission, localeCode).toContain('asset.update');
+      // A refused Archive or Unarchive names the permission to grant, never a credential.
+      expect((translations as Record<string, string>)[`${prefix}_permission`], localeCode).toContain('asset.update');
     }
-    expect(en.archive_unarchive).toBe('Unarchive');
-    expect(de.archive_unarchive).toBe('Dearchivieren');
+    expect(en[prefix]).toBe(englishButton);
+    expect(de[prefix]).toBe(germanButton);
   });
 
   it('translates the Lightbox Archive and Unarchive messages for views that keep the asset in the list in every locale', () => {
@@ -291,28 +294,6 @@ describe('i18n catalogs', () => {
     expect(en.archive_archive_stays).toBe('Archived. It stays in this list.');
     expect(en.archive_unarchive_stays).toBe('Unarchived. It stays in this list.');
     expect(de.archive_archive_stays).toBe('Archiviert. Es bleibt in dieser Liste.');
-  });
-
-  it('translates the Photo and Favorites Timeline Archive strings in every locale with their placeholders', () => {
-    const placeholders: Record<string, string[]> = {
-      archive_archive: [],
-      archive_archive_success: ['{count}'],
-      archive_archive_partial: ['{failed}', '{count}'],
-      archive_archive_none: ['{failed}', '{count}'],
-      archive_archive_failed: [],
-      archive_archive_permission: [],
-    };
-    for (const [localeCode, translations] of Object.entries(catalog)) {
-      for (const [key, expected] of Object.entries(placeholders)) {
-        const value = (translations as Record<string, string>)[key];
-        expect(value, `Locale ${localeCode} is missing ${key}`).toBeTruthy();
-        for (const placeholder of expected) expect(value, `${localeCode}.${key}`).toContain(placeholder);
-      }
-      // A refused Archive names the permission to grant, never a credential.
-      expect((translations as Record<string, string>).archive_archive_permission, localeCode).toContain('asset.update');
-    }
-    expect(en.archive_archive).toBe('Archive');
-    expect(de.archive_archive).toBe('Archivieren');
   });
 
   it('uses consistent timeline and video terminology in favorites strings', () => {

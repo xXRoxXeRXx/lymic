@@ -132,6 +132,7 @@
     get assetsStayInView() { return offeredArchiveMode === "by-visibility"; },
     // A hidden asset (a Live Photo's video) is not archivable: Immich would accept it and make it a standalone asset (#287).
     isArchivable: (assetId) => lightboxAssets.find((asset) => asset.id === assetId)?.visibility !== "hidden",
+    onChanged: (assetId, visibility) => assetActions.reflectVisibility(assetId, visibility),
     onRemoved: (assetId) => selection.forget(assetId),
   });
   const offeredArchiveMode = $derived(setAssetsVisibility ? archiveMode : undefined);

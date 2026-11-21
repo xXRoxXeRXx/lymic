@@ -7,25 +7,28 @@ function setup(
   extra: { assetsStayInView?: boolean; isArchivable?: (assetId: string) => boolean } = {},
 ) {
   const removeAsset = vi.fn();
+  const onChanged = vi.fn();
   const onRemoved = vi.fn();
   const archive = createRemoteAssetArchive({
     timeline: { removeAsset } as unknown as TimelineController,
     setAssetsVisibility,
+    onChanged,
     onRemoved,
     ...extra,
   });
-  return { archive, removeAsset, onRemoved };
+  return { archive, removeAsset, onChanged, onRemoved };
 }
 
 describe("Unarchive", () => {
   it("writes the timeline visibility and removes the unarchived assets from the view", async () => {
     const setAssetsVisibility = vi.fn(async (assetIds: string[]) => ({ changedAssetIds: assetIds }));
-    const { archive, removeAsset, onRemoved } = setup(setAssetsVisibility);
+    const { archive, removeAsset, onChanged, onRemoved } = setup(setAssetsVisibility);
 
     const outcome = await archive.apply("unarchive", ["a", "b"]);
 
     expect(setAssetsVisibility).toHaveBeenCalledWith(["a", "b"], "timeline");
     expect(outcome).toEqual({ changedAssetIds: ["a", "b"], failedAssetIds: [], failure: null });
+    expect(onChanged.mock.calls).toEqual([["a", "timeline"], ["b", "timeline"]]);
     expect(removeAsset.mock.calls).toEqual([["a"], ["b"]]);
     expect(onRemoved.mock.calls).toEqual([["a"], ["b"]]);
   });
@@ -77,12 +80,13 @@ describe("Archive", () => {
 describe("Archive in a view that shows archived and other assets together", () => {
   it("keeps the archived assets in the view and reports them as changed, including ones that were already archived", async () => {
     const setAssetsVisibility = vi.fn(async (assetIds: string[]) => ({ changedAssetIds: assetIds }));
-    const { archive, removeAsset, onRemoved } = setup(setAssetsVisibility, { assetsStayInView: true });
+    const { archive, removeAsset, onChanged, onRemoved } = setup(setAssetsVisibility, { assetsStayInView: true });
 
     const outcome = await archive.apply("archive", ["a", "already-archived"]);
 
     expect(setAssetsVisibility).toHaveBeenCalledWith(["a", "already-archived"], "archive");
     expect(outcome).toEqual({ changedAssetIds: ["a", "already-archived"], failedAssetIds: [], failure: null });
+    expect(onChanged.mock.calls).toEqual([["a", "archive"], ["already-archived", "archive"]]);
     expect(removeAsset).not.toHaveBeenCalled();
     expect(onRemoved).not.toHaveBeenCalled();
   });

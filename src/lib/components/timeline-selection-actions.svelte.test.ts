@@ -405,7 +405,7 @@ describe("selection unarchive", () => {
     expect(selection.busyAction).toBeNull();
   });
 
-  it("archives a single asset with the archive callback and reports it as an Archive", async () => {
+  it("archives a single asset with the archive callback outside the selection feedback", async () => {
     const archive = vi.fn(async (ids: string[]) => outcome(ids, []));
     const unarchive = vi.fn(async (ids: string[]) => outcome(ids, []));
     const selection = createSelection({ archive, unarchive });
@@ -416,11 +416,11 @@ describe("selection unarchive", () => {
     expect(unarchive).not.toHaveBeenCalled();
     expect(result.changedAssetIds).toEqual(["a"]);
     expect(selection.busyAction).toBeNull();
-    expect(selection.archiveFeedback).toEqual({ action: "archive", feedback: { kind: "success", count: 1 } });
+    expect(selection.archiveFeedback).toBeNull();
     await expect(createSelection({ unarchive }).archiveOne("archive", "a")).rejects.toThrow("This timeline offers no Archive.");
   });
 
-  it("unarchives a single asset outside the busy state and keeps its feedback only while the timeline is the same", async () => {
+  it("unarchives a single asset outside the busy state and leaves the selection feedback untouched", async () => {
     const unarchive = vi.fn(async (ids: string[]) => outcome(ids, []));
     const selection = createSelection({ unarchive });
 
@@ -429,15 +429,7 @@ describe("selection unarchive", () => {
     expect(unarchive).toHaveBeenCalledWith(["a"]);
     expect(result.changedAssetIds).toEqual(["a"]);
     expect(selection.busyAction).toBeNull();
-    expect(selection.archiveFeedback).toEqual({ action: "unarchive", feedback: { kind: "success", count: 1 } });
-
-    const pending = deferred<ReturnType<typeof outcome>>();
-    const stale = createSelection({ unarchive: () => pending.promise });
-    const running = stale.archiveOne("unarchive", "a");
-    stale.reset();
-    pending.resolve(outcome(["a"], []));
-    await running;
-    expect(stale.archiveFeedback).toBeNull();
+    expect(selection.archiveFeedback).toBeNull();
 
     const failing = createSelection({ unarchive: async () => outcome([], ["a"]) });
     await failing.archiveOne("unarchive", "a");

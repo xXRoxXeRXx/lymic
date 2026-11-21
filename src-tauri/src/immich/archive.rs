@@ -6,7 +6,6 @@ use super::response::request_failure_code;
 use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashSet;
 
 /// The only visibilities Lymic writes. `locked` and `hidden` cannot be expressed, so they can never be sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,10 +40,9 @@ impl ImmichClient {
     /// only, see the Application Map): one unknown or unowned ID fails the whole request with 400 and
     /// changes nothing, and an asset already in the target state is harmless. A 2xx bulk answer is
     /// therefore trusted for the whole selection, and a 400 makes each asset be updated on its own with
-    /// `PUT assets/{id}` and `{"visibility": ...}` (2xx means changed, 400 means that asset failed), so a
-    /// stale ID cannot block the others. The per-asset request is the Favorite endpoint with the
-    /// `visibility` field and was not itself observed. A single asset is never requested twice.
-    /// The server also accepts `hidden` and `locked`; only `AssetVisibility` keeps Lymic from sending them.
+    /// the same verified `PUT assets` endpoint and a single-element `ids` array (2xx means changed, 400
+    /// means that asset failed), so a stale ID cannot block the others. A single asset is never requested
+    /// twice. The server also accepts `hidden` and `locked`; only `AssetVisibility` keeps Lymic from sending them.
     ///
     /// Failures abort the whole call with a credential-free code: `archive_authentication_required`
     /// (401), `archive_permission_denied:asset.update` (403) and `archive_unavailable` otherwise
@@ -54,75 +52,35 @@ impl ImmichClient {
         asset_ids: &[RemoteAssetId],
         visibility: AssetVisibility,
     ) -> Result<AssetVisibilityResult, String> {
-        if asset_ids.is_empty() {
-            return Ok(AssetVisibilityResult {
-                changed_asset_ids: Vec::new(),
-            });
-        }
-        for asset_id in asset_ids {
-            Self::validate_path_segment(asset_id.as_str(), "asset ID")?;
-        }
-        let unique: HashSet<&str> = asset_ids.iter().map(|id| id.as_str()).collect();
-        if unique.len() != asset_ids.len() {
-            return Err("Asset IDs for visibility must be unique".to_string());
-        }
-
-        if matches!(
-            self.put_visibility_bulk(asset_ids, visibility).await?,
-            VisibilityCall::Applied
-        ) {
-            return Ok(AssetVisibilityResult {
-                changed_asset_ids: asset_ids.iter().map(|id| id.as_str().to_string()).collect(),
-            });
-        }
-        if asset_ids.len() == 1 {
-            // The batch already was the individual request.
-            return Ok(AssetVisibilityResult {
-                changed_asset_ids: Vec::new(),
-            });
-        }
-
-        let mut changed_asset_ids = Vec::new();
-        for asset_id in asset_ids {
-            let outcome = self.put_visibility_single(asset_id, visibility).await?;
-            if matches!(outcome, VisibilityCall::Applied) {
-                changed_asset_ids.push(asset_id.as_str().to_string());
-            }
-        }
+        let changed_asset_ids = Self::run_bulk_with_per_asset_fallback(
+            asset_ids,
+            "Asset IDs for visibility must be unique",
+            |ids| async move {
+                Ok(matches!(
+                    self.put_visibility(ids, visibility).await?,
+                    VisibilityCall::Applied
+                ))
+            },
+            |asset_id| async move {
+                Ok(matches!(
+                    self.put_visibility(std::slice::from_ref(asset_id), visibility)
+                        .await?,
+                    VisibilityCall::Applied
+                ))
+            },
+        )
+        .await?;
         Ok(AssetVisibilityResult { changed_asset_ids })
     }
 
-    /// The bulk call: `PUT assets` for the whole selection.
-    async fn put_visibility_bulk(
+    async fn put_visibility(
         &self,
         asset_ids: &[RemoteAssetId],
         visibility: AssetVisibility,
     ) -> Result<VisibilityCall, String> {
-        self.send_visibility(
-            self.request(Method::PUT, "assets")
-                .json(&json!({ "ids": asset_ids, "visibility": visibility })),
-        )
-        .await
-    }
-
-    /// The per-asset call: `PUT assets/{id}`. The ID was validated as a path segment.
-    async fn put_visibility_single(
-        &self,
-        asset_id: &RemoteAssetId,
-        visibility: AssetVisibility,
-    ) -> Result<VisibilityCall, String> {
-        self.send_visibility(
-            self.request(Method::PUT, &format!("assets/{}", asset_id.as_str()))
-                .json(&json!({ "visibility": visibility })),
-        )
-        .await
-    }
-
-    async fn send_visibility(
-        &self,
-        request: reqwest::RequestBuilder,
-    ) -> Result<VisibilityCall, String> {
-        let response = request
+        let response = self
+            .request(Method::PUT, "assets")
+            .json(&json!({ "ids": asset_ids, "visibility": visibility }))
             .send()
             .await
             .map_err(|_| "archive_unavailable".to_string())?;
@@ -236,8 +194,8 @@ mod tests {
         assert!(requests[0]
             .ends_with(r#"{"ids":["asset-1","gone-2","asset-3"],"visibility":"timeline"}"#));
         for (request, id) in requests[1..].iter().zip(["asset-1", "gone-2", "asset-3"]) {
-            assert!(request.starts_with(&format!("PUT /api/assets/{id} HTTP/1.1")));
-            assert!(request.ends_with(r#"{"visibility":"timeline"}"#));
+            assert!(request.starts_with("PUT /api/assets HTTP/1.1"));
+            assert!(request.ends_with(&format!(r#"{{"ids":["{id}"],"visibility":"timeline"}}"#)));
         }
     }
 
@@ -248,7 +206,7 @@ mod tests {
                 "400 Bad Request",
                 r#"{"message":"Not found or no asset.update access"}"#,
             ),
-            ("200 OK", r#"{"id":"asset-1"}"#),
+            ("204 No Content", ""),
             (
                 "400 Bad Request",
                 r#"{"message":"Not found or no asset.update access"}"#,
@@ -266,8 +224,8 @@ mod tests {
         assert_eq!(requests.len(), 3);
         assert!(requests[0].ends_with(r#"{"ids":["asset-1","gone-2"],"visibility":"archive"}"#));
         for (request, id) in requests[1..].iter().zip(["asset-1", "gone-2"]) {
-            assert!(request.starts_with(&format!("PUT /api/assets/{id} HTTP/1.1")));
-            assert!(request.ends_with(r#"{"visibility":"archive"}"#));
+            assert!(request.starts_with("PUT /api/assets HTTP/1.1"));
+            assert!(request.ends_with(&format!(r#"{{"ids":["{id}"],"visibility":"archive"}}"#)));
         }
     }
 
