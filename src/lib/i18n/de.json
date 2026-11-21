@@ -92,6 +92,8 @@
   "virtual_library_subtitle": "Deine Immich-Bibliothek als schreibgeschützte Ordner im Windows-Explorer anzeigen.",
   "virtual_library_enable": "Virtuelle Bibliothek aktivieren",
   "virtual_library_disable": "Virtuelle Bibliothek deaktivieren",
+  "virtual_library_folder": "Ordner",
+  "virtual_library_change_folder": "Ordner ändern",
   "language": "Sprache",
   "language_subtitle": "Wähle deine bevorzugte Sprache.",
   "appearance": "Darstellung",

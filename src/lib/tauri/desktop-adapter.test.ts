@@ -224,8 +224,8 @@ describe("tauriDesktopAdapter", () => {
   });
 
   it("reads and persists the Virtual Library settings and forwards the backend's change announcements", async () => {
-    const settings = { available: true, enabled: true };
-    invoke.mockResolvedValueOnce(settings).mockResolvedValueOnce(settings);
+    const settings = { available: true, enabled: true, root_folder: "C:\\Users\\Me\\Pictures\\Lymic" };
+    invoke.mockResolvedValueOnce(settings).mockResolvedValueOnce(settings).mockResolvedValueOnce(settings);
     listen.mockImplementationOnce(async (_event: string, handler: (event: { payload: unknown }) => void) => {
       handler({ payload: settings });
       return () => {};
@@ -234,10 +234,12 @@ describe("tauriDesktopAdapter", () => {
 
     await expect(virtualLibraryAdapter.getVirtualLibrarySettings()).resolves.toEqual(settings);
     await expect(virtualLibraryAdapter.setVirtualLibraryEnabled(true)).resolves.toEqual(settings);
+    await expect(virtualLibraryAdapter.setVirtualLibraryRootFolder("D:\\Photos")).resolves.toEqual(settings);
     await virtualLibraryAdapter.subscribeToVirtualLibrarySettings(listener);
 
     expect(invoke).toHaveBeenCalledWith("get_virtual_library_settings");
     expect(invoke).toHaveBeenCalledWith("set_virtual_library_enabled", { enabled: true });
+    expect(invoke).toHaveBeenCalledWith("set_virtual_library_root_folder", { path: "D:\\Photos" });
     expect(listen).toHaveBeenCalledWith("virtual-library-settings-changed", expect.any(Function));
     expect(listener).toHaveBeenCalledWith(settings);
   });

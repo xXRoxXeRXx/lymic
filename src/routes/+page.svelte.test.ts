@@ -1426,6 +1426,40 @@ describe("removable volume setup flow", () => {
     expect(setEnabled).toHaveBeenCalledWith({ enabled: true });
     expect(await screen.findByRole("button", { name: "Disable Virtual Library" })).toHaveAttribute("aria-pressed", "true");
   });
+
+  it("shows the Virtual Library folder and lets the user change it through the folder picker", async () => {
+    const setRoot = vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: "D:\\Photos\\Lymic" });
+    tauri.open.mockResolvedValueOnce("D:\\Photos\\Lymic");
+    renderAuthenticatedPage({
+      get_release_channel: () => Promise.resolve("store"),
+      get_virtual_library_settings: () => Promise.resolve({ available: true, enabled: false, root_folder: "C:\\Users\\Me\\Pictures\\Lymic" }),
+      set_virtual_library_root_folder: setRoot,
+    });
+    await openDashboard();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(await screen.findByText("C:\\Users\\Me\\Pictures\\Lymic")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Change folder" }));
+
+    expect(setRoot).toHaveBeenCalledWith({ path: "D:\\Photos\\Lymic" });
+    expect(await screen.findByText("D:\\Photos\\Lymic")).toBeInTheDocument();
+  });
+
+  it("tells the user which Watched Folder blocks enabling and keeps the Virtual Library off", async () => {
+    const refusal = "The Virtual Library cannot be enabled: the Watched Folder 'C:\\Users\\Me\\Pictures' contains the Virtual Library folder 'C:\\Users\\Me\\Pictures\\Lymic'.";
+    renderAuthenticatedPage({
+      get_release_channel: () => Promise.resolve("store"),
+      get_virtual_library_settings: () => Promise.resolve({ available: true, enabled: false, root_folder: "C:\\Users\\Me\\Pictures\\Lymic" }),
+      set_virtual_library_enabled: () => Promise.reject(refusal),
+    });
+    await openDashboard();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Enable Virtual Library" }));
+
+    expect(await screen.findByText(refusal)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enable Virtual Library" })).toHaveAttribute("aria-pressed", "false");
+  });
 });
 
 describe("watched folder setup flow with target album", () => {

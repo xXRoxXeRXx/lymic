@@ -92,6 +92,8 @@
   "virtual_library_subtitle": "Show your Immich library as read-only folders in Windows File Explorer.",
   "virtual_library_enable": "Enable Virtual Library",
   "virtual_library_disable": "Disable Virtual Library",
+  "virtual_library_folder": "Folder",
+  "virtual_library_change_folder": "Change folder",
   "language": "Language",
   "language_subtitle": "Choose your preferred language.",
   "appearance": "Appearance",

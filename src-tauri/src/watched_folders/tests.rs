@@ -102,9 +102,23 @@ impl RecordedEffects {
 #[derive(Clone, Default)]
 struct ConfiguredFolderPersistence {
     folder: Arc<Mutex<Option<WatchedFolder>>>,
+    virtual_library_root: Option<PathBuf>,
+}
+
+impl ConfiguredFolderPersistence {
+    fn with_virtual_library_root(root: &Path) -> Self {
+        Self {
+            virtual_library_root: Some(root.to_path_buf()),
+            ..Self::default()
+        }
+    }
 }
 
 impl FolderPersistence for ConfiguredFolderPersistence {
+    async fn virtual_library_root(&self) -> Result<Option<PathBuf>, String> {
+        Ok(self.virtual_library_root.clone())
+    }
+
     async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String> {
         Ok(self.folder.lock().unwrap().iter().cloned().collect())
     }
@@ -412,6 +426,97 @@ async fn rejects_duplicate_overlapping_and_non_directory_paths_while_admitting_s
     let folders = crate::db::get_folders(&pool).await.unwrap();
     assert_eq!(folders.len(), 2);
     assert!(folders[0].target_album_id.is_none());
+}
+
+#[tokio::test]
+async fn rejects_folders_inside_equal_to_or_above_the_virtual_library_root() {
+    let pool = test_pool().await;
+    let watcher = test_watcher();
+    let effects = RecordedEffects::default();
+    let pictures = TempDir::new("virtual-library-root");
+    let root = pictures.path().join("Lymic");
+    let inside = root.join("All Photos");
+    let sibling = pictures.path().join("Holiday");
+    std::fs::create_dir_all(&inside).unwrap();
+    std::fs::create_dir_all(&sibling).unwrap();
+    let persistence = ConfiguredFolderPersistence::with_virtual_library_root(&root);
+    let folders = WatchedFolders::new(
+        persistence.clone(),
+        NotifyFolderWatcher { watcher: &watcher },
+        test_sync_work(&pool),
+        &effects,
+    );
+
+    let inside_err = folders
+        .register(RegisterFolderParams::new(inside.to_string_lossy(), None))
+        .await
+        .unwrap_err();
+    assert!(
+        inside_err.contains("inside the Virtual Library folder"),
+        "{inside_err}"
+    );
+    assert!(
+        inside_err
+            .contains(&*crate::media::paths::canonicalize_folder_path(&root).to_string_lossy()),
+        "{inside_err}"
+    );
+
+    let equal_err = folders
+        .register(RegisterFolderParams::new(root.to_string_lossy(), None))
+        .await
+        .unwrap_err();
+    assert!(
+        equal_err.contains("is the Virtual Library folder"),
+        "{equal_err}"
+    );
+
+    let parent_err = folders
+        .register(RegisterFolderParams::new(
+            pictures.path().to_string_lossy(),
+            None,
+        ))
+        .await
+        .unwrap_err();
+    assert!(
+        parent_err.contains("contains the Virtual Library folder"),
+        "{parent_err}"
+    );
+
+    assert!(persistence.list_folders().await.unwrap().is_empty());
+    assert!(effects.triggered_syncs.lock().unwrap().is_empty());
+
+    folders
+        .register(RegisterFolderParams::new(sibling.to_string_lossy(), None))
+        .await
+        .unwrap();
+    assert_eq!(persistence.list_folders().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_folder_that_does_not_exist_yet_is_still_checked_against_the_virtual_library_root() {
+    let pool = test_pool().await;
+    let watcher = test_watcher();
+    let effects = RecordedEffects::default();
+    let pictures = TempDir::new("virtual-library-missing");
+    let root = pictures.path().join("Lymic");
+    let persistence = ConfiguredFolderPersistence::with_virtual_library_root(&root);
+    let folders = WatchedFolders::new(
+        persistence.clone(),
+        NotifyFolderWatcher { watcher: &watcher },
+        test_sync_work(&pool),
+        &effects,
+    );
+
+    let err = folders
+        .register(RegisterFolderParams::new(
+            root.join("Albums").to_string_lossy(),
+            None,
+        ))
+        .await
+        .unwrap_err();
+
+    assert!(err.contains("inside the Virtual Library folder"), "{err}");
+    assert!(persistence.list_folders().await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -1440,6 +1545,10 @@ async fn scan_failure_after_update_keeps_new_patterns_and_admits_nothing() {
 struct VanishingFolderPersistence(ConfiguredFolderPersistence);
 
 impl FolderPersistence for VanishingFolderPersistence {
+    async fn virtual_library_root(&self) -> Result<Option<PathBuf>, String> {
+        self.0.virtual_library_root().await
+    }
+
     async fn list_folders(&self) -> Result<Vec<WatchedFolder>, String> {
         Ok(Vec::new())
     }

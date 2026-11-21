@@ -203,7 +203,7 @@ describe('i18n catalogs', () => {
   });
 
   it('translates the Virtual Library settings strings in every locale', () => {
-    const keys = ['virtual_library', 'virtual_library_subtitle', 'virtual_library_enable', 'virtual_library_disable'];
+    const keys = ['virtual_library', 'virtual_library_subtitle', 'virtual_library_enable', 'virtual_library_disable', 'virtual_library_folder', 'virtual_library_change_folder'];
     for (const [localeCode, translations] of Object.entries(catalog)) {
       for (const key of keys) {
         expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
@@ -212,6 +212,8 @@ describe('i18n catalogs', () => {
     }
     expect(en.virtual_library).toBe('Virtual Library');
     expect(en.virtual_library_enable).toBe('Enable Virtual Library');
+    expect(en.virtual_library_folder).toBe('Folder');
+    expect(en.virtual_library_change_folder).toBe('Change folder');
     expect(de.virtual_library).toBe('Virtuelle Bibliothek');
   });
 

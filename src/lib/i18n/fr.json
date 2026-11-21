@@ -92,6 +92,8 @@
   "virtual_library_subtitle": "Afficher votre bibliothèque Immich sous forme de dossiers en lecture seule dans l'Explorateur de fichiers Windows.",
   "virtual_library_enable": "Activer la bibliothèque virtuelle",
   "virtual_library_disable": "Désactiver la bibliothèque virtuelle",
+  "virtual_library_folder": "Dossier",
+  "virtual_library_change_folder": "Changer de dossier",
   "language": "Langue",
   "language_subtitle": "Choisissez votre langue préférée.",
   "appearance": "Apparence",

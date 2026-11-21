@@ -606,6 +606,28 @@ describe("SettingsView", () => {
       await rerender({ isSavingVirtualLibrary: true });
       expect(screen.getByRole("button", { name: "Disable Virtual Library" })).toBeDisabled();
     });
+
+    it("shows the effective folder and lets the user change it", async () => {
+      const onChangeVirtualLibraryFolder = vi.fn();
+      const { rerender } = renderSettings({
+        isVirtualLibraryAvailable: true,
+        virtualLibraryRootFolder: "D:\\Fotos\\Lymic",
+        onChangeVirtualLibraryFolder,
+      });
+
+      expect(screen.getByText("D:\\Fotos\\Lymic")).toBeInTheDocument();
+      await fireEvent.click(screen.getByRole("button", { name: "Change folder" }));
+      expect(onChangeVirtualLibraryFolder).toHaveBeenCalledOnce();
+
+      await rerender({ isSavingVirtualLibrary: true });
+      expect(screen.getByRole("button", { name: "Change folder" })).toBeDisabled();
+    });
+
+    it("still offers a folder choice when the system could not name a default folder", () => {
+      renderSettings({ isVirtualLibraryAvailable: true, virtualLibraryRootFolder: null });
+
+      expect(screen.getByRole("button", { name: "Change folder" })).toBeEnabled();
+    });
   });
 });
 

@@ -5,16 +5,20 @@ import type { VirtualLibrarySettings } from "../contracts";
 
 function createDesktopAdapter(overrides: Partial<VirtualLibraryDesktopAdapter> = {}): VirtualLibraryDesktopAdapter {
   return {
-    getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: false, enabled: false }),
+    getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: false, enabled: false, root_folder: null }),
     setVirtualLibraryEnabled: vi.fn(),
+    setVirtualLibraryRootFolder: vi.fn(),
+    openFolderDialog: vi.fn(),
     subscribeToVirtualLibrarySettings: vi.fn().mockResolvedValue(() => {}),
     ...overrides,
   };
 }
 
 function createController(adapter: VirtualLibraryDesktopAdapter, reportError = vi.fn()) {
-  return { reportError, controller: createVirtualLibraryController({ reportError, adapter }) };
+  return { reportError, controller: createVirtualLibraryController({ reportError, adapter, t: (key) => key }) };
 }
+
+const ROOT = "C:\\Users\\Me\\Pictures\\Lymic";
 
 describe("virtual library controller", () => {
   it("is unavailable and disabled until the backend reports otherwise", () => {
@@ -36,7 +40,7 @@ describe("virtual library controller", () => {
   });
 
   it("offers the section and the persisted enabled state when the backend reports it available", async () => {
-    const adapter = createDesktopAdapter({ getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: true }) });
+    const adapter = createDesktopAdapter({ getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: true, root_folder: ROOT }) });
     const { controller } = createController(adapter);
 
     await controller.hydrate();
@@ -46,9 +50,9 @@ describe("virtual library controller", () => {
   });
 
   it("toggles the enabled state through the backend and adopts the state it returns", async () => {
-    const setVirtualLibraryEnabled = vi.fn().mockResolvedValue({ available: true, enabled: true });
+    const setVirtualLibraryEnabled = vi.fn().mockResolvedValue({ available: true, enabled: true, root_folder: ROOT });
     const adapter = createDesktopAdapter({
-      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false }),
+      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: ROOT }),
       setVirtualLibraryEnabled,
     });
     const { controller } = createController(adapter);
@@ -63,7 +67,7 @@ describe("virtual library controller", () => {
 
   it("keeps the previous state and reports the error when the backend refuses the change", async () => {
     const adapter = createDesktopAdapter({
-      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false }),
+      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: ROOT }),
       setVirtualLibraryEnabled: vi.fn().mockRejectedValue(new Error("Virtual Library is not available")),
     });
     const { controller, reportError } = createController(adapter);
@@ -74,6 +78,99 @@ describe("virtual library controller", () => {
     expect(controller.isEnabled).toBe(false);
     expect(controller.isSaving).toBe(false);
     expect(reportError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it("shows the effective folder the backend reports and none while unavailable", async () => {
+    const { controller } = createController(createDesktopAdapter());
+    expect(controller.rootFolder).toBeNull();
+
+    const available = createController(createDesktopAdapter({ getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: ROOT }) }));
+    await available.controller.hydrate();
+    expect(available.controller.rootFolder).toBe(ROOT);
+
+    const unresolved = createController(createDesktopAdapter({ getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: null }) }));
+    await unresolved.controller.hydrate();
+    expect(unresolved.controller.rootFolder).toBeNull();
+  });
+
+  it("changes the folder through the folder picker and adopts the folder the backend stored", async () => {
+    const chosen = "D:\\Photos\\Virtual";
+    const openFolderDialog = vi.fn().mockResolvedValue(chosen);
+    const setVirtualLibraryRootFolder = vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: chosen });
+    const adapter = createDesktopAdapter({
+      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: ROOT }),
+      openFolderDialog,
+      setVirtualLibraryRootFolder,
+    });
+    const { controller } = createController(adapter);
+    await controller.hydrate();
+
+    await controller.chooseRootFolder();
+
+    expect(openFolderDialog).toHaveBeenCalledWith({ directory: true, multiple: false, title: "select_folder" });
+    expect(setVirtualLibraryRootFolder).toHaveBeenCalledWith(chosen);
+    expect(controller.rootFolder).toBe(chosen);
+    expect(controller.isSaving).toBe(false);
+  });
+
+  it("leaves the folder alone when the picker is cancelled", async () => {
+    const setVirtualLibraryRootFolder = vi.fn();
+    const adapter = createDesktopAdapter({
+      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: ROOT }),
+      openFolderDialog: vi.fn().mockResolvedValue(null),
+      setVirtualLibraryRootFolder,
+    });
+    const { controller, reportError } = createController(adapter);
+    await controller.hydrate();
+
+    await controller.chooseRootFolder();
+
+    expect(setVirtualLibraryRootFolder).not.toHaveBeenCalled();
+    expect(controller.rootFolder).toBe(ROOT);
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it("keeps the folder and reports the backend's explanation when it refuses the chosen folder", async () => {
+    const refusal = "'D:\\Camera\\Lymic' cannot be the Virtual Library folder: the Watched Folder 'D:\\Camera' contains the Virtual Library folder.";
+    const adapter = createDesktopAdapter({
+      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: ROOT }),
+      openFolderDialog: vi.fn().mockResolvedValue("D:\\Camera\\Lymic"),
+      setVirtualLibraryRootFolder: vi.fn().mockRejectedValue(refusal),
+    });
+    const { controller, reportError } = createController(adapter);
+    await controller.hydrate();
+
+    await controller.chooseRootFolder();
+
+    expect(controller.rootFolder).toBe(ROOT);
+    expect(controller.isSaving).toBe(false);
+    expect(reportError).toHaveBeenCalledWith(refusal);
+  });
+
+  it("cannot change the folder while the Virtual Library is unavailable", async () => {
+    const openFolderDialog = vi.fn();
+    const { controller } = createController(createDesktopAdapter({ openFolderDialog }));
+    await controller.hydrate();
+
+    await controller.chooseRootFolder();
+
+    expect(openFolderDialog).not.toHaveBeenCalled();
+  });
+
+  it("stays disabled and reports the refusal naming the overlapping Watched Folder when enabling is refused", async () => {
+    const refusal = "The Virtual Library cannot be enabled: the Watched Folder 'C:\\Users\\Me\\Pictures' contains the Virtual Library folder '" + ROOT + "'.";
+    const adapter = createDesktopAdapter({
+      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: ROOT }),
+      setVirtualLibraryEnabled: vi.fn().mockRejectedValue(refusal),
+    });
+    const { controller, reportError } = createController(adapter);
+    await controller.hydrate();
+
+    await controller.toggle();
+
+    expect(controller.isEnabled).toBe(false);
+    expect(reportError).toHaveBeenCalledWith(refusal);
+    expect(reportError.mock.calls[0][0]).toContain("C:\\Users\\Me\\Pictures");
   });
 
   it("follows settings changes the backend announces until the lifecycle stops", async () => {
@@ -88,7 +185,7 @@ describe("virtual library controller", () => {
     const { controller } = createController(adapter);
 
     await controller.startLifecycle();
-    announce({ available: true, enabled: true });
+    announce({ available: true, enabled: true, root_folder: ROOT });
     expect(controller.isAvailable).toBe(true);
     expect(controller.isEnabled).toBe(true);
 

@@ -150,6 +150,7 @@ pub(crate) fn run() {
             crate::commands::settings::get_release_channel,
             crate::commands::virtual_library::get_virtual_library_settings,
             crate::commands::virtual_library::set_virtual_library_enabled,
+            crate::commands::virtual_library::set_virtual_library_root_folder,
         ])
         .on_window_event(tray::hide_on_close)
         .build(tauri::generate_context!())
@@ -250,6 +251,7 @@ mod tests {
             "get_release_channel",
             "get_virtual_library_settings",
             "set_virtual_library_enabled",
+            "set_virtual_library_root_folder",
         ] {
             assert!(
                 adapter.contains(&format!("\"{command}\"")),
