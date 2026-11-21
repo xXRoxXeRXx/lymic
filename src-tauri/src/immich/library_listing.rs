@@ -7,9 +7,11 @@
 use super::client::ImmichClient;
 use super::ids::RemoteAssetId;
 use super::response::{non_empty, read_response_body_limited, send_checked};
+use futures::{stream, StreamExt};
 use reqwest::Method;
 use serde::Deserialize;
 use serde_json::json;
+use std::collections::{BTreeSet, HashMap};
 
 const PAGE_SIZE: u64 = 1_000;
 /// 1000 items with EXIF exceed the default 1 MiB response cap.
@@ -26,7 +28,20 @@ pub(crate) struct LibraryAsset {
     pub file_created_at: Option<String>,
     pub file_modified_at: Option<String>,
     pub file_size: Option<u64>,
+    /// Immich's `livePhotoVideoId`: set on the still of a Live Photo, naming the separate video
+    /// asset (hidden from the timeline) that completes the pair.
+    pub live_photo_video_id: Option<RemoteAssetId>,
 }
+
+/// The video half of a Live Photo, as far as the projection needs it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LivePhotoVideo {
+    pub original_file_name: Option<String>,
+    pub file_size: Option<u64>,
+}
+
+/// How many Live Photo videos are looked up at once.
+const VIDEO_LOOKUP_CONCURRENCY: usize = 8;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +52,7 @@ struct SearchItem {
     file_created_at: Option<String>,
     file_modified_at: Option<String>,
     visibility: Option<String>,
+    live_photo_video_id: Option<String>,
     #[serde(default)]
     is_trashed: bool,
     exif_info: Option<ExifInfo>,
@@ -68,6 +84,33 @@ impl ImmichClient {
     /// make it appear in the Virtual Library.
     pub(crate) async fn list_photo_timeline_assets(&self) -> Result<Vec<LibraryAsset>, String> {
         self.search_library_assets(json!({ "visibility": "timeline" }))
+            .await
+    }
+
+    /// The video halves of the Live Photos among `assets`, by video id. Immich lists the video as
+    /// an asset of its own that no timeline search returns, so each one is looked up. A video
+    /// that cannot be looked up (deleted, or not readable) is left out, which leaves its still
+    /// to be projected alone rather than failing the whole listing.
+    pub(crate) async fn list_live_photo_videos(
+        &self,
+        assets: &[LibraryAsset],
+    ) -> HashMap<RemoteAssetId, LivePhotoVideo> {
+        let ids: BTreeSet<&RemoteAssetId> = assets
+            .iter()
+            .filter_map(|asset| asset.live_photo_video_id.as_ref())
+            .collect();
+        stream::iter(ids)
+            .map(|id| async move {
+                let details = self.get_asset_details(id.as_str()).await.ok()?;
+                let video = LivePhotoVideo {
+                    original_file_name: details.original_file_name,
+                    file_size: details.file_size,
+                };
+                Some((id.clone(), video))
+            })
+            .buffer_unordered(VIDEO_LOOKUP_CONCURRENCY)
+            .filter_map(|found| async move { found })
+            .collect()
             .await
     }
 
@@ -115,5 +158,6 @@ fn library_asset(item: SearchItem) -> Option<LibraryAsset> {
         file_created_at: non_empty(item.file_created_at),
         file_modified_at: non_empty(item.file_modified_at),
         file_size: item.exif_info.and_then(|exif| exif.file_size_in_byte),
+        live_photo_video_id: non_empty(item.live_photo_video_id).map(RemoteAssetId::new),
     })
 }
