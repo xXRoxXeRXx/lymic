@@ -59,6 +59,8 @@ export function createSessionController(options: {
   isExploreActive?(): boolean;
   /** Whether the Tags view is the open view; it reloads after Synchronization settles only then. */
   isTagsActive?(): boolean;
+  /** Whether the Virtual Library is on; logging out then names its cleanup in the confirmation. */
+  isVirtualLibraryEnabled?(): boolean;
 }) {
   const { adapter, t } = options;
   const feedback = createFeedbackController(() => t("unknown_error"));
@@ -128,6 +130,7 @@ export function createSessionController(options: {
     formatError: feedback.formatError,
     reportError: feedback.report,
     t: (key) => t(key),
+    virtualLibraryEnabled: () => options.isVirtualLibraryEnabled?.() ?? false,
     onLogin: async () => {
       clear();
       sync.startSubscriptions();

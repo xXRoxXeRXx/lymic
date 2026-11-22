@@ -460,5 +460,11 @@
   "log_virtual_library_start_failed": "无法启动虚拟图库：{error}",
   "virtual_library_nested_root": "此文件夹位于另一个云同步文件夹（例如 OneDrive）内或包含该文件夹，因此无法在此设置虚拟图库。请选择其他文件夹。",
   "virtual_library_start_failed": "无法启动虚拟图库：",
-  "virtual_library_disable_to_change_folder": "更改虚拟图库文件夹之前，请先停用虚拟图库。"
+  "virtual_library_disable_to_change_folder": "更改虚拟图库文件夹之前，请先停用虚拟图库。",
+  "virtual_library_disable_confirmation": "要禁用虚拟图库吗？",
+  "virtual_library_cleanup_warning": "Lymic 会移除虚拟图库的占位符，以及它下载到该文件夹中的所有原图，包括已下载的文件和你设为“始终保留在此设备上”的文件。文件夹中不是占位符且不是由 Lymic 创建的文件会连同其文件夹一起保留在原处。你在 Immich 中的照片不会受到影响。",
+  "virtual_library_cleanup_kept": "虚拟图库文件夹中有一些文件不是由 Lymic 创建的，因此已连同文件夹一起保留：",
+  "virtual_library_cleanup_failed_items": "无法移除以下项目。请先关闭再重新开启虚拟图库以重试：",
+  "virtual_library_cleanup_not_run": "无法移除虚拟图库的同步文件夹，因此没有删除任何文件：",
+  "virtual_library_cleanup_failed": "无法禁用虚拟图库，它仍保持开启："
 }

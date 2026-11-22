@@ -460,5 +460,11 @@
   "log_virtual_library_start_failed": "Die virtuelle Bibliothek konnte nicht gestartet werden: {error}",
   "virtual_library_nested_root": "Dieser Ordner liegt in einem anderen Cloud-Synchronisierungsordner (zum Beispiel OneDrive) oder enthält einen, daher kann die virtuelle Bibliothek dort nicht eingerichtet werden. Wähle einen anderen Ordner.",
   "virtual_library_start_failed": "Die virtuelle Bibliothek konnte nicht gestartet werden:",
-  "virtual_library_disable_to_change_folder": "Deaktiviere die virtuelle Bibliothek, bevor du ihren Ordner änderst."
+  "virtual_library_disable_to_change_folder": "Deaktiviere die virtuelle Bibliothek, bevor du ihren Ordner änderst.",
+  "virtual_library_disable_confirmation": "Virtuelle Bibliothek deaktivieren?",
+  "virtual_library_cleanup_warning": "Lymic entfernt die Platzhalter der virtuellen Bibliothek und jedes Original, das in den Ordner heruntergeladen wurde, einschließlich heruntergeladener Dateien und Dateien, die du auf diesem Gerät immer behalten wolltest. Dateien im Ordner, die keine Platzhalter sind und nicht von Lymic erstellt wurden, bleiben samt ihrem Ordner erhalten. Deine Fotos in Immich bleiben unberührt.",
+  "virtual_library_cleanup_kept": "Einige Dateien im Ordner der virtuellen Bibliothek wurden nicht von Lymic erstellt und blieben deshalb samt ihrem Ordner erhalten:",
+  "virtual_library_cleanup_failed_items": "Diese Elemente konnten nicht entfernt werden. Schalte die virtuelle Bibliothek aus und wieder ein, um es noch einmal zu versuchen:",
+  "virtual_library_cleanup_not_run": "Der Synchronisierungsordner der virtuellen Bibliothek konnte nicht entfernt werden, daher wurden keine Dateien gelöscht:",
+  "virtual_library_cleanup_failed": "Die virtuelle Bibliothek konnte nicht deaktiviert werden und bleibt eingeschaltet:"
 }

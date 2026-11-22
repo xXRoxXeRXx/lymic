@@ -200,6 +200,64 @@ describe("auth controller", () => {
     expect(controller.profileImage).toBe("data:image/jpeg;base64,bmV3SW1hZ2U=");
   });
 
+  it("asks only the plain logout question while the Virtual Library is off or unavailable", async () => {
+    const adapter = createDesktopAdapter();
+    adapter.confirm = vi.fn().mockResolvedValue(true);
+    const controller = createAuthController({
+      formatError: String,
+      onLogin: vi.fn(),
+      onLogout: vi.fn(),
+      reportError: vi.fn(),
+      t: (key) => key,
+      adapter,
+      virtualLibraryEnabled: () => false,
+    });
+
+    await controller.logout();
+
+    expect(adapter.confirm).toHaveBeenCalledWith("logout_confirmation", { title: "logout", kind: "warning" });
+  });
+
+  it("names that the Virtual Library cleanup removes hydrated and pinned originals when logging out while it is on", async () => {
+    const adapter = createDesktopAdapter();
+    adapter.confirm = vi.fn().mockResolvedValue(true);
+    const controller = createAuthController({
+      formatError: String,
+      onLogin: vi.fn(),
+      onLogout: vi.fn(),
+      reportError: vi.fn(),
+      t: (key) => key,
+      adapter,
+      virtualLibraryEnabled: () => true,
+    });
+
+    await controller.logout();
+
+    expect(adapter.confirm).toHaveBeenCalledWith(
+      "logout_confirmation\n\nvirtual_library_cleanup_warning",
+      { title: "logout", kind: "warning" },
+    );
+    expect(adapter.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not log out or clean up when the confirmation naming the Virtual Library cleanup is declined", async () => {
+    const adapter = createDesktopAdapter();
+    adapter.confirm = vi.fn().mockResolvedValue(false);
+    const controller = createAuthController({
+      formatError: String,
+      onLogin: vi.fn(),
+      onLogout: vi.fn(),
+      reportError: vi.fn(),
+      t: (key) => key,
+      adapter,
+      virtualLibraryEnabled: () => true,
+    });
+
+    await controller.logout();
+
+    expect(adapter.logout).not.toHaveBeenCalled();
+  });
+
   it("clears profile image and display name on logout", async () => {
     const adapter = createDesktopAdapter({
       getAuthStatus: vi.fn().mockResolvedValue(true), getServerUrl: vi.fn().mockResolvedValue("https://immich.example"),

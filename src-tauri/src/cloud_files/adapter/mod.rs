@@ -12,6 +12,7 @@
 mod callbacks;
 mod probe;
 mod register;
+mod teardown;
 
 use super::activation::{self, ActivationError, SyncRootHost};
 use super::nested::{RegisteredRoot, SyncRootProbe};
@@ -41,6 +42,16 @@ pub(super) fn stop() {
     if let Some(connection) = connection {
         connection.disconnect();
     }
+}
+
+/// Disconnects, unregisters the sync root and removes what Lymic created in `root`
+/// (`cloud_files::cleanup`). Blocking work runs on a blocking thread.
+pub(super) async fn clean_up(
+    root: std::path::PathBuf,
+) -> Result<super::cleanup::CleanupReport, super::cleanup::CleanupError> {
+    tokio::task::spawn_blocking(move || super::cleanup::clean_up(&root, &teardown::WindowsCleanup))
+        .await
+        .map_err(|error| super::cleanup::CleanupError::Scan(error.to_string()))?
 }
 
 struct WindowsHost;

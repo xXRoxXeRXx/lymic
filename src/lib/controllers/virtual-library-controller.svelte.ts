@@ -1,4 +1,4 @@
-import type { VirtualLibrarySettings } from "../contracts";
+import type { VirtualLibraryCleanupReport, VirtualLibrarySettings } from "../contracts";
 import type { VirtualLibraryDesktopAdapter } from "../tauri/desktop-adapter";
 import { failureMessage } from "./request-failure";
 
@@ -11,6 +11,7 @@ const ERROR_CODES: Record<string, { key: string; detail: "path" | "reason" | "no
   VIRTUAL_LIBRARY_NESTED_SYNC_ROOT: { key: "virtual_library_nested_root", detail: "path" },
   VIRTUAL_LIBRARY_START_FAILED: { key: "virtual_library_start_failed", detail: "reason" },
   VIRTUAL_LIBRARY_DISABLE_TO_CHANGE_FOLDER: { key: "virtual_library_disable_to_change_folder", detail: "none" },
+  VIRTUAL_LIBRARY_CLEANUP_FAILED: { key: "virtual_library_cleanup_failed", detail: "reason" },
 };
 
 /**
@@ -26,6 +27,12 @@ const ERROR_CODES: Record<string, { key: string; detail: "path" | "reason" | "no
  * and autostart is off the controller offers a hint. The autostart state belongs to the preferences
  * controller and is read lazily through `autostartEnabled`; `null` means it is not known yet, which
  * must never flash the hint.
+ *
+ * Disabling removes what the Virtual Library created, including hydrated and pinned originals
+ * (ADR-0003, #283), so it asks first: the confirmation names that and says that files Lymic did not
+ * create stay with their folder. Logout asks the same through the auth controller. After either
+ * cleanup the backend announces what it left (files that are not Lymic's, items it could not
+ * remove) and the controller tells the user with a native notice; a clean cleanup is silent.
  */
 export function createVirtualLibraryController(options: {
   reportError(error: unknown): void;
@@ -39,6 +46,7 @@ export function createVirtualLibraryController(options: {
   let rootFolder = $state<string | null>(null);
   let isSaving = $state(false);
   let unlisten: (() => void) | undefined;
+  let unlistenCleanup: (() => void) | undefined;
   let stopped = true;
 
   /** The localized error for a coded backend error; anything else is returned as it came. */
@@ -69,10 +77,49 @@ export function createVirtualLibraryController(options: {
     }
   }
 
+  /** The text of the notice for a cleanup that left something, or null when there is nothing to say. */
+  function cleanupNotice(report: VirtualLibraryCleanupReport): string | null {
+    const paragraphs: string[] = [];
+    if (report.error) {
+      const reason = report.error.replace(/^[A-Z_]+:\s*/, "");
+      paragraphs.push(`${options.t("virtual_library_cleanup_not_run")} ${reason}`.trim());
+    }
+    if (report.kept_count > 0 || report.root_kept) {
+      const lines = [`${options.t("virtual_library_cleanup_kept")} ${report.root_folder}`];
+      lines.push(...report.kept_examples);
+      if (report.kept_count > report.kept_examples.length) lines.push(`… (${report.kept_count})`);
+      paragraphs.push(lines.join("\n"));
+    }
+    if (report.failed_count > 0) {
+      const lines = [options.t("virtual_library_cleanup_failed_items"), ...report.failed_examples];
+      if (report.failed_count > report.failed_examples.length) lines.push(`… (${report.failed_count})`);
+      paragraphs.push(lines.join("\n"));
+    }
+    return paragraphs.length > 0 ? paragraphs.join("\n\n") : null;
+  }
+
+  async function announceCleanup(report: VirtualLibraryCleanupReport) {
+    const text = cleanupNotice(report);
+    if (!text) return;
+    try {
+      await adapter.notify(text, { title: options.t("virtual_library"), kind: "warning" });
+    } catch (error) {
+      console.error("Failed to show the Virtual Library cleanup notice", error);
+      options.reportError(text);
+    }
+  }
+
   async function toggle() {
     if (!isAvailable || isSaving) return;
     isSaving = true;
     try {
+      if (isEnabled) {
+        const confirmed = await adapter.confirm(
+          `${options.t("virtual_library_disable_confirmation")}\n\n${options.t("virtual_library_cleanup_warning")}`,
+          { title: options.t("virtual_library"), kind: "warning" },
+        );
+        if (!confirmed) return;
+      }
       apply(await adapter.setVirtualLibraryEnabled(!isEnabled));
     } catch (error) {
       options.reportError(localized(error));
@@ -109,12 +156,21 @@ export function createVirtualLibraryController(options: {
     } catch (error) {
       console.error("Failed to subscribe to Virtual Library settings", error);
     }
+    try {
+      const release = await adapter.subscribeToVirtualLibraryCleanup((report) => void announceCleanup(report));
+      if (stopped) release?.();
+      else unlistenCleanup = release;
+    } catch (error) {
+      console.error("Failed to subscribe to Virtual Library cleanup reports", error);
+    }
   }
 
   function stopLifecycle() {
     stopped = true;
     unlisten?.();
     unlisten = undefined;
+    unlistenCleanup?.();
+    unlistenCleanup = undefined;
   }
 
   return {

@@ -11,6 +11,11 @@ export function createAuthController(options: {
   reportError: (error: unknown) => void;
   t: (key: string) => string;
   adapter: AuthDesktopAdapter;
+  /**
+   * Whether the Virtual Library is on. Logging out cleans it up (removing its hydrated and pinned
+   * originals, #283), so the confirmation then says so. Read when the question is asked.
+   */
+  virtualLibraryEnabled?: () => boolean;
 }) {
   const { adapter } = options;
   let isAuthenticated = $state(false);
@@ -123,7 +128,10 @@ export function createAuthController(options: {
 
   async function logout() {
     const confirmationGeneration = generation;
-    const shouldLogout = await adapter.confirm(options.t("logout_confirmation"), {
+    const question = options.virtualLibraryEnabled?.()
+      ? `${options.t("logout_confirmation")}\n\n${options.t("virtual_library_cleanup_warning")}`
+      : options.t("logout_confirmation");
+    const shouldLogout = await adapter.confirm(question, {
       title: options.t("logout"),
       kind: "warning",
     });
