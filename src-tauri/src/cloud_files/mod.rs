@@ -13,21 +13,30 @@
 //! on app start while it is enabled. [`SystemSyncRoot::clean_up`] (disabling, logout; `cleanup`,
 //! #283) stops serving, unregisters the sync root and removes what Lymic created.
 //!
-//! Hooks for the follow-up tickets: #280 compares what `population::populate` plans with the directories
-//! already populated; #281 refines `failure::Failure::status`, retries and the in-app notice.
+//! Reconciliation (#280) keeps populated directories current: `reconcile` diffs what
+//! `population::populate` plans (`diff`) against the directories on disk, `refresh` decides when it
+//! runs and keeps runs from overlapping, `reconciliation` wires it to the app.
+//!
+//! Hooks for the follow-up tickets: #281 refines `failure::Failure::status`, retries and the in-app
+//! notice.
 
 // Outside Windows only the tests use most of this module.
 #![cfg_attr(not(windows), allow(dead_code))]
 
 mod activation;
 mod cleanup;
+mod diff;
 mod failure;
 mod hydration;
 mod identity;
 mod library;
 mod nested;
+mod own_removals;
 mod placeholder;
 mod population;
+mod reconcile;
+mod reconciliation;
+mod refresh;
 mod write_guard;
 
 #[cfg(windows)]
@@ -41,6 +50,7 @@ pub(crate) use cleanup::CLEANUP_FAILED_ERROR;
 pub(crate) use cleanup::{CleanupError, CleanupReport};
 #[cfg(test)]
 pub(crate) use nested::{NestedRoot, Relation as NestedRelation};
+pub(crate) use reconciliation::{mark_populated, run_schedule, LibraryRefresh, SystemRefresh};
 
 use std::path::PathBuf;
 

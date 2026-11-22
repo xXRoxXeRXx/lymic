@@ -623,6 +623,24 @@ describe("SettingsView", () => {
       expect(screen.getByRole("button", { name: "Change folder" })).toBeDisabled();
     });
 
+    it("offers Refresh Library only while the Virtual Library is enabled and forwards a click", async () => {
+      const onRefreshVirtualLibrary = vi.fn();
+      const { rerender } = renderSettings({ isVirtualLibraryAvailable: true, isVirtualLibraryEnabled: false, onRefreshVirtualLibrary });
+      expect(screen.queryByRole("button", { name: "Refresh Library" })).toBeNull();
+
+      await rerender({ isVirtualLibraryEnabled: true });
+      await fireEvent.click(screen.getByRole("button", { name: "Refresh Library" }));
+      expect(onRefreshVirtualLibrary).toHaveBeenCalledOnce();
+    });
+
+    it("shows that a refresh is running and blocks a second press", async () => {
+      const { rerender } = renderSettings({ isVirtualLibraryAvailable: true, isVirtualLibraryEnabled: true, isVirtualLibraryRefreshing: false });
+      expect(screen.getByRole("button", { name: "Refresh Library" })).toBeEnabled();
+
+      await rerender({ isVirtualLibraryRefreshing: true });
+      expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    });
+
     it("shows the autostart hint only when asked to", async () => {
       const hint = "Photos you have not opened yet only work while Lymic is running. Turn on autostart so Lymic starts with Windows.";
       const { rerender } = renderSettings({ isVirtualLibraryAvailable: true, isVirtualLibraryEnabled: true, showVirtualLibraryAutostartHint: false });

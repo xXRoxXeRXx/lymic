@@ -1420,6 +1420,21 @@ describe("removable volume setup flow", () => {
     expect(await screen.findByRole("button", { name: "Disable Virtual Library" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("refreshes the Virtual Library from the settings once it is enabled", async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    renderAuthenticatedPage({
+      get_release_channel: () => Promise.resolve("store"),
+      get_virtual_library_settings: () => Promise.resolve({ available: true, enabled: true, root_folder: "D:/Photos/Lymic" }),
+      refresh_virtual_library: refresh,
+    });
+    await openDashboard();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Refresh Library" }));
+
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
   it("shows the Virtual Library folder and lets the user change it through the folder picker", async () => {
     const setRoot = vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: "D:\\Photos\\Lymic" });
     tauri.open.mockResolvedValueOnce("D:\\Photos\\Lymic");

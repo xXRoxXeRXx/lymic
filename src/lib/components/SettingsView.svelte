@@ -31,12 +31,14 @@
     isVirtualLibraryAvailable?: boolean;
     isVirtualLibraryEnabled?: boolean;
     isSavingVirtualLibrary?: boolean;
+    isVirtualLibraryRefreshing?: boolean;
     virtualLibraryRootFolder?: string | null;
     showVirtualLibraryAutostartHint?: boolean;
     locales: readonly LocaleCatalogEntry[];
     onToggleAutostart: () => void;
     onToggleVirtualLibrary?: () => void;
     onChangeVirtualLibraryFolder?: () => void;
+    onRefreshVirtualLibrary?: () => void;
     onLocaleChange: (locale: string) => void;
     onThemeChange: (preference: ThemePreference) => void;
     onUploadParallelismChange: (event: Event) => void;
@@ -57,12 +59,14 @@
     isVirtualLibraryAvailable = false,
     isVirtualLibraryEnabled = false,
     isSavingVirtualLibrary = false,
+    isVirtualLibraryRefreshing = false,
     virtualLibraryRootFolder = null,
     showVirtualLibraryAutostartHint = false,
     locales,
     onToggleAutostart,
     onToggleVirtualLibrary,
     onChangeVirtualLibraryFolder,
+    onRefreshVirtualLibrary,
     onLocaleChange,
     onThemeChange,
     onUploadParallelismChange,
@@ -302,6 +306,24 @@
           {$t('virtual_library_change_folder')}
         </button>
       </div>
+
+      {#if isVirtualLibraryEnabled}
+        <div class="settings-card flex items-center justify-between gap-4">
+          <div class="space-y-0.5 min-w-0">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm">{$t('virtual_library_refresh')}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-lg">{$t('virtual_library_refresh_description')}</p>
+          </div>
+
+          <button
+            type="button"
+            class="shrink-0 rounded-lg border border-slate-200 bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-slate-200 dark:hover:bg-zinc-700 cursor-pointer"
+            onclick={onRefreshVirtualLibrary}
+            disabled={isVirtualLibraryRefreshing}
+          >
+            {isVirtualLibraryRefreshing ? $t('virtual_library_refreshing') : $t('virtual_library_refresh')}
+          </button>
+        </div>
+      {/if}
     </section>
   {/if}
 
