@@ -69,10 +69,13 @@ windows-sys = { version = "0.59", features = [
 ] }
 
 # The Virtual Library Windows adapter (`cloud_files`, ADR-0003): the WinRT sync root registration and
-# the Cloud Filter API. Pinned to the version tauri already resolves so the lock file gains no second copy.
+# the Cloud Filter API, plus the WinRT StartupTask of a packaged (MSIX) run. windows-sys, above, has no
+# WinRT. Pinned to the version tauri already resolves so the lock file gains no second copy.
 [target.'cfg(windows)'.dependencies.windows]
 version = "=0.62.2"
 features = [
+    "ApplicationModel",
+    "ApplicationModel_Activation",
     "Foundation",
     "Foundation_Collections",
     "Security_Cryptography",

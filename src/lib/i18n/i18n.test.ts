@@ -203,7 +203,7 @@ describe('i18n catalogs', () => {
   });
 
   it('translates the Virtual Library settings strings in every locale', () => {
-    const keys = ['virtual_library', 'virtual_library_subtitle', 'virtual_library_enable', 'virtual_library_disable', 'virtual_library_folder', 'virtual_library_change_folder'];
+    const keys = ['virtual_library', 'virtual_library_subtitle', 'virtual_library_enable', 'virtual_library_disable', 'virtual_library_folder', 'virtual_library_change_folder', 'virtual_library_autostart_hint'];
     for (const [localeCode, translations] of Object.entries(catalog)) {
       for (const key of keys) {
         expect(translations, `Locale ${localeCode} is missing ${key}`).toHaveProperty(key);
@@ -215,6 +215,7 @@ describe('i18n catalogs', () => {
     expect(en.virtual_library_folder).toBe('Folder');
     expect(en.virtual_library_change_folder).toBe('Change folder');
     expect(de.virtual_library).toBe('Virtuelle Bibliothek');
+    expect(en.virtual_library_autostart_hint).toBe('Photos you have not opened yet only work while Lymic is running. Turn on autostart so Lymic starts with Windows.');
   });
 
   it('translates the Archive Timeline strings in every locale', () => {

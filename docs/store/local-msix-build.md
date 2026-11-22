@@ -174,3 +174,24 @@ The Virtual Library settings gate (#272) decides availability at runtime and nev
 4. As a negative control, run `npm run tauri dev`, or start the raw `lymic-desktop.exe` from `target/release`. Neither has a package identity, so the "Virtual Library" section must be absent even though the executable was built with `LYMIC_RELEASE_CHANNEL=store`.
 
 The acceptance criterion of ticket #274 (an identity in this local build, none in `tauri dev`) is **not yet verified**: the check exists, but it has not been run in a registered build. Run the steps above and record the result and the Windows version here.
+
+## Autostart inside the package (#284)
+
+**Finding.** Lymic's existing autostart (`tauri-plugin-autostart`, which writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`) is not expected to work with Package Identity. Microsoft documents that for a packaged desktop app "all writes under HKCU are copied on write to a private per-user, per-app location" ([Understanding how packaged desktop apps run on Windows, Registry](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes#registry)), while Explorer starts Run entries from the real hive. The documented mechanism for a packaged desktop app is a `windows.startupTask` extension in the manifest toggled through the `StartupTask` API ([StartupTask class](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask), [desktop:StartupTask](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-desktop-startuptask)).
+
+**What Lymic does.**
+
+- `src-tauri/msix/AppxManifest.template.xml` declares a `desktop:Extension Category="windows.startupTask"` with `TaskId="LymicStartup"` and `Enabled="false"` (off until the user turns it on). The template is shared with the Store package, so the Store package has the same declaration. `validate-msix.ps1` still passes (it checks identity, publisher, architecture and capabilities only).
+- The backend commands `get_autostart_enabled` and `set_autostart_enabled` (`src-tauri/src/commands/autostart.rs`) use the StartupTask when `has_package_identity()` is true and the login item otherwise (unpackaged runs, `tauri dev`, macOS, Linux). The frontend no longer knows about the mechanism.
+- A StartupTask launch carries no `--autostart` argument. It is recognised by its activation kind (`AppInstance::GetActivatedEventArgs`, `ActivationKind::StartupTask`) and starts hidden in the tray when credentials exist, like the login item does.
+- Windows may keep the task off after a request (`DisabledByUser` after the user turned it off in Settings or Task Manager, `DisabledByPolicy`). The toggle then reports an error that says where to turn it back on, instead of silently doing nothing.
+
+**Not verified.** None of the following was run, because the machine used for the implementation (Windows Server 2022) could not register a package. Verify them in a registered build (see the steps above) and record the Windows version and result here.
+
+1. `makeappx` accepts the manifest with the startup task. Packaging and `validate-msix.ps1` were run with a stand-in executable; registration was not.
+2. The toggle in Settings enables the task: after turning autostart on, **Task Manager, Startup apps** lists "Lymic" as Enabled, and **Settings, Apps, Startup** shows it.
+3. After signing out and in again, Lymic starts hidden in the tray (not with a window) when logged in to an Immich server, and with the window when there are no stored credentials. This depends on `AppInstance::GetActivatedEventArgs` reporting `ActivationKind::StartupTask` for a full-trust packaged process, which is documented for packaged apps but unproven here. If it does not, the failure is benign (the window is shown at sign-in) and the launch detection needs another signal.
+4. Turning the task off in Task Manager makes the Settings toggle show off after reopening Settings, and turning it on again in Lymic reports the "turn it back on in Windows Settings" error.
+5. The Run-key finding itself: in a registered build, the old mechanism would not start Lymic at sign-in. This is inferred from the Microsoft documentation above, not observed.
+6. WinRT calls from a Tauri blocking-pool thread (no explicit COM initialisation) work; the WinRT types used are agile, but this was not run inside a package. Outside a package, `StartupTask.GetAsync` fails with an error (observed in a unit test on the build machine, from a thread without COM initialisation, so the WinRT call path itself runs), which is why the packaged path is used only when Package Identity is present.
+7. Startup task launches within the Virtual Library: the in-app hint ("Photos you have not opened yet only work while Lymic is running") appears while the Virtual Library is on and autostart is off, and disappears when autostart is turned on.

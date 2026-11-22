@@ -94,6 +94,7 @@
   "virtual_library_disable": "تعطيل المكتبة الافتراضية",
   "virtual_library_folder": "المجلد",
   "virtual_library_change_folder": "تغيير المجلد",
+  "virtual_library_autostart_hint": "الصور التي لم تفتحها بعد تعمل فقط أثناء تشغيل Lymic. فعّل التشغيل التلقائي ليبدأ Lymic مع Windows.",
   "language": "اللغة",
   "language_subtitle": "اختر لغتك المفضلة.",
   "appearance": "المظهر",

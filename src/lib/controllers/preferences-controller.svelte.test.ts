@@ -57,4 +57,41 @@ describe("preferences controller", () => {
       },
     }));
   });
+
+  describe("autostart state", () => {
+    const createController = (adapter: PreferencesDesktopAdapter) =>
+      createPreferencesController({ reportError: vi.fn(), addLog: vi.fn(), locale: () => "en", setLocale: vi.fn(), adapter });
+
+    it("is unknown until the backend has reported it, so nothing can react to a guessed value", async () => {
+      const controller = createController(createDesktopAdapter({ isAutostartEnabled: vi.fn().mockResolvedValue(true) }));
+      expect(controller.autostartState).toBeNull();
+
+      await controller.hydrate();
+
+      expect(controller.autostartState).toBe(true);
+    });
+
+    it("stays unknown when the backend cannot read it", async () => {
+      const controller = createController(createDesktopAdapter({ isAutostartEnabled: vi.fn().mockRejectedValue(new Error("no access")) }));
+
+      await controller.hydrate();
+
+      expect(controller.autostartState).toBeNull();
+    });
+
+    it("follows the state the backend reports after a toggle, including a refusal to enable", async () => {
+      const isAutostartEnabled = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+      const setAutostartEnabled = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("blocked in Windows Settings"));
+      const controller = createController(createDesktopAdapter({ isAutostartEnabled, setAutostartEnabled }));
+      await controller.hydrate();
+
+      await controller.toggleAutostart();
+      expect(setAutostartEnabled).toHaveBeenLastCalledWith(true);
+      expect(controller.autostartState).toBe(true);
+
+      await controller.toggleAutostart();
+      expect(setAutostartEnabled).toHaveBeenLastCalledWith(false);
+      expect(controller.autostartState).toBe(true);
+    });
+  });
 });

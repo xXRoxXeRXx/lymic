@@ -32,6 +32,7 @@
     isVirtualLibraryEnabled?: boolean;
     isSavingVirtualLibrary?: boolean;
     virtualLibraryRootFolder?: string | null;
+    showVirtualLibraryAutostartHint?: boolean;
     locales: readonly LocaleCatalogEntry[];
     onToggleAutostart: () => void;
     onToggleVirtualLibrary?: () => void;
@@ -57,6 +58,7 @@
     isVirtualLibraryEnabled = false,
     isSavingVirtualLibrary = false,
     virtualLibraryRootFolder = null,
+    showVirtualLibraryAutostartHint = false,
     locales,
     onToggleAutostart,
     onToggleVirtualLibrary,
@@ -278,6 +280,10 @@
           <div class="desktop-toggle-knob"></div>
         </button>
       </div>
+
+      {#if showVirtualLibraryAutostartHint}
+        <p class="settings-card text-xs text-amber-700 dark:text-amber-400 leading-relaxed" role="note">{$t('virtual_library_autostart_hint')}</p>
+      {/if}
 
       <div class="settings-card flex items-center justify-between gap-4">
         <div class="space-y-0.5 min-w-0">

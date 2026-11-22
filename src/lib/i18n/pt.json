@@ -94,6 +94,7 @@
   "virtual_library_disable": "Desativar a biblioteca virtual",
   "virtual_library_folder": "Pasta",
   "virtual_library_change_folder": "Alterar pasta",
+  "virtual_library_autostart_hint": "As fotos que ainda não abriu só funcionam enquanto o Lymic está em execução. Ative a inicialização automática para que o Lymic arranque com o Windows.",
   "language": "Idioma",
   "language_subtitle": "Escolha seu idioma de preferência.",
   "appearance": "Aparência",

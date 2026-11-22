@@ -94,6 +94,7 @@
   "virtual_library_disable": "Отключить виртуальную библиотеку",
   "virtual_library_folder": "Папка",
   "virtual_library_change_folder": "Изменить папку",
+  "virtual_library_autostart_hint": "Фотографии, которые вы ещё не открывали, работают только пока запущен Lymic. Включите автозапуск, чтобы Lymic запускался вместе с Windows.",
   "language": "Язык",
   "language_subtitle": "Выберите предпочитаемый язык.",
   "appearance": "Оформление",

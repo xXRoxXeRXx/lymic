@@ -94,6 +94,7 @@
   "virtual_library_disable": "ভার্চুয়াল লাইব্রেরি নিষ্ক্রিয় করুন",
   "virtual_library_folder": "ফোল্ডার",
   "virtual_library_change_folder": "ফোল্ডার পরিবর্তন করুন",
+  "virtual_library_autostart_hint": "যে ছবিগুলো আপনি এখনও খোলেননি, সেগুলো কেবল Lymic চালু থাকলেই কাজ করে। অটোস্টার্ট চালু করুন, যাতে Lymic Windows-এর সাথে শুরু হয়।",
   "language": "ভাষা",
   "language_subtitle": "আপনার পছন্দের ভাষা নির্বাচন করুন।",
   "appearance": "চেহারা",
