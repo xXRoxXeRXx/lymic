@@ -14,8 +14,8 @@ function createDesktopAdapter(overrides: Partial<VirtualLibraryDesktopAdapter> =
   };
 }
 
-function createController(adapter: VirtualLibraryDesktopAdapter, reportError = vi.fn()) {
-  return { reportError, controller: createVirtualLibraryController({ reportError, adapter, t: (key) => key }) };
+function createController(adapter: VirtualLibraryDesktopAdapter, reportError = vi.fn(), autostart: () => boolean | null = () => true) {
+  return { reportError, controller: createVirtualLibraryController({ reportError, adapter, autostartEnabled: autostart, t: (key) => key }) };
 }
 
 const ROOT = "C:\\Users\\Me\\Pictures\\Lymic";
@@ -171,6 +171,59 @@ describe("virtual library controller", () => {
     expect(controller.isEnabled).toBe(false);
     expect(reportError).toHaveBeenCalledWith(refusal);
     expect(reportError.mock.calls[0][0]).toContain("C:\\Users\\Me\\Pictures");
+  });
+
+  describe("autostart hint", () => {
+    const enabledSettings = { available: true, enabled: true, root_folder: ROOT };
+    const adapterWith = (settings: VirtualLibrarySettings) => createDesktopAdapter({ getVirtualLibrarySettings: vi.fn().mockResolvedValue(settings) });
+
+    it("is shown while the Virtual Library is enabled and autostart is off", async () => {
+      const { controller } = createController(adapterWith(enabledSettings), vi.fn(), () => false);
+      await controller.hydrate();
+
+      expect(controller.showAutostartHint).toBe(true);
+    });
+
+    it("is not shown while autostart is on", async () => {
+      const { controller } = createController(adapterWith(enabledSettings), vi.fn(), () => true);
+      await controller.hydrate();
+
+      expect(controller.showAutostartHint).toBe(false);
+    });
+
+    it("is not shown before the autostart state is known", async () => {
+      const { controller } = createController(adapterWith(enabledSettings), vi.fn(), () => null);
+      await controller.hydrate();
+
+      expect(controller.showAutostartHint).toBe(false);
+    });
+
+    it("is not shown while the Virtual Library is disabled or unavailable", async () => {
+      const disabled = createController(adapterWith({ ...enabledSettings, enabled: false }), vi.fn(), () => false);
+      await disabled.controller.hydrate();
+      expect(disabled.controller.showAutostartHint).toBe(false);
+
+      const unavailable = createController(adapterWith({ available: false, enabled: false, root_folder: null }), vi.fn(), () => false);
+      await unavailable.controller.hydrate();
+      expect(unavailable.controller.showAutostartHint).toBe(false);
+    });
+
+    it("appears when the user enables the Virtual Library and follows the autostart state afterwards", async () => {
+      let autostart = false;
+      const adapter = createDesktopAdapter({
+        getVirtualLibrarySettings: vi.fn().mockResolvedValue({ ...enabledSettings, enabled: false }),
+        setVirtualLibraryEnabled: vi.fn().mockResolvedValue(enabledSettings),
+      });
+      const { controller } = createController(adapter, vi.fn(), () => autostart);
+      await controller.hydrate();
+      expect(controller.showAutostartHint).toBe(false);
+
+      await controller.toggle();
+      expect(controller.showAutostartHint).toBe(true);
+
+      autostart = true;
+      expect(controller.showAutostartHint).toBe(false);
+    });
   });
 
   it("follows settings changes the backend announces until the lifecycle stops", async () => {

@@ -14,7 +14,8 @@ export function createPreferencesController(options: {
   const { adapter } = options;
   const initialTheme = initializeThemeFromStorage();
   let themePreference = $state<ThemePreference>(initialTheme);
-  let isAutostartEnabled = $state(false);
+  // null until the backend has said, so a dependent hint never reacts to a guessed value.
+  let autostartState = $state<boolean | null>(null);
   let uploadParallelism = $state(3);
   let isSavingUploadParallelism = $state(false);
   let colorSchemeQuery: MediaQueryList | undefined;
@@ -40,7 +41,7 @@ export function createPreferencesController(options: {
     }
 
     try {
-      isAutostartEnabled = await adapter.isAutostartEnabled();
+      autostartState = await adapter.isAutostartEnabled();
     } catch (error) {
       options.reportError(error);
     }
@@ -84,8 +85,8 @@ export function createPreferencesController(options: {
 
   async function toggleAutostart() {
     try {
-      await adapter.setAutostartEnabled(!isAutostartEnabled);
-      isAutostartEnabled = await adapter.isAutostartEnabled();
+      await adapter.setAutostartEnabled(autostartState !== true);
+      autostartState = await adapter.isAutostartEnabled();
     } catch (error) {
       console.error("Failed to update autostart", error);
       options.reportError(error);
@@ -132,7 +133,8 @@ export function createPreferencesController(options: {
 
   return {
     get themePreference() { return themePreference; },
-    get isAutostartEnabled() { return isAutostartEnabled; },
+    get isAutostartEnabled() { return autostartState === true; },
+    get autostartState() { return autostartState; },
     get uploadParallelism() { return uploadParallelism; },
     get isSavingUploadParallelism() { return isSavingUploadParallelism; },
     get locales() { return locales; },

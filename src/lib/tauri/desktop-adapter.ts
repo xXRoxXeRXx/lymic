@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
-import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import { isPermissionGranted, sendNotification } from "@tauri-apps/plugin-notification";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -186,7 +185,9 @@ export interface PreferencesDesktopAdapter {
   getLocaleCatalog(): Promise<LocaleCatalogEntry[]>;
   updateLocale(locale: string): Promise<void>;
   getDatabaseRecoveryNotice(): Promise<DatabaseRecoveryNotice | null>;
+  /** The backend picks the mechanism: the Windows StartupTask in an MSIX package, the login-item plugin elsewhere. */
   isAutostartEnabled(): Promise<boolean>;
+  /** Rejects with an explanation when Windows keeps autostart off (disabled by the user in Settings or by policy). */
   setAutostartEnabled(enabled: boolean): Promise<void>;
 }
 
@@ -326,8 +327,8 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),
   getDatabaseRecoveryNotice: () => invoke<DatabaseRecoveryNotice | null>("get_database_recovery_notice"),
-  isAutostartEnabled: () => isEnabled(),
-  setAutostartEnabled: (enabled) => enabled ? enable() : disable(),
+  isAutostartEnabled: () => invoke<boolean>("get_autostart_enabled"),
+  setAutostartEnabled: (enabled) => invoke<void>("set_autostart_enabled", { enabled }),
   getVirtualLibrarySettings: () => invoke<VirtualLibrarySettings>("get_virtual_library_settings"),
   setVirtualLibraryEnabled: (enabled) => invoke<VirtualLibrarySettings>("set_virtual_library_enabled", { enabled }),
   setVirtualLibraryRootFolder: (path) => invoke<VirtualLibrarySettings>("set_virtual_library_root_folder", { path }),
