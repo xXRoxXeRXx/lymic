@@ -13,8 +13,7 @@
 //! Library and again on app start while it is enabled; [`SystemSyncRoot::stop`] only stops serving
 //! callbacks. Unregistering the sync root and removing what Lymic created is #283.
 //!
-//! Hooks for the follow-up tickets: #279 adds the delete and rename vetoes to the callback table in
-//! `adapter::connection`; #280 compares what `population::populate` plans with the directories
+//! Hooks for the follow-up tickets: #280 compares what `population::populate` plans with the directories
 //! already populated; #281 refines `failure::Failure::status`, retries and the in-app notice.
 
 // Outside Windows only the tests use most of this module.
@@ -28,6 +27,7 @@ mod library;
 mod nested;
 mod placeholder;
 mod population;
+mod write_guard;
 
 #[cfg(windows)]
 mod adapter;
