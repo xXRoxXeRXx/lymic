@@ -623,6 +623,15 @@ describe("SettingsView", () => {
       expect(screen.getByRole("button", { name: "Change folder" })).toBeDisabled();
     });
 
+    it("shows the autostart hint only when asked to", async () => {
+      const hint = "Photos you have not opened yet only work while Lymic is running. Turn on autostart so Lymic starts with Windows.";
+      const { rerender } = renderSettings({ isVirtualLibraryAvailable: true, isVirtualLibraryEnabled: true, showVirtualLibraryAutostartHint: false });
+      expect(screen.queryByText(hint)).toBeNull();
+
+      await rerender({ showVirtualLibraryAutostartHint: true });
+      expect(screen.getByText(hint)).toBeInTheDocument();
+    });
+
     it("still offers a folder choice when the system could not name a default folder", () => {
       renderSettings({ isVirtualLibraryAvailable: true, virtualLibraryRootFolder: null });
 

@@ -94,6 +94,7 @@
   "virtual_library_disable": "禁用虚拟图库",
   "virtual_library_folder": "文件夹",
   "virtual_library_change_folder": "更改文件夹",
+  "virtual_library_autostart_hint": "尚未打开过的照片只有在 Lymic 运行时才能使用。请开启开机自启，让 Lymic 随 Windows 一起启动。",
   "language": "语言",
   "language_subtitle": "选择你的首选语言。",
   "appearance": "外观",

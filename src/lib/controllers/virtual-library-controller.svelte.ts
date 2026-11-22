@@ -7,10 +7,16 @@ import type { VirtualLibraryDesktopAdapter } from "../tauri/desktop-adapter";
  * cannot say, the section stays hidden. The backend also owns the root folder rule: it reports the
  * effective folder and refuses an enable or folder change that would overlap a Watched Folder; the
  * controller surfaces its explanation unchanged.
+ *
+ * Unhydrated placeholders only work while Lymic runs (ADR-0003), so while the Virtual Library is on
+ * and autostart is off the controller offers a hint. The autostart state belongs to the preferences
+ * controller and is read lazily through `autostartEnabled`; `null` means it is not known yet, which
+ * must never flash the hint.
  */
 export function createVirtualLibraryController(options: {
   reportError(error: unknown): void;
   t(key: string): string;
+  autostartEnabled(): boolean | null;
   adapter: VirtualLibraryDesktopAdapter;
 }) {
   const { adapter } = options;
@@ -89,6 +95,7 @@ export function createVirtualLibraryController(options: {
     get isEnabled() { return isEnabled; },
     get isSaving() { return isSaving; },
     get rootFolder() { return rootFolder; },
+    get showAutostartHint() { return isEnabled && options.autostartEnabled() === false; },
     hydrate,
     toggle,
     chooseRootFolder,

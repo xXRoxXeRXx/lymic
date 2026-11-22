@@ -68,5 +68,8 @@ windows-sys = { version = "0.59", features = [
     "Win32_UI_Shell",
 ] }
 
+# WinRT projection for the StartupTask of a packaged (MSIX) run. windows-sys, above, has no WinRT.
+windows = { version = "0.62", features = ["ApplicationModel", "ApplicationModel_Activation"] }
+
 [target.'cfg(windows)'.dev-dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }

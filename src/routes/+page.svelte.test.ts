@@ -8,7 +8,6 @@ const tauri = vi.hoisted(() => ({
   getVersion: vi.fn(),
   invoke: vi.fn(),
   listen: vi.fn(),
-  isEnabled: vi.fn(),
   confirm: vi.fn(),
   open: vi.fn(),
   check: vi.fn(),
@@ -45,11 +44,6 @@ let colorSchemeListeners = new Set<(event: MediaQueryListEvent) => void>();
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: tauri.getVersion }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: tauri.listen }));
-vi.mock("@tauri-apps/plugin-autostart", () => ({
-  enable: vi.fn(),
-  disable: vi.fn(),
-  isEnabled: tauri.isEnabled,
-}));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: tauri.open, confirm: tauri.confirm }));
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: tauri.check }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: tauri.relaunch }));
@@ -167,7 +161,6 @@ beforeEach(() => {
     return Promise.resolve(() => {});
   });
 
-  tauri.isEnabled.mockResolvedValue(false);
   tauri.confirm.mockResolvedValue(true);
   tauri.getVersion.mockResolvedValue("0.0.0");
   tauri.check.mockResolvedValue(null);
@@ -1443,6 +1436,61 @@ describe("removable volume setup flow", () => {
 
     expect(setRoot).toHaveBeenCalledWith({ path: "D:\\Photos\\Lymic" });
     expect(await screen.findByText("D:\\Photos\\Lymic")).toBeInTheDocument();
+  });
+
+  describe("autostart hint", () => {
+    const hint = "Photos you have not opened yet only work while Lymic is running. Turn on autostart so Lymic starts with Windows.";
+    const virtualLibrary = (enabled: boolean) => ({ available: true, enabled, root_folder: "C:\Users\Me\Pictures\Lymic" });
+
+    it("appears after enabling the Virtual Library while autostart is off", async () => {
+      renderAuthenticatedPage({
+        get_release_channel: () => Promise.resolve("store"),
+        get_autostart_enabled: () => Promise.resolve(false),
+        get_virtual_library_settings: () => Promise.resolve(virtualLibrary(false)),
+        set_virtual_library_enabled: () => Promise.resolve(virtualLibrary(true)),
+      });
+      await openDashboard();
+
+      await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+      await screen.findByRole("button", { name: "Enable Virtual Library" });
+      expect(screen.queryByText(hint)).toBeNull();
+      await fireEvent.click(screen.getByRole("button", { name: "Enable Virtual Library" }));
+
+      expect(await screen.findByText(hint)).toBeInTheDocument();
+    });
+
+    it("does not appear while autostart is on", async () => {
+      renderAuthenticatedPage({
+        get_release_channel: () => Promise.resolve("store"),
+        get_autostart_enabled: () => Promise.resolve(true),
+        get_virtual_library_settings: () => Promise.resolve(virtualLibrary(true)),
+      });
+      await openDashboard();
+
+      await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+      await screen.findByRole("button", { name: "Disable Virtual Library" });
+
+      expect(screen.queryByText(hint)).toBeNull();
+    });
+
+    it("goes away when the user turns autostart on in the same settings", async () => {
+      const setAutostart = vi.fn().mockResolvedValue(undefined);
+      let autostart = false;
+      renderAuthenticatedPage({
+        get_release_channel: () => Promise.resolve("store"),
+        get_autostart_enabled: () => Promise.resolve(autostart),
+        set_autostart_enabled: (args) => { autostart = (args as { enabled: boolean }).enabled; return setAutostart(args); },
+        get_virtual_library_settings: () => Promise.resolve(virtualLibrary(true)),
+      });
+      await openDashboard();
+
+      await fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+      expect(await screen.findByText(hint)).toBeInTheDocument();
+      await fireEvent.click(screen.getByRole("button", { name: "Enable autostart" }));
+
+      expect(setAutostart).toHaveBeenCalledWith({ enabled: true });
+      await waitFor(() => expect(screen.queryByText(hint)).toBeNull());
+    });
   });
 
   it("tells the user which Watched Folder blocks enabling and keeps the Virtual Library off", async () => {

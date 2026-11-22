@@ -2,6 +2,7 @@
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap rescap">
 
@@ -46,6 +47,21 @@
         Square44x44Logo="Assets\Square44x44Logo.png">
         <uap:DefaultTile Square71x71Logo="Assets\Square71x71Logo.png" />
       </uap:VisualElements>
+      <Extensions>
+        <!-- Autostart inside the package. A registry Run entry written by a packaged app is
+             virtualized, so the in-app toggle uses this task through the StartupTask API (see
+             src-tauri/src/app/autostart.rs). Enabled="false": off until the user turns it on.
+             The TaskId must match STARTUP_TASK_ID there. -->
+        <desktop:Extension
+          Category="windows.startupTask"
+          Executable="{{EXECUTABLE}}"
+          EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask
+            TaskId="LymicStartup"
+            Enabled="false"
+            DisplayName="{{DISPLAY_NAME}}" />
+        </desktop:Extension>
+      </Extensions>
     </Application>
   </Applications>
 </Package>

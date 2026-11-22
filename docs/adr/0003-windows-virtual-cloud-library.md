@@ -58,7 +58,7 @@ This ADR stays `proposed` until prototypes confirm the assumptions that would ch
 3. The sync root's behaviour on MSIX uninstall is known (no uninstall hook exists), and any leftover placeholders have an acceptable story.
 4. A sync root nested in another sync root (for example OneDrive-redirected Pictures) is detected before registration.
 
-Two items are implementation tasks, not gates: whether the existing autostart works inside the MSIX package or needs a manifest `StartupTask`, and any Store certification requirements specific to Cloud Files apps.
+Two items are implementation tasks, not gates: autostart inside the MSIX package, and any Store certification requirements specific to Cloud Files apps. The autostart task is decided (#284): the Run-key login item is not expected to work with Package Identity because HKCU writes are virtualized, so the manifest declares a `windows.startupTask` that the in-app toggle drives through the `StartupTask` API in packaged runs. Its runtime behaviour is still unverified in a registered package; see `docs/store/local-msix-build.md`.
 
 ## Consequences
 

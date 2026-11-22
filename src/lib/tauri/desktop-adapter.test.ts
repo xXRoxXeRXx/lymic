@@ -1,13 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { invoke, confirm, open, save, disable, enable, isEnabled, getVersion, check, relaunch, listen, isPermissionGranted, sendNotification, openUrl } = vi.hoisted(() => ({
+const { invoke, confirm, open, save, getVersion, check, relaunch, listen, isPermissionGranted, sendNotification, openUrl } = vi.hoisted(() => ({
   invoke: vi.fn(),
   confirm: vi.fn(),
   open: vi.fn(),
   save: vi.fn(),
-  disable: vi.fn(),
-  enable: vi.fn(),
-  isEnabled: vi.fn(),
   getVersion: vi.fn(),
   check: vi.fn(),
   relaunch: vi.fn(),
@@ -20,7 +17,6 @@ const { invoke, confirm, open, save, disable, enable, isEnabled, getVersion, che
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/app", () => ({ getVersion }));
 vi.mock("@tauri-apps/api/event", () => ({ listen }));
-vi.mock("@tauri-apps/plugin-autostart", () => ({ disable, enable, isEnabled }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm, open, save }));
 vi.mock("@tauri-apps/plugin-notification", () => ({ isPermissionGranted, sendNotification }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
@@ -200,15 +196,15 @@ describe("tauriDesktopAdapter", () => {
       ["get_locale_catalog"],
       ["update_locale", { locale: "de" }],
       ["get_database_recovery_notice"],
+      ["get_autostart_enabled"],
+      ["set_autostart_enabled", { enabled: true }],
+      ["set_autostart_enabled", { enabled: false }],
       ["record_webview_startup_phase_probe", { phase: "update_check_started" }],
       ["get_release_channel"],
     ]);
     expect(confirm).toHaveBeenCalledWith("Log out?", { title: "Log out", kind: "warning" });
     expect(open).toHaveBeenCalledWith({ directory: true, multiple: false, title: "Select folder" });
     expect(save).toHaveBeenCalledWith({ defaultPath: "IMG_0001.CR3" });
-    expect(isEnabled).toHaveBeenCalledOnce();
-    expect(enable).toHaveBeenCalledOnce();
-    expect(disable).toHaveBeenCalledOnce();
     expect(getVersion).toHaveBeenCalledOnce();
     expect(check).toHaveBeenCalledOnce();
     expect(downloadAndInstall).toHaveBeenCalledOnce();
