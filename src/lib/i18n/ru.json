@@ -460,5 +460,9 @@
   "log_virtual_library_start_failed": "Не удалось запустить виртуальную библиотеку: {error}",
   "virtual_library_nested_root": "Эта папка находится внутри другой папки облачной синхронизации (например, OneDrive) или содержит её, поэтому виртуальную библиотеку там настроить нельзя. Выберите другую папку.",
   "virtual_library_start_failed": "Не удалось запустить виртуальную библиотеку:",
-  "virtual_library_disable_to_change_folder": "Отключите виртуальную библиотеку, прежде чем менять её папку."
+  "virtual_library_disable_to_change_folder": "Отключите виртуальную библиотеку, прежде чем менять её папку.",
+  "virtual_library_refresh": "Обновить библиотеку",
+  "virtual_library_refreshing": "Обновление…",
+  "virtual_library_refresh_description": "Проверить в Immich новые, изменённые и удалённые фото в уже открытых папках. Это также происходит автоматически каждые 10 минут.",
+  "virtual_library_refresh_failed": "Не удалось обновить виртуальную библиотеку:"
 }

@@ -460,5 +460,9 @@
   "log_virtual_library_start_failed": "No se pudo iniciar la biblioteca virtual: {error}",
   "virtual_library_nested_root": "Esta carpeta está dentro de otra carpeta de sincronización en la nube (por ejemplo OneDrive) o la contiene, por lo que la biblioteca virtual no se puede configurar allí. Elige otra carpeta.",
   "virtual_library_start_failed": "No se pudo iniciar la biblioteca virtual:",
-  "virtual_library_disable_to_change_folder": "Desactiva la biblioteca virtual antes de cambiar su carpeta."
+  "virtual_library_disable_to_change_folder": "Desactiva la biblioteca virtual antes de cambiar su carpeta.",
+  "virtual_library_refresh": "Actualizar biblioteca",
+  "virtual_library_refreshing": "Actualizando…",
+  "virtual_library_refresh_description": "Busca en Immich fotos nuevas, modificadas y eliminadas en las carpetas que ya has abierto. Esto también ocurre automáticamente cada 10 minutos.",
+  "virtual_library_refresh_failed": "No se pudo actualizar la biblioteca virtual:"
 }

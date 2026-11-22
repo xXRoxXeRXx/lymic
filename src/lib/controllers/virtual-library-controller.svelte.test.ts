@@ -8,6 +8,7 @@ function createDesktopAdapter(overrides: Partial<VirtualLibraryDesktopAdapter> =
     getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: false, enabled: false, root_folder: null }),
     setVirtualLibraryEnabled: vi.fn(),
     setVirtualLibraryRootFolder: vi.fn(),
+    refreshVirtualLibrary: vi.fn().mockResolvedValue(undefined),
     openFolderDialog: vi.fn(),
     subscribeToVirtualLibrarySettings: vi.fn().mockResolvedValue(() => {}),
     ...overrides,
@@ -215,6 +216,64 @@ describe("virtual library controller", () => {
 
     expect(controller.rootFolder).toBe(ROOT);
     expect((reportError.mock.calls[0][0] as Error).message).toBe("virtual_library_disable_to_change_folder");
+  });
+
+  describe("Refresh Library", () => {
+    const enabledSettings = { available: true, enabled: true, root_folder: ROOT };
+    const adapterWith = (settings: VirtualLibrarySettings, refreshVirtualLibrary = vi.fn().mockResolvedValue(undefined)) =>
+      createDesktopAdapter({ getVirtualLibrarySettings: vi.fn().mockResolvedValue(settings), refreshVirtualLibrary });
+
+    it("asks the backend to reconcile now and shows that it is refreshing until it answers", async () => {
+      let finish: () => void = () => {};
+      const refreshVirtualLibrary = vi.fn().mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
+      const { controller } = createController(adapterWith(enabledSettings, refreshVirtualLibrary));
+      await controller.hydrate();
+
+      const running = controller.refresh();
+      expect(refreshVirtualLibrary).toHaveBeenCalledOnce();
+      expect(controller.isRefreshing).toBe(true);
+
+      finish();
+      await running;
+      expect(controller.isRefreshing).toBe(false);
+    });
+
+    it("ignores a second press while a refresh is running", async () => {
+      const refreshVirtualLibrary = vi.fn().mockReturnValue(new Promise<void>(() => {}));
+      const { controller } = createController(adapterWith(enabledSettings, refreshVirtualLibrary));
+      await controller.hydrate();
+
+      void controller.refresh();
+      void controller.refresh();
+
+      expect(refreshVirtualLibrary).toHaveBeenCalledOnce();
+    });
+
+    it("does nothing while the Virtual Library is disabled or unavailable", async () => {
+      const refreshVirtualLibrary = vi.fn();
+      const disabled = createController(adapterWith({ ...enabledSettings, enabled: false }, refreshVirtualLibrary));
+      await disabled.controller.hydrate();
+      const unavailable = createController(adapterWith({ available: false, enabled: false, root_folder: null }, refreshVirtualLibrary));
+      await unavailable.controller.hydrate();
+
+      await disabled.controller.refresh();
+      await unavailable.controller.refresh();
+
+      expect(refreshVirtualLibrary).not.toHaveBeenCalled();
+    });
+
+    it("reports a failed refresh with the localized text and the reason, and can be pressed again", async () => {
+      const refreshVirtualLibrary = vi.fn().mockRejectedValue("VIRTUAL_LIBRARY_REFRESH_FAILED: could not list '': error sending request");
+      const { controller, reportError } = createController(adapterWith(enabledSettings, refreshVirtualLibrary));
+      await controller.hydrate();
+
+      await controller.refresh();
+
+      expect(controller.isRefreshing).toBe(false);
+      expect((reportError.mock.calls[0][0] as Error).message).toBe("virtual_library_refresh_failed could not list '': error sending request");
+      await controller.refresh();
+      expect(refreshVirtualLibrary).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("autostart hint", () => {

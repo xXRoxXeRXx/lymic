@@ -55,10 +55,38 @@ Fill the **Result** column with PASS, FAIL or the observed behaviour, and add a 
 | 26 | Inspect `AppxManifest.xml` in the registered package. | No `windows.cloudFiles` extension and no COM server declaration (the gate prototype's `Register` failed with 0x80070490 with one). | |
 | 27 | On a machine where the nested-root check can be exercised only through the registry (or only through `CfGetSyncRootInfoByPath`), note which one caught it, if it can be told. | Record. Reading `HKLM\...\SyncRootManager` from inside the package has not been confirmed to see other providers' roots. | |
 
+## Reconciliation and Refresh Library (#280): manual steps
+
+**Status: NOT YET RUN.** Same conventions and environment as the checklist above; fill the Result column. The platform-neutral logic is unit tested (`cargo test`: `cloud_files::diff` for new, removed and changed placeholders, the safety rules, case-insensitive names and skipped names; `cloud_files::reconcile` for populated-only listing, parents first, failures that must not delete, removed directories; `cloud_files::refresh` for the single-flight guard and the schedule with a fake clock; `db::virtual_library_populated`; the `refresh_virtual_library` command with a fake service). The Windows calls in `src-tauri/src/cloud_files/adapter/reconcile.rs` (`FindFirstFileW`, `CfGetPlaceholderStateFromAttributeTag`, `CfGetPlaceholderInfo`, `CfCreatePlaceholders`, `CfOpenFileWithOplock`, `CfUpdatePlaceholder`, deleting a placeholder) and the `mark_populated` call in `FETCH_PLACEHOLDERS` compile but **have never run**; nothing below was observed.
+
+Preparation: enable the Virtual Library on a fresh folder (see "Known gaps": directories populated by an earlier build are not recorded). Open `All Photos`, one year, one month with a few photos, `Albums` and one album, so they are populated. Leave one other album and one other month unopened.
+
+| # | Step | Expected | Result |
+| --- | --- | --- | --- |
+| R1 | Inspect the database: `sqlite3 <app data>\lymic.db "select path from virtual_library_populated_directories"` (the app data folder of the installed package). | One row per directory you opened (`""` for the root, `All Photos`, `All Photos/<year>`, `All Photos/<year>/<MM Month>`, `Albums`, `Albums/<album>`) and none for the ones you did not open. A directory whose listing failed (step 24 above) has no row. | |
+| R2 | Upload a new photo to Immich (web app) so it belongs to the opened month and the opened album. Open Settings, Virtual Library, **Refresh Library**. | The button shows "Refreshing..." and returns. The new placeholder appears in the open month and album (F5 in Explorer if needed) with the right name, size and dates. | |
+| R3 | In Immich, remove that photo from the album only. Refresh Library. | It disappears from the album folder but stays in the month (`All Photos`). | |
+| R4 | In Immich, move a photo to the trash. Refresh Library. | The placeholder is gone from its month and from every album. Explorer shows no error and the Recycle Bin did not receive it. | |
+| R5 | Hydrate a photo (open it), then change it in Immich so its size changes (for example replace the asset). Refresh Library. | The placeholder shows the new size; the local copy is dropped (status icon returns to cloud only) and opening it downloads the new original. | |
+| R6 | Hydrate a photo, then modify it locally so it is no longer in sync (the status icon shows pending sync), and remove that asset in Immich. Refresh Library. | The modified file is not deleted. | |
+| R7 | Put your own file (`notes.txt`) into an opened month folder and a folder `Mine` (with a file in it) into `Albums`. Refresh Library. | Both survive. No upload happens. | |
+| R8 | Delete an Immich album that is opened (populated) and contains a hydrated photo. Refresh Library. | The album folder disappears together with its placeholders; its row is gone from `virtual_library_populated_directories`. Repeat with a `notes.txt` placed inside the album folder first: the folder and `notes.txt` stay, the placeholders go, and the row stays. | |
+| R9 | Remove in Immich the album you left unopened, and add a photo to a month you never opened. Refresh Library and watch the Immich access log. | Neither the unopened album nor the unopened month was listed during the refresh (no `search/metadata` request for them). The month is listed, with current content, the first time you open it. | |
+| R10 | Stop the Immich server. Refresh Library. | An error naming the Virtual Library refresh with the reason is shown. Nothing in the Virtual Library disappeared. Start the server and refresh again: it works. | |
+| R11 | Revoke the API key (or log out of Lymic) and refresh. | An error is shown; nothing disappeared. | |
+| R12 | Quit Lymic. Add a photo in Immich. Start Lymic and wait about a minute without touching Settings. | The photo appears in the opened folder: the startup run works. Note how long it took. | |
+| R13 | Add another photo in Immich and wait 10 minutes with Lymic running in the tray. | It appears without any action: the timer works. | |
+| R14 | Make a run slow (a large Library or a throttled connection). Press Refresh Library twice while it runs, and let the startup or timer run fall into it. | Only one run is active at any time (the Immich access log shows no two listings at once). The presses wait and return after one follow-up run. | |
+| R15 | Hydrate and pin ("Always keep on this device") a photo, remove it in Immich and refresh. | Record what happens. Expected: an in-sync pinned placeholder is deleted like any other. | |
+| R16 | With the delete veto of #279 merged: remove a photo in Immich and refresh. | The removal still works, because the veto acknowledges deletes for which `adapter::reconcile::is_own_removal(path)` is true. If the delete is refused, the callback of #279 does not consult it. | |
+| R17 | Change the Virtual Library folder (disable, choose another folder, enable) and open a directory. | `virtual_library_populated_directories` holds only directories of the new folder. | |
+
+Things to look for beyond the table: whether `CfOpenFileWithOplock` works on a directory placeholder to read its identity (a directory that cannot be read counts as not ours and is left, which would keep a removed album's folder forever); whether reading the identity of thousands of placeholders per run is fast enough (a month with a few thousand photos); whether `CF_UPDATE_FLAG_DEHYDRATE` together with a new size works on a hydrated placeholder; whether `remove_dir` on a never-populated directory placeholder triggers `FETCH_PLACEHOLDERS` (it should not); whether Lymic's own deletion of a placeholder reaches `NOTIFY_DELETE` at all.
+
 ## Known gaps this record will not close
 
 - Delete and rename of placeholders are not vetoed yet (#279). Do not test them as passing.
-- Placeholders are not refreshed after the first listing (#280); a changed Immich Library shows after the next listing only if the directory was never populated.
+- Directories populated before reconciliation existed (#280) are not recorded as populated and are not reconciled; test reconciliation on a fresh enable.
 - No in-app notice and no re-login offer on failure (#281); the platform error is all a person sees.
 - Disabling does not unregister the sync root or remove files (#283).
 - No thumbnails from Immich and no autostart hint yet; unhydrated placeholders work only while Lymic runs.

@@ -460,5 +460,9 @@
   "log_virtual_library_start_failed": "Impossible de démarrer la bibliothèque virtuelle : {error}",
   "virtual_library_nested_root": "Ce dossier se trouve dans un autre dossier de synchronisation cloud (par exemple OneDrive) ou en contient un, la bibliothèque virtuelle ne peut donc pas y être configurée. Choisissez un autre dossier.",
   "virtual_library_start_failed": "Impossible de démarrer la bibliothèque virtuelle :",
-  "virtual_library_disable_to_change_folder": "Désactivez la bibliothèque virtuelle avant de modifier son dossier."
+  "virtual_library_disable_to_change_folder": "Désactivez la bibliothèque virtuelle avant de modifier son dossier.",
+  "virtual_library_refresh": "Actualiser la bibliothèque",
+  "virtual_library_refreshing": "Actualisation…",
+  "virtual_library_refresh_description": "Rechercher dans Immich les photos nouvelles, modifiées et supprimées dans les dossiers déjà ouverts. Cela se fait aussi automatiquement toutes les 10 minutes.",
+  "virtual_library_refresh_failed": "La bibliothèque virtuelle n'a pas pu être actualisée :"
 }

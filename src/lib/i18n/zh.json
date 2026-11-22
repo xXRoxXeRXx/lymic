@@ -460,5 +460,9 @@
   "log_virtual_library_start_failed": "无法启动虚拟图库：{error}",
   "virtual_library_nested_root": "此文件夹位于另一个云同步文件夹（例如 OneDrive）内或包含该文件夹，因此无法在此设置虚拟图库。请选择其他文件夹。",
   "virtual_library_start_failed": "无法启动虚拟图库：",
-  "virtual_library_disable_to_change_folder": "更改虚拟图库文件夹之前，请先停用虚拟图库。"
+  "virtual_library_disable_to_change_folder": "更改虚拟图库文件夹之前，请先停用虚拟图库。",
+  "virtual_library_refresh": "刷新资料库",
+  "virtual_library_refreshing": "正在刷新…",
+  "virtual_library_refresh_description": "在 Immich 中检查已打开文件夹里新增、变更和已移除的照片。此操作也会每 10 分钟自动进行一次。",
+  "virtual_library_refresh_failed": "无法刷新虚拟资料库："
 }

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Virtual Library stays current (refresh)**:
+  - Folders of the Virtual Library you have already opened are compared with Immich when Lymic starts, every 10 minutes and when you choose **Refresh Library** in the Virtual Library settings (shown while it is turned on). New photos and albums appear, changed ones are updated and ones removed in Immich disappear. Folders you have never opened are not touched until you open them.
+  - Only placeholders Lymic created are updated or removed. Your own files in the folder, and photos you changed after opening them, are left as they are, and nothing is removed when Immich cannot be reached. A refresh that is already running is never started a second time: **Refresh Library** waits for it and then refreshes once more. Available in all supported languages.
 - **Virtual Library in Windows Explorer (tracer bullet)**:
   - Enabling the Virtual Library in the Microsoft Store version of Lymic now registers the folder as a Windows sync folder and shows your Immich Library there as read-only placeholders (`All Photos`, `Albums`). Opening a folder creates only that folder's placeholders, and opening a file downloads the full original from Immich. It is read-only: nothing is ever written to Immich. **Not yet verified in Explorer**: see `docs/virtual-library-verification.md`.
   - If the chosen folder is inside, or contains, another cloud sync folder such as OneDrive, Lymic asks for another folder instead of registering. The folder cannot be changed while the Virtual Library is enabled. Available in all supported languages.

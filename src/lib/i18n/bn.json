@@ -460,5 +460,9 @@
   "log_virtual_library_start_failed": "ভার্চুয়াল লাইব্রেরি চালু করা যায়নি: {error}",
   "virtual_library_nested_root": "এই ফোল্ডারটি অন্য একটি ক্লাউড সিঙ্ক ফোল্ডারের (যেমন OneDrive) ভিতরে আছে বা সেটি ধারণ করে, তাই এখানে ভার্চুয়াল লাইব্রেরি সেট আপ করা যাবে না। অন্য একটি ফোল্ডার বেছে নিন।",
   "virtual_library_start_failed": "ভার্চুয়াল লাইব্রেরি চালু করা যায়নি:",
-  "virtual_library_disable_to_change_folder": "ফোল্ডার পরিবর্তনের আগে ভার্চুয়াল লাইব্রেরি বন্ধ করুন।"
+  "virtual_library_disable_to_change_folder": "ফোল্ডার পরিবর্তনের আগে ভার্চুয়াল লাইব্রেরি বন্ধ করুন।",
+  "virtual_library_refresh": "লাইব্রেরি রিফ্রেশ করুন",
+  "virtual_library_refreshing": "রিফ্রেশ হচ্ছে…",
+  "virtual_library_refresh_description": "আপনি ইতিমধ্যে যে ফোল্ডারগুলো খুলেছেন সেগুলোতে Immich থেকে নতুন, পরিবর্তিত ও সরানো ছবি দেখে নিন। এটি প্রতি ১০ মিনিটে স্বয়ংক্রিয়ভাবেও হয়।",
+  "virtual_library_refresh_failed": "ভার্চুয়াল লাইব্রেরি রিফ্রেশ করা যায়নি:"
 }

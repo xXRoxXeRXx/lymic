@@ -13,21 +13,29 @@
 //! Library and again on app start while it is enabled; [`SystemSyncRoot::stop`] only stops serving
 //! callbacks. Unregistering the sync root and removing what Lymic created is #283.
 //!
+//! Reconciliation (#280) keeps populated directories current: `reconcile` diffs what
+//! `population::populate` plans (`diff`) against the directories on disk, `refresh` decides when it
+//! runs and keeps runs from overlapping, `reconciliation` wires it to the app.
+//!
 //! Hooks for the follow-up tickets: #279 adds the delete and rename vetoes to the callback table in
-//! `adapter::connection`; #280 compares what `population::populate` plans with the directories
-//! already populated; #281 refines `failure::Failure::status`, retries and the in-app notice.
+//! `adapter::connection`; #281 refines `failure::Failure::status`, retries and the in-app notice.
 
 // Outside Windows only the tests use most of this module.
 #![cfg_attr(not(windows), allow(dead_code))]
 
 mod activation;
+mod diff;
 mod failure;
 mod hydration;
 mod identity;
 mod library;
 mod nested;
+mod own_removals;
 mod placeholder;
 mod population;
+mod reconcile;
+mod reconciliation;
+mod refresh;
 
 #[cfg(windows)]
 mod adapter;
@@ -37,6 +45,7 @@ pub(crate) use activation::ActivationError;
 pub(crate) use activation::{NESTED_SYNC_ROOT_ERROR, START_FAILED_ERROR};
 #[cfg(test)]
 pub(crate) use nested::{NestedRoot, Relation as NestedRelation};
+pub(crate) use reconciliation::{mark_populated, run_schedule, LibraryRefresh, SystemRefresh};
 
 use std::path::PathBuf;
 
