@@ -6,7 +6,7 @@
 //! Paths are relative to the Virtual Library root, use `/` (a `\` is accepted too) and carry no
 //! platform semantics, so the module behaves the same on every OS.
 
-use crate::immich::{ImmichClient, LibraryAlbum, LibraryAsset, RemoteAssetId};
+use crate::immich::{ImmichClient, LibraryAlbum, LibraryAsset, RemoteAssetId, RemoteFailure};
 use chrono::{DateTime, Utc};
 
 mod albums;
@@ -62,8 +62,8 @@ pub(crate) enum VirtualLibraryError {
     NotADirectory,
     /// `resolve` was asked for a directory.
     NotAFile,
-    /// Immich could not answer; the message never carries credentials.
-    Remote(String),
+    /// Immich could not answer; the failure says why and never carries credentials.
+    Remote(RemoteFailure),
 }
 /// The Virtual Library tree over one Immich Library.
 pub(crate) struct VirtualLibrary<'a> {

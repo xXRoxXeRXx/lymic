@@ -7,6 +7,7 @@ mod library_listing;
 mod original;
 mod people;
 mod places;
+mod remote_failure;
 mod response;
 mod search;
 mod search_filters;
@@ -25,9 +26,10 @@ pub(crate) use bulk_check::{BulkCheckDuplicate, DuplicateRemoteAsset};
 pub(crate) use client::{AssetDetails, AssetResponse, ImmichClient};
 pub(crate) use ids::{AlbumId, RemoteAssetId};
 pub(crate) use library_listing::{LibraryAlbum, LibraryAsset, LivePhotoVideo};
-pub(crate) use original::{AssetOriginal, OriginalError, OriginalFailureKind};
+pub(crate) use original::AssetOriginal;
 pub(crate) use people::PeoplePage;
 pub(crate) use places::Place;
+pub(crate) use remote_failure::{RemoteFailure, RemoteFailureKind};
 pub(crate) use search::{
     ContextSearchPage, SearchFeatures, SearchRequest, SearchResults, SearchSupport,
 };

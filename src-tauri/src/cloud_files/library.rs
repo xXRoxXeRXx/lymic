@@ -5,9 +5,9 @@
 //! naming, path and date rule), and the bytes of an original. Keeping them behind traits lets the
 //! orchestration (population, hydration) be tested without Windows and without a server.
 
-use super::failure::{Failure, FailureKind};
+use super::failure::Failure;
 use crate::immich::{
-    AssetOriginal, ImmichClient, ImmichSession, OriginalError, OriginalFailureKind, RemoteAssetId,
+    AssetOriginal, ImmichClient, ImmichSession, RemoteAssetId, RemoteFailure, RemoteFailureKind,
 };
 use crate::virtual_library::{Entry, VirtualLibrary, VirtualLibraryError};
 use bytes::Bytes;
@@ -53,15 +53,24 @@ pub(super) trait OriginalStream: Send {
 pub(super) struct StoredCredentialsImmich;
 
 impl StoredCredentialsImmich {
-    fn session() -> Result<ImmichSession, Failure> {
-        ImmichSession::from_stored_credentials()
-            .map_err(|message| Failure::from_library(VirtualLibraryError::Remote(message)))
+    /// The session for the stored credentials. No credentials, or credentials that cannot be read,
+    /// mean the user has to sign in again.
+    fn session() -> Result<ImmichSession, RemoteFailure> {
+        let credentials = crate::auth::get_credentials()
+            .map_err(|_| {
+                RemoteFailure::new(
+                    RemoteFailureKind::Unauthorized,
+                    "the stored credentials could not be read",
+                )
+            })?
+            .ok_or_else(|| RemoteFailure::new(RemoteFailureKind::Unauthorized, "not signed in"))?;
+        ImmichSession::from_credentials(credentials).map_err(RemoteFailure::unavailable)
     }
 }
 
 impl Library for StoredCredentialsImmich {
     async fn list(&self, path: &str) -> Result<Vec<Entry>, VirtualLibraryError> {
-        let session = open_session()?;
+        let session = Self::session().map_err(VirtualLibraryError::Remote)?;
         let client = session.client();
         VirtualLibrary::new(&client)
             .list(path)
@@ -70,7 +79,7 @@ impl Library for StoredCredentialsImmich {
     }
 
     async fn resolve(&self, path: &str) -> Result<RemoteAssetId, VirtualLibraryError> {
-        let session = open_session()?;
+        let session = Self::session().map_err(VirtualLibraryError::Remote)?;
         let client = session.client();
         VirtualLibrary::new(&client)
             .resolve(path)
@@ -79,17 +88,17 @@ impl Library for StoredCredentialsImmich {
     }
 }
 
-fn open_session() -> Result<ImmichSession, VirtualLibraryError> {
-    ImmichSession::from_stored_credentials().map_err(VirtualLibraryError::Remote)
-}
-
 fn redacted(session: &ImmichSession, error: VirtualLibraryError) -> VirtualLibraryError {
     match error {
-        VirtualLibraryError::Remote(message) => {
-            VirtualLibraryError::Remote(session.credentials().redact(&message))
+        VirtualLibraryError::Remote(failure) => {
+            VirtualLibraryError::Remote(redact_failure(session, failure))
         }
         other => other,
     }
+}
+
+fn redact_failure(session: &ImmichSession, failure: RemoteFailure) -> RemoteFailure {
+    RemoteFailure::new(failure.kind, session.credentials().redact(&failure.message))
 }
 
 impl SizeLookup for StoredCredentialsImmich {
@@ -114,11 +123,11 @@ impl OriginalSource for StoredCredentialsImmich {
     type Stream = ImmichOriginal;
 
     async fn open(&self, asset: &RemoteAssetId) -> Result<ImmichOriginal, Failure> {
-        let session = Self::session()?;
+        let session = Self::session().map_err(Failure::from_remote)?;
         let client = session.client();
         match client.open_asset_original(asset.as_str()).await {
             Ok(body) => Ok(ImmichOriginal { body, session }),
-            Err(error) => Err(original_failure(&session, error)),
+            Err(error) => Err(Failure::from_remote(redact_failure(&session, error))),
         }
     }
 }
@@ -127,16 +136,7 @@ impl OriginalStream for ImmichOriginal {
     async fn next_chunk(&mut self) -> Result<Option<Bytes>, Failure> {
         match self.body.next_chunk().await {
             Ok(chunk) => Ok(chunk),
-            Err(error) => Err(original_failure(&self.session, error)),
+            Err(error) => Err(Failure::from_remote(redact_failure(&self.session, error))),
         }
     }
-}
-
-fn original_failure(session: &ImmichSession, error: OriginalError) -> Failure {
-    let kind = match error.kind {
-        OriginalFailureKind::Unauthorized => FailureKind::Unauthorized,
-        OriginalFailureKind::NotFound => FailureKind::NotFound,
-        OriginalFailureKind::Unavailable => FailureKind::Offline,
-    };
-    Failure::new(kind, session.credentials().redact(&error.message))
 }

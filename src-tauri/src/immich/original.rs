@@ -5,34 +5,27 @@
 //! the whole original comes back, and it only reads: no Immich write is involved.
 
 use super::client::ImmichClient;
-use super::response::response_status_error;
+use super::remote_failure::{send_bounded, RemoteFailure, RemoteFailureKind};
 use bytes::Bytes;
-use reqwest::{Method, Response, StatusCode};
+use reqwest::{Method, Response};
+use std::time::Duration;
 
-/// Why an original could not be read, in the terms Hydration needs to pick a Cloud Files error.
+/// How long Explorer may wait on Immich: a read that cannot make progress fails instead of
+/// hanging, and the reader is told so.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum OriginalFailureKind {
-    /// 401 or 403: the API key is no longer accepted.
-    Unauthorized,
-    /// 404: the Remote Asset no longer exists (or is not visible to this key).
-    NotFound,
-    /// The server could not be reached, or answered with an error or a broken body.
-    Unavailable,
+pub(crate) struct OriginalTimeouts {
+    /// Connecting and waiting for the response headers.
+    pub response: Duration,
+    /// Waiting for the next piece of an original that has started to arrive. The whole download
+    /// has no deadline of its own: a large original on a slow link is fine while bytes keep coming.
+    pub stall: Duration,
 }
 
-/// A failed original read. `message` never carries credentials or a response body.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct OriginalError {
-    pub kind: OriginalFailureKind,
-    pub message: String,
-}
-
-impl OriginalFailureKind {
-    fn of_status(status: StatusCode) -> Self {
-        match status {
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Self::Unauthorized,
-            StatusCode::NOT_FOUND => Self::NotFound,
-            _ => Self::Unavailable,
+impl Default for OriginalTimeouts {
+    fn default() -> Self {
+        Self {
+            response: Duration::from_secs(15),
+            stall: Duration::from_secs(30),
         }
     }
 }
@@ -40,15 +33,22 @@ impl OriginalFailureKind {
 /// The body of an original being read.
 pub(crate) struct AssetOriginal {
     response: Response,
+    stall: Duration,
 }
 
 impl AssetOriginal {
     /// The next piece of the original, or `None` at its end.
-    pub(crate) async fn next_chunk(&mut self) -> Result<Option<Bytes>, OriginalError> {
-        self.response.chunk().await.map_err(|error| OriginalError {
-            kind: OriginalFailureKind::Unavailable,
-            message: format!("Failed to read asset original: {error}"),
-        })
+    pub(crate) async fn next_chunk(&mut self) -> Result<Option<Bytes>, RemoteFailure> {
+        match tokio::time::timeout(self.stall, self.response.chunk()).await {
+            Ok(Ok(chunk)) => Ok(chunk),
+            Ok(Err(error)) => Err(RemoteFailure::unavailable(format!(
+                "Failed to read asset original: {error}"
+            ))),
+            Err(_) => Err(RemoteFailure::unavailable(format!(
+                "Failed to read asset original: no data for {} seconds",
+                self.stall.as_secs().max(1)
+            ))),
+        }
     }
 }
 
@@ -57,30 +57,28 @@ impl ImmichClient {
     pub(crate) async fn open_asset_original(
         &self,
         asset_id: &str,
-    ) -> Result<AssetOriginal, OriginalError> {
-        Self::validate_path_segment(asset_id, "asset ID").map_err(|message| OriginalError {
-            kind: OriginalFailureKind::NotFound,
-            message,
-        })?;
-        let response = self
-            .request(Method::GET, &format!("assets/{asset_id}/original"))
-            .send()
+    ) -> Result<AssetOriginal, RemoteFailure> {
+        self.open_asset_original_within(asset_id, OriginalTimeouts::default())
             .await
-            .map_err(|error| OriginalError {
-                kind: OriginalFailureKind::Unavailable,
-                message: format!("Failed to download asset original: {error}"),
-            })?;
-        if !response.status().is_success() {
-            let kind = OriginalFailureKind::of_status(response.status());
-            let detail = response_status_error(response)
-                .await
-                .unwrap_or_else(|error| error);
-            return Err(OriginalError {
-                kind,
-                message: format!("Failed to download asset original: {detail}"),
-            });
-        }
-        Ok(AssetOriginal { response })
+    }
+
+    pub(crate) async fn open_asset_original_within(
+        &self,
+        asset_id: &str,
+        timeouts: OriginalTimeouts,
+    ) -> Result<AssetOriginal, RemoteFailure> {
+        Self::validate_path_segment(asset_id, "asset ID")
+            .map_err(|message| RemoteFailure::new(RemoteFailureKind::NotFound, message))?;
+        let response = send_bounded(
+            self.request(Method::GET, &format!("assets/{asset_id}/original")),
+            "Failed to download asset original",
+            timeouts.response,
+        )
+        .await?;
+        Ok(AssetOriginal {
+            response,
+            stall: timeouts.stall,
+        })
     }
 }
 
@@ -112,13 +110,10 @@ mod tests {
     #[tokio::test]
     async fn classifies_the_status_of_a_refused_original() {
         for (status, kind) in [
-            ("401 Unauthorized", OriginalFailureKind::Unauthorized),
-            ("403 Forbidden", OriginalFailureKind::Unauthorized),
-            ("404 Not Found", OriginalFailureKind::NotFound),
-            (
-                "500 Internal Server Error",
-                OriginalFailureKind::Unavailable,
-            ),
+            ("401 Unauthorized", RemoteFailureKind::Unauthorized),
+            ("403 Forbidden", RemoteFailureKind::Unauthorized),
+            ("404 Not Found", RemoteFailureKind::NotFound),
+            ("500 Internal Server Error", RemoteFailureKind::Unavailable),
         ] {
             let (url, _request) = serve_once(status, "secret server detail").await;
 
@@ -148,7 +143,7 @@ mod tests {
             Err(error) => error,
         };
 
-        assert_eq!(error.kind, OriginalFailureKind::Unavailable);
+        assert_eq!(error.kind, RemoteFailureKind::Unavailable);
     }
 
     #[tokio::test]
@@ -161,6 +156,67 @@ mod tests {
             Err(error) => error,
         };
 
-        assert_eq!(error.kind, OriginalFailureKind::NotFound);
+        assert_eq!(error.kind, RemoteFailureKind::NotFound);
+    }
+    fn quick() -> OriginalTimeouts {
+        OriginalTimeouts {
+            response: Duration::from_millis(150),
+            stall: Duration::from_millis(150),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_server_that_never_answers_fails_the_open_instead_of_hanging() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let hold = tokio::spawn(async move {
+            let (_stream, _) = listener.accept().await.unwrap();
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+
+        let error = match test_client(url, "key")
+            .open_asset_original_within("a", quick())
+            .await
+        {
+            Ok(_) => panic!("a silent server must fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.kind, RemoteFailureKind::Unavailable);
+        hold.abort();
+    }
+
+    #[tokio::test]
+    async fn a_download_that_stops_arriving_fails_the_read_instead_of_hanging() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        // Announces 100 bytes, sends 5, then goes quiet with the connection open.
+        let hold = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request).await.unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK
+content-length: 100
+
+hello",
+                )
+                .await
+                .unwrap();
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let mut original = test_client(url, "key")
+            .open_asset_original_within("a", quick())
+            .await
+            .unwrap();
+
+        assert_eq!(original.next_chunk().await.unwrap().unwrap(), "hello");
+        let error = original.next_chunk().await.unwrap_err();
+
+        assert_eq!(error.kind, RemoteFailureKind::Unavailable);
+        assert!(error.message.contains("no data"), "{}", error.message);
+        hold.abort();
     }
 }

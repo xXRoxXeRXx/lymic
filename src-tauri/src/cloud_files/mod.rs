@@ -15,7 +15,7 @@
 //!
 //! Hooks for the follow-up tickets: #279 adds the delete and rename vetoes to the callback table in
 //! `adapter::connection`; #280 compares what `population::populate` plans with the directories
-//! already populated; #281 refines `failure::Failure::status`, retries and the in-app notice.
+//! already populated; #281 (done) is `failure`, `reporting` and `inflight`.
 
 // Outside Windows only the tests use most of this module.
 #![cfg_attr(not(windows), allow(dead_code))]
@@ -24,10 +24,12 @@ mod activation;
 mod failure;
 mod hydration;
 mod identity;
+mod inflight;
 mod library;
 mod nested;
 mod placeholder;
 mod population;
+mod reporting;
 
 #[cfg(windows)]
 mod adapter;
@@ -37,6 +39,7 @@ pub(crate) use activation::ActivationError;
 pub(crate) use activation::{NESTED_SYNC_ROOT_ERROR, START_FAILED_ERROR};
 #[cfg(test)]
 pub(crate) use nested::{NestedRoot, Relation as NestedRelation};
+pub(crate) use reporting::{install as install_notice_sink, Notice, NoticeKind, NoticeSink};
 
 use std::path::PathBuf;
 
