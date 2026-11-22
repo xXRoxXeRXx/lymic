@@ -55,9 +55,40 @@ Fill the **Result** column with PASS, FAIL or the observed behaviour, and add a 
 | 26 | Inspect `AppxManifest.xml` in the registered package. | No `windows.cloudFiles` extension and no COM server declaration (the gate prototype's `Register` failed with 0x80070490 with one). | |
 | 27 | On a machine where the nested-root check can be exercised only through the registry (or only through `CfGetSyncRootInfoByPath`), note which one caught it, if it can be told. | Record. Reading `HKLM\...\SyncRootManager` from inside the package has not been confirmed to see other providers' roots. | |
 
+## Read-only enforcement (#279)
+
+**Status: NOT YET RUN.** Same environment table as above.
+
+What was observed and what was not. In the gate prototype (`vl-gates-prototype`) the maintainer saw, on real Windows 11, Explorer Delete and Explorer Rename of a placeholder raise `NOTIFY_DELETE` and `NOTIFY_RENAME` from `explorer.exe`, and vetoed them with `STATUS_CLOUD_FILE_ACCESS_DENIED` through `CfExecute` `ACK_DELETE` and `ACK_RENAME`. That code was ported into `adapter/callbacks.rs` (`on_notify_delete`, `on_notify_rename`) and the refusal decision lives in `cloud_files/write_guard.rs`, unit tested. **Nothing below has been run against the ported code**, and these paths have **never been observed at all**, even in the prototype: Shift+Delete, dragging to the Recycle Bin, and creating a new local file in the folder. The author of this change cannot run Explorer or register a package (Windows Server 2022, no Developer Mode). Which callback each of the unobserved paths raises is unknown; the Lymic diagnostic output (standard error, lines starting `virtual library: refused a ...`) tells which callback fired and with which target.
+
+Do the steps with the Virtual Library enabled and the Immich access log (or a proxy) open. Use a hydrated and an unhydrated placeholder, a file and a folder.
+
+| # | Step | Expected | Result |
+| --- | --- | --- | --- |
+| R1 | Select a placeholder file in Explorer, press Delete (or right-click, Delete). | Refused with an error; the file stays. Lymic logs `refused a delete`. | |
+| R2 | Same for a folder placeholder (for example a month, an album). | Refused; the folder and its content stay. | |
+| R3 | Rename a file placeholder (F2). | Refused; the old name stays. Lymic logs `refused a rename inside the Virtual Library folder`. | |
+| R4 | Rename a folder placeholder. | Refused. | |
+| R5 | Press Shift+Delete on a placeholder (permanent delete, skips the Recycle Bin). Record which callback Lymic logged. | Refused; the file stays. If it is deleted, or no refusal is logged, that is a FAIL and a finding for the ADR gate 1. | |
+| R6 | Drag a placeholder onto the Recycle Bin on the desktop. | Refused; Lymic logs `refused a rename into the Recycle Bin` or `refused a delete`. Nothing appears in the Recycle Bin. | |
+| R7 | Drag a placeholder to another folder outside the Virtual Library (same volume), then to another drive. | Refused (move on the same volume is a rename, to another volume it is copy then delete). Record whether the copy is made and whether the delete is refused; a copy is the user's own file and is allowed. The placeholder must stay. | |
+| R8 | Drag a placeholder to another folder inside the Virtual Library (for example from one month to another). | Refused. | |
+| R9 | Cut a placeholder (Ctrl+X) and paste it elsewhere. | Refused; the placeholder stays. | |
+| R10 | Select several placeholders and press Delete. | All refused; none disappears. | |
+| R11 | Restore from the Recycle Bin, if something that was vetoed ever got there (only possible if R5-R7 failed). | Record. | |
+| R12 | Right-click a hydrated file, Free up space. | Still works (dehydrate is not vetoed). | |
+| R13 | Create a new file in the Virtual Library folder (for example New, Text Document, and copy a photo into the root and into `All Photos`). | The file is created and is not blocked. Lymic does not touch it and makes no request to Immich for it. | |
+| R14 | Wait at least two minutes, then check the Immich access log and Lymic's activity log. | The files from R13 are never uploaded and never mentioned. No `POST /assets`, `PUT`, `PATCH` or `DELETE` of any kind. | |
+| R15 | Delete or rename the file from R13 itself. | Record: is it refused or allowed? (It is not a placeholder, so no callback is expected, and it is allowed.) | |
+| R16 | Try to add the Virtual Library folder (and a folder inside it, and its parent) as a Watched Folder; then add an ordinary Watched Folder and run a Synchronization. | The three are refused with the overlap message. The ordinary Watched Folder synchronizes as before and never reads the Virtual Library folder (check with Process Monitor on the folder if possible). | |
+| R17 | Make a junction or symbolic link inside an ordinary Watched Folder that points at the Virtual Library folder (`mklink /J`), then synchronize. | Record whether the scanner enters it. The scanner does not follow symbolic links by design; junctions on Windows have not been tested. A scan that hydrates a placeholder is a FAIL. | |
+| R18 | Inspect the Immich access log for the whole R session. | Only `GET` requests and the `POST` metadata searches. | |
+
+Code-level checks done by reading and by unit tests (not by running Explorer): the projection and hydration make only `GET` requests and the read-only `POST /search/metadata` (`walking_the_whole_projection_sends_only_reads_to_immich`); nothing in `cloud_files` or `virtual_library` references the upload queue, Synchronization or Watched Folders; Watched Folder registration, enabling and moving the root all refuse an overlap, in both directions (`virtual_library_root`, `watched_folders/registration.rs`, `commands/virtual_library.rs`, each with tests).
+
 ## Known gaps this record will not close
 
-- Delete and rename of placeholders are not vetoed yet (#279). Do not test them as passing.
+- Delete and rename of placeholders are vetoed in code (#279) but have never been run against this code; see the section below. Do not read them as passing.
 - Placeholders are not refreshed after the first listing (#280); a changed Immich Library shows after the next listing only if the directory was never populated.
 - No in-app notice and no re-login offer on failure (#281); the platform error is all a person sees.
 - Disabling does not unregister the sync root or remove files (#283).
