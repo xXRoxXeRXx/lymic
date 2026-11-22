@@ -460,5 +460,13 @@
   "log_virtual_library_start_failed": "无法启动虚拟图库：{error}",
   "virtual_library_nested_root": "此文件夹位于另一个云同步文件夹（例如 OneDrive）内或包含该文件夹，因此无法在此设置虚拟图库。请选择其他文件夹。",
   "virtual_library_start_failed": "无法启动虚拟图库：",
-  "virtual_library_disable_to_change_folder": "更改虚拟图库文件夹之前，请先停用虚拟图库。"
+  "virtual_library_disable_to_change_folder": "更改虚拟图库文件夹之前，请先停用虚拟图库。",
+  "log_virtual_library_offline": "无法从虚拟图库打开“{name}”，因为无法连接到 Immich。",
+  "log_virtual_library_unauthorized": "无法从虚拟图库打开“{name}”，因为你的 Immich 登录已失效。",
+  "log_virtual_library_not_found": "无法从虚拟图库打开“{name}”，因为它已从 Immich 中删除。下次刷新时它会消失。",
+  "log_virtual_library_failed": "无法从虚拟图库打开“{name}”。",
+  "virtual_library_notice_relogin": "重新登录",
+  "virtual_library_notice_dismiss": "关闭通知",
+  "virtual_library_relogin_hint": "你的 Immich 登录已失效。请输入新的 API 密钥以继续使用虚拟图库。",
+  "virtual_library_relogin_cancel": "暂不"
 }

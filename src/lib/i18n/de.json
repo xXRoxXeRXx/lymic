@@ -460,5 +460,13 @@
   "log_virtual_library_start_failed": "Die virtuelle Bibliothek konnte nicht gestartet werden: {error}",
   "virtual_library_nested_root": "Dieser Ordner liegt in einem anderen Cloud-Synchronisierungsordner (zum Beispiel OneDrive) oder enthält einen, daher kann die virtuelle Bibliothek dort nicht eingerichtet werden. Wähle einen anderen Ordner.",
   "virtual_library_start_failed": "Die virtuelle Bibliothek konnte nicht gestartet werden:",
-  "virtual_library_disable_to_change_folder": "Deaktiviere die virtuelle Bibliothek, bevor du ihren Ordner änderst."
+  "virtual_library_disable_to_change_folder": "Deaktiviere die virtuelle Bibliothek, bevor du ihren Ordner änderst.",
+  "log_virtual_library_offline": "„{name}“ konnte nicht aus der virtuellen Bibliothek geöffnet werden, weil Immich nicht erreichbar war.",
+  "log_virtual_library_unauthorized": "„{name}“ konnte nicht aus der virtuellen Bibliothek geöffnet werden, weil deine Immich-Anmeldung nicht mehr gültig ist.",
+  "log_virtual_library_not_found": "„{name}“ konnte nicht aus der virtuellen Bibliothek geöffnet werden, weil es aus Immich entfernt wurde. Es verschwindet bei der nächsten Aktualisierung.",
+  "log_virtual_library_failed": "„{name}“ konnte nicht aus der virtuellen Bibliothek geöffnet werden.",
+  "virtual_library_notice_relogin": "Erneut anmelden",
+  "virtual_library_notice_dismiss": "Hinweis schließen",
+  "virtual_library_relogin_hint": "Deine Immich-Anmeldung ist nicht mehr gültig. Gib einen neuen API-Schlüssel ein, um die virtuelle Bibliothek weiter zu nutzen.",
+  "virtual_library_relogin_cancel": "Jetzt nicht"
 }

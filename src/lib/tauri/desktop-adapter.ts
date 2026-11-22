@@ -27,6 +27,7 @@ import type {
   RemoveFolderResult,
   SyncSnapshot,
   SyncSummary,
+  VirtualLibraryNotice,
   VirtualLibrarySettings,
   WebviewStartupPhase,
   DetectedVolume,
@@ -201,6 +202,8 @@ export interface VirtualLibraryDesktopAdapter {
   openFolderDialog(options: { directory: true; multiple: false; defaultPath?: string; title: string }): Promise<string | string[] | null>;
   /** Backend announcements of changed Virtual Library settings. */
   subscribeToVirtualLibrarySettings(listener: (settings: VirtualLibrarySettings) => void): Promise<() => void>;
+  /** Backend announcements of a file that could not be opened (offline, expired sign-in, removed, other), once per failure episode. */
+  subscribeToVirtualLibraryNotices(listener: (notice: VirtualLibraryNotice) => void): Promise<() => void>;
 }
 
 export interface UpdateDesktopAdapter {
@@ -334,6 +337,10 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   setVirtualLibraryRootFolder: (path) => invoke<VirtualLibrarySettings>("set_virtual_library_root_folder", { path }),
   subscribeToVirtualLibrarySettings: (listener) => listen<VirtualLibrarySettings>(
     "virtual-library-settings-changed",
+    (event) => listener(event.payload),
+  ),
+  subscribeToVirtualLibraryNotices: (listener) => listen<VirtualLibraryNotice>(
+    "virtual-library-notice",
     (event) => listener(event.payload),
   ),
   recordWebviewStartupPhaseProbe: (phase) => invoke<void>("record_webview_startup_phase_probe", { phase }),

@@ -460,5 +460,13 @@
   "log_virtual_library_start_failed": "Could not start the Virtual Library: {error}",
   "virtual_library_nested_root": "This folder is inside or contains another cloud sync folder, such as OneDrive, so the Virtual Library cannot be set up there. Choose another folder.",
   "virtual_library_start_failed": "The Virtual Library could not be started:",
-  "virtual_library_disable_to_change_folder": "Disable the Virtual Library before changing its folder."
+  "virtual_library_disable_to_change_folder": "Disable the Virtual Library before changing its folder.",
+  "log_virtual_library_offline": "Could not open “{name}” from the Virtual Library because Immich could not be reached.",
+  "log_virtual_library_unauthorized": "Could not open “{name}” from the Virtual Library because your Immich sign-in is no longer valid.",
+  "log_virtual_library_not_found": "Could not open “{name}” from the Virtual Library because it was removed from Immich. It disappears at the next refresh.",
+  "log_virtual_library_failed": "Could not open “{name}” from the Virtual Library.",
+  "virtual_library_notice_relogin": "Sign in again",
+  "virtual_library_notice_dismiss": "Dismiss notice",
+  "virtual_library_relogin_hint": "Your Immich sign-in is no longer valid. Enter a new API key to keep using the Virtual Library.",
+  "virtual_library_relogin_cancel": "Not now"
 }

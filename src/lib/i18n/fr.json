@@ -460,5 +460,13 @@
   "log_virtual_library_start_failed": "Impossible de démarrer la bibliothèque virtuelle : {error}",
   "virtual_library_nested_root": "Ce dossier se trouve dans un autre dossier de synchronisation cloud (par exemple OneDrive) ou en contient un, la bibliothèque virtuelle ne peut donc pas y être configurée. Choisissez un autre dossier.",
   "virtual_library_start_failed": "Impossible de démarrer la bibliothèque virtuelle :",
-  "virtual_library_disable_to_change_folder": "Désactivez la bibliothèque virtuelle avant de modifier son dossier."
+  "virtual_library_disable_to_change_folder": "Désactivez la bibliothèque virtuelle avant de modifier son dossier.",
+  "log_virtual_library_offline": "Impossible d'ouvrir « {name} » depuis la bibliothèque virtuelle, car Immich est injoignable.",
+  "log_virtual_library_unauthorized": "Impossible d'ouvrir « {name} » depuis la bibliothèque virtuelle, car votre connexion à Immich n'est plus valide.",
+  "log_virtual_library_not_found": "Impossible d'ouvrir « {name} » depuis la bibliothèque virtuelle, car il a été supprimé d'Immich. Il disparaîtra à la prochaine actualisation.",
+  "log_virtual_library_failed": "Impossible d'ouvrir « {name} » depuis la bibliothèque virtuelle.",
+  "virtual_library_notice_relogin": "Se reconnecter",
+  "virtual_library_notice_dismiss": "Fermer la notification",
+  "virtual_library_relogin_hint": "Votre connexion à Immich n'est plus valide. Saisissez une nouvelle clé API pour continuer à utiliser la bibliothèque virtuelle.",
+  "virtual_library_relogin_cancel": "Pas maintenant"
 }

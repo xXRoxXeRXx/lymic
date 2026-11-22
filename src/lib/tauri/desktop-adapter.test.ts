@@ -240,6 +240,20 @@ describe("tauriDesktopAdapter", () => {
     expect(listener).toHaveBeenCalledWith(settings);
   });
 
+  it("forwards the backend's Virtual Library notices", async () => {
+    const notice = { kind: "unauthorized", name: "IMG_1.jpg" };
+    listen.mockImplementationOnce(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+      handler({ payload: notice });
+      return () => {};
+    });
+    const listener = vi.fn();
+
+    await virtualLibraryAdapter.subscribeToVirtualLibraryNotices(listener);
+
+    expect(listen).toHaveBeenCalledWith("virtual-library-notice", expect.any(Function));
+    expect(listener).toHaveBeenCalledWith(notice);
+  });
+
   it("returns the partial result of Move to Trash with its failure code as the backend reports it", async () => {
     const partial: TrashMoveResult = { movedAssetIds: ["asset-1"], failureCode: "trash_move_permission_denied:asset.delete" };
     invoke.mockClear();

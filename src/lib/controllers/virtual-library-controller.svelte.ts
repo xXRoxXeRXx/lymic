@@ -1,4 +1,4 @@
-import type { VirtualLibrarySettings } from "../contracts";
+import type { VirtualLibraryNotice, VirtualLibrarySettings } from "../contracts";
 import type { VirtualLibraryDesktopAdapter } from "../tauri/desktop-adapter";
 import { failureMessage } from "./request-failure";
 
@@ -26,11 +26,17 @@ const ERROR_CODES: Record<string, { key: string; detail: "path" | "reason" | "no
  * and autostart is off the controller offers a hint. The autostart state belongs to the preferences
  * controller and is read lazily through `autostartEnabled`; `null` means it is not known yet, which
  * must never flash the hint.
+ *
+ * A read that fails (Immich unreachable, expired sign-in, photo removed) is announced by the backend
+ * once per failure episode; the controller holds that one notice until it is dismissed. An expired
+ * sign-in offers to sign in again, through `beginRelogin`, which keeps the session (and the Virtual
+ * Library) as it is until the new key is accepted.
  */
 export function createVirtualLibraryController(options: {
   reportError(error: unknown): void;
   t(key: string): string;
   autostartEnabled(): boolean | null;
+  beginRelogin(): void;
   adapter: VirtualLibraryDesktopAdapter;
 }) {
   const { adapter } = options;
@@ -38,7 +44,9 @@ export function createVirtualLibraryController(options: {
   let isEnabled = $state(false);
   let rootFolder = $state<string | null>(null);
   let isSaving = $state(false);
+  let notice = $state<(VirtualLibraryNotice & { key: string; canRelogin: boolean }) | null>(null);
   let unlisten: (() => void) | undefined;
+  let unlistenNotices: (() => void) | undefined;
   let stopped = true;
 
   /** The localized error for a coded backend error; anything else is returned as it came. */
@@ -100,6 +108,24 @@ export function createVirtualLibraryController(options: {
     }
   }
 
+  function showNotice(announced: VirtualLibraryNotice) {
+    notice = {
+      ...announced,
+      key: `log_virtual_library_${announced.kind}`,
+      canRelogin: announced.kind === "unauthorized",
+    };
+  }
+
+  function dismissNotice() {
+    notice = null;
+  }
+
+  function relogin() {
+    if (!notice?.canRelogin) return;
+    notice = null;
+    options.beginRelogin();
+  }
+
   async function startLifecycle() {
     stopped = false;
     try {
@@ -109,12 +135,21 @@ export function createVirtualLibraryController(options: {
     } catch (error) {
       console.error("Failed to subscribe to Virtual Library settings", error);
     }
+    try {
+      const release = await adapter.subscribeToVirtualLibraryNotices(showNotice);
+      if (stopped) release?.();
+      else unlistenNotices = release;
+    } catch (error) {
+      console.error("Failed to subscribe to Virtual Library notices", error);
+    }
   }
 
   function stopLifecycle() {
     stopped = true;
     unlisten?.();
     unlisten = undefined;
+    unlistenNotices?.();
+    unlistenNotices = undefined;
   }
 
   return {
@@ -122,10 +157,13 @@ export function createVirtualLibraryController(options: {
     get isEnabled() { return isEnabled; },
     get isSaving() { return isSaving; },
     get rootFolder() { return rootFolder; },
+    get notice() { return notice; },
     get showAutostartHint() { return isEnabled && options.autostartEnabled() === false; },
     hydrate,
     toggle,
     chooseRootFolder,
+    dismissNotice,
+    relogin,
     startLifecycle,
     stopLifecycle,
   };

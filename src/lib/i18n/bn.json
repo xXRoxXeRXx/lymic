@@ -460,5 +460,13 @@
   "log_virtual_library_start_failed": "ভার্চুয়াল লাইব্রেরি চালু করা যায়নি: {error}",
   "virtual_library_nested_root": "এই ফোল্ডারটি অন্য একটি ক্লাউড সিঙ্ক ফোল্ডারের (যেমন OneDrive) ভিতরে আছে বা সেটি ধারণ করে, তাই এখানে ভার্চুয়াল লাইব্রেরি সেট আপ করা যাবে না। অন্য একটি ফোল্ডার বেছে নিন।",
   "virtual_library_start_failed": "ভার্চুয়াল লাইব্রেরি চালু করা যায়নি:",
-  "virtual_library_disable_to_change_folder": "ফোল্ডার পরিবর্তনের আগে ভার্চুয়াল লাইব্রেরি বন্ধ করুন।"
+  "virtual_library_disable_to_change_folder": "ফোল্ডার পরিবর্তনের আগে ভার্চুয়াল লাইব্রেরি বন্ধ করুন।",
+  "log_virtual_library_offline": "ভার্চুয়াল লাইব্রেরি থেকে “{name}” খোলা যায়নি, কারণ Immich-এ পৌঁছানো যায়নি।",
+  "log_virtual_library_unauthorized": "ভার্চুয়াল লাইব্রেরি থেকে “{name}” খোলা যায়নি, কারণ আপনার Immich সাইন-ইন আর বৈধ নয়।",
+  "log_virtual_library_not_found": "ভার্চুয়াল লাইব্রেরি থেকে “{name}” খোলা যায়নি, কারণ এটি Immich থেকে সরিয়ে ফেলা হয়েছে। পরের রিফ্রেশে এটি মুছে যাবে।",
+  "log_virtual_library_failed": "ভার্চুয়াল লাইব্রেরি থেকে “{name}” খোলা যায়নি।",
+  "virtual_library_notice_relogin": "আবার সাইন ইন করুন",
+  "virtual_library_notice_dismiss": "বিজ্ঞপ্তি বন্ধ করুন",
+  "virtual_library_relogin_hint": "আপনার Immich সাইন-ইন আর বৈধ নয়। ভার্চুয়াল লাইব্রেরি ব্যবহার চালিয়ে যেতে একটি নতুন API কী দিন।",
+  "virtual_library_relogin_cancel": "এখন নয়"
 }

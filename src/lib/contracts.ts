@@ -266,6 +266,16 @@ export interface VirtualLibrarySettings {
   root_folder: string | null;
 }
 
+/**
+ * A Virtual Library request that failed and that the user should hear about, once per failure
+ * episode (#281). Mirrors `cloud_files::Notice`, sent as the `virtual-library-notice` event. `name`
+ * is the photo or folder the failed request was about.
+ */
+export interface VirtualLibraryNotice {
+  kind: "offline" | "unauthorized" | "not_found" | "failed";
+  name: string;
+}
+
 export interface MapMarker { id: string; lat: number; lon: number; }
 
 // Search (ADR-0008, ADR-0009). Mirrors `src-tauri/src/immich/search.rs`.

@@ -22,6 +22,8 @@ export function createAuthController(options: {
   let cloudflareClientId = $state("");
   let cloudflareClientSecret = $state("");
   let isLoggingIn = $state(false);
+  /** Signing in again to the same server while the app stays open (an expired API key), not a logout. */
+  let isRelogin = $state(false);
   let loginError = $state("");
   let loginErrorCode = $state("");
   let generation = 0;
@@ -63,6 +65,7 @@ export function createAuthController(options: {
     if (request !== generation) return;
     if (!authenticated) {
       isAuthenticated = false;
+      isRelogin = false;
       currentUserName = "";
       profileImage = null;
       await options.onLogout();
@@ -103,6 +106,7 @@ export function createAuthController(options: {
       cloudflareClientId = "";
       cloudflareClientSecret = "";
       isAuthenticated = true;
+      isRelogin = false;
       currentUserName = "";
       profileImage = null;
       await options.onLogin();
@@ -121,6 +125,30 @@ export function createAuthController(options: {
     }
   }
 
+  function clearCredentialInputs() {
+    apiKey = "";
+    allowLocalHttp = false;
+    cloudflareClientId = "";
+    cloudflareClientSecret = "";
+    loginError = "";
+    loginErrorCode = "";
+  }
+
+  /**
+   * Asks for a new API key for the server already in use, after the stored one stopped working.
+   * The session stays as it is (nothing is logged out or cleaned up) until a login replaces it.
+   */
+  function beginRelogin() {
+    if (!isAuthenticated) return;
+    clearCredentialInputs();
+    isRelogin = true;
+  }
+
+  function cancelRelogin() {
+    clearCredentialInputs();
+    isRelogin = false;
+  }
+
   async function logout() {
     const confirmationGeneration = generation;
     const shouldLogout = await adapter.confirm(options.t("logout_confirmation"), {
@@ -134,6 +162,7 @@ export function createAuthController(options: {
       if (request !== generation) return;
       isLoggingIn = false;
       isAuthenticated = false;
+      isRelogin = false;
       apiKey = "";
       allowLocalHttp = false;
       loginError = "";
@@ -165,10 +194,13 @@ export function createAuthController(options: {
     get cloudflareClientSecret() { return cloudflareClientSecret; },
     set cloudflareClientSecret(value: string) { cloudflareClientSecret = value; },
     get isLoggingIn() { return isLoggingIn; },
+    get isRelogin() { return isRelogin; },
     get loginError() { return loginError; },
     get loginErrorCode() { return loginErrorCode; },
     hydrate,
     login,
     logout,
+    beginRelogin,
+    cancelRelogin,
   };
 }

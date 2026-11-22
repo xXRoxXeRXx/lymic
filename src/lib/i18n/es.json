@@ -460,5 +460,13 @@
   "log_virtual_library_start_failed": "No se pudo iniciar la biblioteca virtual: {error}",
   "virtual_library_nested_root": "Esta carpeta está dentro de otra carpeta de sincronización en la nube (por ejemplo OneDrive) o la contiene, por lo que la biblioteca virtual no se puede configurar allí. Elige otra carpeta.",
   "virtual_library_start_failed": "No se pudo iniciar la biblioteca virtual:",
-  "virtual_library_disable_to_change_folder": "Desactiva la biblioteca virtual antes de cambiar su carpeta."
+  "virtual_library_disable_to_change_folder": "Desactiva la biblioteca virtual antes de cambiar su carpeta.",
+  "log_virtual_library_offline": "No se pudo abrir «{name}» desde la biblioteca virtual porque no se pudo conectar con Immich.",
+  "log_virtual_library_unauthorized": "No se pudo abrir «{name}» desde la biblioteca virtual porque tu inicio de sesión en Immich ya no es válido.",
+  "log_virtual_library_not_found": "No se pudo abrir «{name}» desde la biblioteca virtual porque se eliminó de Immich. Desaparecerá en la próxima actualización.",
+  "log_virtual_library_failed": "No se pudo abrir «{name}» desde la biblioteca virtual.",
+  "virtual_library_notice_relogin": "Iniciar sesión de nuevo",
+  "virtual_library_notice_dismiss": "Descartar aviso",
+  "virtual_library_relogin_hint": "Tu inicio de sesión en Immich ya no es válido. Introduce una nueva clave de API para seguir usando la biblioteca virtual.",
+  "virtual_library_relogin_cancel": "Ahora no"
 }

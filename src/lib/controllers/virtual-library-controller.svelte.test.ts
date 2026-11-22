@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createVirtualLibraryController } from "./virtual-library-controller.svelte";
 import type { VirtualLibraryDesktopAdapter } from "../tauri/desktop-adapter";
-import type { VirtualLibrarySettings } from "../contracts";
+import type { VirtualLibraryNotice, VirtualLibrarySettings } from "../contracts";
 
 function createDesktopAdapter(overrides: Partial<VirtualLibraryDesktopAdapter> = {}): VirtualLibraryDesktopAdapter {
   return {
@@ -10,12 +10,14 @@ function createDesktopAdapter(overrides: Partial<VirtualLibraryDesktopAdapter> =
     setVirtualLibraryRootFolder: vi.fn(),
     openFolderDialog: vi.fn(),
     subscribeToVirtualLibrarySettings: vi.fn().mockResolvedValue(() => {}),
+    subscribeToVirtualLibraryNotices: vi.fn().mockResolvedValue(() => {}),
     ...overrides,
   };
 }
 
 function createController(adapter: VirtualLibraryDesktopAdapter, reportError = vi.fn(), autostart: () => boolean | null = () => true) {
-  return { reportError, controller: createVirtualLibraryController({ reportError, adapter, autostartEnabled: autostart, t: (key) => key }) };
+  const beginRelogin = vi.fn();
+  return { reportError, beginRelogin, controller: createVirtualLibraryController({ reportError, adapter, autostartEnabled: autostart, beginRelogin, t: (key) => key }) };
 }
 
 const ROOT = "C:\\Users\\Me\\Pictures\\Lymic";
@@ -304,5 +306,100 @@ describe("virtual library controller", () => {
     await started;
 
     expect(unlisten).toHaveBeenCalledTimes(1);
+  });
+
+  describe("notices about files that could not be opened", () => {
+    async function withNotices() {
+      let announce: (notice: VirtualLibraryNotice) => void = () => {};
+      const unlisten = vi.fn();
+      const adapter = createDesktopAdapter({
+        subscribeToVirtualLibraryNotices: vi.fn().mockImplementation(async (listener) => {
+          announce = listener;
+          return unlisten;
+        }),
+      });
+      const created = createController(adapter);
+      await created.controller.startLifecycle();
+      return { ...created, announce: (notice: VirtualLibraryNotice) => announce(notice), unlisten };
+    }
+
+    it("has no notice until the backend announces one", async () => {
+      const { controller } = await withNotices();
+
+      expect(controller.notice).toBeNull();
+    });
+
+    it("shows the announced notice with the log key of its kind and the item's name", async () => {
+      const { controller, announce } = await withNotices();
+
+      announce({ kind: "offline", name: "IMG_1.jpg" });
+
+      expect(controller.notice).toEqual({ kind: "offline", name: "IMG_1.jpg", key: "log_virtual_library_offline", canRelogin: false });
+      for (const kind of ["not_found", "failed"] as const) {
+        announce({ kind, name: "a" });
+        expect(controller.notice).toMatchObject({ key: `log_virtual_library_${kind}`, canRelogin: false });
+      }
+    });
+
+    it("offers to sign in again only for an expired sign-in", async () => {
+      const { controller, announce } = await withNotices();
+
+      announce({ kind: "unauthorized", name: "IMG_1.jpg" });
+
+      expect(controller.notice).toMatchObject({ kind: "unauthorized", canRelogin: true });
+    });
+
+    it("dismisses the notice", async () => {
+      const { controller, announce } = await withNotices();
+      announce({ kind: "offline", name: "a" });
+
+      controller.dismissNotice();
+
+      expect(controller.notice).toBeNull();
+    });
+
+    it("signs in again by starting the sign-in and clearing the notice", async () => {
+      const { controller, announce, beginRelogin } = await withNotices();
+      announce({ kind: "unauthorized", name: "a" });
+
+      controller.relogin();
+
+      expect(beginRelogin).toHaveBeenCalledTimes(1);
+      expect(controller.notice).toBeNull();
+    });
+
+    it("does not start a sign-in for a notice that does not offer one", async () => {
+      const { controller, announce, beginRelogin } = await withNotices();
+      announce({ kind: "offline", name: "a" });
+
+      controller.relogin();
+
+      expect(beginRelogin).not.toHaveBeenCalled();
+      expect(controller.notice).not.toBeNull();
+    });
+
+    it("stops listening when the lifecycle stops", async () => {
+      const { controller, unlisten } = await withNotices();
+
+      controller.stopLifecycle();
+
+      expect(unlisten).toHaveBeenCalledTimes(1);
+    });
+
+    it("releases a subscription that resolves after the lifecycle already stopped", async () => {
+      const late = vi.fn();
+      let resolveSubscription: (unlisten: () => void) => void = () => {};
+      const adapter = createDesktopAdapter({
+        subscribeToVirtualLibraryNotices: vi.fn().mockReturnValue(new Promise((resolve) => { resolveSubscription = resolve; })),
+      });
+      const { controller } = createController(adapter);
+
+      const started = controller.startLifecycle();
+      controller.stopLifecycle();
+      resolveSubscription(late);
+      await started;
+
+      expect(late).toHaveBeenCalledTimes(1);
+    });
   });
 });
