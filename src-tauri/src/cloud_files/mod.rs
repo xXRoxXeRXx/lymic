@@ -9,21 +9,22 @@
 //! themselves are in `adapter`, behind `cfg(windows)`; they cannot be unit tested and are covered
 //! by the manual record in `docs/virtual-library-verification.md`.
 //!
-//! Lifecycle in this ticket: [`SystemSyncRoot::start`] runs when the user enables the Virtual
-//! Library and again on app start while it is enabled; [`SystemSyncRoot::stop`] only stops serving
-//! callbacks. Unregistering the sync root and removing what Lymic created is #283.
+//! Lifecycle: [`SystemSyncRoot::start`] runs when the user enables the Virtual Library and again
+//! on app start while it is enabled. [`SystemSyncRoot::clean_up`] (disabling, logout; `cleanup`,
+//! #283) stops serving, unregisters the sync root and removes what Lymic created.
 //!
 //! Reconciliation (#280) keeps populated directories current: `reconcile` diffs what
 //! `population::populate` plans (`diff`) against the directories on disk, `refresh` decides when it
 //! runs and keeps runs from overlapping, `reconciliation` wires it to the app.
 //!
-//! Hooks for the follow-up tickets: #279 adds the delete and rename vetoes to the callback table in
-//! `adapter::connection`; #281 refines `failure::Failure::status`, retries and the in-app notice.
+//! Hooks for the follow-up tickets: #281 refines `failure::Failure::status`, retries and the in-app
+//! notice.
 
 // Outside Windows only the tests use most of this module.
 #![cfg_attr(not(windows), allow(dead_code))]
 
 mod activation;
+mod cleanup;
 mod diff;
 mod failure;
 mod hydration;
@@ -36,6 +37,7 @@ mod population;
 mod reconcile;
 mod reconciliation;
 mod refresh;
+mod write_guard;
 
 #[cfg(windows)]
 mod adapter;
@@ -43,6 +45,9 @@ mod adapter;
 pub(crate) use activation::ActivationError;
 #[cfg(test)]
 pub(crate) use activation::{NESTED_SYNC_ROOT_ERROR, START_FAILED_ERROR};
+#[cfg(test)]
+pub(crate) use cleanup::CLEANUP_FAILED_ERROR;
+pub(crate) use cleanup::{CleanupError, CleanupReport};
 #[cfg(test)]
 pub(crate) use nested::{NestedRoot, Relation as NestedRelation};
 pub(crate) use reconciliation::{mark_populated, run_schedule, LibraryRefresh, SystemRefresh};
@@ -63,8 +68,17 @@ pub(crate) trait SyncRootService: Sync {
         root: PathBuf,
     ) -> impl std::future::Future<Output = Result<(), ActivationError>> + Send;
 
-    /// Stops serving callbacks. Registered sync roots and placeholders stay (#283).
+    /// Stops serving callbacks only. The registration and the placeholders stay; used when a
+    /// start has to be undone. Disabling and logout use [`SyncRootService::clean_up`].
     fn stop(&self);
+
+    /// Stops serving, unregisters the sync root and removes everything Lymic created in `root`
+    /// (`cleanup`). Works when nothing is connected or registered. Files Lymic did not create stay,
+    /// with their folder; the report says what is left.
+    fn clean_up(
+        &self,
+        root: PathBuf,
+    ) -> impl std::future::Future<Output = Result<CleanupReport, CleanupError>> + Send;
 }
 
 /// The real thing: Windows only.
@@ -84,5 +98,15 @@ impl SyncRootService for SystemSyncRoot {
     fn stop(&self) {
         #[cfg(windows)]
         adapter::stop();
+    }
+
+    #[cfg(windows)]
+    async fn clean_up(&self, root: PathBuf) -> Result<CleanupReport, CleanupError> {
+        adapter::clean_up(root).await
+    }
+
+    #[cfg(not(windows))]
+    async fn clean_up(&self, _root: PathBuf) -> Result<CleanupReport, CleanupError> {
+        Err(CleanupError::Unsupported)
     }
 }

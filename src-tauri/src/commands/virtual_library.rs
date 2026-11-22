@@ -2,13 +2,17 @@
 //!
 //! The section exists only for a packaged Store-channel Windows run. The decision is made here, at
 //! runtime, and never by the frontend: the release-channel flag alone is a compile-time label.
-//! Enabling registers and serves the sync root through `cloud_files` (Windows adapter, #278) and
-//! disabling stops serving it; unregistering is #283. The root folder (the Known Folder Pictures
-//! plus `Lymic` unless the user chose another) and the refusal to overlap a Watched Folder live
-//! here and in `virtual_library_root`; the registration side of the rule is in `watched_folders`.
+//! Enabling registers and serves the sync root through `cloud_files` (Windows adapter, #278).
+//! Disabling, and logging out (`clean_up_for_logout`), run the cleanup (#283): the sync root is
+//! unregistered and everything Lymic created is removed; files it did not create stay with their
+//! folder. The confirmation that precedes both is the frontend's; the backend never asks. What is
+//! left is announced to the frontend as `virtual-library-cleanup-finished`. The root folder (the
+//! Known Folder Pictures plus `Lymic` unless the user chose another) and the refusal to overlap a
+//! Watched Folder live here and in `virtual_library_root`; the registration side of the rule is in
+//! `watched_folders`.
 
 use crate::{
-    cloud_files::{LibraryRefresh, SyncRootService, SystemRefresh, SystemSyncRoot},
+    cloud_files::{CleanupReport, LibraryRefresh, SyncRootService, SystemRefresh, SystemSyncRoot},
     db,
     media::paths::canonicalize_folder_path,
     virtual_library_root::{
@@ -20,6 +24,8 @@ use std::path::{Path, PathBuf};
 use tauri::Emitter;
 
 pub(crate) const SETTINGS_CHANGED_EVENT: &str = "virtual-library-settings-changed";
+/// Sent after a cleanup that left something in place or could not remove something.
+pub(crate) const CLEANUP_FINISHED_EVENT: &str = "virtual-library-cleanup-finished";
 const UNAVAILABLE_MESSAGE: &str =
     "The Virtual Library is available only in the Microsoft Store version of Lymic on Windows.";
 /// Error text prefix when the folder is changed while the Virtual Library is enabled. The
@@ -107,19 +113,31 @@ fn overlap_refusal(action: &str, root: &Path, overlaps: &[(PathBuf, RootOverlap)
     }
 }
 
+/// The settings after a change, and what the cleanup did when the change was a disable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Change {
+    settings: VirtualLibrarySettings,
+    cleanup: Option<CleanupReport>,
+}
+
 /// Enabling checks the folder (Watched Folders, other sync roots), registers and serves it, and only
-/// then remembers the choice; a refusal leaves everything as it was. Disabling remembers the choice
-/// and stops serving.
+/// then remembers the choice; a refusal leaves everything as it was. Disabling stops serving,
+/// unregisters the sync root, removes everything Lymic created (`cloud_files::cleanup`) and then
+/// remembers the choice. When the cleanup cannot run at all (the registration cannot be removed,
+/// the folder cannot be examined) nothing was removed, the Virtual Library is served again and
+/// stays enabled. Items that could not be removed one by one do not stop the disable; they are in
+/// the report.
 async fn change_enabled(
     pool: &sqlx::SqlitePool,
     available: bool,
     known_folders: &impl KnownFolders,
     service: &impl SyncRootService,
     enabled: bool,
-) -> Result<VirtualLibrarySettings, String> {
+) -> Result<Change, String> {
     if !available {
         return Err(UNAVAILABLE_MESSAGE.to_string());
     }
+    let mut cleanup = None;
     if enabled {
         let root = load_root(pool, known_folders)
             .await?
@@ -141,12 +159,78 @@ async fn change_enabled(
             return Err(error.to_string());
         }
     } else {
+        match load_root(pool, known_folders).await? {
+            Some(root) => match service.clean_up(root.clone()).await {
+                Ok(report) => cleanup = Some(report),
+                Err(error) => {
+                    // Nothing was removed: keep serving what the user still has enabled.
+                    let _ = service.start(root).await;
+                    return Err(error.user_message());
+                }
+            },
+            None => service.stop(),
+        }
         db::set_virtual_library_enabled(pool, false)
             .await
             .map_err(|error| error.to_string())?;
-        service.stop();
+        // The placeholders are gone, so no directory is populated any more (#280).
+        db::clear_virtual_library_populated_directories(pool)
+            .await
+            .map_err(|error| error.to_string())?;
     }
-    load_settings(pool, available, known_folders).await
+    Ok(Change {
+        settings: load_settings(pool, available, known_folders).await?,
+        cleanup,
+    })
+}
+
+/// Logout runs the same cleanup as disabling, whatever its outcome: signing out must always work. A
+/// cleanup that could not run is reported instead of returned, and the Virtual Library is off
+/// afterwards in every case, so the next account is never served the previous account's folder.
+/// `None` when the Virtual Library is not available or was not enabled.
+async fn clean_up_for_logout_with(
+    pool: &sqlx::SqlitePool,
+    available: bool,
+    known_folders: &impl KnownFolders,
+    service: &impl SyncRootService,
+) -> Option<CleanupReport> {
+    if !available || !db::get_virtual_library_enabled(pool).await.unwrap_or(false) {
+        return None;
+    }
+    let report = match load_root(pool, known_folders).await {
+        Ok(Some(root)) => match service.clean_up(root.clone()).await {
+            Ok(report) => Some(report),
+            Err(error) => Some(CleanupReport::not_run(&root, error.user_message())),
+        },
+        _ => {
+            service.stop();
+            None
+        }
+    };
+    if let Err(error) = db::set_virtual_library_enabled(pool, false).await {
+        eprintln!("virtual library: could not remember that it is off after logout: {error}");
+    }
+    if let Err(error) = db::clear_virtual_library_populated_directories(pool).await {
+        eprintln!("virtual library: could not forget the populated directories: {error}");
+    }
+    report
+}
+
+/// Called by `logout` before the credentials are deleted. Tells the frontend the new settings and,
+/// when anything stayed or failed, what the cleanup left.
+pub(crate) async fn clean_up_for_logout(app: &tauri::AppHandle, pool: &sqlx::SqlitePool) {
+    let report = clean_up_for_logout_with(
+        pool,
+        is_available_at_runtime(),
+        &SystemKnownFolders,
+        &SystemSyncRoot,
+    )
+    .await;
+    let Some(report) = report else { return };
+    if let Ok(settings) = load_settings(pool, true, &SystemKnownFolders).await {
+        announce(app, &settings);
+    }
+    announce_cleanup(app, &report);
 }
 
 /// Starts serving again after an app start, when the Virtual Library is available and enabled.
@@ -265,6 +349,13 @@ fn announce(app: &tauri::AppHandle, settings: &VirtualLibrarySettings) {
     let _ = app.emit(SETTINGS_CHANGED_EVENT, settings);
 }
 
+/// Tells the frontend what a cleanup left, when there is anything to tell.
+fn announce_cleanup(app: &tauri::AppHandle, report: &CleanupReport) {
+    if report.needs_notice() {
+        let _ = app.emit(CLEANUP_FINISHED_EVENT, report);
+    }
+}
+
 #[tauri::command]
 pub(crate) async fn get_virtual_library_settings(
     pool: tauri::State<'_, sqlx::SqlitePool>,
@@ -278,7 +369,7 @@ pub(crate) async fn set_virtual_library_enabled(
     pool: tauri::State<'_, sqlx::SqlitePool>,
     enabled: bool,
 ) -> Result<VirtualLibrarySettings, String> {
-    let settings = change_enabled(
+    let change = change_enabled(
         pool.inner(),
         is_available_at_runtime(),
         &SystemKnownFolders,
@@ -286,8 +377,11 @@ pub(crate) async fn set_virtual_library_enabled(
         enabled,
     )
     .await?;
-    announce(&app, &settings);
-    Ok(settings)
+    announce(&app, &change.settings);
+    if let Some(report) = &change.cleanup {
+        announce_cleanup(&app, report);
+    }
+    Ok(change.settings)
 }
 
 #[tauri::command]
@@ -320,15 +414,21 @@ pub(crate) async fn refresh_virtual_library(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cloud_files::{ActivationError, NESTED_SYNC_ROOT_ERROR, START_FAILED_ERROR};
+    use crate::cloud_files::{
+        ActivationError, CleanupError, CleanupReport, CLEANUP_FAILED_ERROR, NESTED_SYNC_ROOT_ERROR,
+        START_FAILED_ERROR,
+    };
     use crate::db::test_pool;
     use crate::virtual_library_root::FixedKnownFolders;
     use std::sync::Mutex;
 
-    /// A sync root service that records what it is asked and can refuse to start.
+    /// A sync root service that records what it is asked, can refuse to start and answers a
+    /// cleanup with a canned result.
     struct FakeService {
         refuse: Option<ActivationError>,
+        cleanup: Result<CleanupReport, CleanupError>,
         started: Mutex<Vec<PathBuf>>,
+        cleaned: Mutex<Vec<PathBuf>>,
         stops: Mutex<usize>,
     }
 
@@ -336,7 +436,9 @@ mod tests {
         fn ok() -> Self {
             Self {
                 refuse: None,
+                cleanup: Ok(CleanupReport::default()),
                 started: Mutex::new(Vec::new()),
+                cleaned: Mutex::new(Vec::new()),
                 stops: Mutex::new(0),
             }
         }
@@ -348,8 +450,19 @@ mod tests {
             }
         }
 
+        fn cleaning(result: Result<CleanupReport, CleanupError>) -> Self {
+            Self {
+                cleanup: result,
+                ..Self::ok()
+            }
+        }
+
         fn started(&self) -> Vec<PathBuf> {
             self.started.lock().unwrap().clone()
+        }
+
+        fn cleaned(&self) -> Vec<PathBuf> {
+            self.cleaned.lock().unwrap().clone()
         }
 
         fn stops(&self) -> usize {
@@ -369,6 +482,24 @@ mod tests {
         fn stop(&self) {
             *self.stops.lock().unwrap() += 1;
         }
+
+        async fn clean_up(&self, root: PathBuf) -> Result<CleanupReport, CleanupError> {
+            self.cleaned.lock().unwrap().push(root);
+            self.cleanup.clone()
+        }
+    }
+
+    /// `change_enabled` for the tests that only look at the settings.
+    async fn toggle(
+        pool: &sqlx::SqlitePool,
+        available: bool,
+        known_folders: &impl KnownFolders,
+        service: &impl SyncRootService,
+        enabled: bool,
+    ) -> Result<VirtualLibrarySettings, String> {
+        change_enabled(pool, available, known_folders, service, enabled)
+            .await
+            .map(|change| change.settings)
     }
 
     /// A refresh that records how often it ran and can fail.
@@ -437,14 +568,14 @@ mod tests {
             settings(true, false, Some(default_root()))
         );
         assert_eq!(
-            change_enabled(&pool, true, &known, &FakeService::ok(), true)
+            toggle(&pool, true, &known, &FakeService::ok(), true)
                 .await
                 .unwrap(),
             settings(true, true, Some(default_root()))
         );
         assert!(load_settings(&pool, true, &known).await.unwrap().enabled);
         assert!(
-            !change_enabled(&pool, true, &known, &FakeService::ok(), false)
+            !toggle(&pool, true, &known, &FakeService::ok(), false)
                 .await
                 .unwrap()
                 .enabled
@@ -462,7 +593,7 @@ mod tests {
             settings(false, false, None)
         );
         assert_eq!(
-            change_enabled(&pool, false, &known, &FakeService::ok(), true).await,
+            toggle(&pool, false, &known, &FakeService::ok(), true).await,
             Err(UNAVAILABLE_MESSAGE.to_string())
         );
         assert_eq!(
@@ -515,7 +646,7 @@ mod tests {
             settings(true, false, None)
         );
         assert_eq!(
-            change_enabled(&pool, true, &unknown, &FakeService::ok(), true).await,
+            toggle(&pool, true, &unknown, &FakeService::ok(), true).await,
             Err(NO_ROOT_MESSAGE.to_string())
         );
         assert!(!db::get_virtual_library_enabled(&pool).await.unwrap());
@@ -563,7 +694,7 @@ mod tests {
             let pool = test_pool().await;
             watch(&pool, &watched).await;
 
-            let error = change_enabled(&pool, true, &known, &FakeService::ok(), true)
+            let error = toggle(&pool, true, &known, &FakeService::ok(), true)
                 .await
                 .unwrap_err();
 
@@ -583,14 +714,14 @@ mod tests {
         watch(&pool, &pictures().join("Holiday")).await;
 
         assert!(
-            change_enabled(&pool, true, &known, &FakeService::ok(), true)
+            toggle(&pool, true, &known, &FakeService::ok(), true)
                 .await
                 .unwrap()
                 .enabled
         );
         watch(&pool, &pictures()).await;
         assert!(
-            !change_enabled(&pool, true, &known, &FakeService::ok(), false)
+            !toggle(&pool, true, &known, &FakeService::ok(), false)
                 .await
                 .unwrap()
                 .enabled
@@ -604,7 +735,7 @@ mod tests {
         watch(&pool, &pictures()).await;
         watch(&pool, &inside).await;
 
-        let error = change_enabled(&pool, true, &known(), &FakeService::ok(), true)
+        let error = toggle(&pool, true, &known(), &FakeService::ok(), true)
             .await
             .unwrap_err();
 
@@ -652,9 +783,7 @@ mod tests {
         let pool = test_pool().await;
         let service = FakeService::ok();
 
-        let enabled = change_enabled(&pool, true, &known(), &service, true)
-            .await
-            .unwrap();
+        let enabled = toggle(&pool, true, &known(), &service, true).await.unwrap();
 
         assert_eq!(service.started(), vec![default_root()]);
         assert!(enabled.enabled);
@@ -672,7 +801,7 @@ mod tests {
             },
         ));
 
-        let error = change_enabled(&pool, true, &known(), &service, true)
+        let error = toggle(&pool, true, &known(), &service, true)
             .await
             .unwrap_err();
 
@@ -689,7 +818,7 @@ mod tests {
         let pool = test_pool().await;
         let service = FakeService::refusing(ActivationError::Register("0x80070490".to_string()));
 
-        let error = change_enabled(&pool, true, &known(), &service, true)
+        let error = toggle(&pool, true, &known(), &service, true)
             .await
             .unwrap_err();
 
@@ -704,7 +833,7 @@ mod tests {
         watch(&pool, &pictures()).await;
         let service = FakeService::ok();
 
-        change_enabled(&pool, true, &known(), &service, true)
+        toggle(&pool, true, &known(), &service, true)
             .await
             .unwrap_err();
 
@@ -712,19 +841,162 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn disabling_remembers_the_choice_and_stops_serving() {
+    async fn disabling_cleans_up_the_root_remembers_the_choice_and_returns_the_report() {
         let pool = test_pool().await;
+        let report = CleanupReport {
+            root_folder: default_root().to_string_lossy().into_owned(),
+            removed_files: 3,
+            ..CleanupReport::default()
+        };
+        let service = FakeService::cleaning(Ok(report.clone()));
+        toggle(&pool, true, &known(), &service, true).await.unwrap();
+
+        let change = change_enabled(&pool, true, &known(), &service, false)
+            .await
+            .unwrap();
+
+        assert!(!change.settings.enabled);
+        assert_eq!(change.cleanup, Some(report));
+        assert_eq!(service.cleaned(), vec![default_root()]);
+        assert!(!db::get_virtual_library_enabled(&pool).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn enabling_returns_no_cleanup_report() {
+        let pool = test_pool().await;
+
+        let change = change_enabled(&pool, true, &known(), &FakeService::ok(), true)
+            .await
+            .unwrap();
+
+        assert_eq!(change.cleanup, None);
+    }
+
+    #[tokio::test]
+    async fn a_cleanup_that_cannot_run_keeps_the_virtual_library_enabled_and_serving_again() {
+        let pool = test_pool().await;
+        let service =
+            FakeService::cleaning(Err(CleanupError::Unregister("0x80070005".to_string())));
+        toggle(&pool, true, &known(), &service, true).await.unwrap();
+
+        let error = change_enabled(&pool, true, &known(), &service, false)
+            .await
+            .unwrap_err();
+
+        assert!(error.starts_with(CLEANUP_FAILED_ERROR), "{error}");
+        assert!(error.contains("0x80070005"), "{error}");
+        assert!(db::get_virtual_library_enabled(&pool).await.unwrap());
+        assert_eq!(
+            service.started(),
+            vec![default_root(), default_root()],
+            "served again after the failed cleanup"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_report_with_files_left_behind_is_passed_on_so_the_user_is_told() {
+        let pool = test_pool().await;
+        let report = CleanupReport {
+            kept_count: 1,
+            kept_examples: vec!["mine.txt".to_string()],
+            root_kept: true,
+            ..CleanupReport::default()
+        };
+        let service = FakeService::cleaning(Ok(report));
+
+        let change = change_enabled(&pool, true, &known(), &service, false)
+            .await
+            .unwrap();
+
+        assert!(change.cleanup.unwrap().needs_notice());
+    }
+
+    #[test]
+    fn the_cleanup_report_serialises_with_the_field_names_the_frontend_contract_expects() {
+        let report = CleanupReport {
+            root_folder: "C:\\Pictures\\Lymic".to_string(),
+            removed_files: 2,
+            removed_folders: 1,
+            kept_count: 1,
+            kept_examples: vec!["mine.txt".to_string()],
+            root_kept: true,
+            failed_count: 0,
+            failed_examples: vec![],
+            error: None,
+        };
+
+        assert_eq!(
+            serde_json::to_value(report).unwrap(),
+            serde_json::json!({
+                "root_folder": "C:\\Pictures\\Lymic",
+                "removed_files": 2,
+                "removed_folders": 1,
+                "kept_count": 1,
+                "kept_examples": ["mine.txt"],
+                "root_kept": true,
+                "failed_count": 0,
+                "failed_examples": [],
+                "error": null
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn logout_runs_the_same_cleanup_and_turns_the_virtual_library_off() {
+        let pool = test_pool().await;
+        let report = CleanupReport {
+            removed_files: 5,
+            ..CleanupReport::default()
+        };
+        let service = FakeService::cleaning(Ok(report.clone()));
+        toggle(&pool, true, &known(), &service, true).await.unwrap();
+
+        let result = clean_up_for_logout_with(&pool, true, &known(), &service).await;
+
+        assert_eq!(result, Some(report));
+        assert_eq!(service.cleaned(), vec![default_root()]);
+        assert!(!db::get_virtual_library_enabled(&pool).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn logout_does_not_touch_anything_when_the_virtual_library_was_not_enabled_or_available()
+    {
         let service = FakeService::ok();
-        change_enabled(&pool, true, &known(), &service, true)
+        let disabled = test_pool().await;
+        assert_eq!(
+            clean_up_for_logout_with(&disabled, true, &known(), &service).await,
+            None
+        );
+
+        let enabled = test_pool().await;
+        db::set_virtual_library_enabled(&enabled, true)
+            .await
+            .unwrap();
+        assert_eq!(
+            clean_up_for_logout_with(&enabled, false, &known(), &service).await,
+            None
+        );
+
+        assert!(service.cleaned().is_empty());
+        assert!(db::get_virtual_library_enabled(&enabled).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn logout_reports_a_cleanup_that_could_not_run_and_still_turns_the_virtual_library_off() {
+        let pool = test_pool().await;
+        let service = FakeService::cleaning(Err(CleanupError::Unregister("denied".to_string())));
+        toggle(&pool, true, &known(), &FakeService::ok(), true)
             .await
             .unwrap();
 
-        let disabled = change_enabled(&pool, true, &known(), &service, false)
+        let report = clean_up_for_logout_with(&pool, true, &known(), &service)
             .await
             .unwrap();
 
-        assert!(!disabled.enabled);
-        assert_eq!(service.stops(), 1);
+        assert!(report.needs_notice());
+        assert!(report.error.unwrap().contains("denied"));
+        assert_eq!(report.root_folder, default_root().to_string_lossy());
+        assert!(!db::get_virtual_library_enabled(&pool).await.unwrap());
     }
 
     #[tokio::test]
@@ -732,7 +1004,7 @@ mod tests {
         let pool = test_pool().await;
         let service = FakeService::ok();
 
-        assert!(change_enabled(&pool, false, &known(), &service, true)
+        assert!(toggle(&pool, false, &known(), &service, true)
             .await
             .is_err());
 
@@ -743,7 +1015,7 @@ mod tests {
     async fn the_folder_cannot_be_changed_while_the_virtual_library_is_enabled() {
         let pool = test_pool().await;
         let known = known();
-        change_enabled(&pool, true, &known, &FakeService::ok(), true)
+        toggle(&pool, true, &known, &FakeService::ok(), true)
             .await
             .unwrap();
 
@@ -844,6 +1116,36 @@ mod tests {
             error,
             format!("{REFRESH_FAILED_ERROR}: could not list '': offline")
         );
+    }
+
+    #[tokio::test]
+    async fn disabling_and_logout_forget_the_populated_directories() {
+        for logout in [false, true] {
+            let pool = test_pool().await;
+            let service = FakeService::ok();
+            change_enabled(&pool, true, &known(), &service, true)
+                .await
+                .unwrap();
+            db::mark_virtual_library_directory_populated(&pool, "Albums")
+                .await
+                .unwrap();
+
+            if logout {
+                clean_up_for_logout_with(&pool, true, &known(), &service).await;
+            } else {
+                change_enabled(&pool, true, &known(), &service, false)
+                    .await
+                    .unwrap();
+            }
+
+            assert!(
+                db::list_virtual_library_populated_directories(&pool)
+                    .await
+                    .unwrap()
+                    .is_empty(),
+                "logout: {logout}"
+            );
+        }
     }
 
     #[tokio::test]

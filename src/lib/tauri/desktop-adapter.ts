@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
-import { confirm, open, save } from "@tauri-apps/plugin-dialog";
+import { confirm, message, open, save } from "@tauri-apps/plugin-dialog";
 import { isPermissionGranted, sendNotification } from "@tauri-apps/plugin-notification";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -27,6 +27,7 @@ import type {
   RemoveFolderResult,
   SyncSnapshot,
   SyncSummary,
+  VirtualLibraryCleanupReport,
   VirtualLibrarySettings,
   WebviewStartupPhase,
   DetectedVolume,
@@ -206,6 +207,12 @@ export interface VirtualLibraryDesktopAdapter {
   refreshVirtualLibrary(): Promise<void>;
   /** Backend announcements of changed Virtual Library settings. */
   subscribeToVirtualLibrarySettings(listener: (settings: VirtualLibrarySettings) => void): Promise<() => void>;
+  /** Backend announcements of a cleanup (disabling, logout) that left something in place or could not remove something. */
+  subscribeToVirtualLibraryCleanup(listener: (report: VirtualLibraryCleanupReport) => void): Promise<() => void>;
+  /** The native confirmation dialog, used before a disable removes the originals the Virtual Library downloaded. */
+  confirm(message: string, options: { title: string; kind: "warning" }): Promise<boolean>;
+  /** A native notice with an OK button. */
+  notify(text: string, options: { title: string; kind: "warning" }): Promise<void>;
 }
 
 export interface UpdateDesktopAdapter {
@@ -342,6 +349,11 @@ export const tauriDesktopAdapter: DesktopAdapter = {
     "virtual-library-settings-changed",
     (event) => listener(event.payload),
   ),
+  subscribeToVirtualLibraryCleanup: (listener) => listen<VirtualLibraryCleanupReport>(
+    "virtual-library-cleanup-finished",
+    (event) => listener(event.payload),
+  ),
+  notify: async (text, options) => { await message(text, options); },
   recordWebviewStartupPhaseProbe: (phase) => invoke<void>("record_webview_startup_phase_probe", { phase }),
   getReleaseChannel: () => invoke<ReleaseChannel>("get_release_channel"),
   getAppVersion: getVersion,

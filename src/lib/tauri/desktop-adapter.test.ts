@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { invoke, confirm, open, save, getVersion, check, relaunch, listen, isPermissionGranted, sendNotification, openUrl } = vi.hoisted(() => ({
+const { invoke, confirm, message, open, save, getVersion, check, relaunch, listen, isPermissionGranted, sendNotification, openUrl } = vi.hoisted(() => ({
   invoke: vi.fn(),
   confirm: vi.fn(),
+  message: vi.fn(),
   open: vi.fn(),
   save: vi.fn(),
   getVersion: vi.fn(),
@@ -17,7 +18,7 @@ const { invoke, confirm, open, save, getVersion, check, relaunch, listen, isPerm
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/app", () => ({ getVersion }));
 vi.mock("@tauri-apps/api/event", () => ({ listen }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm, open, save }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm, message, open, save }));
 vi.mock("@tauri-apps/plugin-notification", () => ({ isPermissionGranted, sendNotification }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch }));
@@ -241,6 +242,26 @@ describe("tauriDesktopAdapter", () => {
     expect(invoke).toHaveBeenCalledWith("refresh_virtual_library");
     expect(listen).toHaveBeenCalledWith("virtual-library-settings-changed", expect.any(Function));
     expect(listener).toHaveBeenCalledWith(settings);
+  });
+
+  it("forwards the Virtual Library cleanup reports and shows the user's notices and confirmations through the native dialogs", async () => {
+    const report = { root_folder: "D:/Lib", removed_files: 1, removed_folders: 1, kept_count: 1, kept_examples: ["mine.txt"], root_kept: true, failed_count: 0, failed_examples: [], error: null };
+    listen.mockImplementationOnce(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+      handler({ payload: report });
+      return () => {};
+    });
+    confirm.mockResolvedValueOnce(true);
+    message.mockResolvedValueOnce(undefined);
+    const listener = vi.fn();
+
+    await virtualLibraryAdapter.subscribeToVirtualLibraryCleanup(listener);
+    await expect(virtualLibraryAdapter.confirm("Disable?", { title: "Virtual Library", kind: "warning" })).resolves.toBe(true);
+    await virtualLibraryAdapter.notify("Kept", { title: "Virtual Library", kind: "warning" });
+
+    expect(listen).toHaveBeenCalledWith("virtual-library-cleanup-finished", expect.any(Function));
+    expect(listener).toHaveBeenCalledWith(report);
+    expect(confirm).toHaveBeenCalledWith("Disable?", { title: "Virtual Library", kind: "warning" });
+    expect(message).toHaveBeenCalledWith("Kept", { title: "Virtual Library", kind: "warning" });
   });
 
   it("returns the partial result of Move to Trash with its failure code as the backend reports it", async () => {

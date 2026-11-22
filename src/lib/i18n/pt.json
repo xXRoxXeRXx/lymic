@@ -464,5 +464,11 @@
   "virtual_library_refresh": "Atualizar biblioteca",
   "virtual_library_refreshing": "A atualizar…",
   "virtual_library_refresh_description": "Verifica no Immich fotos novas, alteradas e removidas nas pastas que já abriu. Isto também acontece automaticamente a cada 10 minutos.",
-  "virtual_library_refresh_failed": "Não foi possível atualizar a biblioteca virtual:"
+  "virtual_library_refresh_failed": "Não foi possível atualizar a biblioteca virtual:",
+  "virtual_library_disable_confirmation": "Desativar a biblioteca virtual?",
+  "virtual_library_cleanup_warning": "O Lymic remove os marcadores da biblioteca virtual e todos os originais que transferiu para a pasta, incluindo os ficheiros transferidos e os que definiu para manter sempre neste dispositivo. Os ficheiros da pasta que não são marcadores e não foram criados pelo Lymic permanecem no local, juntamente com a respetiva pasta. As suas fotos no Immich não são afetadas.",
+  "virtual_library_cleanup_kept": "Alguns ficheiros na pasta da biblioteca virtual não foram criados pelo Lymic e, por isso, foram mantidos juntamente com a pasta:",
+  "virtual_library_cleanup_failed_items": "Não foi possível remover estes itens. Desative e volte a ativar a biblioteca virtual para tentar novamente:",
+  "virtual_library_cleanup_not_run": "Não foi possível remover a pasta de sincronização da biblioteca virtual, por isso nenhum ficheiro foi eliminado:",
+  "virtual_library_cleanup_failed": "Não foi possível desativar a biblioteca virtual, que continua ativada:"
 }

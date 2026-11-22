@@ -464,5 +464,11 @@
   "virtual_library_refresh": "Actualiser la bibliothèque",
   "virtual_library_refreshing": "Actualisation…",
   "virtual_library_refresh_description": "Rechercher dans Immich les photos nouvelles, modifiées et supprimées dans les dossiers déjà ouverts. Cela se fait aussi automatiquement toutes les 10 minutes.",
-  "virtual_library_refresh_failed": "La bibliothèque virtuelle n'a pas pu être actualisée :"
+  "virtual_library_refresh_failed": "La bibliothèque virtuelle n'a pas pu être actualisée :",
+  "virtual_library_disable_confirmation": "Désactiver la bibliothèque virtuelle ?",
+  "virtual_library_cleanup_warning": "Lymic supprime les espaces réservés de la bibliothèque virtuelle et tous les originaux qu'il a téléchargés dans le dossier, y compris les fichiers téléchargés et ceux que vous avez choisi de toujours conserver sur cet appareil. Les fichiers du dossier qui ne sont pas des espaces réservés et n'ont pas été créés par Lymic restent en place, avec leur dossier. Vos photos dans Immich ne sont pas affectées.",
+  "virtual_library_cleanup_kept": "Certains fichiers du dossier de la bibliothèque virtuelle n'ont pas été créés par Lymic ; ils ont donc été conservés avec leur dossier :",
+  "virtual_library_cleanup_failed_items": "Ces éléments n'ont pas pu être supprimés. Désactivez puis réactivez la bibliothèque virtuelle pour réessayer :",
+  "virtual_library_cleanup_not_run": "Le dossier de synchronisation de la bibliothèque virtuelle n'a pas pu être supprimé ; aucun fichier n'a donc été effacé :",
+  "virtual_library_cleanup_failed": "La bibliothèque virtuelle n'a pas pu être désactivée et reste activée :"
 }

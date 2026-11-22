@@ -11,7 +11,8 @@
 //! platform would otherwise have to throw away with it.
 //!
 //! Lymic's own deletions are registered with [`OWN_REMOVALS`] so that the delete veto of #279
-//! (`NOTIFY_DELETE` in `callbacks.rs`) can let them pass: it asks [`is_own_removal`].
+//! (`NOTIFY_DELETE` in `callbacks.rs`) lets them pass: it asks [`is_own_removal`] and acknowledges instead of
+//! vetoing (the one exception to `write_guard`'s refusal).
 
 use crate::cloud_files::diff::{LocalEntry, LocalState, Plan, Removal, Update};
 use crate::cloud_files::identity;
@@ -34,7 +35,6 @@ static OWN_REMOVALS: OwnRemovals = OwnRemovals::new();
 
 /// Whether Lymic itself is deleting the placeholder at the root-relative `path` (`/` separated).
 /// For the delete veto (#279): such a deletion must be acknowledged, not refused.
-#[allow(dead_code)] // The delete veto of #279 calls it.
 pub(in crate::cloud_files) fn is_own_removal(path: &str) -> bool {
     OWN_REMOVALS.is_own(path)
 }

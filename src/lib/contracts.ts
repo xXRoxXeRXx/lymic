@@ -266,6 +266,30 @@ export interface VirtualLibrarySettings {
   root_folder: string | null;
 }
 
+/**
+ * What a Virtual Library cleanup (disabling, logout) did, sent as `virtual-library-cleanup-finished`
+ * only when something stayed or failed. Mirrors `CleanupReport` in
+ * `src-tauri/src/cloud_files/cleanup.rs`.
+ */
+export interface VirtualLibraryCleanupReport {
+  /** The Virtual Library folder that was cleaned. */
+  root_folder: string;
+  removed_files: number;
+  removed_folders: number;
+  /** Items left in place because Lymic did not create them (or the user changed them). */
+  kept_count: number;
+  /** The first few of them, relative to the folder. */
+  kept_examples: string[];
+  /** The folder itself stays, because something is left in it. */
+  root_kept: boolean;
+  /** Items that could not be removed. */
+  failed_count: number;
+  /** The first few of them with the reason. */
+  failed_examples: string[];
+  /** The cleanup could not run at all (the sync folder could not be unregistered); nothing was removed. */
+  error: string | null;
+}
+
 export interface MapMarker { id: string; lat: number; lon: number; }
 
 // Search (ADR-0008, ADR-0009). Mirrors `src-tauri/src/immich/search.rs`.
