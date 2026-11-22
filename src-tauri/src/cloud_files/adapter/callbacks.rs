@@ -326,14 +326,27 @@ fn fail_data(request: &Request, offset: i64, length: i64, status: CloudStatus) {
 
 // ------------------------------------------------------------------ connection
 
-/// A connected sync root.
-pub(super) struct Connection(CF_CONNECTION_KEY);
+/// A connected sync root. It owns the callback table the platform was given, so the table lives
+/// exactly as long as the connection and is freed after the disconnect, once per connect.
+pub(super) struct Connection {
+    key: CF_CONNECTION_KEY,
+    // Declared for its lifetime only: the platform may read it until the disconnect returns.
+    _table: Box<[CF_CALLBACK_REGISTRATION]>,
+}
 
 impl Connection {
     /// Stops callbacks. The registration stays.
     pub(super) fn disconnect(self) {
-        // SAFETY: the key came from a successful `CfConnectSyncRoot` and is disconnected once.
-        if let Err(error) = unsafe { CfDisconnectSyncRoot(self.0) } {
+        drop(self);
+    }
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        // SAFETY: the key came from a successful `CfConnectSyncRoot` and is disconnected once. The
+        // call returns when no callback is running any more; the table is freed after it, as the
+        // fields drop after this body.
+        if let Err(error) = unsafe { CfDisconnectSyncRoot(self.key) } {
             note(&format!("CfDisconnectSyncRoot failed: {error}"));
         }
     }
@@ -363,10 +376,10 @@ fn callback_table() -> Vec<CF_CALLBACK_REGISTRATION> {
 
 /// Connects the registered sync root at `root` and starts serving callbacks.
 pub(super) fn connect(root: &Path) -> windows::core::Result<Connection> {
-    // The platform may keep the table, so it lives for the rest of the process.
-    let table: &'static [CF_CALLBACK_REGISTRATION] = Box::leak(callback_table().into_boxed_slice());
+    // The platform may keep the table, so the connection owns it until it is disconnected.
+    let table = callback_table().into_boxed_slice();
     let root = utf16z(&root.to_string_lossy());
-    // SAFETY: `root` is NUL terminated and `table` is terminated and static.
+    // SAFETY: `root` is NUL terminated and `table` is terminated and outlives the connection.
     let key = unsafe {
         CfConnectSyncRoot(
             PCWSTR(root.as_ptr()),
@@ -375,5 +388,5 @@ pub(super) fn connect(root: &Path) -> windows::core::Result<Connection> {
             CF_CONNECT_FLAG_NONE,
         )?
     };
-    Ok(Connection(key))
+    Ok(Connection { key, _table: table })
 }

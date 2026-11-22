@@ -2,7 +2,7 @@
 
 **Status: NOT YET RUN.** Every result below is empty on purpose.
 
-This is the manual verification record for the Windows adapter tracer bullet ([#278](https://github.com/xXRoxXeRXx/lymic/issues/278), part of [#266](https://github.com/xXRoxXeRXx/lymic/issues/266), [ADR-0003](adr/0003-windows-virtual-cloud-library.md)): enabling the Virtual Library, registering the sync root, browsing the projected tree in Explorer, hydrating an original, and refusing a folder inside another sync root.
+This is the manual verification record for the Windows adapter tracer bullet ([#278](https://github.com/xXRoxXeRXx/lymic/issues/278), part of [#266](https://github.com/xXRoxXeRXx/lymic/issues/266), [ADR-0003](adr/0003-windows-virtual-cloud-library.md)): enabling the Virtual Library, registering the sync root, browsing the projected tree in Explorer, hydrating an original, and refusing a folder inside another sync root. The cleanup on disable and logout ([#283](https://github.com/xXRoxXeRXx/lymic/issues/283)) has its own section below; it is also **not yet run**.
 
 ## What was and was not observed
 
@@ -41,9 +41,9 @@ Fill the **Result** column with PASS, FAIL or the observed behaviour, and add a 
 | 12 | Copy a hydrated file elsewhere and compare its SHA-256 with the original downloaded from the Immich web app. | Identical. | |
 | 13 | Open a large video (more than 1 GiB if possible). Watch Lymic's memory in Task Manager. | The video plays or copies completely. Memory does not grow with the file size. | |
 | 14 | Open an album or month with more than 1000 assets. | All assets appear (placeholders are handed over in batches of 1000). | |
-| 15 | Switch the toggle off, then on again for the same folder. | Re-enabling is not mistaken for a nested root and works. | |
+| 15 | Switch the toggle off (confirm the dialog), then on again for the same folder. | Re-enabling is not mistaken for a nested root and works. | |
 | 16 | Quit Lymic and start it again with the toggle on. Without touching Settings, open an unhydrated placeholder. | It hydrates (the sync root is served again on app start). | |
-| 17 | Switch the toggle off. Open an unhydrated placeholder, and a hydrated one. | The unhydrated one fails to open (record the Explorer error). The hydrated one still opens. The registration and placeholders stay (cleanup is #283). | |
+| 17 | Switch the toggle off and confirm (see steps 28 to 43 for the cleanup in detail). Look at the folder. | The Virtual Library folder no longer shows unhydrated placeholders: nothing is left to open. | |
 | 18 | While enabled, try Change folder. | Refused with a localized message asking to disable the Virtual Library first. | |
 | 19 | Disable the toggle. Choose, with Change folder, a folder inside OneDrive (or inside any other cloud sync folder), then switch on. | Refused with a localized message that asks for another folder and names the other sync root. The toggle stays off. No new entry appears under `SyncRootManager` and the folder is not created. | |
 | 20 | Choose a folder that contains another sync root (for example your user profile folder, which contains `OneDrive`). Switch on. | Refused the same way. Nothing is registered. | |
@@ -55,11 +55,57 @@ Fill the **Result** column with PASS, FAIL or the observed behaviour, and add a 
 | 26 | Inspect `AppxManifest.xml` in the registered package. | No `windows.cloudFiles` extension and no COM server declaration (the gate prototype's `Register` failed with 0x80070490 with one). | |
 | 27 | On a machine where the nested-root check can be exercised only through the registry (or only through `CfGetSyncRootInfoByPath`), note which one caught it, if it can be told. | Record. Reading `HKLM\...\SyncRootManager` from inside the package has not been confirmed to see other providers' roots. | |
 
+## Cleanup on disable and logout (#283): NOT YET RUN
+
+The cleanup ([#283](https://github.com/xXRoxXeRXx/lymic/issues/283)) is implemented the same way as the rest of the adapter: the decisions (what is Lymic's, what stays, the order, a failure half way, running twice) are unit tested in `src-tauri/src/cloud_files/cleanup.rs` and `commands/virtual_library.rs` with a fake filesystem and a fake host, and the confirmation and notice flow is tested in the controllers. The Windows calls (`adapter/teardown.rs`: `CfGetPlaceholderInfo` on an attributes-only handle, `StorageProviderSyncRootManager.Unregister`, `CfDisconnectSyncRoot`) **cannot be unit tested and have never run**: this machine cannot register an MSIX package or open Explorer. Everything below is expected behaviour to be checked, not an observation. Use a throw-away Immich account and a Virtual Library folder with nothing valuable in it.
+
+What the cleanup assumes about Windows, each to be confirmed by the steps:
+
+- A hydrated or pinned original is still reported as a placeholder by `CfGetPlaceholderInfo`, with the identity Lymic stored and the in-sync state (steps 30 and 31).
+- Reading that state does not hydrate anything and does not call Immich (step 33).
+- A file the user created in the folder is not a placeholder (steps 30 and 31).
+- Unregistering and deleting work while nothing serves the folder (steps 31 and 36).
+- What `Unregister` does to placeholders is **not established**: the gate prototype saw unhydrated placeholders disappear and hydrated ones turn into plain files, unpackaged and on Windows Server only. The cleanup scans before it unregisters, so the outcome only decides whether Lymic or Windows removes the files. Record which (step 31).
+
+| # | Step | Expected | Result |
+| --- | --- | --- | --- |
+| 28 | Enable the Virtual Library. Browse `All Photos` to a month, open (hydrate) two photos, and on a third use "Always keep on this device". Put a text file `mine.txt` into a month folder, and a text file `top.txt` into the root folder. Make a folder `Mine` in the root with a file inside. Edit one hydrated photo and save it in place. | The two photos show the locally available icon, the third shows the pinned icon. | |
+| 29 | Switch the toggle off and decline the confirmation. | The dialog names that hydrated and pinned originals are removed and that files that are not placeholders and were not created by Lymic stay in place together with their folder. After declining, nothing changed: the toggle is still on, the folder is still served, files still open. | |
+| 30 | Switch the toggle off and confirm. | The toggle turns off. A notice names the folder and lists `mine.txt`, `top.txt`, `Mine` (or its file) and the edited photo as kept. | |
+| 31 | Inspect the folder in Explorer and with `reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager" /s`. Also note, if you can tell, whether Lymic or Windows removed the files (watch with Process Monitor for `DeleteFile` from `lymic-desktop.exe`). | The `Lymic.VirtualLibrary!<SID>!Library` entry is gone. The unhydrated, hydrated and pinned placeholders and the empty Lymic folders are gone. `mine.txt` with its month folder and the folders above it, `top.txt` with the root folder, `Mine` with its file, and the edited photo with its folders are all still there. Record which of the two removed the hydrated files. | |
+| 32 | Open the kept files. | They open and have their content (nothing of the user's was deleted or truncated). | |
+| 33 | During step 30, watch the Immich access log. | No request for any original and no listing: the cleanup reads only local placeholder state. | |
+| 34 | Repeat 28 and 30 with no user files, no edited photo and no `Mine` folder. | No notice. The root folder is removed too. | |
+| 35 | After 34, switch on again, then off again at once (nothing browsed). | Both work; no notice; the folder is created and removed again. | |
+| 36 | Switch on, browse a few folders, then end `lymic-desktop.exe` in Task Manager (a crash: nothing connected). Start Lymic, switch off and confirm. | The cleanup completes the same way as in step 31 although the sync root was served by the previous process. | |
+| 37 | Switch on, browse, switch off and confirm; then immediately repeat the same disable cleanup (switch on, off) | The second run finds nothing to remove and does not error. | |
+| 38 | While the Virtual Library is on, lock one hydrated file (open it in another program so the delete is refused) and switch off. | A notice lists that item with the Windows reason and says to turn the Virtual Library on and off again. Everything else is removed and the sync root is unregistered. Close the other program, switch on, off: the item is removed. | |
+| 39 | While the Virtual Library is on, log out: decline the confirmation. | The logout question also names that hydrated and pinned originals are removed and that other files stay. Declining changes nothing: still logged in, still served. | |
+| 40 | Repeat 28, log out and confirm. | Same cleanup as 31 and the same notice as 30 (shown on the login screen). After logging in again the Virtual Library is off and the folder is not served. | |
+| 41 | Log out while the Virtual Library is off. | The plain logout question only. Nothing is removed from the folder, which may be any folder the user already has. | |
+| 42 | Repeat 30 in German and Arabic. | The dialogs and notices are in the chosen language; the right-to-left text and the path are not garbled. | |
+| 43 | Open Task Manager details, switch the Virtual Library on and off five times. | Lymic's memory does not grow by a callback table per cycle (the table is now owned by the connection and freed on disconnect). | |
+
+### Uninstall (gate #277): not observed
+
+Nobody has observed what Windows leaves behind when the Store package is uninstalled, and the cleanup does not rely on it. Check on a machine that can: with the Virtual Library on, some photos hydrated and pinned and a user file in the folder, uninstall the package without switching the Virtual Library off, then record:
+
+| Item | Observed |
+| --- | --- |
+| Is the `SyncRootManager` registration still there? | |
+| Does the folder still show in Explorer with cloud icons? | |
+| Do unhydrated placeholders open, fail, or stay? What error? | |
+| Do hydrated and pinned files still open? | |
+| Can the leftover folder be deleted in Explorer? Any error? | |
+| After reinstalling, enabling and disabling the Virtual Library: is everything Lymic created removed? | |
+
+Until this is observed, the guidance for a user who sees a leftover Lymic folder after an uninstall is: delete it in Explorer (placeholders and hydrated files can be deleted by the user; nothing is deleted in Immich), or reinstall Lymic, switch the Virtual Library on and off again so that its cleanup runs. The CHANGELOG says the same. An in-app note is not possible: Lymic is not running after an uninstall, and no uninstall hook exists.
+
 ## Known gaps this record will not close
 
 - Delete and rename of placeholders are not vetoed yet (#279). Do not test them as passing.
 - Placeholders are not refreshed after the first listing (#280); a changed Immich Library shows after the next listing only if the directory was never populated.
 - No in-app notice and no re-login offer on failure (#281); the platform error is all a person sees.
-- Disabling does not unregister the sync root or remove files (#283).
+- Disabling and logout run the cleanup (#283); it has not run on Windows yet, see the section below. What Windows leaves behind after an MSIX uninstall (#277) is unknown.
 - No thumbnails from Immich and no autostart hint yet; unhydrated placeholders work only while Lymic runs.
 - Files whose size Immich does not report even after asking for the asset are left out of their directory (logged to standard error only).
