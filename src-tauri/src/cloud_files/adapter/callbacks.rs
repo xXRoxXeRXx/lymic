@@ -2,9 +2,8 @@
 //! `FETCH_DATA` (a placeholder opened). Each one copies what it needs, spawns the work onto the
 //! Tokio runtime and returns at once; the spawned work answers through `CfExecute`.
 //!
-//! Hook for #279 (the delete and rename veto): add the `NOTIFY_DELETE` and `NOTIFY_RENAME` entries
-//! to [`callback_table`], and acknowledge them with `CF_OPERATION_TYPE_ACK_DELETE` and
-//! `CF_OPERATION_TYPE_ACK_RENAME` using [`Request`] and [`operation_info`].
+//! `NOTIFY_DELETE` and `NOTIFY_RENAME` (#279) are the exception to "spawn and return": they only
+//! refuse (`write_guard`), do no I/O, and acknowledge inline.
 
 use crate::cloud_files::failure::{CloudStatus, Failure, FailureKind};
 use crate::cloud_files::hydration::{self, Block, DataRequest, DataSink};
@@ -12,6 +11,7 @@ use crate::cloud_files::identity;
 use crate::cloud_files::library::StoredCredentialsImmich;
 use crate::cloud_files::placeholder::PlaceholderSpec;
 use crate::cloud_files::population;
+use crate::cloud_files::write_guard;
 use std::mem::{offset_of, size_of};
 use std::path::Path;
 use windows::core::{HRESULT, PCWSTR};
@@ -324,6 +324,85 @@ fn fail_data(request: &Request, offset: i64, length: i64, status: CloudStatus) {
     }
 }
 
+// ------------------------------------------------------------------ NOTIFY_DELETE / NOTIFY_RENAME
+
+/// What the platform answers a refused delete or rename with. Observed in the gate prototype
+/// (`vl-gates-prototype`): Explorer shows the operation as refused and leaves the placeholder.
+const VETO: NTSTATUS = windows::Win32::Foundation::STATUS_CLOUD_FILE_ACCESS_DENIED;
+
+unsafe extern "system" fn on_notify_delete(
+    info: *const CF_CALLBACK_INFO,
+    _parameters: *const CF_CALLBACK_PARAMETERS,
+) {
+    // SAFETY: called by the platform with the callback's own `info`.
+    let request = unsafe { Request::capture(info) };
+    veto_delete(&request);
+}
+
+unsafe extern "system" fn on_notify_rename(
+    info: *const CF_CALLBACK_INFO,
+    parameters: *const CF_CALLBACK_PARAMETERS,
+) {
+    // SAFETY: called by the platform with the callback's own `info` and `parameters`.
+    let (request, rename) = unsafe { (Request::capture(info), (*parameters).Anonymous.Rename) };
+    // SAFETY: `TargetPath` is NUL terminated and valid while the callback runs, or null.
+    let target = if rename.TargetPath.is_null() {
+        String::new()
+    } else {
+        unsafe { rename.TargetPath.to_string() }.unwrap_or_default()
+    };
+    veto_rename(
+        &request,
+        &target,
+        rename
+            .Flags
+            .contains(CF_CALLBACK_RENAME_FLAG_TARGET_IN_SCOPE),
+    );
+}
+
+/// Refuses the delete. Every `NOTIFY_*` that asks for an answer must get one, or the caller waits.
+fn veto_delete(request: &Request) {
+    let refusal = write_guard::refuse(write_guard::Operation::Delete);
+    note(&format!(
+        "refused a {} of '{}'",
+        refusal.describe(),
+        request.path().unwrap_or_default()
+    ));
+    let operation = operation_info(request, CF_OPERATION_TYPE_ACK_DELETE);
+    let mut params = parameters(size_of::<CF_OPERATION_PARAMETERS_0_7>());
+    params.Anonymous.AckDelete = CF_OPERATION_PARAMETERS_0_7 {
+        Flags: CF_OPERATION_ACK_DELETE_FLAG_NONE,
+        CompletionStatus: VETO,
+    };
+    // SAFETY: valid structures for the call.
+    if let Err(error) = unsafe { CfExecute(&operation, &mut params) } {
+        note(&format!("ACK_DELETE failed: {error}"));
+    }
+}
+
+/// Refuses the rename or move, whatever its target (inside the root, out of it, the Recycle Bin).
+fn veto_rename(request: &Request, target: &str, target_in_scope: bool) {
+    let refusal = write_guard::refuse(write_guard::Operation::Rename {
+        target,
+        target_in_scope,
+    });
+    note(&format!(
+        "refused a {} of '{}' to '{target}'",
+        refusal.describe(),
+        request.path().unwrap_or_default()
+    ));
+    let operation = operation_info(request, CF_OPERATION_TYPE_ACK_RENAME);
+    let mut params = parameters(size_of::<CF_OPERATION_PARAMETERS_0_6>());
+    params.Anonymous.AckRename = CF_OPERATION_PARAMETERS_0_6 {
+        Flags: CF_OPERATION_ACK_RENAME_FLAG_NONE,
+        CompletionStatus: VETO,
+    };
+    // SAFETY: valid structures for the call.
+    if let Err(error) = unsafe { CfExecute(&operation, &mut params) } {
+        note(&format!("ACK_RENAME failed: {error}"));
+    }
+}
+
 // ------------------------------------------------------------------ connection
 
 /// A connected sync root. It owns the callback table the platform was given, so the table lives
@@ -367,6 +446,8 @@ fn callback_table() -> Vec<CF_CALLBACK_REGISTRATION> {
     vec![
         registration(CF_CALLBACK_TYPE_FETCH_PLACEHOLDERS, on_fetch_placeholders),
         registration(CF_CALLBACK_TYPE_FETCH_DATA, on_fetch_data),
+        registration(CF_CALLBACK_TYPE_NOTIFY_DELETE, on_notify_delete),
+        registration(CF_CALLBACK_TYPE_NOTIFY_RENAME, on_notify_rename),
         CF_CALLBACK_REGISTRATION {
             Type: CF_CALLBACK_TYPE_NONE,
             Callback: None,

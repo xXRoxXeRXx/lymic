@@ -13,8 +13,7 @@
 //! on app start while it is enabled. [`SystemSyncRoot::clean_up`] (disabling, logout; `cleanup`,
 //! #283) stops serving, unregisters the sync root and removes what Lymic created.
 //!
-//! Hooks for the follow-up tickets: #279 adds the delete and rename vetoes to the callback table in
-//! `adapter::connection`; #280 compares what `population::populate` plans with the directories
+//! Hooks for the follow-up tickets: #280 compares what `population::populate` plans with the directories
 //! already populated; #281 refines `failure::Failure::status`, retries and the in-app notice.
 
 // Outside Windows only the tests use most of this module.
@@ -29,6 +28,7 @@ mod library;
 mod nested;
 mod placeholder;
 mod population;
+mod write_guard;
 
 #[cfg(windows)]
 mod adapter;
