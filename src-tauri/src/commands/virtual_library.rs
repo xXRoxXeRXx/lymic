@@ -12,7 +12,11 @@
 //! `watched_folders`.
 
 use crate::{
-    cloud_files::{CleanupReport, LibraryRefresh, SyncRootService, SystemRefresh, SystemSyncRoot},
+    app::events::log_to_ui_keyed,
+    cloud_files::{
+        CleanupReport, LibraryRefresh, Notice, NoticeKind, NoticeSink, SyncRootService,
+        SystemRefresh, SystemSyncRoot,
+    },
     db,
     media::paths::canonicalize_folder_path,
     virtual_library_root::{
@@ -21,9 +25,13 @@ use crate::{
 };
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use tauri::Emitter;
+use tauri::{Emitter, Runtime};
 
 pub(crate) const SETTINGS_CHANGED_EVENT: &str = "virtual-library-settings-changed";
+/// A failed open or listing the user should hear about, once per failure episode (#281). Its
+/// payload is a `cloud_files::Notice`; the frontend shows it and, for an expired sign-in, offers to
+/// sign in again.
+pub(crate) const NOTICE_EVENT: &str = "virtual-library-notice";
 /// Sent after a cleanup that left something in place or could not remove something.
 pub(crate) const CLEANUP_FINISHED_EVENT: &str = "virtual-library-cleanup-finished";
 const UNAVAILABLE_MESSAGE: &str =
@@ -319,6 +327,35 @@ async fn change_root_folder(
         .await
         .map_err(|error| error.to_string())?;
     load_settings(pool, available, known_folders).await
+}
+
+/// Shows a Virtual Library notice in the app: an activity log entry (key
+/// `log_virtual_library_<kind>`) and the [`NOTICE_EVENT`] the frontend turns into its banner.
+pub(crate) struct AppNoticeSink<R: Runtime>(tauri::AppHandle<R>);
+
+impl<R: Runtime> AppNoticeSink<R> {
+    pub(crate) fn new(app: tauri::AppHandle<R>) -> Self {
+        Self(app)
+    }
+}
+
+impl<R: Runtime> NoticeSink for AppNoticeSink<R> {
+    fn show(&self, notice: &Notice) {
+        let level = if notice.kind == NoticeKind::Failed {
+            "ERROR"
+        } else {
+            "WARN"
+        };
+        log_to_ui_keyed(
+            &self.0,
+            level,
+            &notice.message(),
+            &format!("log_virtual_library_{}", notice.kind.code()),
+            std::collections::HashMap::from([("name".to_string(), notice.name.clone())]),
+        );
+        // A missed event only means no banner; the log entry above still records it.
+        let _ = self.0.emit(NOTICE_EVENT, notice);
+    }
 }
 
 /// Refresh Library: reconciles the populated directories now (#280). Waits for a run already in
@@ -1075,6 +1112,38 @@ mod tests {
             .unwrap_err();
 
         assert!(error.contains("denied"), "{error}");
+    }
+
+    #[test]
+    fn a_notice_becomes_one_keyed_log_entry_and_one_event_for_the_banner() {
+        use crate::app::events::CapturedUiLogs;
+        use tauri::Listener;
+
+        let app = tauri::test::mock_app();
+        let logs = CapturedUiLogs::listen(app.handle());
+        let events = std::sync::Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
+        let captured = events.clone();
+        app.handle().listen(NOTICE_EVENT, move |event| {
+            captured
+                .lock()
+                .unwrap()
+                .push(serde_json::from_str(event.payload()).unwrap());
+        });
+        let sink = AppNoticeSink::new(app.handle().clone());
+
+        sink.show(&Notice {
+            kind: NoticeKind::Unauthorized,
+            name: "IMG_1.jpg".into(),
+        });
+
+        let entries = logs.with_key("log_virtual_library_unauthorized");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["level"], "WARN");
+        assert_eq!(entries[0]["params"]["name"], "IMG_1.jpg");
+        assert_eq!(
+            events.lock().unwrap().as_slice(),
+            [serde_json::json!({ "kind": "unauthorized", "name": "IMG_1.jpg" })]
+        );
     }
 
     #[tokio::test]

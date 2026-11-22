@@ -307,4 +307,89 @@ describe("auth controller", () => {
     expect(controller.currentUserName).toBe("Meyer");
     expect(controller.profileImage).toBeNull();
   });
+
+  describe("signing in again after the session expired", () => {
+    async function signedInController(overrides: Partial<AuthDesktopAdapter> = {}) {
+      const adapter = createDesktopAdapter({
+        getAuthStatus: vi.fn().mockResolvedValue(true),
+        getServerUrl: vi.fn().mockResolvedValue("https://immich.example"),
+        getCurrentUser: vi.fn().mockResolvedValue({ displayName: "User", profileImage: null }),
+        login: vi.fn().mockResolvedValue(undefined),
+        ...overrides,
+      });
+      const onLogin = vi.fn();
+      const onLogout = vi.fn();
+      const controller = createAuthController({ formatError: String, onLogin, onLogout, reportError: vi.fn(), t: (key) => key, adapter });
+      await controller.hydrate();
+      onLogin.mockClear();
+      return { controller, adapter, onLogin, onLogout };
+    }
+
+    it("shows the sign-in form for the same server while staying signed in, without logging out", async () => {
+      const { controller, adapter, onLogout } = await signedInController();
+
+      controller.beginRelogin();
+
+      expect(controller.isRelogin).toBe(true);
+      expect(controller.isAuthenticated).toBe(true);
+      expect(controller.serverUrl).toBe("https://immich.example");
+      expect(controller.apiKey).toBe("");
+      expect(adapter.logout).not.toHaveBeenCalled();
+      expect(onLogout).not.toHaveBeenCalled();
+    });
+
+    it("ends the sign-in again after a successful login and refreshes what depends on the session", async () => {
+      const { controller, adapter, onLogin } = await signedInController();
+      controller.beginRelogin();
+      controller.apiKey = "new-key";
+
+      await controller.login();
+
+      expect(adapter.login).toHaveBeenCalledWith(expect.objectContaining({ serverUrl: "https://immich.example", apiKey: "new-key" }));
+      expect(controller.isRelogin).toBe(false);
+      expect(controller.isAuthenticated).toBe(true);
+      expect(onLogin).toHaveBeenCalledTimes(1);
+    });
+
+    it("stays on the form with the error when the new key is refused", async () => {
+      const { controller } = await signedInController({ login: vi.fn().mockRejectedValue(new Error("Invalid key")) });
+      controller.beginRelogin();
+      controller.apiKey = "bad";
+
+      await controller.login();
+
+      expect(controller.isRelogin).toBe(true);
+      expect(controller.loginError).toBe("Error: Invalid key");
+    });
+
+    it("can be dismissed without signing in", async () => {
+      const { controller } = await signedInController();
+      controller.beginRelogin();
+      controller.apiKey = "half-typed";
+
+      controller.cancelRelogin();
+
+      expect(controller.isRelogin).toBe(false);
+      expect(controller.apiKey).toBe("");
+      expect(controller.isAuthenticated).toBe(true);
+    });
+
+    it("does nothing when nobody is signed in", () => {
+      const controller = createAuthController({ formatError: String, onLogin: vi.fn(), onLogout: vi.fn(), reportError: vi.fn(), t: (key) => key, adapter: createDesktopAdapter() });
+
+      controller.beginRelogin();
+
+      expect(controller.isRelogin).toBe(false);
+    });
+
+    it("leaves the form when the user logs out", async () => {
+      const { controller } = await signedInController({ logout: vi.fn().mockResolvedValue(undefined) });
+      controller.beginRelogin();
+
+      await controller.logout();
+
+      expect(controller.isRelogin).toBe(false);
+      expect(controller.isAuthenticated).toBe(false);
+    });
+  });
 });

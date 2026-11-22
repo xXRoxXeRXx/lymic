@@ -6,9 +6,8 @@
 
 use super::client::ImmichClient;
 use super::ids::{AlbumId, RemoteAssetId};
-use super::response::{
-    non_empty, read_response_body_limited, send_checked, MAX_SUCCESS_RESPONSE_BYTES,
-};
+use super::remote_failure::{send_bounded, RemoteFailure};
+use super::response::{non_empty, read_response_body_limited, MAX_SUCCESS_RESPONSE_BYTES};
 use super::timeline::TimelineBucket;
 use chrono::{DateTime, SecondsFormat, Utc};
 use futures::{stream, StreamExt};
@@ -16,8 +15,11 @@ use reqwest::Method;
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::{BTreeSet, HashMap};
+use std::time::Duration;
 
 const PAGE_SIZE: u64 = 1_000;
+/// How long one listing request may take before Explorer is told Immich is not answering.
+const LISTING_TIMEOUT: Duration = Duration::from_secs(30);
 /// 1000 items with EXIF exceed the default 1 MiB response cap.
 const MAX_PAGE_BYTES: usize = 32 * 1024 * 1024;
 
@@ -95,8 +97,24 @@ impl ImmichClient {
     /// Photo videos (#242). One small response however many assets the Library holds, so the year
     /// and month directories of `All Photos` need no asset at all. Immich buckets by local
     /// capture time, like the projection.
-    pub(crate) async fn list_photo_timeline_months(&self) -> Result<Vec<TimelineBucket>, String> {
-        self.get_timeline_buckets().await
+    pub(crate) async fn list_photo_timeline_months(
+        &self,
+    ) -> Result<Vec<TimelineBucket>, RemoteFailure> {
+        let response = send_bounded(
+            self.request(Method::GET, "timeline/buckets")
+                .query(&[("size", "MONTH"), ("visibility", "timeline")]),
+            "Failed to fetch timeline buckets",
+            LISTING_TIMEOUT,
+        )
+        .await?;
+        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES)
+            .await
+            .map_err(RemoteFailure::unavailable)?;
+        let mut buckets: Vec<TimelineBucket> = serde_json::from_slice(&body).map_err(|error| {
+            RemoteFailure::rejected(format!("Invalid timeline buckets response: {error}"))
+        })?;
+        buckets.sort_by(|a, b| b.time_bucket.cmp(&a.time_bucket));
+        Ok(buckets)
     }
 
     /// The Photo Timeline assets whose `fileCreatedAt` (UTC) lies in `[after, before]`, paginated.
@@ -109,7 +127,7 @@ impl ImmichClient {
         &self,
         after: DateTime<Utc>,
         before: DateTime<Utc>,
-    ) -> Result<Vec<LibraryAsset>, String> {
+    ) -> Result<Vec<LibraryAsset>, RemoteFailure> {
         let filter = json!({
             "visibility": "timeline",
             "takenAfter": after.to_rfc3339_opts(SecondsFormat::Millis, true),
@@ -124,7 +142,7 @@ impl ImmichClient {
     pub(crate) async fn find_photo_timeline_assets(
         &self,
         keep: &(dyn Fn(&LibraryAsset) -> bool + Sync),
-    ) -> Result<Vec<LibraryAsset>, String> {
+    ) -> Result<Vec<LibraryAsset>, RemoteFailure> {
         self.search_library_assets(json!({ "visibility": "timeline" }), true, keep)
             .await
     }
@@ -134,7 +152,7 @@ impl ImmichClient {
     pub(crate) async fn list_album_assets(
         &self,
         album_id: &AlbumId,
-    ) -> Result<Vec<LibraryAsset>, String> {
+    ) -> Result<Vec<LibraryAsset>, RemoteFailure> {
         self.search_library_assets(json!({ "albumIds": [album_id] }), false, &|_| true)
             .await
     }
@@ -142,7 +160,7 @@ impl ImmichClient {
     /// The Albums the user owns plus the Albums shared with the user, each once, in Immich's
     /// order. `GET /albums` alone lists only the Albums the user owns; the Albums shared with the
     /// user come with `shared=true`, which Immich's own web client requests as well.
-    pub(crate) async fn list_library_albums(&self) -> Result<Vec<LibraryAlbum>, String> {
+    pub(crate) async fn list_library_albums(&self) -> Result<Vec<LibraryAlbum>, RemoteFailure> {
         let mut albums = self.fetch_library_albums(false).await?;
         for album in self.fetch_library_albums(true).await? {
             if !albums.iter().any(|known| known.id == album.id) {
@@ -152,15 +170,19 @@ impl ImmichClient {
         Ok(albums)
     }
 
-    async fn fetch_library_albums(&self, shared: bool) -> Result<Vec<LibraryAlbum>, String> {
+    async fn fetch_library_albums(&self, shared: bool) -> Result<Vec<LibraryAlbum>, RemoteFailure> {
         let mut request = self.request(Method::GET, "albums");
         if shared {
             request = request.query(&[("shared", "true")]);
         }
-        let response = send_checked(request, "Failed to list library albums").await?;
-        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES).await?;
-        serde_json::from_slice(&body)
-            .map_err(|error| format!("Invalid library albums response: {error}"))
+        let response =
+            send_bounded(request, "Failed to list library albums", LISTING_TIMEOUT).await?;
+        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES)
+            .await
+            .map_err(RemoteFailure::unavailable)?;
+        serde_json::from_slice(&body).map_err(|error| {
+            RemoteFailure::rejected(format!("Invalid library albums response: {error}"))
+        })
     }
 
     /// The video halves of the Live Photos among `assets`, by video id. Immich lists the video as
@@ -201,7 +223,7 @@ impl ImmichClient {
         filter: serde_json::Value,
         timeline_only: bool,
         keep: &(dyn Fn(&LibraryAsset) -> bool + Sync),
-    ) -> Result<Vec<LibraryAsset>, String> {
+    ) -> Result<Vec<LibraryAsset>, RemoteFailure> {
         let mut page = 1_u64;
         let mut assets = Vec::new();
         loop {
@@ -210,14 +232,18 @@ impl ImmichClient {
             body["withExif"] = true.into();
             body["page"] = page.into();
             body["size"] = PAGE_SIZE.into();
-            let response = send_checked(
+            let response = send_bounded(
                 self.request(Method::POST, "search/metadata").json(&body),
                 "Failed to list library assets",
+                LISTING_TIMEOUT,
             )
             .await?;
-            let body = read_response_body_limited(response, MAX_PAGE_BYTES).await?;
-            let payload: SearchPage = serde_json::from_slice(&body)
-                .map_err(|error| format!("Invalid library listing response: {error}"))?;
+            let body = read_response_body_limited(response, MAX_PAGE_BYTES)
+                .await
+                .map_err(RemoteFailure::unavailable)?;
+            let payload: SearchPage = serde_json::from_slice(&body).map_err(|error| {
+                RemoteFailure::rejected(format!("Invalid library listing response: {error}"))
+            })?;
             assets.extend(
                 payload
                     .assets
@@ -228,7 +254,11 @@ impl ImmichClient {
             );
             match payload.assets.next_page {
                 Some(next_page) if next_page > page => page = next_page,
-                Some(_) => return Err("Invalid library listing pagination response".to_string()),
+                Some(_) => {
+                    return Err(RemoteFailure::rejected(
+                        "Invalid library listing pagination response",
+                    ))
+                }
                 None => return Ok(assets),
             }
         }

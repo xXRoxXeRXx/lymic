@@ -1,4 +1,4 @@
-import type { VirtualLibraryCleanupReport, VirtualLibrarySettings } from "../contracts";
+import type { VirtualLibraryCleanupReport, VirtualLibraryNotice, VirtualLibrarySettings } from "../contracts";
 import type { VirtualLibraryDesktopAdapter } from "../tauri/desktop-adapter";
 import { failureMessage } from "./request-failure";
 
@@ -33,6 +33,11 @@ const ERROR_CODES: Record<string, { key: string; detail: "path" | "reason" | "no
  * controller and is read lazily through `autostartEnabled`; `null` means it is not known yet, which
  * must never flash the hint.
  *
+ * A read that fails (Immich unreachable, expired sign-in, photo removed) is announced by the backend
+ * once per failure episode; the controller holds that one notice until it is dismissed. An expired
+ * sign-in offers to sign in again, through `beginRelogin`, which keeps the session (and the Virtual
+ * Library) as it is until the new key is accepted.
+ *
  * Disabling removes what the Virtual Library created, including hydrated and pinned originals
  * (ADR-0003, #283), so it asks first: the confirmation names that and says that files Lymic did not
  * create stay with their folder. Logout asks the same through the auth controller. After either
@@ -43,6 +48,7 @@ export function createVirtualLibraryController(options: {
   reportError(error: unknown): void;
   t(key: string): string;
   autostartEnabled(): boolean | null;
+  beginRelogin(): void;
   adapter: VirtualLibraryDesktopAdapter;
 }) {
   const { adapter } = options;
@@ -50,8 +56,10 @@ export function createVirtualLibraryController(options: {
   let isEnabled = $state(false);
   let rootFolder = $state<string | null>(null);
   let isSaving = $state(false);
+  let notice = $state<(VirtualLibraryNotice & { key: string; canRelogin: boolean }) | null>(null);
   let isRefreshing = $state(false);
   let unlisten: (() => void) | undefined;
+  let unlistenNotices: (() => void) | undefined;
   let unlistenCleanup: (() => void) | undefined;
   let stopped = true;
 
@@ -165,6 +173,24 @@ export function createVirtualLibraryController(options: {
     }
   }
 
+  function showNotice(announced: VirtualLibraryNotice) {
+    notice = {
+      ...announced,
+      key: `log_virtual_library_${announced.kind}`,
+      canRelogin: announced.kind === "unauthorized",
+    };
+  }
+
+  function dismissNotice() {
+    notice = null;
+  }
+
+  function relogin() {
+    if (!notice?.canRelogin) return;
+    notice = null;
+    options.beginRelogin();
+  }
+
   async function startLifecycle() {
     stopped = false;
     try {
@@ -173,6 +199,13 @@ export function createVirtualLibraryController(options: {
       else unlisten = release;
     } catch (error) {
       console.error("Failed to subscribe to Virtual Library settings", error);
+    }
+    try {
+      const release = await adapter.subscribeToVirtualLibraryNotices(showNotice);
+      if (stopped) release?.();
+      else unlistenNotices = release;
+    } catch (error) {
+      console.error("Failed to subscribe to Virtual Library notices", error);
     }
     try {
       const release = await adapter.subscribeToVirtualLibraryCleanup((report) => void announceCleanup(report));
@@ -187,6 +220,8 @@ export function createVirtualLibraryController(options: {
     stopped = true;
     unlisten?.();
     unlisten = undefined;
+    unlistenNotices?.();
+    unlistenNotices = undefined;
     unlistenCleanup?.();
     unlistenCleanup = undefined;
   }
@@ -197,11 +232,14 @@ export function createVirtualLibraryController(options: {
     get isSaving() { return isSaving; },
     get isRefreshing() { return isRefreshing; },
     get rootFolder() { return rootFolder; },
+    get notice() { return notice; },
     get showAutostartHint() { return isEnabled && options.autostartEnabled() === false; },
     hydrate,
     toggle,
     refresh,
     chooseRootFolder,
+    dismissNotice,
+    relogin,
     startLifecycle,
     stopLifecycle,
   };

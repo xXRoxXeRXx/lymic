@@ -267,6 +267,16 @@ export interface VirtualLibrarySettings {
 }
 
 /**
+ * A Virtual Library request that failed and that the user should hear about, once per failure
+ * episode (#281). Mirrors `cloud_files::Notice`, sent as the `virtual-library-notice` event. `name`
+ * is the photo or folder the failed request was about.
+ */
+export interface VirtualLibraryNotice {
+  kind: "offline" | "unauthorized" | "not_found" | "failed";
+  name: string;
+}
+
+/**
  * What a Virtual Library cleanup (disabling, logout) did, sent as `virtual-library-cleanup-finished`
  * only when something stayed or failed. Mirrors `CleanupReport` in
  * `src-tauri/src/cloud_files/cleanup.rs`.

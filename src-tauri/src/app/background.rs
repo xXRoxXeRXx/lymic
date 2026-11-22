@@ -28,6 +28,9 @@ pub(crate) fn spawn(handle: tauri::AppHandle, startup: StartupContext) {
 /// Serves the Virtual Library again after a start while it is enabled. Off the setup path, so a
 /// slow registration never delays the window.
 fn spawn_virtual_library_restore(handle: tauri::AppHandle) {
+    crate::cloud_files::install_notice_sink(Box::new(
+        crate::commands::virtual_library::AppNoticeSink::new(handle.clone()),
+    ));
     tauri::async_runtime::spawn(async move {
         let pool = handle.state::<sqlx::SqlitePool>().inner().clone();
         if let Err(error) = crate::commands::virtual_library::restore(&pool).await {

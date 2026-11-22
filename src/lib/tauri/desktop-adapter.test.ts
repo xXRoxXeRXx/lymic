@@ -244,6 +244,20 @@ describe("tauriDesktopAdapter", () => {
     expect(listener).toHaveBeenCalledWith(settings);
   });
 
+  it("forwards the backend's Virtual Library notices", async () => {
+    const notice = { kind: "unauthorized", name: "IMG_1.jpg" };
+    listen.mockImplementationOnce(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+      handler({ payload: notice });
+      return () => {};
+    });
+    const listener = vi.fn();
+
+    await virtualLibraryAdapter.subscribeToVirtualLibraryNotices(listener);
+
+    expect(listen).toHaveBeenCalledWith("virtual-library-notice", expect.any(Function));
+    expect(listener).toHaveBeenCalledWith(notice);
+  });
+
   it("forwards the Virtual Library cleanup reports and shows the user's notices and confirmations through the native dialogs", async () => {
     const report = { root_folder: "D:/Lib", removed_files: 1, removed_folders: 1, kept_count: 1, kept_examples: ["mine.txt"], root_kept: true, failed_count: 0, failed_examples: [], error: null };
     listen.mockImplementationOnce(async (_event: string, handler: (event: { payload: unknown }) => void) => {

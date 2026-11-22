@@ -50,6 +50,7 @@ mod tests {
     use super::*;
     use crate::cloud_files::failure::FailureKind;
     use crate::immich::RemoteAssetId;
+    use crate::immich::RemoteFailure;
     use crate::virtual_library::{Entry, VirtualLibraryError};
     use std::collections::HashMap;
     use std::sync::Mutex;
@@ -186,9 +187,9 @@ mod tests {
     async fn a_listing_that_fails_fails_the_population_with_its_kind() {
         let library = FakeLibrary::new(vec![(
             "Albums",
-            Err(VirtualLibraryError::Remote(
-                "error sending request".to_string(),
-            )),
+            Err(VirtualLibraryError::Remote(RemoteFailure::unavailable(
+                "error sending request",
+            ))),
         )]);
 
         let failure = populate(&library, &no_sizes(), "Albums").await.unwrap_err();

@@ -183,7 +183,7 @@ mod tests {
     use super::*;
     use crate::cloud_files::diff::LocalState;
     use crate::cloud_files::placeholder::PlaceholderSpec;
-    use crate::immich::RemoteAssetId;
+    use crate::immich::{RemoteAssetId, RemoteFailure};
     use crate::virtual_library::{Entry, EntryKind, VirtualLibraryError};
     use std::collections::{BTreeMap, HashMap};
     use std::sync::Mutex;
@@ -499,9 +499,9 @@ mod tests {
         let (library, tree) = world();
         library.set(
             "Albums",
-            Err(VirtualLibraryError::Remote(
-                "error sending request".to_string(),
-            )),
+            Err(VirtualLibraryError::Remote(RemoteFailure::unavailable(
+                "error sending request",
+            ))),
         );
 
         let report = reconcile(&library, &NoSizes, &tree, &FakePopulated::of(&POPULATED)).await;
@@ -517,9 +517,9 @@ mod tests {
         let (library, tree) = world();
         library.set(
             "Albums/Trip",
-            Err(VirtualLibraryError::Remote(
-                "request failed with status 500".to_string(),
-            )),
+            Err(VirtualLibraryError::Remote(RemoteFailure::rejected(
+                "request failed with status 500",
+            ))),
         );
         library.set("Albums/Home", Ok(vec![]));
 

@@ -12,7 +12,9 @@
     isLoggingIn,
     loginError,
     loginErrorCode = "",
-    onLogin
+    onLogin,
+    reloginNotice = "",
+    onCancel
   }: {
     serverUrl: string;
     apiKey: string;
@@ -23,6 +25,10 @@
     loginError: string;
     loginErrorCode?: string;
     onLogin: () => void;
+    /** Why the user is asked again (an expired API key); set only when signing in again to the same server. */
+    reloginNotice?: string;
+    /** Leaves the form without signing in; offered only when signing in again. */
+    onCancel?: () => void;
   } = $props();
 
   let advancedDetailsOpen = $state(false);
@@ -70,7 +76,7 @@
 <div class="max-w-md w-full mx-auto space-y-6 animate-in">
   <div class="text-center space-y-1.5">
     <h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100">{$t('login')}</h1>
-    <p class="text-slate-500 dark:text-zinc-400 text-xs">{$t('login_subtitle')}</p>
+    <p class="text-slate-500 dark:text-zinc-400 text-xs">{reloginNotice || $t('login_subtitle')}</p>
   </div>
   <div class="desktop-card p-6 space-y-5">
     <div class="space-y-4">
@@ -208,6 +214,13 @@
       {/if}
       <span>{isLoggingIn ? $t('connect') : $t('login')}</span>
     </button>
+    {#if onCancel}
+      <button
+        type="button"
+        class="w-full py-2 rounded-lg text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium text-sm transition-colors cursor-pointer"
+        onclick={onCancel}
+      >{$t('virtual_library_relogin_cancel')}</button>
+    {/if}
   </div>
 </div>
 

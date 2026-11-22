@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::immich::test_support::{serve_routes, test_client, RecordedRequest, RoutedServer};
+use crate::immich::RemoteFailureKind;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -457,10 +458,11 @@ async fn an_unreachable_or_refusing_server_is_reported_without_credentials() {
     let client = test_client(server.url.clone(), "secret-api-key");
     let library = VirtualLibrary::new(&client);
 
-    let Err(VirtualLibraryError::Remote(message)) = library.list("All Photos").await else {
+    let Err(VirtualLibraryError::Remote(failure)) = library.list("All Photos").await else {
         panic!("expected a remote error");
     };
-    assert!(!message.contains("secret-api-key"));
+    assert_eq!(failure.kind, RemoteFailureKind::Unauthorized);
+    assert!(!failure.message.contains("secret-api-key"));
     // The root and Albums structure need no server.
     assert!(library.list("").await.is_ok());
 }
@@ -773,10 +775,11 @@ async fn albums_report_an_unreachable_server_without_credentials() {
     let library = VirtualLibrary::new(&client);
 
     for path in ["Albums", "Albums/Holiday"] {
-        let Err(VirtualLibraryError::Remote(message)) = library.list(path).await else {
+        let Err(VirtualLibraryError::Remote(failure)) = library.list(path).await else {
             panic!("expected a remote error for {path}");
         };
-        assert!(!message.contains("secret-api-key"));
+        assert_eq!(failure.kind, RemoteFailureKind::Unauthorized, "{path}");
+        assert!(!failure.message.contains("secret-api-key"));
     }
 }
 

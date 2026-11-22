@@ -27,6 +27,7 @@ import type {
   RemoveFolderResult,
   SyncSnapshot,
   SyncSummary,
+  VirtualLibraryNotice,
   VirtualLibraryCleanupReport,
   VirtualLibrarySettings,
   WebviewStartupPhase,
@@ -207,6 +208,8 @@ export interface VirtualLibraryDesktopAdapter {
   refreshVirtualLibrary(): Promise<void>;
   /** Backend announcements of changed Virtual Library settings. */
   subscribeToVirtualLibrarySettings(listener: (settings: VirtualLibrarySettings) => void): Promise<() => void>;
+  /** Backend announcements of a file that could not be opened (offline, expired sign-in, removed, other), once per failure episode. */
+  subscribeToVirtualLibraryNotices(listener: (notice: VirtualLibraryNotice) => void): Promise<() => void>;
   /** Backend announcements of a cleanup (disabling, logout) that left something in place or could not remove something. */
   subscribeToVirtualLibraryCleanup(listener: (report: VirtualLibraryCleanupReport) => void): Promise<() => void>;
   /** The native confirmation dialog, used before a disable removes the originals the Virtual Library downloaded. */
@@ -347,6 +350,10 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   refreshVirtualLibrary: () => invoke<void>("refresh_virtual_library"),
   subscribeToVirtualLibrarySettings: (listener) => listen<VirtualLibrarySettings>(
     "virtual-library-settings-changed",
+    (event) => listener(event.payload),
+  ),
+  subscribeToVirtualLibraryNotices: (listener) => listen<VirtualLibraryNotice>(
+    "virtual-library-notice",
     (event) => listener(event.payload),
   ),
   subscribeToVirtualLibraryCleanup: (listener) => listen<VirtualLibraryCleanupReport>(

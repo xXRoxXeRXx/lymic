@@ -8,16 +8,19 @@
 use crate::cloud_files::failure::{CloudStatus, Failure, FailureKind};
 use crate::cloud_files::hydration::{self, Block, DataRequest, DataSink};
 use crate::cloud_files::identity;
+use crate::cloud_files::inflight::InFlight;
 use crate::cloud_files::library::StoredCredentialsImmich;
 use crate::cloud_files::placeholder::PlaceholderSpec;
 use crate::cloud_files::population;
+use crate::cloud_files::reporting::{self, Operation, Report};
 use crate::cloud_files::write_guard;
 use std::mem::{offset_of, size_of};
 use std::path::Path;
+use std::sync::LazyLock;
 use windows::core::{HRESULT, PCWSTR};
 use windows::Win32::Foundation::{
-    NTSTATUS, STATUS_CLOUD_FILE_AUTHENTICATION_FAILED, STATUS_CLOUD_FILE_INVALID_REQUEST,
-    STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE, STATUS_CLOUD_FILE_UNSUCCESSFUL,
+    NTSTATUS, STATUS_CLOUD_FILE_AUTHENTICATION_FAILED, STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE,
+    STATUS_CLOUD_FILE_UNSUCCESSFUL, STATUS_OBJECT_NAME_NOT_FOUND,
 };
 use windows::Win32::Storage::CloudFilters::*;
 use windows::Win32::Storage::FileSystem::{
@@ -25,6 +28,8 @@ use windows::Win32::Storage::FileSystem::{
 };
 
 const STATUS_SUCCESS: NTSTATUS = NTSTATUS(0);
+/// The downloads in flight, so `CANCEL_FETCH_DATA` can stop one.
+static IN_FLIGHT: LazyLock<InFlight> = LazyLock::new(InFlight::default);
 /// Placeholders handed over per `TRANSFER_PLACEHOLDERS` call.
 pub(super) const PLACEHOLDER_BATCH: usize = 1000;
 
@@ -32,7 +37,7 @@ fn ntstatus(status: CloudStatus) -> NTSTATUS {
     match status {
         CloudStatus::NetworkUnavailable => STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE,
         CloudStatus::AuthenticationFailed => STATUS_CLOUD_FILE_AUTHENTICATION_FAILED,
-        CloudStatus::InvalidRequest => STATUS_CLOUD_FILE_INVALID_REQUEST,
+        CloudStatus::NotFound => STATUS_OBJECT_NAME_NOT_FOUND,
         CloudStatus::Unsuccessful => STATUS_CLOUD_FILE_UNSUCCESSFUL,
     }
 }
@@ -106,7 +111,7 @@ fn parameters(member_size: usize) -> CF_OPERATION_PARAMETERS {
     }
 }
 
-/// Diagnostics for failures nobody is waiting on. User-facing notices are #281.
+/// Diagnostics for failures nobody is waiting on. User-facing notices go through `reporting`.
 fn note(message: &str) {
     eprintln!("virtual library: {message}");
 }
@@ -127,15 +132,16 @@ unsafe extern "system" fn on_fetch_placeholders(
         return;
     };
     runtime.spawn(async move {
-        let plan = match request.path() {
+        let path = request.path();
+        let plan = match &path {
             Ok(path) => {
-                population::populate(&StoredCredentialsImmich, &StoredCredentialsImmich, &path)
-                    .await
+                population::populate(&StoredCredentialsImmich, &StoredCredentialsImmich, path).await
             }
-            Err(failure) => Err(failure),
+            Err(failure) => Err(failure.clone()),
         };
         match plan {
             Ok(plan) => {
+                reporting::report_succeeded();
                 if !plan.skipped.is_empty() {
                     note(&format!(
                         "{} item(s) not shown for now (no size or too long a path): {}",
@@ -152,6 +158,11 @@ unsafe extern "system" fn on_fetch_placeholders(
             }
             Err(failure) => {
                 note(&format!("could not list a directory: {}", failure.message));
+                reporting::report_failed(&Report {
+                    operation: Operation::List,
+                    path: path.as_deref().unwrap_or(""),
+                    failure: &failure,
+                });
                 fail_placeholders(&request, failure.status());
             }
         }
@@ -256,36 +267,76 @@ unsafe extern "system" fn on_fetch_data(
     let Some(runtime) = super::runtime() else {
         return;
     };
+    // Registered before the callback returns, so a cancel that follows at once finds it.
+    let registration = IN_FLIGHT.begin(request.transfer);
     runtime.spawn(async move {
-        let result = match request.path() {
-            Ok(path) if !path.is_empty() => {
-                let data_request = DataRequest {
-                    path,
-                    required_offset: fetch.RequiredFileOffset.max(0) as u64,
-                    file_size: request.file_size.max(0) as u64,
-                };
-                hydration::hydrate(
-                    &StoredCredentialsImmich,
-                    &StoredCredentialsImmich,
-                    &mut CfSink { request: &request },
-                    &data_request,
-                )
-                .await
-                .map(|_| ())
-            }
-            Ok(_) => Err(Failure::new(FailureKind::NotFound, "not a file")),
-            Err(failure) => Err(failure),
+        let path = request.path();
+        let hydrated = registration
+            .run(async {
+                match &path {
+                    Ok(path) if !path.is_empty() => {
+                        let data_request = DataRequest {
+                            path: path.clone(),
+                            required_offset: fetch.RequiredFileOffset.max(0) as u64,
+                            file_size: request.file_size.max(0) as u64,
+                        };
+                        hydration::hydrate(
+                            &StoredCredentialsImmich,
+                            &StoredCredentialsImmich,
+                            &mut CfSink { request: &request },
+                            &data_request,
+                        )
+                        .await
+                        .map(|_| ())
+                    }
+                    Ok(_) => Err(Failure::new(FailureKind::NotFound, "not a file")),
+                    Err(failure) => Err(failure.clone()),
+                }
+            })
+            .await;
+        // The platform has already ended a cancelled read: nothing to complete, nothing to report.
+        let Some(result) = hydrated else {
+            note("a download was cancelled by the reader and stopped");
+            return;
         };
-        if let Err(failure) = result {
-            note(&format!("could not hydrate a file: {}", failure.message));
-            fail_data(
-                &request,
-                fetch.RequiredFileOffset,
-                fetch.RequiredLength,
-                failure.status(),
-            );
+        match result {
+            Ok(()) => reporting::report_succeeded(),
+            Err(failure) => {
+                note(&format!("could not hydrate a file: {}", failure.message));
+                let report = Report {
+                    operation: Operation::Open,
+                    path: path.as_deref().unwrap_or(""),
+                    failure: &failure,
+                };
+                if let Some(removed) = report.removed_asset_path() {
+                    // Reconciliation (#280) drops this placeholder once the asset is gone from its
+                    // listing; this is the point to hand it the path sooner.
+                    note(&format!("'{removed}' was removed from Immich"));
+                }
+                reporting::report_failed(&report);
+                fail_data(
+                    &request,
+                    fetch.RequiredFileOffset,
+                    fetch.RequiredLength,
+                    failure.status(),
+                );
+            }
         }
     });
+}
+
+/// `CANCEL_FETCH_DATA`: the reader gave up, so the download for it stops. Nothing is completed: the
+/// platform has already ended the read.
+unsafe extern "system" fn on_cancel_fetch_data(
+    info: *const CF_CALLBACK_INFO,
+    _parameters: *const CF_CALLBACK_PARAMETERS,
+) {
+    // SAFETY: called by the platform with the callback's own `info`.
+    let transfer = unsafe { (*info).TransferKey };
+    let cancelled = IN_FLIGHT.cancel(transfer);
+    if cancelled == 0 {
+        note("a cancel arrived for a download that is not (or no longer) in flight");
+    }
 }
 
 /// Hands blocks of the original to the platform.
@@ -306,8 +357,9 @@ impl DataSink for CfSink<'_> {
         };
         // SAFETY: `block.data` outlives the synchronous call.
         unsafe { CfExecute(&operation, &mut params) }.map_err(|error| {
+            // The platform refused the data, typically because the reader went away.
             Failure::new(
-                FailureKind::Failed,
+                FailureKind::Platform,
                 format!("TRANSFER_DATA at {} failed: {error}", block.offset),
             )
         })
@@ -476,6 +528,7 @@ fn callback_table() -> Vec<CF_CALLBACK_REGISTRATION> {
     vec![
         registration(CF_CALLBACK_TYPE_FETCH_PLACEHOLDERS, on_fetch_placeholders),
         registration(CF_CALLBACK_TYPE_FETCH_DATA, on_fetch_data),
+        registration(CF_CALLBACK_TYPE_CANCEL_FETCH_DATA, on_cancel_fetch_data),
         registration(CF_CALLBACK_TYPE_NOTIFY_DELETE, on_notify_delete),
         registration(CF_CALLBACK_TYPE_NOTIFY_RENAME, on_notify_rename),
         CF_CALLBACK_REGISTRATION {

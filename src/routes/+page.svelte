@@ -5,6 +5,7 @@
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
   import LoginView from "#lib/components/LoginView.svelte";
+  import VirtualLibraryNoticeBanner from "#lib/components/VirtualLibraryNoticeBanner.svelte";
   import DashboardView from "#lib/components/DashboardView.svelte";
   import TimelineView from "#lib/components/TimelineView.svelte";
   import MapView from "#lib/components/MapView.svelte";
@@ -374,7 +375,7 @@
     setLocale: (value) => $locale = value,
   });
   const updater = createUpdateController(() => sync.isActive, desktop);
-  const virtualLibrary = createVirtualLibraryController({ adapter: desktop, reportError: feedback.report, autostartEnabled: () => preferences.autostartState, t: (key) => $t(key) });
+  const virtualLibrary = createVirtualLibraryController({ adapter: desktop, reportError: feedback.report, autostartEnabled: () => preferences.autostartState, beginRelogin: auth.beginRelogin, t: (key) => $t(key) });
   const targetAlbumDialog = $derived(watchedFolders.targetAlbumDialog);
 
   // Leaving the Trash Timeline drops its assets and selection; returning shows a fresh load.
@@ -433,7 +434,7 @@
 </script>
 
 <div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60">
-  {#if !auth.isAuthenticated}
+  {#if !auth.isAuthenticated || auth.isRelogin}
     <!-- Left Side: Hero Image (Login Screen) -->
     <aside class="w-[38%] h-full shrink-0 relative overflow-hidden select-none">
       <div class="hero-container">
@@ -471,6 +472,8 @@
           loginError={auth.loginError}
           loginErrorCode={auth.loginErrorCode}
           onLogin={auth.login}
+          reloginNotice={auth.isRelogin ? $t('virtual_library_relogin_hint') : ""}
+          onCancel={auth.isRelogin ? auth.cancelRelogin : undefined}
         />
       </div>
 
@@ -554,6 +557,9 @@
               <X class="w-4 h-4" />
             </button>
           </div>
+        {/if}
+        {#if virtualLibrary.notice}
+          <VirtualLibraryNoticeBanner notice={virtualLibrary.notice} onRelogin={virtualLibrary.relogin} onDismiss={virtualLibrary.dismissNotice} />
         {/if}
         {#if removable.currentPrompt}
           <RemovableVolumePrompt
