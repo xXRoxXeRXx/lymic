@@ -468,5 +468,11 @@
   "virtual_library_notice_relogin": "Erneut anmelden",
   "virtual_library_notice_dismiss": "Hinweis schließen",
   "virtual_library_relogin_hint": "Deine Immich-Anmeldung ist nicht mehr gültig. Gib einen neuen API-Schlüssel ein, um die virtuelle Bibliothek weiter zu nutzen.",
-  "virtual_library_relogin_cancel": "Jetzt nicht"
+  "virtual_library_relogin_cancel": "Jetzt nicht",
+  "virtual_library_disable_confirmation": "Virtuelle Bibliothek deaktivieren?",
+  "virtual_library_cleanup_warning": "Lymic entfernt die Platzhalter der virtuellen Bibliothek und jedes Original, das in den Ordner heruntergeladen wurde, einschließlich heruntergeladener Dateien und Dateien, die du auf diesem Gerät immer behalten wolltest. Dateien im Ordner, die keine Platzhalter sind und nicht von Lymic erstellt wurden, bleiben samt ihrem Ordner erhalten. Deine Fotos in Immich bleiben unberührt.",
+  "virtual_library_cleanup_kept": "Einige Dateien im Ordner der virtuellen Bibliothek wurden nicht von Lymic erstellt und blieben deshalb samt ihrem Ordner erhalten:",
+  "virtual_library_cleanup_failed_items": "Diese Elemente konnten nicht entfernt werden. Schalte die virtuelle Bibliothek aus und wieder ein, um es noch einmal zu versuchen:",
+  "virtual_library_cleanup_not_run": "Der Synchronisierungsordner der virtuellen Bibliothek konnte nicht entfernt werden, daher wurden keine Dateien gelöscht:",
+  "virtual_library_cleanup_failed": "Die virtuelle Bibliothek konnte nicht deaktiviert werden und bleibt eingeschaltet:"
 }

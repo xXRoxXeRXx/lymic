@@ -468,5 +468,11 @@
   "virtual_library_notice_relogin": "Sign in again",
   "virtual_library_notice_dismiss": "Dismiss notice",
   "virtual_library_relogin_hint": "Your Immich sign-in is no longer valid. Enter a new API key to keep using the Virtual Library.",
-  "virtual_library_relogin_cancel": "Not now"
+  "virtual_library_relogin_cancel": "Not now",
+  "virtual_library_disable_confirmation": "Disable the Virtual Library?",
+  "virtual_library_cleanup_warning": "Lymic removes the Virtual Library placeholders and every original it downloaded into the folder, including hydrated files and files you set to always keep on this device. Files in the folder that are not placeholders and were not created by Lymic stay in place, together with their folder. Your photos in Immich are not affected.",
+  "virtual_library_cleanup_kept": "Some files in the Virtual Library folder were not created by Lymic, so they were kept together with their folder:",
+  "virtual_library_cleanup_failed_items": "These items could not be removed. Turn the Virtual Library on and off again to try once more:",
+  "virtual_library_cleanup_not_run": "The Virtual Library sync folder could not be removed, so no files were deleted:",
+  "virtual_library_cleanup_failed": "The Virtual Library could not be disabled and stays on:"
 }

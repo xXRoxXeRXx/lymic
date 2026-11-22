@@ -468,5 +468,11 @@
   "virtual_library_notice_relogin": "تسجيل الدخول مرة أخرى",
   "virtual_library_notice_dismiss": "إغلاق الإشعار",
   "virtual_library_relogin_hint": "تسجيل دخولك إلى Immich لم يعد صالحًا. أدخل مفتاح API جديدًا لمواصلة استخدام المكتبة الافتراضية.",
-  "virtual_library_relogin_cancel": "ليس الآن"
+  "virtual_library_relogin_cancel": "ليس الآن",
+  "virtual_library_disable_confirmation": "هل تريد تعطيل المكتبة الافتراضية؟",
+  "virtual_library_cleanup_warning": "سيزيل Lymic العناصر النائبة للمكتبة الافتراضية وكل الأصول التي نزّلها إلى المجلد، بما في ذلك الملفات المنزَّلة والملفات التي حددتها للاحتفاظ بها دائمًا على هذا الجهاز. أما الملفات الموجودة في المجلد التي ليست عناصر نائبة ولم ينشئها Lymic فتبقى في مكانها مع مجلدها. صورك في Immich لن تتأثر.",
+  "virtual_library_cleanup_kept": "بعض الملفات في مجلد المكتبة الافتراضية لم ينشئها Lymic، لذلك تم الاحتفاظ بها مع مجلدها:",
+  "virtual_library_cleanup_failed_items": "تعذّرت إزالة هذه العناصر. عطّل المكتبة الافتراضية ثم شغّلها مرة أخرى للمحاولة من جديد:",
+  "virtual_library_cleanup_not_run": "تعذّرت إزالة مجلد المزامنة الخاص بالمكتبة الافتراضية، لذلك لم يُحذف أي ملف:",
+  "virtual_library_cleanup_failed": "تعذّر تعطيل المكتبة الافتراضية وما زالت قيد التشغيل:"
 }

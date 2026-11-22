@@ -1545,4 +1545,48 @@ mod lazy_listing {
             .iter()
             .all(|search| search["size"].as_u64().unwrap() <= 1_000));
     }
+
+    /// ADR-0003: the Virtual Library never causes an Immich write. Walking every kind of directory
+    /// and resolving a file sends only reads: `GET`s, and the metadata search, which Immich models as
+    /// a `POST` although it changes nothing.
+    #[tokio::test]
+    async fn walking_the_whole_projection_sends_only_reads_to_immich() {
+        let mut assets = month_of(2024, 6, 3);
+        assets.push(FakeAsset {
+            local_date_time: None,
+            ..asset("u1", "scan.png", "")
+        });
+        let ids: Vec<&'static str> = assets.iter().map(|asset| asset.id).collect();
+        let fixture = fixture(assets, vec![album("al1", "Holiday", &ids)]).await;
+        let client = test_client(fixture.server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        for directory in [
+            "",
+            "All Photos",
+            "All Photos/2024",
+            "All Photos/2024/06 June",
+            "All Photos/Undated",
+            "Albums",
+            "Albums/Holiday",
+        ] {
+            library.list(directory).await.unwrap();
+        }
+        library
+            .resolve("All Photos/Undated/scan.png")
+            .await
+            .unwrap();
+
+        let requests = fixture.server.requests();
+        assert!(!requests.is_empty());
+        for request in requests {
+            let is_read = request.method == "GET"
+                || (request.method == "POST" && request.target == "/api/search/metadata");
+            assert!(
+                is_read,
+                "the Virtual Library sent {} {}",
+                request.method, request.target
+            );
+        }
+    }
 }

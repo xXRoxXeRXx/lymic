@@ -468,5 +468,11 @@
   "virtual_library_notice_relogin": "Iniciar sesión de nuevo",
   "virtual_library_notice_dismiss": "Descartar aviso",
   "virtual_library_relogin_hint": "Tu inicio de sesión en Immich ya no es válido. Introduce una nueva clave de API para seguir usando la biblioteca virtual.",
-  "virtual_library_relogin_cancel": "Ahora no"
+  "virtual_library_relogin_cancel": "Ahora no",
+  "virtual_library_disable_confirmation": "¿Desactivar la biblioteca virtual?",
+  "virtual_library_cleanup_warning": "Lymic elimina los marcadores de posición de la biblioteca virtual y todos los originales que descargó en la carpeta, incluidos los archivos descargados y los que marcaste para mantener siempre en este dispositivo. Los archivos de la carpeta que no son marcadores de posición y no fueron creados por Lymic se quedan donde están, junto con su carpeta. Tus fotos de Immich no se ven afectadas.",
+  "virtual_library_cleanup_kept": "Algunos archivos de la carpeta de la biblioteca virtual no fueron creados por Lymic, así que se conservaron junto con su carpeta:",
+  "virtual_library_cleanup_failed_items": "No se pudieron eliminar estos elementos. Desactiva y vuelve a activar la biblioteca virtual para intentarlo de nuevo:",
+  "virtual_library_cleanup_not_run": "No se pudo quitar la carpeta de sincronización de la biblioteca virtual, así que no se eliminó ningún archivo:",
+  "virtual_library_cleanup_failed": "No se pudo desactivar la biblioteca virtual y sigue activada:"
 }

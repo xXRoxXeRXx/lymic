@@ -310,6 +310,7 @@
     },
     isExploreActive: () => currentView === EXPLORE_VIEW,
     isTagsActive: () => currentView === TAGS_VIEW,
+    isVirtualLibraryEnabled: () => virtualLibrary.isEnabled,
   });
   const {
     auth,

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createVirtualLibraryController } from "./virtual-library-controller.svelte";
 import type { VirtualLibraryDesktopAdapter } from "../tauri/desktop-adapter";
-import type { VirtualLibraryNotice, VirtualLibrarySettings } from "../contracts";
+import type { VirtualLibraryCleanupReport, VirtualLibraryNotice, VirtualLibrarySettings } from "../contracts";
 
 function createDesktopAdapter(overrides: Partial<VirtualLibraryDesktopAdapter> = {}): VirtualLibraryDesktopAdapter {
   return {
@@ -11,6 +11,9 @@ function createDesktopAdapter(overrides: Partial<VirtualLibraryDesktopAdapter> =
     openFolderDialog: vi.fn(),
     subscribeToVirtualLibrarySettings: vi.fn().mockResolvedValue(() => {}),
     subscribeToVirtualLibraryNotices: vi.fn().mockResolvedValue(() => {}),
+    subscribeToVirtualLibraryCleanup: vi.fn().mockResolvedValue(() => {}),
+    confirm: vi.fn().mockResolvedValue(true),
+    notify: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -217,6 +220,152 @@ describe("virtual library controller", () => {
 
     expect(controller.rootFolder).toBe(ROOT);
     expect((reportError.mock.calls[0][0] as Error).message).toBe("virtual_library_disable_to_change_folder");
+  });
+
+  describe("disabling and cleanup (#283)", () => {
+    const enabledSettings = { available: true, enabled: true, root_folder: ROOT };
+    const disabledSettings = { available: true, enabled: false, root_folder: ROOT };
+    const enabledAdapter = (overrides: Partial<VirtualLibraryDesktopAdapter> = {}) => createDesktopAdapter({
+      getVirtualLibrarySettings: vi.fn().mockResolvedValue(enabledSettings),
+      setVirtualLibraryEnabled: vi.fn().mockResolvedValue(disabledSettings),
+      ...overrides,
+    });
+
+    it("confirms before disabling, naming that hydrated and pinned originals are removed and that other files stay", async () => {
+      const adapter = enabledAdapter();
+      const { controller } = createController(adapter);
+      await controller.hydrate();
+
+      await controller.toggle();
+
+      expect(adapter.confirm).toHaveBeenCalledTimes(1);
+      const [message, options] = vi.mocked(adapter.confirm).mock.calls[0];
+      expect(message).toContain("virtual_library_disable_confirmation");
+      expect(message).toContain("virtual_library_cleanup_warning");
+      expect(options).toEqual({ title: "virtual_library", kind: "warning" });
+      expect(adapter.setVirtualLibraryEnabled).toHaveBeenCalledWith(false);
+      expect(controller.isEnabled).toBe(false);
+    });
+
+    it("leaves everything as it was when the confirmation is declined", async () => {
+      const adapter = enabledAdapter({ confirm: vi.fn().mockResolvedValue(false) });
+      const { controller } = createController(adapter);
+      await controller.hydrate();
+
+      await controller.toggle();
+
+      expect(adapter.setVirtualLibraryEnabled).not.toHaveBeenCalled();
+      expect(controller.isEnabled).toBe(true);
+      expect(controller.isSaving).toBe(false);
+    });
+
+    it("does not ask for a confirmation when enabling", async () => {
+      const adapter = createDesktopAdapter({
+        getVirtualLibrarySettings: vi.fn().mockResolvedValue(disabledSettings),
+        setVirtualLibraryEnabled: vi.fn().mockResolvedValue(enabledSettings),
+      });
+      const { controller } = createController(adapter);
+      await controller.hydrate();
+
+      await controller.toggle();
+
+      expect(adapter.confirm).not.toHaveBeenCalled();
+    });
+
+    it("keeps the Virtual Library enabled and localizes the error when the cleanup could not run", async () => {
+      const adapter = enabledAdapter({
+        setVirtualLibraryEnabled: vi.fn().mockRejectedValue("VIRTUAL_LIBRARY_CLEANUP_FAILED: could not unregister the sync folder: 0x80070005"),
+      });
+      const { controller, reportError } = createController(adapter);
+      await controller.hydrate();
+
+      await controller.toggle();
+
+      expect(controller.isEnabled).toBe(true);
+      expect((reportError.mock.calls[0][0] as Error).message).toBe("virtual_library_cleanup_failed could not unregister the sync folder: 0x80070005");
+    });
+
+    const report = (overrides: Partial<VirtualLibraryCleanupReport> = {}): VirtualLibraryCleanupReport => ({
+      root_folder: ROOT,
+      removed_files: 4,
+      removed_folders: 2,
+      kept_count: 0,
+      kept_examples: [],
+      root_kept: false,
+      failed_count: 0,
+      failed_examples: [],
+      error: null,
+      ...overrides,
+    });
+
+    async function started(adapter: VirtualLibraryDesktopAdapter) {
+      let announce: (report: VirtualLibraryCleanupReport) => void = () => {};
+      adapter.subscribeToVirtualLibraryCleanup = vi.fn().mockImplementation(async (listener) => {
+        announce = listener;
+        return () => {};
+      });
+      const created = createController(adapter);
+      await created.controller.startLifecycle();
+      return { ...created, announce: (value: VirtualLibraryCleanupReport) => announce(value) };
+    }
+
+    it("tells the user that files Lymic did not create stayed, naming the folder and the files", async () => {
+      const adapter = createDesktopAdapter();
+      const { announce } = await started(adapter);
+
+      announce(report({ kept_count: 7, kept_examples: ["mine.txt", "Edits/a.psd"], root_kept: true }));
+
+      expect(adapter.notify).toHaveBeenCalledTimes(1);
+      const [message, options] = vi.mocked(adapter.notify).mock.calls[0];
+      expect(message).toContain("virtual_library_cleanup_kept");
+      expect(message).toContain(ROOT);
+      expect(message).toContain("mine.txt");
+      expect(message).toContain("Edits/a.psd");
+      expect(message).toContain("7");
+      expect(options).toEqual({ title: "virtual_library", kind: "warning" });
+    });
+
+    it("tells the user which items could not be removed and why", async () => {
+      const adapter = createDesktopAdapter();
+      const { announce } = await started(adapter);
+
+      announce(report({ failed_count: 1, failed_examples: ["All Photos/a.jpg: access denied"], root_kept: true }));
+
+      const [message] = vi.mocked(adapter.notify).mock.calls[0];
+      expect(message).toContain("virtual_library_cleanup_failed_items");
+      expect(message).toContain("All Photos/a.jpg: access denied");
+    });
+
+    it("tells the user when the cleanup could not run at all, with the technical reason", async () => {
+      const adapter = createDesktopAdapter();
+      const { announce } = await started(adapter);
+
+      announce(report({ error: "VIRTUAL_LIBRARY_CLEANUP_FAILED: could not unregister the sync folder: denied" }));
+
+      const [message] = vi.mocked(adapter.notify).mock.calls[0];
+      expect(message).toContain("virtual_library_cleanup_not_run");
+      expect(message).toContain("denied");
+    });
+
+    it("stays silent when the cleanup left nothing behind", async () => {
+      const adapter = createDesktopAdapter();
+      const { announce } = await started(adapter);
+
+      announce(report());
+
+      expect(adapter.notify).not.toHaveBeenCalled();
+    });
+
+    it("stops listening for cleanup reports with the lifecycle", async () => {
+      const unlistenCleanup = vi.fn();
+      const adapter = createDesktopAdapter({ subscribeToVirtualLibraryCleanup: vi.fn().mockResolvedValue(unlistenCleanup) });
+      const { controller } = createController(adapter);
+
+      await controller.startLifecycle();
+      controller.stopLifecycle();
+
+      expect(unlistenCleanup).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("autostart hint", () => {

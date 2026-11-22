@@ -53,7 +53,7 @@ fn current_user_sid() -> Result<String> {
 }
 
 /// `[Provider ID]![Windows SID]![Account ID]`, the documented sync root id format.
-fn sync_root_id() -> Result<String> {
+pub(super) fn sync_root_id() -> Result<String> {
     Ok(format!("{PROVIDER_ID}!{}!Library", current_user_sid()?))
 }
 

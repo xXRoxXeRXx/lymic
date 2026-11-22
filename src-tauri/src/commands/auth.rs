@@ -117,12 +117,17 @@ pub(crate) async fn login(
 }
 
 #[tauri::command]
-pub(crate) async fn logout(app: tauri::AppHandle) -> Result<(), String> {
+pub(crate) async fn logout(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<(), String> {
     let operation_id = crate::audit::AuditEvent::operation_id();
     let actor_id = auth::get_credentials()
         .ok()
         .flatten()
         .map(|credentials| credentials.account_id());
+    // The Virtual Library is cleaned up first and never blocks signing out (#283).
+    crate::commands::virtual_library::clean_up_for_logout(&app, pool.inner()).await;
     let result = auth::delete_credentials();
     if result.is_ok() {
         if let Ok(cache_dir) = profile_cache_dir(&app) {

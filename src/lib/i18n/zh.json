@@ -468,5 +468,11 @@
   "virtual_library_notice_relogin": "重新登录",
   "virtual_library_notice_dismiss": "关闭通知",
   "virtual_library_relogin_hint": "你的 Immich 登录已失效。请输入新的 API 密钥以继续使用虚拟图库。",
-  "virtual_library_relogin_cancel": "暂不"
+  "virtual_library_relogin_cancel": "暂不",
+  "virtual_library_disable_confirmation": "要禁用虚拟图库吗？",
+  "virtual_library_cleanup_warning": "Lymic 会移除虚拟图库的占位符，以及它下载到该文件夹中的所有原图，包括已下载的文件和你设为“始终保留在此设备上”的文件。文件夹中不是占位符且不是由 Lymic 创建的文件会连同其文件夹一起保留在原处。你在 Immich 中的照片不会受到影响。",
+  "virtual_library_cleanup_kept": "虚拟图库文件夹中有一些文件不是由 Lymic 创建的，因此已连同文件夹一起保留：",
+  "virtual_library_cleanup_failed_items": "无法移除以下项目。请先关闭再重新开启虚拟图库以重试：",
+  "virtual_library_cleanup_not_run": "无法移除虚拟图库的同步文件夹，因此没有删除任何文件：",
+  "virtual_library_cleanup_failed": "无法禁用虚拟图库，它仍保持开启："
 }
