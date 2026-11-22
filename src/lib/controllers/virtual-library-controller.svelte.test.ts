@@ -173,6 +173,50 @@ describe("virtual library controller", () => {
     expect(reportError.mock.calls[0][0]).toContain("C:\\Users\\Me\\Pictures");
   });
 
+  it("asks for another folder when the backend refuses one inside another sync root, and stays disabled", async () => {
+    const adapter = createDesktopAdapter({
+      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: ROOT }),
+      setVirtualLibraryEnabled: vi.fn().mockRejectedValue("VIRTUAL_LIBRARY_NESTED_SYNC_ROOT: C:\\Users\\Me\\OneDrive"),
+    });
+    const { controller, reportError } = createController(adapter);
+    await controller.hydrate();
+
+    await controller.toggle();
+
+    expect(controller.isEnabled).toBe(false);
+    expect(reportError).toHaveBeenCalledTimes(1);
+    const reported = reportError.mock.calls[0][0] as Error;
+    expect(reported.message).toBe("virtual_library_nested_root (C:\\Users\\Me\\OneDrive)");
+  });
+
+  it("explains a failure to start with the technical reason after the localized text", async () => {
+    const adapter = createDesktopAdapter({
+      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: false, root_folder: ROOT }),
+      setVirtualLibraryEnabled: vi.fn().mockRejectedValue(new Error("VIRTUAL_LIBRARY_START_FAILED: could not register the sync folder: 0x80070490")),
+    });
+    const { controller, reportError } = createController(adapter);
+    await controller.hydrate();
+
+    await controller.toggle();
+
+    expect((reportError.mock.calls[0][0] as Error).message).toBe("virtual_library_start_failed could not register the sync folder: 0x80070490");
+  });
+
+  it("asks to disable the Virtual Library first when the folder is changed while it is enabled", async () => {
+    const adapter = createDesktopAdapter({
+      getVirtualLibrarySettings: vi.fn().mockResolvedValue({ available: true, enabled: true, root_folder: ROOT }),
+      openFolderDialog: vi.fn().mockResolvedValue("D:\\Photos"),
+      setVirtualLibraryRootFolder: vi.fn().mockRejectedValue("VIRTUAL_LIBRARY_DISABLE_TO_CHANGE_FOLDER: disable the Virtual Library before changing its folder"),
+    });
+    const { controller, reportError } = createController(adapter);
+    await controller.hydrate();
+
+    await controller.chooseRootFolder();
+
+    expect(controller.rootFolder).toBe(ROOT);
+    expect((reportError.mock.calls[0][0] as Error).message).toBe("virtual_library_disable_to_change_folder");
+  });
+
   describe("autostart hint", () => {
     const enabledSettings = { available: true, enabled: true, root_folder: ROOT };
     const adapterWith = (settings: VirtualLibrarySettings) => createDesktopAdapter({ getVirtualLibrarySettings: vi.fn().mockResolvedValue(settings) });

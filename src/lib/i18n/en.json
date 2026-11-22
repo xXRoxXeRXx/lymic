@@ -456,5 +456,9 @@
   ,"archive_archive_failed": "Could not archive. Please try again."
   ,"archive_archive_permission": "Archiving was refused. Give the API key the asset.update permission."
   ,"archive_archive_stays": "Archived. It stays in this list."
-  ,"archive_unarchive_stays": "Unarchived. It stays in this list."
+  ,"archive_unarchive_stays": "Unarchived. It stays in this list.",
+  "log_virtual_library_start_failed": "Could not start the Virtual Library: {error}",
+  "virtual_library_nested_root": "This folder is inside or contains another cloud sync folder, such as OneDrive, so the Virtual Library cannot be set up there. Choose another folder.",
+  "virtual_library_start_failed": "The Virtual Library could not be started:",
+  "virtual_library_disable_to_change_folder": "Disable the Virtual Library before changing its folder."
 }

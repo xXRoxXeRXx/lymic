@@ -1,0 +1,379 @@
+//! The Cloud Filter callbacks: `FETCH_PLACEHOLDERS` (a directory listed for the first time) and
+//! `FETCH_DATA` (a placeholder opened). Each one copies what it needs, spawns the work onto the
+//! Tokio runtime and returns at once; the spawned work answers through `CfExecute`.
+//!
+//! Hook for #279 (the delete and rename veto): add the `NOTIFY_DELETE` and `NOTIFY_RENAME` entries
+//! to [`callback_table`], and acknowledge them with `CF_OPERATION_TYPE_ACK_DELETE` and
+//! `CF_OPERATION_TYPE_ACK_RENAME` using [`Request`] and [`operation_info`].
+
+use crate::cloud_files::failure::{CloudStatus, Failure, FailureKind};
+use crate::cloud_files::hydration::{self, Block, DataRequest, DataSink};
+use crate::cloud_files::identity;
+use crate::cloud_files::library::StoredCredentialsImmich;
+use crate::cloud_files::placeholder::PlaceholderSpec;
+use crate::cloud_files::population;
+use std::mem::{offset_of, size_of};
+use std::path::Path;
+use windows::core::{HRESULT, PCWSTR};
+use windows::Win32::Foundation::{
+    NTSTATUS, STATUS_CLOUD_FILE_AUTHENTICATION_FAILED, STATUS_CLOUD_FILE_INVALID_REQUEST,
+    STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE, STATUS_CLOUD_FILE_UNSUCCESSFUL,
+};
+use windows::Win32::Storage::CloudFilters::*;
+use windows::Win32::Storage::FileSystem::{
+    FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL, FILE_BASIC_INFO,
+};
+
+const STATUS_SUCCESS: NTSTATUS = NTSTATUS(0);
+/// Placeholders handed over per `TRANSFER_PLACEHOLDERS` call.
+const PLACEHOLDER_BATCH: usize = 1000;
+
+fn ntstatus(status: CloudStatus) -> NTSTATUS {
+    match status {
+        CloudStatus::NetworkUnavailable => STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE,
+        CloudStatus::AuthenticationFailed => STATUS_CLOUD_FILE_AUTHENTICATION_FAILED,
+        CloudStatus::InvalidRequest => STATUS_CLOUD_FILE_INVALID_REQUEST,
+        CloudStatus::Unsuccessful => STATUS_CLOUD_FILE_UNSUCCESSFUL,
+    }
+}
+
+/// What a callback copies out of the platform's structures, which are only valid while the callback
+/// runs. The keys are plain integers, so the request can move to another thread.
+pub(super) struct Request {
+    connection: CF_CONNECTION_KEY,
+    transfer: i64,
+    request: i64,
+    /// The placeholder's file identity: its path relative to the Virtual Library root.
+    identity: Vec<u8>,
+    file_size: i64,
+}
+
+impl Request {
+    /// # Safety
+    /// `info` must be the `CF_CALLBACK_INFO` the platform passed to the running callback.
+    unsafe fn capture(info: *const CF_CALLBACK_INFO) -> Self {
+        let info = unsafe { &*info };
+        let identity = if info.FileIdentity.is_null() || info.FileIdentityLength == 0 {
+            Vec::new()
+        } else {
+            // SAFETY: the platform guarantees `FileIdentityLength` readable bytes at `FileIdentity`.
+            unsafe {
+                std::slice::from_raw_parts(
+                    info.FileIdentity.cast::<u8>(),
+                    info.FileIdentityLength as usize,
+                )
+            }
+            .to_vec()
+        };
+        Self {
+            connection: info.ConnectionKey,
+            transfer: info.TransferKey,
+            request: info.RequestKey,
+            identity,
+            file_size: info.FileSize,
+        }
+    }
+
+    /// The path the placeholder stands for, `""` for the root.
+    fn path(&self) -> Result<String, Failure> {
+        identity::decode(&self.identity).ok_or_else(|| {
+            Failure::new(
+                FailureKind::NotFound,
+                "the placeholder identity is not a path",
+            )
+        })
+    }
+}
+
+/// `CF_OPERATION_INFO` for a request captured earlier.
+pub(super) fn operation_info(request: &Request, kind: CF_OPERATION_TYPE) -> CF_OPERATION_INFO {
+    CF_OPERATION_INFO {
+        StructSize: size_of::<CF_OPERATION_INFO>() as u32,
+        Type: kind,
+        ConnectionKey: request.connection,
+        TransferKey: request.transfer,
+        CorrelationVector: std::ptr::null(),
+        SyncStatus: std::ptr::null(),
+        RequestKey: request.request,
+    }
+}
+
+/// `CF_SIZE_OF_OP_PARAM`: the offset of the union plus the size of the member used.
+fn parameters(member_size: usize) -> CF_OPERATION_PARAMETERS {
+    CF_OPERATION_PARAMETERS {
+        ParamSize: (offset_of!(CF_OPERATION_PARAMETERS, Anonymous) + member_size) as u32,
+        ..Default::default()
+    }
+}
+
+/// Diagnostics for failures nobody is waiting on. User-facing notices are #281.
+fn note(message: &str) {
+    eprintln!("virtual library: {message}");
+}
+
+fn utf16z(text: &str) -> Vec<u16> {
+    text.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+// ------------------------------------------------------------------ FETCH_PLACEHOLDERS
+
+unsafe extern "system" fn on_fetch_placeholders(
+    info: *const CF_CALLBACK_INFO,
+    _parameters: *const CF_CALLBACK_PARAMETERS,
+) {
+    // SAFETY: called by the platform with the callback's own `info`.
+    let request = unsafe { Request::capture(info) };
+    let Some(runtime) = super::runtime() else {
+        return;
+    };
+    runtime.spawn(async move {
+        let plan = match request.path() {
+            Ok(path) => {
+                population::populate(&StoredCredentialsImmich, &StoredCredentialsImmich, &path)
+                    .await
+            }
+            Err(failure) => Err(failure),
+        };
+        match plan {
+            Ok(plan) => {
+                if !plan.skipped.is_empty() {
+                    note(&format!(
+                        "{} item(s) not shown for now (no size or too long a path): {}",
+                        plan.skipped.len(),
+                        plan.skipped.join(", ")
+                    ));
+                }
+                transfer_placeholders(&request, &plan.specs);
+            }
+            Err(failure) => {
+                note(&format!("could not list a directory: {}", failure.message));
+                fail_placeholders(&request, failure.status());
+            }
+        }
+    });
+}
+
+fn create_info(spec: &PlaceholderSpec, name: &[u16]) -> CF_PLACEHOLDER_CREATE_INFO {
+    CF_PLACEHOLDER_CREATE_INFO {
+        RelativeFileName: PCWSTR(name.as_ptr()),
+        FsMetadata: CF_FS_METADATA {
+            BasicInfo: FILE_BASIC_INFO {
+                CreationTime: spec.created,
+                LastAccessTime: spec.modified,
+                LastWriteTime: spec.modified,
+                ChangeTime: spec.modified,
+                FileAttributes: if spec.is_directory {
+                    FILE_ATTRIBUTE_DIRECTORY.0
+                } else {
+                    FILE_ATTRIBUTE_NORMAL.0
+                },
+            },
+            FileSize: spec.size as i64,
+        },
+        FileIdentity: spec.identity.as_ptr().cast(),
+        FileIdentityLength: spec.identity.len() as u32,
+        Flags: CF_PLACEHOLDER_CREATE_FLAG_MARK_IN_SYNC,
+        Result: HRESULT(0),
+        CreateUsn: 0,
+    }
+}
+
+/// Creates the placeholders in the directory being listed, and marks that directory populated.
+fn transfer_placeholders(request: &Request, specs: &[PlaceholderSpec]) {
+    let names: Vec<Vec<u16>> = specs.iter().map(|spec| utf16z(&spec.name)).collect();
+    let mut entries: Vec<CF_PLACEHOLDER_CREATE_INFO> = specs
+        .iter()
+        .zip(&names)
+        .map(|(spec, name)| create_info(spec, name))
+        .collect();
+    let operation = operation_info(request, CF_OPERATION_TYPE_TRANSFER_PLACEHOLDERS);
+    let total = entries.len();
+    let batches = entries.chunks_mut(PLACEHOLDER_BATCH).collect::<Vec<_>>();
+    // An empty directory still needs the one call that marks it populated.
+    let batch_count = batches.len().max(1);
+    let mut empty: [CF_PLACEHOLDER_CREATE_INFO; 0] = [];
+    let mut batches = batches.into_iter();
+    for number in 1..=batch_count {
+        let batch: &mut [CF_PLACEHOLDER_CREATE_INFO] = batches.next().unwrap_or(&mut empty);
+        let mut params = parameters(size_of::<CF_OPERATION_PARAMETERS_0_4>());
+        params.Anonymous.TransferPlaceholders = CF_OPERATION_PARAMETERS_0_4 {
+            // Only the last call marks the directory fully populated, so the platform does not
+            // ask for its listing again.
+            Flags: if number == batch_count {
+                CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAG_DISABLE_ON_DEMAND_POPULATION
+            } else {
+                CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAG_NONE
+            },
+            CompletionStatus: STATUS_SUCCESS,
+            PlaceholderTotalCount: total as i64,
+            PlaceholderArray: batch.as_mut_ptr(),
+            PlaceholderCount: batch.len() as u32,
+            EntriesProcessed: 0,
+        };
+        // SAFETY: `operation` and `params` are valid for the call, and the names and identities
+        // the entries point at outlive it.
+        if let Err(error) = unsafe { CfExecute(&operation, &mut params) } {
+            note(&format!("TRANSFER_PLACEHOLDERS failed: {error}"));
+            return;
+        }
+    }
+}
+
+/// Completes a listing with an error and no placeholders; the directory stays unpopulated, so the
+/// next listing asks again.
+fn fail_placeholders(request: &Request, status: CloudStatus) {
+    let operation = operation_info(request, CF_OPERATION_TYPE_TRANSFER_PLACEHOLDERS);
+    let mut params = parameters(size_of::<CF_OPERATION_PARAMETERS_0_4>());
+    params.Anonymous.TransferPlaceholders = CF_OPERATION_PARAMETERS_0_4 {
+        Flags: CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAG_NONE,
+        CompletionStatus: ntstatus(status),
+        PlaceholderTotalCount: 0,
+        PlaceholderArray: std::ptr::null_mut(),
+        PlaceholderCount: 0,
+        EntriesProcessed: 0,
+    };
+    // SAFETY: valid structures, no array to read.
+    if let Err(error) = unsafe { CfExecute(&operation, &mut params) } {
+        note(&format!("TRANSFER_PLACEHOLDERS (failure) failed: {error}"));
+    }
+}
+
+// ------------------------------------------------------------------ FETCH_DATA
+
+unsafe extern "system" fn on_fetch_data(
+    info: *const CF_CALLBACK_INFO,
+    parameters: *const CF_CALLBACK_PARAMETERS,
+) {
+    // SAFETY: called by the platform with the callback's own `info` and `parameters`.
+    let (request, fetch) = unsafe { (Request::capture(info), (*parameters).Anonymous.FetchData) };
+    let Some(runtime) = super::runtime() else {
+        return;
+    };
+    runtime.spawn(async move {
+        let result = match request.path() {
+            Ok(path) if !path.is_empty() => {
+                let data_request = DataRequest {
+                    path,
+                    required_offset: fetch.RequiredFileOffset.max(0) as u64,
+                    file_size: request.file_size.max(0) as u64,
+                };
+                hydration::hydrate(
+                    &StoredCredentialsImmich,
+                    &StoredCredentialsImmich,
+                    &mut CfSink { request: &request },
+                    &data_request,
+                )
+                .await
+                .map(|_| ())
+            }
+            Ok(_) => Err(Failure::new(FailureKind::NotFound, "not a file")),
+            Err(failure) => Err(failure),
+        };
+        if let Err(failure) = result {
+            note(&format!("could not hydrate a file: {}", failure.message));
+            fail_data(
+                &request,
+                fetch.RequiredFileOffset,
+                fetch.RequiredLength,
+                failure.status(),
+            );
+        }
+    });
+}
+
+/// Hands blocks of the original to the platform.
+struct CfSink<'a> {
+    request: &'a Request,
+}
+
+impl DataSink for CfSink<'_> {
+    fn transfer(&mut self, block: &Block) -> Result<(), Failure> {
+        let operation = operation_info(self.request, CF_OPERATION_TYPE_TRANSFER_DATA);
+        let mut params = parameters(size_of::<CF_OPERATION_PARAMETERS_0_0>());
+        params.Anonymous.TransferData = CF_OPERATION_PARAMETERS_0_0 {
+            Flags: CF_OPERATION_TRANSFER_DATA_FLAG_NONE,
+            CompletionStatus: STATUS_SUCCESS,
+            Buffer: block.data.as_ptr().cast(),
+            Offset: block.offset as i64,
+            Length: block.data.len() as i64,
+        };
+        // SAFETY: `block.data` outlives the synchronous call.
+        unsafe { CfExecute(&operation, &mut params) }.map_err(|error| {
+            Failure::new(
+                FailureKind::Failed,
+                format!("TRANSFER_DATA at {} failed: {error}", block.offset),
+            )
+        })
+    }
+}
+
+/// Completes the range the reader waits for with an error, which fails its read.
+fn fail_data(request: &Request, offset: i64, length: i64, status: CloudStatus) {
+    let operation = operation_info(request, CF_OPERATION_TYPE_TRANSFER_DATA);
+    let mut params = parameters(size_of::<CF_OPERATION_PARAMETERS_0_0>());
+    params.Anonymous.TransferData = CF_OPERATION_PARAMETERS_0_0 {
+        Flags: CF_OPERATION_TRANSFER_DATA_FLAG_NONE,
+        CompletionStatus: ntstatus(status),
+        Buffer: std::ptr::null(),
+        Offset: offset,
+        Length: length,
+    };
+    // SAFETY: valid structures, no buffer to read.
+    if let Err(error) = unsafe { CfExecute(&operation, &mut params) } {
+        note(&format!("TRANSFER_DATA (failure) failed: {error}"));
+    }
+}
+
+// ------------------------------------------------------------------ connection
+
+/// A connected sync root.
+pub(super) struct Connection(CF_CONNECTION_KEY);
+
+impl Connection {
+    /// Stops callbacks. The registration stays.
+    pub(super) fn disconnect(self) {
+        // SAFETY: the key came from a successful `CfConnectSyncRoot` and is disconnected once.
+        if let Err(error) = unsafe { CfDisconnectSyncRoot(self.0) } {
+            note(&format!("CfDisconnectSyncRoot failed: {error}"));
+        }
+    }
+}
+
+fn registration(
+    kind: CF_CALLBACK_TYPE,
+    callback: unsafe extern "system" fn(*const CF_CALLBACK_INFO, *const CF_CALLBACK_PARAMETERS),
+) -> CF_CALLBACK_REGISTRATION {
+    CF_CALLBACK_REGISTRATION {
+        Type: kind,
+        Callback: Some(callback),
+    }
+}
+
+/// The callbacks this adapter serves, ended by the platform's terminator entry.
+fn callback_table() -> Vec<CF_CALLBACK_REGISTRATION> {
+    vec![
+        registration(CF_CALLBACK_TYPE_FETCH_PLACEHOLDERS, on_fetch_placeholders),
+        registration(CF_CALLBACK_TYPE_FETCH_DATA, on_fetch_data),
+        CF_CALLBACK_REGISTRATION {
+            Type: CF_CALLBACK_TYPE_NONE,
+            Callback: None,
+        },
+    ]
+}
+
+/// Connects the registered sync root at `root` and starts serving callbacks.
+pub(super) fn connect(root: &Path) -> windows::core::Result<Connection> {
+    // The platform may keep the table, so it lives for the rest of the process.
+    let table: &'static [CF_CALLBACK_REGISTRATION] = Box::leak(callback_table().into_boxed_slice());
+    let root = utf16z(&root.to_string_lossy());
+    // SAFETY: `root` is NUL terminated and `table` is terminated and static.
+    let key = unsafe {
+        CfConnectSyncRoot(
+            PCWSTR(root.as_ptr()),
+            table.as_ptr(),
+            None,
+            CF_CONNECT_FLAG_NONE,
+        )?
+    };
+    Ok(Connection(key))
+}

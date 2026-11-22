@@ -4,6 +4,7 @@ mod bulk_check;
 mod client;
 pub(crate) mod ids;
 mod library_listing;
+mod original;
 mod people;
 mod places;
 mod response;
@@ -24,6 +25,7 @@ pub(crate) use bulk_check::{BulkCheckDuplicate, DuplicateRemoteAsset};
 pub(crate) use client::{AssetDetails, AssetResponse, ImmichClient};
 pub(crate) use ids::{AlbumId, RemoteAssetId};
 pub(crate) use library_listing::{LibraryAlbum, LibraryAsset, LivePhotoVideo};
+pub(crate) use original::{AssetOriginal, OriginalError, OriginalFailureKind};
 pub(crate) use people::PeoplePage;
 pub(crate) use places::Place;
 pub(crate) use search::{

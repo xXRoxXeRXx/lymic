@@ -2,11 +2,13 @@
 //!
 //! The section exists only for a packaged Store-channel Windows run. The decision is made here, at
 //! runtime, and never by the frontend: the release-channel flag alone is a compile-time label.
-//! The toggle has no projection effect yet. The root folder (the Known Folder Pictures plus
-//! `Lymic` unless the user chose another) and the refusal to overlap a Watched Folder live here
-//! and in `virtual_library_root`; the registration side of the rule is in `watched_folders`.
+//! Enabling registers and serves the sync root through `cloud_files` (Windows adapter, #278) and
+//! disabling stops serving it; unregistering is #283. The root folder (the Known Folder Pictures
+//! plus `Lymic` unless the user chose another) and the refusal to overlap a Watched Folder live
+//! here and in `virtual_library_root`; the registration side of the rule is in `watched_folders`.
 
 use crate::{
+    cloud_files::{SyncRootService, SystemSyncRoot},
     db,
     media::paths::canonicalize_folder_path,
     virtual_library_root::{
@@ -20,6 +22,9 @@ use tauri::Emitter;
 pub(crate) const SETTINGS_CHANGED_EVENT: &str = "virtual-library-settings-changed";
 const UNAVAILABLE_MESSAGE: &str =
     "The Virtual Library is available only in the Microsoft Store version of Lymic on Windows.";
+/// Error text prefix when the folder is changed while the Virtual Library is enabled. The
+/// frontend turns it into a localized request to disable it first.
+pub(crate) const DISABLE_TO_CHANGE_FOLDER_ERROR: &str = "VIRTUAL_LIBRARY_DISABLE_TO_CHANGE_FOLDER";
 const NO_ROOT_MESSAGE: &str = "The Virtual Library cannot be enabled because Lymic could not find your Pictures folder. Choose a Virtual Library folder first.";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -98,10 +103,14 @@ fn overlap_refusal(action: &str, root: &Path, overlaps: &[(PathBuf, RootOverlap)
     }
 }
 
+/// Enabling checks the folder (Watched Folders, other sync roots), registers and serves it, and only
+/// then remembers the choice; a refusal leaves everything as it was. Disabling remembers the choice
+/// and stops serving.
 async fn change_enabled(
     pool: &sqlx::SqlitePool,
     available: bool,
     known_folders: &impl KnownFolders,
+    service: &impl SyncRootService,
     enabled: bool,
 ) -> Result<VirtualLibrarySettings, String> {
     if !available {
@@ -119,11 +128,54 @@ async fn change_enabled(
                 &overlaps,
             ));
         }
+        service
+            .start(root)
+            .await
+            .map_err(|error| error.user_message())?;
+        if let Err(error) = db::set_virtual_library_enabled(pool, true).await {
+            service.stop();
+            return Err(error.to_string());
+        }
+    } else {
+        db::set_virtual_library_enabled(pool, false)
+            .await
+            .map_err(|error| error.to_string())?;
+        service.stop();
     }
-    db::set_virtual_library_enabled(pool, enabled)
-        .await
-        .map_err(|error| error.to_string())?;
     load_settings(pool, available, known_folders).await
+}
+
+/// Starts serving again after an app start, when the Virtual Library is available and enabled.
+pub(crate) async fn restore(pool: &sqlx::SqlitePool) -> Result<(), String> {
+    restore_with(
+        pool,
+        is_available_at_runtime(),
+        &SystemKnownFolders,
+        &SystemSyncRoot,
+    )
+    .await
+}
+
+async fn restore_with(
+    pool: &sqlx::SqlitePool,
+    available: bool,
+    known_folders: &impl KnownFolders,
+    service: &impl SyncRootService,
+) -> Result<(), String> {
+    if !available
+        || !db::get_virtual_library_enabled(pool)
+            .await
+            .map_err(|error| error.to_string())?
+    {
+        return Ok(());
+    }
+    let root = load_root(pool, known_folders)
+        .await?
+        .ok_or_else(|| NO_ROOT_MESSAGE.to_string())?;
+    service
+        .start(root)
+        .await
+        .map_err(|error| error.user_message())
 }
 
 async fn change_root_folder(
@@ -134,6 +186,14 @@ async fn change_root_folder(
 ) -> Result<VirtualLibrarySettings, String> {
     if !available {
         return Err(UNAVAILABLE_MESSAGE.to_string());
+    }
+    if db::get_virtual_library_enabled(pool)
+        .await
+        .map_err(|error| error.to_string())?
+    {
+        return Err(format!(
+            "{DISABLE_TO_CHANGE_FOLDER_ERROR}: disable the Virtual Library before changing its folder"
+        ));
     }
     let chosen = chosen.trim();
     if chosen.is_empty() {
@@ -191,6 +251,7 @@ pub(crate) async fn set_virtual_library_enabled(
         pool.inner(),
         is_available_at_runtime(),
         &SystemKnownFolders,
+        &SystemSyncRoot,
         enabled,
     )
     .await?;
@@ -218,8 +279,56 @@ pub(crate) async fn set_virtual_library_root_folder(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cloud_files::{ActivationError, NESTED_SYNC_ROOT_ERROR, START_FAILED_ERROR};
     use crate::db::test_pool;
     use crate::virtual_library_root::FixedKnownFolders;
+    use std::sync::Mutex;
+
+    /// A sync root service that records what it is asked and can refuse to start.
+    struct FakeService {
+        refuse: Option<ActivationError>,
+        started: Mutex<Vec<PathBuf>>,
+        stops: Mutex<usize>,
+    }
+
+    impl FakeService {
+        fn ok() -> Self {
+            Self {
+                refuse: None,
+                started: Mutex::new(Vec::new()),
+                stops: Mutex::new(0),
+            }
+        }
+
+        fn refusing(error: ActivationError) -> Self {
+            Self {
+                refuse: Some(error),
+                ..Self::ok()
+            }
+        }
+
+        fn started(&self) -> Vec<PathBuf> {
+            self.started.lock().unwrap().clone()
+        }
+
+        fn stops(&self) -> usize {
+            *self.stops.lock().unwrap()
+        }
+    }
+
+    impl SyncRootService for FakeService {
+        async fn start(&self, root: PathBuf) -> Result<(), ActivationError> {
+            self.started.lock().unwrap().push(root);
+            match &self.refuse {
+                Some(error) => Err(error.clone()),
+                None => Ok(()),
+            }
+        }
+
+        fn stop(&self) {
+            *self.stops.lock().unwrap() += 1;
+        }
+    }
 
     fn base() -> PathBuf {
         std::env::temp_dir().join("lymic-vl-settings-tests")
@@ -261,12 +370,14 @@ mod tests {
             settings(true, false, Some(default_root()))
         );
         assert_eq!(
-            change_enabled(&pool, true, &known, true).await.unwrap(),
+            change_enabled(&pool, true, &known, &FakeService::ok(), true)
+                .await
+                .unwrap(),
             settings(true, true, Some(default_root()))
         );
         assert!(load_settings(&pool, true, &known).await.unwrap().enabled);
         assert!(
-            !change_enabled(&pool, true, &known, false)
+            !change_enabled(&pool, true, &known, &FakeService::ok(), false)
                 .await
                 .unwrap()
                 .enabled
@@ -284,7 +395,7 @@ mod tests {
             settings(false, false, None)
         );
         assert_eq!(
-            change_enabled(&pool, false, &known, true).await,
+            change_enabled(&pool, false, &known, &FakeService::ok(), true).await,
             Err(UNAVAILABLE_MESSAGE.to_string())
         );
         assert_eq!(
@@ -337,7 +448,7 @@ mod tests {
             settings(true, false, None)
         );
         assert_eq!(
-            change_enabled(&pool, true, &unknown, true).await,
+            change_enabled(&pool, true, &unknown, &FakeService::ok(), true).await,
             Err(NO_ROOT_MESSAGE.to_string())
         );
         assert!(!db::get_virtual_library_enabled(&pool).await.unwrap());
@@ -385,7 +496,9 @@ mod tests {
             let pool = test_pool().await;
             watch(&pool, &watched).await;
 
-            let error = change_enabled(&pool, true, &known, true).await.unwrap_err();
+            let error = change_enabled(&pool, true, &known, &FakeService::ok(), true)
+                .await
+                .unwrap_err();
 
             assert!(
                 error.contains(&format!("'{}'", watched.display())),
@@ -403,14 +516,14 @@ mod tests {
         watch(&pool, &pictures().join("Holiday")).await;
 
         assert!(
-            change_enabled(&pool, true, &known, true)
+            change_enabled(&pool, true, &known, &FakeService::ok(), true)
                 .await
                 .unwrap()
                 .enabled
         );
         watch(&pool, &pictures()).await;
         assert!(
-            !change_enabled(&pool, true, &known, false)
+            !change_enabled(&pool, true, &known, &FakeService::ok(), false)
                 .await
                 .unwrap()
                 .enabled
@@ -424,7 +537,7 @@ mod tests {
         watch(&pool, &pictures()).await;
         watch(&pool, &inside).await;
 
-        let error = change_enabled(&pool, true, &known(), true)
+        let error = change_enabled(&pool, true, &known(), &FakeService::ok(), true)
             .await
             .unwrap_err();
 
@@ -465,5 +578,163 @@ mod tests {
                 .root_folder,
             Some(default_root().to_string_lossy().into_owned())
         );
+    }
+
+    #[tokio::test]
+    async fn enabling_registers_and_serves_the_effective_root_then_remembers_the_choice() {
+        let pool = test_pool().await;
+        let service = FakeService::ok();
+
+        let enabled = change_enabled(&pool, true, &known(), &service, true)
+            .await
+            .unwrap();
+
+        assert_eq!(service.started(), vec![default_root()]);
+        assert!(enabled.enabled);
+        assert!(db::get_virtual_library_enabled(&pool).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_root_inside_another_sync_root_is_refused_with_the_nested_code_and_not_remembered() {
+        let pool = test_pool().await;
+        let onedrive = base().join("OneDrive");
+        let service = FakeService::refusing(ActivationError::NestedSyncRoot(
+            crate::cloud_files::NestedRoot {
+                relation: crate::cloud_files::NestedRelation::Inside,
+                root: onedrive.clone(),
+            },
+        ));
+
+        let error = change_enabled(&pool, true, &known(), &service, true)
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            format!("{NESTED_SYNC_ROOT_ERROR}: {}", onedrive.display())
+        );
+        assert!(!db::get_virtual_library_enabled(&pool).await.unwrap());
+        assert_eq!(service.stops(), 0);
+    }
+
+    #[tokio::test]
+    async fn another_failure_to_start_is_reported_and_not_remembered() {
+        let pool = test_pool().await;
+        let service = FakeService::refusing(ActivationError::Register("0x80070490".to_string()));
+
+        let error = change_enabled(&pool, true, &known(), &service, true)
+            .await
+            .unwrap_err();
+
+        assert!(error.starts_with(START_FAILED_ERROR), "{error}");
+        assert!(error.contains("0x80070490"), "{error}");
+        assert!(!db::get_virtual_library_enabled(&pool).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_watched_folder_overlap_is_refused_before_anything_is_registered() {
+        let pool = test_pool().await;
+        watch(&pool, &pictures()).await;
+        let service = FakeService::ok();
+
+        change_enabled(&pool, true, &known(), &service, true)
+            .await
+            .unwrap_err();
+
+        assert!(service.started().is_empty());
+    }
+
+    #[tokio::test]
+    async fn disabling_remembers_the_choice_and_stops_serving() {
+        let pool = test_pool().await;
+        let service = FakeService::ok();
+        change_enabled(&pool, true, &known(), &service, true)
+            .await
+            .unwrap();
+
+        let disabled = change_enabled(&pool, true, &known(), &service, false)
+            .await
+            .unwrap();
+
+        assert!(!disabled.enabled);
+        assert_eq!(service.stops(), 1);
+    }
+
+    #[tokio::test]
+    async fn an_unavailable_virtual_library_never_starts_the_service() {
+        let pool = test_pool().await;
+        let service = FakeService::ok();
+
+        assert!(change_enabled(&pool, false, &known(), &service, true)
+            .await
+            .is_err());
+
+        assert!(service.started().is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_folder_cannot_be_changed_while_the_virtual_library_is_enabled() {
+        let pool = test_pool().await;
+        let known = known();
+        change_enabled(&pool, true, &known, &FakeService::ok(), true)
+            .await
+            .unwrap();
+
+        let error = change_root_folder(
+            &pool,
+            true,
+            &known,
+            &base().join("Elsewhere").to_string_lossy(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(error.starts_with(DISABLE_TO_CHANGE_FOLDER_ERROR), "{error}");
+        assert_eq!(
+            load_settings(&pool, true, &known)
+                .await
+                .unwrap()
+                .root_folder,
+            Some(default_root().to_string_lossy().into_owned())
+        );
+    }
+
+    #[tokio::test]
+    async fn app_start_serves_again_only_when_available_and_enabled() {
+        let known = known();
+
+        let disabled = test_pool().await;
+        let service = FakeService::ok();
+        restore_with(&disabled, true, &known, &service)
+            .await
+            .unwrap();
+        assert!(service.started().is_empty(), "not enabled");
+
+        let enabled = test_pool().await;
+        db::set_virtual_library_enabled(&enabled, true)
+            .await
+            .unwrap();
+        restore_with(&enabled, false, &known, &service)
+            .await
+            .unwrap();
+        assert!(service.started().is_empty(), "not available");
+
+        restore_with(&enabled, true, &known, &service)
+            .await
+            .unwrap();
+        assert_eq!(service.started(), vec![default_root()]);
+    }
+
+    #[tokio::test]
+    async fn a_failing_restore_reports_the_reason() {
+        let pool = test_pool().await;
+        db::set_virtual_library_enabled(&pool, true).await.unwrap();
+        let service = FakeService::refusing(ActivationError::Connect("denied".to_string()));
+
+        let error = restore_with(&pool, true, &known(), &service)
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("denied"), "{error}");
     }
 }

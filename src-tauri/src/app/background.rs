@@ -14,6 +14,7 @@ use tauri::Manager;
 
 pub(crate) fn spawn(handle: tauri::AppHandle, startup: StartupContext) {
     spawn_deferred_watches(handle.clone());
+    spawn_virtual_library_restore(handle.clone());
     spawn_startup_sync(handle.clone());
     spawn_watcher_consumer(
         handle.clone(),
@@ -22,6 +23,23 @@ pub(crate) fn spawn(handle: tauri::AppHandle, startup: StartupContext) {
         startup.rescan_notify,
     );
     spawn_removable_volume_consumer(handle, startup.volume_events);
+}
+
+/// Serves the Virtual Library again after a start while it is enabled. Off the setup path, so a
+/// slow registration never delays the window.
+fn spawn_virtual_library_restore(handle: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let pool = handle.state::<sqlx::SqlitePool>().inner().clone();
+        if let Err(error) = crate::commands::virtual_library::restore(&pool).await {
+            log_to_ui_error(
+                &handle,
+                "ERROR",
+                &format!("Could not start the Virtual Library: {error}"),
+                "log_virtual_library_start_failed",
+                &error,
+            );
+        }
+    });
 }
 
 fn spawn_removable_volume_consumer(

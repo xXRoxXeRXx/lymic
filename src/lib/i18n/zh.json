@@ -456,5 +456,9 @@
   ,"archive_archive_failed": "无法归档，请重试。"
   ,"archive_archive_permission": "归档被拒绝。请为 API 密钥授予 asset.update 权限。"
   ,"archive_archive_stays": "已归档。它仍保留在此列表中。"
-  ,"archive_unarchive_stays": "已取消归档。它仍保留在此列表中。"
+  ,"archive_unarchive_stays": "已取消归档。它仍保留在此列表中。",
+  "log_virtual_library_start_failed": "无法启动虚拟图库：{error}",
+  "virtual_library_nested_root": "此文件夹位于另一个云同步文件夹（例如 OneDrive）内或包含该文件夹，因此无法在此设置虚拟图库。请选择其他文件夹。",
+  "virtual_library_start_failed": "无法启动虚拟图库：",
+  "virtual_library_disable_to_change_folder": "更改虚拟图库文件夹之前，请先停用虚拟图库。"
 }

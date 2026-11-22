@@ -456,5 +456,9 @@
   ,"archive_archive_failed": "Échec de l'archivage. Veuillez réessayer."
   ,"archive_archive_permission": "L'archivage a été refusé. Accordez à la clé API l'autorisation asset.update."
   ,"archive_archive_stays": "Archivé. Il reste dans cette liste."
-  ,"archive_unarchive_stays": "Désarchivé. Il reste dans cette liste."
+  ,"archive_unarchive_stays": "Désarchivé. Il reste dans cette liste.",
+  "log_virtual_library_start_failed": "Impossible de démarrer la bibliothèque virtuelle : {error}",
+  "virtual_library_nested_root": "Ce dossier se trouve dans un autre dossier de synchronisation cloud (par exemple OneDrive) ou en contient un, la bibliothèque virtuelle ne peut donc pas y être configurée. Choisissez un autre dossier.",
+  "virtual_library_start_failed": "Impossible de démarrer la bibliothèque virtuelle :",
+  "virtual_library_disable_to_change_folder": "Désactivez la bibliothèque virtuelle avant de modifier son dossier."
 }

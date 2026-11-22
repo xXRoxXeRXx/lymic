@@ -123,7 +123,7 @@ impl ImmichClient {
     /// work is a full pass. Only for what Immich cannot filter on, such as a missing capture time.
     pub(crate) async fn find_photo_timeline_assets(
         &self,
-        keep: &dyn Fn(&LibraryAsset) -> bool,
+        keep: &(dyn Fn(&LibraryAsset) -> bool + Sync),
     ) -> Result<Vec<LibraryAsset>, String> {
         self.search_library_assets(json!({ "visibility": "timeline" }), true, keep)
             .await
@@ -171,9 +171,11 @@ impl ImmichClient {
         &self,
         assets: &[LibraryAsset],
     ) -> HashMap<RemoteAssetId, LivePhotoVideo> {
-        let ids: BTreeSet<&RemoteAssetId> = assets
+        // Owned ids, so the lookups do not borrow from the listing: a borrowing closure makes
+        // this future impossible to prove `Send`, which the Windows adapter needs.
+        let ids: BTreeSet<RemoteAssetId> = assets
             .iter()
-            .filter_map(|asset| asset.live_photo_video_id.as_ref())
+            .filter_map(|asset| asset.live_photo_video_id.clone())
             .collect();
         stream::iter(ids)
             .map(|id| async move {
@@ -182,7 +184,7 @@ impl ImmichClient {
                     original_file_name: details.original_file_name,
                     file_size: details.file_size,
                 };
-                Some((id.clone(), video))
+                Some((id, video))
             })
             .buffer_unordered(VIDEO_LOOKUP_CONCURRENCY)
             .filter_map(|found| async move { found })
@@ -198,7 +200,7 @@ impl ImmichClient {
         &self,
         filter: serde_json::Value,
         timeline_only: bool,
-        keep: &dyn Fn(&LibraryAsset) -> bool,
+        keep: &(dyn Fn(&LibraryAsset) -> bool + Sync),
     ) -> Result<Vec<LibraryAsset>, String> {
         let mut page = 1_u64;
         let mut assets = Vec::new();
