@@ -455,5 +455,9 @@
   ,"archive_archive_failed": "Não foi possível arquivar. Tente novamente."
   ,"archive_archive_permission": "O arquivamento foi recusado. Conceda à chave de API a permissão asset.update."
   ,"archive_archive_stays": "Arquivado. Continua nesta lista."
-  ,"archive_unarchive_stays": "Desarquivado. Continua nesta lista."
+  ,"archive_unarchive_stays": "Desarquivado. Continua nesta lista.",
+  "log_virtual_library_start_failed": "Não foi possível iniciar a biblioteca virtual: {error}",
+  "virtual_library_nested_root": "Esta pasta está dentro de outra pasta de sincronização na nuvem (por exemplo, o OneDrive) ou a contém, por isso a biblioteca virtual não pode ser configurada nela. Escolha outra pasta.",
+  "virtual_library_start_failed": "Não foi possível iniciar a biblioteca virtual:",
+  "virtual_library_disable_to_change_folder": "Desative a biblioteca virtual antes de alterar a respetiva pasta."
 }

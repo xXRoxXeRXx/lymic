@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Virtual Library in Windows Explorer (tracer bullet)**:
+  - Enabling the Virtual Library in the Microsoft Store version of Lymic now registers the folder as a Windows sync folder and shows your Immich Library there as read-only placeholders (`All Photos`, `Albums`). Opening a folder creates only that folder's placeholders, and opening a file downloads the full original from Immich. It is read-only: nothing is ever written to Immich. **Not yet verified in Explorer**: see `docs/virtual-library-verification.md`.
+  - If the chosen folder is inside, or contains, another cloud sync folder such as OneDrive, Lymic asks for another folder instead of registering. The folder cannot be changed while the Virtual Library is enabled. Available in all supported languages.
+  - Disabling stops serving the folder for now; the sync folder and its files are not removed until the cleanup work lands. Delete and rename protection, refresh and failure notices are separate, later changes.
 - **Virtual Library settings section**:
   - Settings gain a Virtual Library section with an enable toggle whose state is kept across restarts. The section appears only in the Microsoft Store version of Lymic on Windows when it runs as an installed package; it is absent on macOS, Linux, the GitHub installer and unpackaged runs. The toggle has no effect on files yet.
   - The section shows the folder the Virtual Library will use, by default `Lymic` inside your Windows Pictures folder (also when Pictures is redirected), and lets you choose another folder. A Watched Folder cannot be inside, the same as, or a parent of that folder: adding one is rejected with an explanation, and the Virtual Library cannot be enabled while such a Watched Folder exists; the message names it. Available in all supported languages.

@@ -273,7 +273,7 @@ Maintainers can configure this build input at build time via `LYMIC_RELEASE_CHAN
 
 The optional Virtual Library settings section needs more than the channel label: the backend offers it (`get_virtual_library_settings`) only on Windows, in the `store` channel and when the process has real Package Identity. A Store-labelled build that is not running as an installed or registered MSIX package, and `tauri dev`, therefore show no Virtual Library section.
 
-To build and register a local MSIX with Package Identity (needed to exercise Store-only features such as the planned Virtual Library, which is unavailable in `tauri dev`), see [`docs/store/local-msix-build.md`](store/local-msix-build.md).
+To build and register a local MSIX with Package Identity (needed to exercise Store-only features such as the planned Virtual Library, which is unavailable in `tauri dev`), see [`docs/store/local-msix-build.md`](store/local-msix-build.md). The manual checklist for the Virtual Library's Explorer flow, not yet run, is [`docs/virtual-library-verification.md`](virtual-library-verification.md).
 
 ### Canonical Snap Store (Linux)
 
