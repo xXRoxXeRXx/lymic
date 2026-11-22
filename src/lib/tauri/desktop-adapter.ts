@@ -201,6 +201,11 @@ export interface VirtualLibraryDesktopAdapter {
   /** Persists the chosen folder. Rejects, naming the Watched Folder, when it would overlap one. */
   setVirtualLibraryRootFolder(path: string): Promise<VirtualLibrarySettings>;
   openFolderDialog(options: { directory: true; multiple: false; defaultPath?: string; title: string }): Promise<string | string[] | null>;
+  /**
+   * Refresh Library: reconciles the already-populated directories with Immich now and resolves when
+   * that run is done. Rejects with `VIRTUAL_LIBRARY_REFRESH_FAILED: <reason>` when it could not.
+   */
+  refreshVirtualLibrary(): Promise<void>;
   /** Backend announcements of changed Virtual Library settings. */
   subscribeToVirtualLibrarySettings(listener: (settings: VirtualLibrarySettings) => void): Promise<() => void>;
   /** Backend announcements of a file that could not be opened (offline, expired sign-in, removed, other), once per failure episode. */
@@ -342,6 +347,7 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getVirtualLibrarySettings: () => invoke<VirtualLibrarySettings>("get_virtual_library_settings"),
   setVirtualLibraryEnabled: (enabled) => invoke<VirtualLibrarySettings>("set_virtual_library_enabled", { enabled }),
   setVirtualLibraryRootFolder: (path) => invoke<VirtualLibrarySettings>("set_virtual_library_root_folder", { path }),
+  refreshVirtualLibrary: () => invoke<void>("refresh_virtual_library"),
   subscribeToVirtualLibrarySettings: (listener) => listen<VirtualLibrarySettings>(
     "virtual-library-settings-changed",
     (event) => listener(event.payload),

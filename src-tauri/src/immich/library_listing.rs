@@ -111,7 +111,7 @@ impl ImmichClient {
             .await
             .map_err(RemoteFailure::unavailable)?;
         let mut buckets: Vec<TimelineBucket> = serde_json::from_slice(&body).map_err(|error| {
-            RemoteFailure::unavailable(format!("Invalid timeline buckets response: {error}"))
+            RemoteFailure::rejected(format!("Invalid timeline buckets response: {error}"))
         })?;
         buckets.sort_by(|a, b| b.time_bucket.cmp(&a.time_bucket));
         Ok(buckets)
@@ -181,7 +181,7 @@ impl ImmichClient {
             .await
             .map_err(RemoteFailure::unavailable)?;
         serde_json::from_slice(&body).map_err(|error| {
-            RemoteFailure::unavailable(format!("Invalid library albums response: {error}"))
+            RemoteFailure::rejected(format!("Invalid library albums response: {error}"))
         })
     }
 
@@ -242,7 +242,7 @@ impl ImmichClient {
                 .await
                 .map_err(RemoteFailure::unavailable)?;
             let payload: SearchPage = serde_json::from_slice(&body).map_err(|error| {
-                RemoteFailure::unavailable(format!("Invalid library listing response: {error}"))
+                RemoteFailure::rejected(format!("Invalid library listing response: {error}"))
             })?;
             assets.extend(
                 payload
@@ -255,7 +255,7 @@ impl ImmichClient {
             match payload.assets.next_page {
                 Some(next_page) if next_page > page => page = next_page,
                 Some(_) => {
-                    return Err(RemoteFailure::unavailable(
+                    return Err(RemoteFailure::rejected(
                         "Invalid library listing pagination response",
                     ))
                 }

@@ -31,7 +31,7 @@ const STATUS_SUCCESS: NTSTATUS = NTSTATUS(0);
 /// The downloads in flight, so `CANCEL_FETCH_DATA` can stop one.
 static IN_FLIGHT: LazyLock<InFlight> = LazyLock::new(InFlight::default);
 /// Placeholders handed over per `TRANSFER_PLACEHOLDERS` call.
-const PLACEHOLDER_BATCH: usize = 1000;
+pub(super) const PLACEHOLDER_BATCH: usize = 1000;
 
 fn ntstatus(status: CloudStatus) -> NTSTATUS {
     match status {
@@ -149,7 +149,12 @@ unsafe extern "system" fn on_fetch_placeholders(
                         plan.skipped.join(", ")
                     ));
                 }
-                transfer_placeholders(&request, &plan.specs);
+                // Reconciliation (#280) diffs a directory only once it is populated.
+                if transfer_placeholders(&request, &plan.specs) {
+                    if let Ok(path) = request.path() {
+                        crate::cloud_files::mark_populated(&path).await;
+                    }
+                }
             }
             Err(failure) => {
                 note(&format!("could not list a directory: {}", failure.message));
@@ -164,7 +169,7 @@ unsafe extern "system" fn on_fetch_placeholders(
     });
 }
 
-fn create_info(spec: &PlaceholderSpec, name: &[u16]) -> CF_PLACEHOLDER_CREATE_INFO {
+pub(super) fn create_info(spec: &PlaceholderSpec, name: &[u16]) -> CF_PLACEHOLDER_CREATE_INFO {
     CF_PLACEHOLDER_CREATE_INFO {
         RelativeFileName: PCWSTR(name.as_ptr()),
         FsMetadata: CF_FS_METADATA {
@@ -190,7 +195,8 @@ fn create_info(spec: &PlaceholderSpec, name: &[u16]) -> CF_PLACEHOLDER_CREATE_IN
 }
 
 /// Creates the placeholders in the directory being listed, and marks that directory populated.
-fn transfer_placeholders(request: &Request, specs: &[PlaceholderSpec]) {
+/// `false` when the platform refused them.
+fn transfer_placeholders(request: &Request, specs: &[PlaceholderSpec]) -> bool {
     let names: Vec<Vec<u16>> = specs.iter().map(|spec| utf16z(&spec.name)).collect();
     let mut entries: Vec<CF_PLACEHOLDER_CREATE_INFO> = specs
         .iter()
@@ -225,9 +231,10 @@ fn transfer_placeholders(request: &Request, specs: &[PlaceholderSpec]) {
         // the entries point at outlive it.
         if let Err(error) = unsafe { CfExecute(&operation, &mut params) } {
             note(&format!("TRANSFER_PLACEHOLDERS failed: {error}"));
-            return;
+            return false;
         }
     }
+    true
 }
 
 /// Completes a listing with an error and no placeholders; the directory stays unpopulated, so the
@@ -302,7 +309,7 @@ unsafe extern "system" fn on_fetch_data(
                     failure: &failure,
                 };
                 if let Some(removed) = report.removed_asset_path() {
-                    // #280: reconciliation drops this placeholder once the asset is gone from its
+                    // Reconciliation (#280) drops this placeholder once the asset is gone from its
                     // listing; this is the point to hand it the path sooner.
                     note(&format!("'{removed}' was removed from Immich"));
                 }
@@ -388,6 +395,15 @@ unsafe extern "system" fn on_notify_delete(
 ) {
     // SAFETY: called by the platform with the callback's own `info`.
     let request = unsafe { Request::capture(info) };
+    // The one delete that is allowed: Lymic removing a placeholder whose Remote Asset is gone
+    // (reconciliation, #280). Everything else is refused.
+    if request
+        .path()
+        .is_ok_and(|path| super::reconcile::is_own_removal(&path))
+    {
+        allow_delete(&request);
+        return;
+    }
     veto_delete(&request);
 }
 
@@ -429,6 +445,20 @@ fn veto_delete(request: &Request) {
     // SAFETY: valid structures for the call.
     if let Err(error) = unsafe { CfExecute(&operation, &mut params) } {
         note(&format!("ACK_DELETE failed: {error}"));
+    }
+}
+
+/// Acknowledges a delete Lymic itself is making during reconciliation.
+fn allow_delete(request: &Request) {
+    let operation = operation_info(request, CF_OPERATION_TYPE_ACK_DELETE);
+    let mut params = parameters(size_of::<CF_OPERATION_PARAMETERS_0_7>());
+    params.Anonymous.AckDelete = CF_OPERATION_PARAMETERS_0_7 {
+        Flags: CF_OPERATION_ACK_DELETE_FLAG_NONE,
+        CompletionStatus: STATUS_SUCCESS,
+    };
+    // SAFETY: valid structures for the call.
+    if let Err(error) = unsafe { CfExecute(&operation, &mut params) } {
+        note(&format!("ACK_DELETE (allow) failed: {error}"));
     }
 }
 

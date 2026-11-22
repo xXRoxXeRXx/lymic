@@ -660,12 +660,14 @@
             isVirtualLibraryAvailable={virtualLibrary.isAvailable}
             isVirtualLibraryEnabled={virtualLibrary.isEnabled}
             isSavingVirtualLibrary={virtualLibrary.isSaving}
+            isVirtualLibraryRefreshing={virtualLibrary.isRefreshing}
             virtualLibraryRootFolder={virtualLibrary.rootFolder}
             showVirtualLibraryAutostartHint={virtualLibrary.showAutostartHint}
             locales={preferences.locales}
             onToggleAutostart={preferences.toggleAutostart}
             onToggleVirtualLibrary={virtualLibrary.toggle}
             onChangeVirtualLibraryFolder={virtualLibrary.chooseRootFolder}
+            onRefreshVirtualLibrary={virtualLibrary.refresh}
             onLocaleChange={preferences.setLocale}
             onThemeChange={preferences.setThemePreference}
             onUploadParallelismChange={preferences.changeUploadParallelism}

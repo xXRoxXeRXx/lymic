@@ -11,6 +11,7 @@ const ERROR_CODES: Record<string, { key: string; detail: "path" | "reason" | "no
   VIRTUAL_LIBRARY_NESTED_SYNC_ROOT: { key: "virtual_library_nested_root", detail: "path" },
   VIRTUAL_LIBRARY_START_FAILED: { key: "virtual_library_start_failed", detail: "reason" },
   VIRTUAL_LIBRARY_DISABLE_TO_CHANGE_FOLDER: { key: "virtual_library_disable_to_change_folder", detail: "none" },
+  VIRTUAL_LIBRARY_REFRESH_FAILED: { key: "virtual_library_refresh_failed", detail: "reason" },
   VIRTUAL_LIBRARY_CLEANUP_FAILED: { key: "virtual_library_cleanup_failed", detail: "reason" },
 };
 
@@ -22,6 +23,10 @@ const ERROR_CODES: Record<string, { key: string; detail: "path" | "reason" | "no
  * controller surfaces its explanation unchanged. Enabling also registers the sync root, and the
  * backend refuses a folder that lies inside another sync root (such as OneDrive) with a code the
  * controller turns into a localized request for another folder.
+ *
+ * Refresh Library reconciles the directories the user has already opened with Immich right away
+ * (the backend also does it at start and every 10 minutes). It is only offered while the Virtual
+ * Library is on, ignores a press while a refresh is running, and does not block the other controls.
  *
  * Unhydrated placeholders only work while Lymic runs (ADR-0003), so while the Virtual Library is on
  * and autostart is off the controller offers a hint. The autostart state belongs to the preferences
@@ -52,6 +57,7 @@ export function createVirtualLibraryController(options: {
   let rootFolder = $state<string | null>(null);
   let isSaving = $state(false);
   let notice = $state<(VirtualLibraryNotice & { key: string; canRelogin: boolean }) | null>(null);
+  let isRefreshing = $state(false);
   let unlisten: (() => void) | undefined;
   let unlistenNotices: (() => void) | undefined;
   let unlistenCleanup: (() => void) | undefined;
@@ -136,6 +142,18 @@ export function createVirtualLibraryController(options: {
     }
   }
 
+  async function refresh() {
+    if (!isAvailable || !isEnabled || isRefreshing) return;
+    isRefreshing = true;
+    try {
+      await adapter.refreshVirtualLibrary();
+    } catch (error) {
+      options.reportError(localized(error));
+    } finally {
+      isRefreshing = false;
+    }
+  }
+
   async function chooseRootFolder() {
     if (!isAvailable || isSaving) return;
     isSaving = true;
@@ -212,11 +230,13 @@ export function createVirtualLibraryController(options: {
     get isAvailable() { return isAvailable; },
     get isEnabled() { return isEnabled; },
     get isSaving() { return isSaving; },
+    get isRefreshing() { return isRefreshing; },
     get rootFolder() { return rootFolder; },
     get notice() { return notice; },
     get showAutostartHint() { return isEnabled && options.autostartEnabled() === false; },
     hydrate,
     toggle,
+    refresh,
     chooseRootFolder,
     dismissNotice,
     relogin,

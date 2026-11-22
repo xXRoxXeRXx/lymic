@@ -13,7 +13,10 @@
 
 use crate::{
     app::events::log_to_ui_keyed,
-    cloud_files::{CleanupReport, Notice, NoticeKind, NoticeSink, SyncRootService, SystemSyncRoot},
+    cloud_files::{
+        CleanupReport, LibraryRefresh, Notice, NoticeKind, NoticeSink, SyncRootService,
+        SystemRefresh, SystemSyncRoot,
+    },
     db,
     media::paths::canonicalize_folder_path,
     virtual_library_root::{
@@ -36,6 +39,10 @@ const UNAVAILABLE_MESSAGE: &str =
 /// Error text prefix when the folder is changed while the Virtual Library is enabled. The
 /// frontend turns it into a localized request to disable it first.
 pub(crate) const DISABLE_TO_CHANGE_FOLDER_ERROR: &str = "VIRTUAL_LIBRARY_DISABLE_TO_CHANGE_FOLDER";
+/// Error text prefix when Refresh Library could not reconcile; the text after `": "` is the
+/// technical reason. The frontend turns it into a localized message.
+pub(crate) const REFRESH_FAILED_ERROR: &str = "VIRTUAL_LIBRARY_REFRESH_FAILED";
+const NOT_ENABLED_MESSAGE: &str = "Turn on the Virtual Library before refreshing it.";
 const NO_ROOT_MESSAGE: &str = "The Virtual Library cannot be enabled because Lymic could not find your Pictures folder. Choose a Virtual Library folder first.";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -174,6 +181,10 @@ async fn change_enabled(
         db::set_virtual_library_enabled(pool, false)
             .await
             .map_err(|error| error.to_string())?;
+        // The placeholders are gone, so no directory is populated any more (#280).
+        db::clear_virtual_library_populated_directories(pool)
+            .await
+            .map_err(|error| error.to_string())?;
     }
     Ok(Change {
         settings: load_settings(pool, available, known_folders).await?,
@@ -206,6 +217,9 @@ async fn clean_up_for_logout_with(
     };
     if let Err(error) = db::set_virtual_library_enabled(pool, false).await {
         eprintln!("virtual library: could not remember that it is off after logout: {error}");
+    }
+    if let Err(error) = db::clear_virtual_library_populated_directories(pool).await {
+        eprintln!("virtual library: could not forget the populated directories: {error}");
     }
     report
 }
@@ -308,6 +322,10 @@ async fn change_root_folder(
     db::set_virtual_library_root(pool, &root.to_string_lossy())
         .await
         .map_err(|error| error.to_string())?;
+    // What was populated belonged to the old folder.
+    db::clear_virtual_library_populated_directories(pool)
+        .await
+        .map_err(|error| error.to_string())?;
     load_settings(pool, available, known_folders).await
 }
 
@@ -338,6 +356,29 @@ impl<R: Runtime> NoticeSink for AppNoticeSink<R> {
         // A missed event only means no banner; the log entry above still records it.
         let _ = self.0.emit(NOTICE_EVENT, notice);
     }
+}
+
+/// Refresh Library: reconciles the populated directories now (#280). Waits for a run already in
+/// progress and then runs once more (see `cloud_files::refresh`), so it returns after Immich's
+/// current state has been applied.
+async fn refresh_library(
+    pool: &sqlx::SqlitePool,
+    available: bool,
+    refresher: &impl LibraryRefresh,
+) -> Result<(), String> {
+    if !available {
+        return Err(UNAVAILABLE_MESSAGE.to_string());
+    }
+    if !db::get_virtual_library_enabled(pool)
+        .await
+        .map_err(|error| error.to_string())?
+    {
+        return Err(NOT_ENABLED_MESSAGE.to_string());
+    }
+    refresher
+        .refresh()
+        .await
+        .map_err(|reason| format!("{REFRESH_FAILED_ERROR}: {reason}"))
 }
 
 fn announce(app: &tauri::AppHandle, settings: &VirtualLibrarySettings) {
@@ -395,6 +436,16 @@ pub(crate) async fn set_virtual_library_root_folder(
     .await?;
     announce(&app, &settings);
     Ok(settings)
+}
+
+#[tauri::command]
+pub(crate) async fn refresh_virtual_library(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<(), String> {
+    let refresher = SystemRefresh {
+        pool: pool.inner().clone(),
+    };
+    refresh_library(pool.inner(), is_available_at_runtime(), &refresher).await
 }
 
 #[cfg(test)]
@@ -486,6 +537,32 @@ mod tests {
         change_enabled(pool, available, known_folders, service, enabled)
             .await
             .map(|change| change.settings)
+    }
+
+    /// A refresh that records how often it ran and can fail.
+    struct FakeRefresh {
+        outcome: Result<(), String>,
+        runs: Mutex<usize>,
+    }
+
+    impl FakeRefresh {
+        fn new(outcome: Result<(), String>) -> Self {
+            Self {
+                outcome,
+                runs: Mutex::new(0),
+            }
+        }
+
+        fn runs(&self) -> usize {
+            *self.runs.lock().unwrap()
+        }
+    }
+
+    impl LibraryRefresh for FakeRefresh {
+        async fn refresh(&self) -> Result<(), String> {
+            *self.runs.lock().unwrap() += 1;
+            self.outcome.clone()
+        }
     }
 
     fn base() -> PathBuf {
@@ -1067,5 +1144,98 @@ mod tests {
             events.lock().unwrap().as_slice(),
             [serde_json::json!({ "kind": "unauthorized", "name": "IMG_1.jpg" })]
         );
+    }
+
+    #[tokio::test]
+    async fn refreshing_reconciles_when_the_virtual_library_is_enabled() {
+        let pool = test_pool().await;
+        db::set_virtual_library_enabled(&pool, true).await.unwrap();
+        let refresh = FakeRefresh::new(Ok(()));
+
+        refresh_library(&pool, true, &refresh).await.unwrap();
+
+        assert_eq!(refresh.runs(), 1);
+    }
+
+    #[tokio::test]
+    async fn refreshing_is_refused_when_unavailable_or_off_and_never_reconciles() {
+        let pool = test_pool().await;
+        let refresh = FakeRefresh::new(Ok(()));
+
+        assert_eq!(
+            refresh_library(&pool, false, &refresh).await,
+            Err(UNAVAILABLE_MESSAGE.to_string())
+        );
+        assert_eq!(
+            refresh_library(&pool, true, &refresh).await,
+            Err(NOT_ENABLED_MESSAGE.to_string())
+        );
+        assert_eq!(refresh.runs(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_failed_refresh_is_reported_with_the_code_the_frontend_localizes() {
+        let pool = test_pool().await;
+        db::set_virtual_library_enabled(&pool, true).await.unwrap();
+        let refresh = FakeRefresh::new(Err("could not list '': offline".to_string()));
+
+        let error = refresh_library(&pool, true, &refresh).await.unwrap_err();
+
+        assert_eq!(
+            error,
+            format!("{REFRESH_FAILED_ERROR}: could not list '': offline")
+        );
+    }
+
+    #[tokio::test]
+    async fn disabling_and_logout_forget_the_populated_directories() {
+        for logout in [false, true] {
+            let pool = test_pool().await;
+            let service = FakeService::ok();
+            change_enabled(&pool, true, &known(), &service, true)
+                .await
+                .unwrap();
+            db::mark_virtual_library_directory_populated(&pool, "Albums")
+                .await
+                .unwrap();
+
+            if logout {
+                clean_up_for_logout_with(&pool, true, &known(), &service).await;
+            } else {
+                change_enabled(&pool, true, &known(), &service, false)
+                    .await
+                    .unwrap();
+            }
+
+            assert!(
+                db::list_virtual_library_populated_directories(&pool)
+                    .await
+                    .unwrap()
+                    .is_empty(),
+                "logout: {logout}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn changing_the_folder_forgets_the_populated_directories_of_the_old_one() {
+        let pool = test_pool().await;
+        db::mark_virtual_library_directory_populated(&pool, "Albums")
+            .await
+            .unwrap();
+
+        change_root_folder(
+            &pool,
+            true,
+            &known(),
+            &base().join("Elsewhere").to_string_lossy(),
+        )
+        .await
+        .unwrap();
+
+        assert!(db::list_virtual_library_populated_directories(&pool)
+            .await
+            .unwrap()
+            .is_empty());
     }
 }

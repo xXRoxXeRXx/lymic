@@ -113,7 +113,8 @@ mod tests {
             ("401 Unauthorized", RemoteFailureKind::Unauthorized),
             ("403 Forbidden", RemoteFailureKind::Unauthorized),
             ("404 Not Found", RemoteFailureKind::NotFound),
-            ("500 Internal Server Error", RemoteFailureKind::Unavailable),
+            ("500 Internal Server Error", RemoteFailureKind::Rejected),
+            ("503 Service Unavailable", RemoteFailureKind::Unavailable),
         ] {
             let (url, _request) = serve_once(status, "secret server detail").await;
 

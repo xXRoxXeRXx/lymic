@@ -118,9 +118,10 @@ pub(super) struct Report<'a> {
 }
 
 impl Report<'_> {
-    /// The path of a placeholder whose Remote Asset has been removed from Immich: the hook for
-    /// #280, whose reconciliation owns removing placeholders. Today it is only reported to the
-    /// reader and the user; reconciliation finds the same asset gone from its listing.
+    /// The path of a placeholder whose Remote Asset has been removed from Immich: the seam for
+    /// handing it to reconciliation (#280) sooner than its next run. Reconciliation already drops
+    /// the placeholder when it next lists the directory, so today this only gets reported to the
+    /// reader and the user.
     pub(super) fn removed_asset_path(&self) -> Option<&str> {
         (self.operation == Operation::Open && self.failure.kind == FailureKind::NotFound)
             .then_some(self.path)

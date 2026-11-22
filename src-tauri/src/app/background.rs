@@ -42,6 +42,9 @@ fn spawn_virtual_library_restore(handle: tauri::AppHandle) {
                 &error,
             );
         }
+        // Reconciliation starts after the sync root is served again, so its run at start sees the
+        // sync root registered. It runs at start and every 10 minutes (#280).
+        crate::cloud_files::run_schedule(pool).await;
     });
 }
 

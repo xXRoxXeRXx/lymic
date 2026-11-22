@@ -11,6 +11,7 @@
 
 mod callbacks;
 mod probe;
+mod reconcile;
 mod register;
 mod teardown;
 
@@ -34,6 +35,11 @@ pub(super) async fn start(root: std::path::PathBuf) -> Result<(), ActivationErro
     tokio::task::spawn_blocking(move || activation::activate(&root, &WindowsHost))
         .await
         .map_err(|error| ActivationError::Connect(error.to_string()))?
+}
+
+/// The Virtual Library folder on disk, for reconciliation (#280).
+pub(super) fn disk_tree(root: std::path::PathBuf, populated: &[String]) -> reconcile::DiskTree {
+    reconcile::DiskTree::new(root, populated)
 }
 
 /// Stops serving callbacks. The registration and the placeholders stay.

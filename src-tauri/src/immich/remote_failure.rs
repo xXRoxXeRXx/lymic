@@ -15,9 +15,11 @@ pub(crate) enum RemoteFailureKind {
     Unauthorized,
     /// 404: the Remote Asset no longer exists (or is not visible to this key).
     NotFound,
-    /// The server could not be reached, did not answer in time, or answered with an error or a
-    /// broken body.
+    /// The server could not be reached or did not answer in time, or a gateway in front of it
+    /// said so (502, 503, 504).
     Unavailable,
+    /// The server answered, but with another error status or a body that does not make sense.
+    Rejected,
 }
 
 /// A failed request. `message` never carries credentials or a response body.
@@ -32,7 +34,10 @@ impl RemoteFailureKind {
         match status {
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Self::Unauthorized,
             StatusCode::NOT_FOUND => Self::NotFound,
-            _ => Self::Unavailable,
+            StatusCode::BAD_GATEWAY
+            | StatusCode::SERVICE_UNAVAILABLE
+            | StatusCode::GATEWAY_TIMEOUT => Self::Unavailable,
+            _ => Self::Rejected,
         }
     }
 }
@@ -47,6 +52,10 @@ impl RemoteFailure {
 
     pub(crate) fn unavailable(message: impl Into<String>) -> Self {
         Self::new(RemoteFailureKind::Unavailable, message)
+    }
+
+    pub(crate) fn rejected(message: impl Into<String>) -> Self {
+        Self::new(RemoteFailureKind::Rejected, message)
     }
 
     /// The failure of a response that is not a success.
@@ -110,8 +119,9 @@ mod tests {
             ("401 Unauthorized", RemoteFailureKind::Unauthorized),
             ("403 Forbidden", RemoteFailureKind::Unauthorized),
             ("404 Not Found", RemoteFailureKind::NotFound),
-            ("500 Internal Server Error", RemoteFailureKind::Unavailable),
-            ("302 Found", RemoteFailureKind::Unavailable),
+            ("500 Internal Server Error", RemoteFailureKind::Rejected),
+            ("503 Service Unavailable", RemoteFailureKind::Unavailable),
+            ("302 Found", RemoteFailureKind::Rejected),
         ] {
             let (url, _request) = serve_once(status, "secret server detail").await;
 

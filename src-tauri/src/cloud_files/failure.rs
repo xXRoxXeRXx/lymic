@@ -62,13 +62,14 @@ impl Failure {
     }
 
     /// The failure of a request to Immich, classified by the kind the Immich client decided where
-    /// it knew the HTTP status. A server that could not be reached, did not answer or answered
-    /// with an error is `Offline`.
+    /// it knew the HTTP status. A server that could not be reached or did not answer (or a gateway
+    /// in front of it said so) is `Offline`; one that answered with another error is `Failed`.
     pub(crate) fn from_remote(failure: RemoteFailure) -> Self {
         let kind = match failure.kind {
             RemoteFailureKind::Unauthorized => FailureKind::Unauthorized,
             RemoteFailureKind::NotFound => FailureKind::NotFound,
             RemoteFailureKind::Unavailable => FailureKind::Offline,
+            RemoteFailureKind::Rejected => FailureKind::Failed,
         };
         Self::new(kind, failure.message)
     }
@@ -118,6 +119,7 @@ mod tests {
             (RemoteFailureKind::Unauthorized, FailureKind::Unauthorized),
             (RemoteFailureKind::NotFound, FailureKind::NotFound),
             (RemoteFailureKind::Unavailable, FailureKind::Offline),
+            (RemoteFailureKind::Rejected, FailureKind::Failed),
         ] {
             // Text that would have fooled a text match must not matter.
             let failure = RemoteFailure::new(remote, "status 404 status 401 Not authenticated");

@@ -154,6 +154,7 @@ pub(crate) fn run() {
             crate::commands::virtual_library::get_virtual_library_settings,
             crate::commands::virtual_library::set_virtual_library_enabled,
             crate::commands::virtual_library::set_virtual_library_root_folder,
+            crate::commands::virtual_library::refresh_virtual_library,
         ])
         .on_window_event(tray::hide_on_close)
         .build(tauri::generate_context!())
@@ -257,6 +258,7 @@ mod tests {
             "get_virtual_library_settings",
             "set_virtual_library_enabled",
             "set_virtual_library_root_folder",
+            "refresh_virtual_library",
         ] {
             assert!(
                 adapter.contains(&format!("\"{command}\"")),
