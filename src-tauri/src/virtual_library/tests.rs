@@ -20,6 +20,8 @@ struct FakeAsset {
     trashed: bool,
     /// Immich's `livePhotoVideoId`: the hidden video asset paired with this still.
     live_video: Option<&'static str>,
+    /// The status `GET /assets/<id>` answers with for this asset.
+    lookup_status: &'static str,
 }
 
 /// An asset captured at `local_date_time` in UTC, so its local and UTC capture time agree. One
@@ -38,6 +40,7 @@ fn asset(id: &'static str, name: &'static str, local_date_time: &'static str) ->
         visibility: "timeline",
         trashed: false,
         live_video: None,
+        lookup_status: "200 OK",
     }
 }
 
@@ -148,7 +151,10 @@ async fn fake_immich_shared(
         let assets = library.lock().unwrap().clone();
         if let Some(id) = request.target.strip_prefix("/api/assets/") {
             return match assets.iter().find(|asset| asset.id == id) {
-                Some(asset) => ("200 OK".into(), asset.json().to_string()),
+                Some(asset) if asset.lookup_status == "200 OK" => {
+                    ("200 OK".into(), asset.json().to_string())
+                }
+                Some(asset) => (asset.lookup_status.into(), "{}".into()),
                 None => ("404 Not Found".into(), "{}".into()),
             };
         }
@@ -724,6 +730,43 @@ async fn a_still_whose_video_cannot_be_found_is_listed_alone() {
     let march = library.list("All Photos/2025/03 March").await.unwrap();
 
     assert_eq!(names(&march), ["IMG_0001.HEIC", "IMG_0002.jpg"]);
+}
+
+/// A listing that lost a Live Photo's video to a failed lookup is not a listing: the video's
+/// placeholder would look removed, and reconciliation deletes what a listing no longer shows.
+#[tokio::test]
+async fn a_failed_video_lookup_fails_the_listing_instead_of_dropping_the_video() {
+    for (status, kind) in [
+        ("503 Service Unavailable", RemoteFailureKind::Unavailable),
+        ("500 Internal Server Error", RemoteFailureKind::Rejected),
+        ("401 Unauthorized", RemoteFailureKind::Unauthorized),
+    ] {
+        let server = fake_immich(
+            vec![
+                FakeAsset {
+                    live_video: Some("v-live"),
+                    ..asset("s-live", "IMG_0001.HEIC", "2025-03-10T10:00:00.000Z")
+                },
+                FakeAsset {
+                    lookup_status: status,
+                    ..live_video("v-live", "IMG_0001.MOV", 9_000)
+                },
+            ],
+            vec![album("al1", "Trip", &["s-live", "v-live"])],
+        )
+        .await;
+        let client = test_client(server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        for path in ["All Photos/2025/03 March", "Albums/Trip"] {
+            match library.list(path).await {
+                Err(VirtualLibraryError::Remote(failure)) => {
+                    assert_eq!(failure.kind, kind, "{status} {path}");
+                }
+                other => panic!("{status} {path}: expected a remote failure, got {other:?}"),
+            }
+        }
+    }
 }
 
 #[tokio::test]

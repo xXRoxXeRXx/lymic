@@ -1,6 +1,7 @@
 use super::bulk_check::{
     bulk_check_response_error, parse_bulk_check_response, BulkCheckDuplicate, BulkCheckError,
 };
+use super::remote_failure::{send_bounded, RemoteFailure, RemoteFailureKind};
 use super::response::{
     non_empty, read_response_body_limited, send_checked, send_checked_as,
     MAX_SUCCESS_RESPONSE_BYTES,
@@ -575,6 +576,39 @@ impl ImmichClient {
         serde_json::from_slice::<AssetDetailsResponse>(&body)
             .map(AssetDetails::from)
             .map_err(|error| format!("Invalid asset details response: {error}"))
+    }
+
+    /// The details of one asset for the Virtual Library, which must tell "the asset is gone" from
+    /// "the lookup failed": `Ok(None)` is a 404 (deleted, or not visible to this key), every other
+    /// failure comes back typed so the caller does not read it as absence. Bounded like the
+    /// other listing requests.
+    pub(crate) async fn find_asset_details(
+        &self,
+        asset_id: &str,
+        timeout: std::time::Duration,
+    ) -> Result<Option<AssetDetails>, RemoteFailure> {
+        Self::validate_path_segment(asset_id, "asset ID").map_err(RemoteFailure::rejected)?;
+        let response = match send_bounded(
+            self.request(Method::GET, &format!("assets/{asset_id}")),
+            "Failed to fetch asset details",
+            timeout,
+        )
+        .await
+        {
+            Ok(response) => response,
+            Err(failure) if failure.kind == RemoteFailureKind::NotFound => return Ok(None),
+            Err(failure) => return Err(failure),
+        };
+        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES)
+            .await
+            .map_err(|error| {
+                RemoteFailure::unavailable(format!("Failed to read asset details: {error}"))
+            })?;
+        serde_json::from_slice::<AssetDetailsResponse>(&body)
+            .map(|details| Some(AssetDetails::from(details)))
+            .map_err(|error| {
+                RemoteFailure::rejected(format!("Invalid asset details response: {error}"))
+            })
     }
 
     pub(crate) async fn set_asset_favorite(

@@ -200,7 +200,11 @@ impl<'a> VirtualLibrary<'a> {
                 // An Album lists its hidden members too, so a Live Photo video shows up as an
                 // asset of its own until the still claims it.
                 let assets = live_photo::without_paired_videos(assets);
-                let videos = self.client.list_live_photo_videos(&assets).await;
+                let videos = self
+                    .client
+                    .list_live_photo_videos(&assets)
+                    .await
+                    .map_err(VirtualLibraryError::Remote)?;
                 Ok(albums::files(&assets, &videos))
             }
             Dir::AllPhotos => Ok(self.calendar().await?.years()),
@@ -271,7 +275,11 @@ impl<'a> VirtualLibrary<'a> {
         assets: Vec<LibraryAsset>,
     ) -> Result<Vec<Entry>, VirtualLibraryError> {
         let assets = live_photo::without_paired_videos(assets);
-        let videos = self.client.list_live_photo_videos(&assets).await;
+        let videos = self
+            .client
+            .list_live_photo_videos(&assets)
+            .await
+            .map_err(VirtualLibraryError::Remote)?;
         photo_timeline::files(&assets, &videos).ok_or(VirtualLibraryError::NotFound)
     }
 }
