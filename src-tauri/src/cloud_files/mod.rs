@@ -24,6 +24,7 @@
 
 mod activation;
 mod cleanup;
+mod diagnostic_log;
 mod diff;
 mod failure;
 mod hydration;
@@ -34,6 +35,7 @@ mod nested;
 mod own_removals;
 mod placeholder;
 mod population;
+mod readers;
 mod reconcile;
 mod reconciliation;
 mod refresh;
