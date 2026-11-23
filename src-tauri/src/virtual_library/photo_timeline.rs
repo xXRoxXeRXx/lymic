@@ -18,17 +18,24 @@ enum Bucket {
     Undated,
 }
 
+/// The month Immich reports for an asset that has no capture time: it sends `localDateTime` as the
+/// Unix epoch (`1970-01-01T00:00:00.000Z`, observed on a real server), which is January 1970.
+/// Nothing real was captured then, so the whole month is read as "no capture time": the exact epoch
+/// instant and the rest of that month are filed under `Undated` and no `1970` directory exists. The
+/// timeline buckets are per month, so the calendar and the assets have to agree on the whole month.
+const UNDATED_PLACEHOLDER_MONTH: (i32, u32) = (1970, 1);
+
 /// The local capture month of `asset`. Immich's `localDateTime` already is the wall-clock time at
 /// the place of capture, so its components are read as written and no time zone is applied.
-/// An asset without a usable `localDateTime` is undated.
+/// An asset without a usable `localDateTime`, or with the epoch placeholder, is undated.
 fn bucket_of(asset: &LibraryAsset) -> Bucket {
     asset
         .local_date_time
         .as_deref()
         .and_then(local_wall_clock)
-        .map_or(Bucket::Undated, |time| {
-            Bucket::Month(time.year(), time.month())
-        })
+        .map(|time| (time.year(), time.month()))
+        .filter(|month| *month != UNDATED_PLACEHOLDER_MONTH)
+        .map_or(Bucket::Undated, |(year, month)| Bucket::Month(year, month))
 }
 
 fn local_wall_clock(text: &str) -> Option<NaiveDateTime> {
@@ -48,8 +55,9 @@ pub(super) struct Calendar {
 
 impl Calendar {
     /// A bucket names its month in its first seven characters (`2025-03-01T00:00:00.000Z`, or
-    /// `2025-03-01`); one that names no calendar month holds assets without a usable capture
-    /// time. Empty buckets hold nothing.
+    /// `2025-03-01`); one that names no calendar month, or the epoch placeholder month
+    /// ([`UNDATED_PLACEHOLDER_MONTH`]), holds assets without a usable capture time. Empty buckets
+    /// hold nothing.
     pub(super) fn from_buckets(buckets: &[TimelineBucket]) -> Self {
         let mut calendar = Self {
             months: BTreeSet::new(),
@@ -57,10 +65,10 @@ impl Calendar {
         };
         for bucket in buckets.iter().filter(|bucket| bucket.count > 0) {
             match bucket_month(&bucket.time_bucket) {
-                Some(month) => {
+                Some(month) if month != UNDATED_PLACEHOLDER_MONTH => {
                     calendar.months.insert(month);
                 }
-                None => calendar.has_undated = true,
+                _ => calendar.has_undated = true,
             }
         }
         calendar
