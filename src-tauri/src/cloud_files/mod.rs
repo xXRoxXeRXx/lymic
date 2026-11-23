@@ -31,6 +31,7 @@ mod hydration;
 mod identity;
 mod inflight;
 mod library;
+mod listing_log;
 mod nested;
 mod own_removals;
 mod placeholder;
@@ -42,6 +43,7 @@ mod refresh;
 mod registration;
 mod reporting;
 mod shell_thumbnails;
+mod watchdog;
 mod write_guard;
 
 #[cfg(windows)]
@@ -55,10 +57,20 @@ pub(crate) use cleanup::CLEANUP_FAILED_ERROR;
 pub(crate) use cleanup::{CleanupError, CleanupReport};
 #[cfg(test)]
 pub(crate) use nested::{NestedRoot, Relation as NestedRelation};
-pub(crate) use reconciliation::{mark_populated, run_schedule, LibraryRefresh, SystemRefresh};
+pub(crate) use reconciliation::{
+    mark_populated, run_schedule, use_database, LibraryRefresh, SystemRefresh,
+};
 pub(crate) use reporting::{install as install_notice_sink, Notice, NoticeKind, NoticeSink};
 
 use std::path::PathBuf;
+
+/// Writes one line to `lymic-virtual-library.log` (standard error without it, and off Windows).
+pub(crate) fn system_note(message: &str) {
+    #[cfg(windows)]
+    adapter::note(message);
+    #[cfg(not(windows))]
+    eprintln!("virtual library: {message}");
+}
 
 /// The provider part of the sync root id (`<provider>!<SID>!<account>`), also how Lymic recognises
 /// its own registrations.

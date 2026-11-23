@@ -418,6 +418,100 @@ async fn a_library_whose_only_asset_has_the_epoch_capture_time_shows_only_undate
     );
 }
 
+/// A server whose timeline says `2016-04` holds `count` assets, while the metadata search finds
+/// `found` of them in any window: Immich disagreeing with itself.
+async fn disagreeing_server(count: usize, found: Vec<FakeAsset>) -> RoutedServer {
+    serve_routes(move |request: &RecordedRequest| {
+        if request.method == "GET" && request.target.starts_with("/api/timeline/buckets") {
+            let buckets = json!([{ "timeBucket": "2016-04-01T00:00:00.000Z", "count": count }]);
+            return ("200 OK".into(), buckets.to_string());
+        }
+        if request.target == "/api/search/metadata" {
+            let body: Value = serde_json::from_str(&request.body).unwrap();
+            // Only a search without a window (the full pass) finds them.
+            let windowed = body.get("takenAfter").is_some();
+            let items: Vec<Value> = if windowed {
+                vec![]
+            } else {
+                found.iter().map(FakeAsset::json).collect()
+            };
+            let page =
+                json!({ "assets": { "items": items, "nextPage": null, "total": items.len() } });
+            return ("200 OK".into(), page.to_string());
+        }
+        ("404 Not Found".into(), "{}".into())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn a_month_the_timeline_reports_is_found_even_when_the_capture_window_misses_its_assets() {
+    // Captured in April 2016 by its local time, but Immich holds a creation instant years later, so
+    // a window around April 2016 does not contain it.
+    let late = FakeAsset {
+        file_created_at: "2024-01-05T00:00:00.000Z",
+        ..asset(
+            "a1",
+            "2016-04-29_182422_000.mp4",
+            "2016-04-29T18:24:22.000Z",
+        )
+    };
+    let server = fake_library(vec![late]).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(
+        names(&library.list("All Photos/2016").await.unwrap()),
+        ["04 April"]
+    );
+    let april = library.list("All Photos/2016/04 April").await;
+
+    assert_eq!(
+        names(&april.expect("the month the timeline reports is not empty")),
+        ["2016-04-29_182422_000.mp4"]
+    );
+    assert_eq!(
+        library
+            .resolve("All Photos/2016/04 April/2016-04-29_182422_000.mp4")
+            .await,
+        Ok(RemoteAssetId::new("a1"))
+    );
+}
+
+#[tokio::test]
+async fn a_month_that_stays_empty_although_the_timeline_reports_assets_says_why() {
+    let server = disagreeing_server(3, vec![]).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(
+        library.list("All Photos/2016/04 April").await,
+        Err(VirtualLibraryError::NotFound)
+    );
+    let why = library
+        .explain_missing("All Photos/2016/04 April")
+        .await
+        .expect("an explanation");
+
+    assert!(why.contains("2016-04"), "{why}");
+    assert!(why.contains("3 asset(s)"), "{why}");
+    assert!(why.contains("0 asset(s)"), "{why}");
+}
+
+#[tokio::test]
+async fn a_directory_that_is_genuinely_absent_needs_no_explanation_of_assets() {
+    let server = fake_library(near_midnight_library()).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    let why = library
+        .explain_missing("All Photos/2016/04 April")
+        .await
+        .expect("an explanation");
+
+    assert!(why.contains("reports no asset"), "{why}");
+}
+
 #[tokio::test]
 async fn resolving_a_file_returns_the_remote_asset_it_represents() {
     let server = fake_library(near_midnight_library()).await;

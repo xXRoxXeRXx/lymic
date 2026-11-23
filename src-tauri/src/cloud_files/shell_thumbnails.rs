@@ -22,15 +22,18 @@
 //!
 //! Disabling the Virtual Library or logging out clears the cache ([`clear_system_cache`]).
 
+use super::diagnostic_log::{NoNotes, Notes, SharedNotes, SystemNotes};
 use super::identity;
 use super::library::{Library, StoredCredentialsImmich};
+use super::listing_log::ListingLog;
 use crate::immich::RemoteAssetId;
 use crate::virtual_library::{Entry, EntryKind, VirtualLibraryError};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use lymic_shell_ext::cache::ThumbnailCache;
-use std::collections::HashMap;
+use lymic_shell_ext::cache::{Miss, ThumbnailCache};
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// How many thumbnails of a listing are fetched before the listing returns.
@@ -71,12 +74,29 @@ pub(super) trait ThumbnailSource: Sync {
 
 impl ThumbnailSource for StoredCredentialsImmich {
     async fn thumbnail(&self, asset: &RemoteAssetId) -> Option<Vec<u8>> {
-        let session = Self::session().ok()?;
+        let session = match Self::session() {
+            Ok(session) => session,
+            Err(failure) => {
+                SystemNotes.note(&format!(
+                    "thumbnail of asset {}: no session: {}",
+                    asset.as_str(),
+                    failure.message
+                ));
+                return None;
+            }
+        };
         let client = session.client();
-        client
-            .get_thumbnail_in_format(asset.as_str(), "JPEG")
-            .await
-            .ok()
+        match client.get_thumbnail_in_format(asset.as_str(), "JPEG").await {
+            Ok(image) => Some(image),
+            Err(error) => {
+                SystemNotes.note(&format!(
+                    "thumbnail of asset {}: Immich did not deliver it: {}",
+                    asset.as_str(),
+                    session.credentials().redact(&error)
+                ));
+                None
+            }
+        }
     }
 }
 
@@ -102,11 +122,13 @@ pub(super) fn jobs(parent: &str, entries: &[Entry]) -> Vec<Job> {
 }
 
 /// What caching a batch did.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(super) struct Warmed {
     pub stored: usize,
     pub already_cached: usize,
     pub failed: usize,
+    /// Why the first thumbnail that failed did, for the log.
+    pub first_failure: Option<String>,
 }
 
 impl Warmed {
@@ -114,6 +136,21 @@ impl Warmed {
         self.stored += other.stored;
         self.already_cached += other.already_cached;
         self.failed += other.failed;
+        if self.first_failure.is_none() {
+            self.first_failure = other.first_failure;
+        }
+    }
+
+    /// `3 cached, 1 already cached, 2 failed (first failure: ...)`.
+    pub(super) fn describe(&self) -> String {
+        let mut text = format!(
+            "{} cached, {} already cached, {} failed",
+            self.stored, self.already_cached, self.failed
+        );
+        if let Some(reason) = &self.first_failure {
+            text.push_str(&format!(" (first failure: {reason})"));
+        }
+        text
     }
 }
 
@@ -136,15 +173,24 @@ async fn warm_one<S: ThumbnailSource>(
         }
         tokio::time::sleep(retry.delay * attempt).await;
     }
+    let name = String::from_utf8_lossy(&job.identity).into_owned();
     let Some(image) = image else {
         outcome.failed = 1;
+        outcome.first_failure = Some(format!("no thumbnail from Immich for '{name}'"));
         return outcome;
     };
     let (cache, identity) = (cache.clone(), job.identity.clone());
     let stored = tokio::task::spawn_blocking(move || cache.store(&identity, &image)).await;
     match stored {
         Ok(Ok(())) => outcome.stored = 1,
-        _ => outcome.failed = 1,
+        Ok(Err(error)) => {
+            outcome.failed = 1;
+            outcome.first_failure = Some(format!("'{name}' was not stored: {error}"));
+        }
+        Err(error) => {
+            outcome.failed = 1;
+            outcome.first_failure = Some(format!("'{name}' was not stored: {error}"));
+        }
     }
     outcome
 }
@@ -157,19 +203,35 @@ pub(super) async fn warm<S: ThumbnailSource>(
     jobs: &[Job],
     retry: Retry,
 ) -> Warmed {
+    let mut total = Warmed::default();
+    for outcome in warm_each(cache, source, jobs, retry).await {
+        total.add(outcome);
+    }
+    total
+}
+
+/// [`warm`], with the outcome of every job, in the order of `jobs`.
+pub(super) async fn warm_each<S: ThumbnailSource>(
+    cache: &ThumbnailCache,
+    source: &S,
+    jobs: &[Job],
+    retry: Retry,
+) -> Vec<Warmed> {
     // A plain loop, not `buffer_unordered` over a closure: a closure over each borrowed job makes
     // the future fail the higher-ranked `Send` check of `tokio::spawn`.
-    let mut total = Warmed::default();
+    let mut outcomes: Vec<Warmed> = jobs.iter().map(|_| Warmed::default()).collect();
     let mut running = FuturesUnordered::new();
-    let mut waiting = jobs.iter();
+    let mut waiting = jobs.iter().enumerate();
     loop {
         while running.len() < CONCURRENCY {
-            let Some(job) = waiting.next() else { break };
-            running.push(warm_one(cache, source, job, retry));
+            let Some((index, job)) = waiting.next() else {
+                break;
+            };
+            running.push(async move { (index, warm_one(cache, source, job, retry).await) });
         }
         match running.next().await {
-            Some(outcome) => total.add(outcome),
-            None => return total,
+            Some((index, outcome)) => outcomes[index] = outcome,
+            None => return outcomes,
         }
     }
 }
@@ -183,6 +245,7 @@ pub(super) struct WarmingLibrary<L, S> {
     pub(super) prewarm_count: usize,
     pub(super) prewarm_deadline: Duration,
     pub(super) retry: Retry,
+    pub(super) notes: SharedNotes,
 }
 
 impl<L, S> WarmingLibrary<L, S> {
@@ -194,6 +257,7 @@ impl<L, S> WarmingLibrary<L, S> {
             prewarm_count: PREWARM_COUNT,
             prewarm_deadline: PREWARM_DEADLINE,
             retry: RETRY,
+            notes: Arc::new(NoNotes),
         }
     }
 }
@@ -201,7 +265,9 @@ impl<L, S> WarmingLibrary<L, S> {
 impl<L> WarmingLibrary<L, StoredCredentialsImmich> {
     /// Over the real Immich and the running package's cache.
     pub(super) fn system(inner: L) -> Self {
-        Self::new(inner, StoredCredentialsImmich, system_cache())
+        let mut library = Self::new(inner, StoredCredentialsImmich, system_cache());
+        library.notes = Arc::new(SystemNotes);
+        library
     }
 }
 
@@ -213,19 +279,62 @@ where
     async fn list(&self, path: &str) -> Result<Vec<Entry>, VirtualLibraryError> {
         let entries = self.inner.list(path).await?;
         let Some(cache) = &self.cache else {
+            self.notes.note(&format!(
+                "no thumbnail cache (no package identity): '{path}' is listed without thumbnails"
+            ));
             return Ok(entries);
         };
         let mut jobs = jobs(path, &entries);
         let later = jobs.split_off(self.prewarm_count.min(jobs.len()));
-        // Not finishing in time is fine: those thumbnails are simply missing for now.
-        let _ = tokio::time::timeout(
-            self.prewarm_deadline,
-            warm(cache, &self.source, &jobs, self.retry),
-        )
-        .await;
-        let (cache, source, retry) = (cache.clone(), self.source.clone(), self.retry);
+        let (first, rest) = (jobs.len(), later.len());
+        // The first thumbnails are fetched on a task of their own: when the deadline passes the
+        // listing returns and the task carries on, instead of being dropped half way, so what is
+        // not there by then arrives later.
+        let mut prewarm = {
+            let (cache, source, retry) = (cache.clone(), self.source.clone(), self.retry);
+            tokio::spawn(async move { warm(&cache, &source, &jobs, retry).await })
+        };
+        let finished = tokio::time::timeout(self.prewarm_deadline, &mut prewarm).await;
+        let (cache, source, retry, notes) = (
+            cache.clone(),
+            self.source.clone(),
+            self.retry,
+            self.notes.clone(),
+        );
+        let path = path.to_string();
+        match &finished {
+            Ok(Ok(warmed)) => notes.note(&format!(
+                "thumbnails of '{path}': the first {first} before the listing returned: {}",
+                warmed.describe()
+            )),
+            Ok(Err(error)) => notes.note(&format!(
+                "thumbnails of '{path}': the first {first} stopped with an error: {error}"
+            )),
+            Err(_) => notes.note(&format!(
+                "thumbnails of '{path}': the first {first} were not all there after {} ms; they continue in the background",
+                self.prewarm_deadline.as_millis()
+            )),
+        }
+        let late = finished.is_err();
         tokio::spawn(async move {
-            warm(&cache, &source, &later, retry).await;
+            if late {
+                match prewarm.await {
+                    Ok(warmed) => notes.note(&format!(
+                        "thumbnails of '{path}': the first {first}, finished late: {}",
+                        warmed.describe()
+                    )),
+                    Err(error) => notes.note(&format!(
+                        "thumbnails of '{path}': the first {first} stopped with an error: {error}"
+                    )),
+                }
+            }
+            if rest > 0 {
+                let warmed = warm(&cache, &source, &later, retry).await;
+                notes.note(&format!(
+                    "thumbnails of '{path}': the other {rest} in the background: {}",
+                    warmed.describe()
+                ));
+            }
             let _ = tokio::task::spawn_blocking(move || cache.trim(CACHE_LIMIT_BYTES)).await;
         });
         Ok(entries)
@@ -233,6 +342,10 @@ where
 
     async fn resolve(&self, path: &str) -> Result<RemoteAssetId, VirtualLibraryError> {
         self.inner.resolve(path).await
+    }
+
+    async fn explain_missing(&self, path: &str) -> Option<String> {
+        self.inner.explain_missing(path).await
     }
 }
 
@@ -261,10 +374,13 @@ pub(super) struct Served {
 }
 
 /// Serves the thumbnails Explorer asked for and the cache did not have: the provider answered those
-/// with a generic image and left a request. Each is looked up (`identity` to path to Remote Asset),
-/// fetched with `retry` and stored, and its item is refreshed so Explorer replaces the generic
-/// image. A request that cannot be served is put back for another round, up to [`MISS_ROUNDS`]
-/// rounds, because Explorer keeps the generic image it was given and will not ask again by itself.
+/// with a generic image and left a request. The requests are grouped by directory and each
+/// directory is listed once (`identity` to name to Remote Asset, as `Library::resolve` would, without
+/// listing a month again for every file of it), the thumbnails are fetched a few at a time with
+/// `retry` and stored, and each item is refreshed so Explorer replaces the generic image. A request
+/// that cannot be served is put back for another round, up to [`MISS_ROUNDS`] rounds, because
+/// Explorer keeps the generic image it was given and will not ask again by itself. Every directory
+/// served, and every request that cannot be, is written to `notes`.
 pub(super) async fn serve_misses<L, S, R>(
     cache: &ThumbnailCache,
     library: &L,
@@ -272,6 +388,7 @@ pub(super) async fn serve_misses<L, S, R>(
     refresh: &R,
     queue: &mut MissQueue,
     retry: Retry,
+    notes: &dyn Notes,
 ) -> Served
 where
     L: Library,
@@ -279,39 +396,130 @@ where
     R: ItemRefresh,
 {
     let mut served = Served::default();
+    let mut directories: BTreeMap<String, Vec<(Miss, String)>> = BTreeMap::new();
     for miss in cache.take_misses() {
         let Some(path) = identity::decode(&miss.identity) else {
             served.dropped += 1;
+            notes.note(&format!(
+                "gave up on a thumbnail request for '{}': its identity is not a path",
+                miss.path
+            ));
             continue;
         };
-        let done = match library.resolve(&path).await {
-            Ok(asset) => {
-                let job = Job {
-                    identity: miss.identity.clone(),
-                    asset,
-                };
-                let warmed = warm_one(cache, source, &job, retry).await;
-                warmed.stored + warmed.already_cached > 0
+        let (directory, _) = path.rsplit_once('/').unwrap_or(("", &path));
+        directories
+            .entry(directory.to_string())
+            .or_default()
+            .push((miss, path));
+    }
+    for (directory, requests) in directories {
+        let asked = requests.len();
+        let before = served;
+        let outcomes = resolve_and_warm(cache, library, source, &directory, &requests, retry).await;
+        let mut first_failure = None;
+        for ((miss, path), outcome) in requests.into_iter().zip(outcomes) {
+            let failure = match outcome {
+                Ok(()) => {
+                    queue.rounds.remove(&miss.identity);
+                    refresh.refresh(&miss.path);
+                    served.stored += 1;
+                    continue;
+                }
+                Err(failure) => failure,
+            };
+            first_failure.get_or_insert_with(|| format!("'{path}': {failure}"));
+            let rounds = queue.rounds.entry(miss.identity.clone()).or_insert(0);
+            *rounds += 1;
+            if *rounds >= MISS_ROUNDS {
+                queue.rounds.remove(&miss.identity);
+                served.dropped += 1;
+                notes.note(&format!(
+                    "gave up on '{path}' after {MISS_ROUNDS} rounds: {failure}"
+                ));
+            } else {
+                cache.record_miss(&miss.identity, &miss.path);
+                served.requeued += 1;
             }
-            Err(_) => false,
-        };
-        if done {
-            queue.rounds.remove(&miss.identity);
-            refresh.refresh(&miss.path);
-            served.stored += 1;
-            continue;
         }
-        let rounds = queue.rounds.entry(miss.identity.clone()).or_insert(0);
-        *rounds += 1;
-        if *rounds >= MISS_ROUNDS {
-            queue.rounds.remove(&miss.identity);
-            served.dropped += 1;
-        } else {
-            cache.record_miss(&miss.identity, &miss.path);
-            served.requeued += 1;
+        let mut line = format!(
+            "thumbnail requests for '{directory}': {asked} asked, {} cached, {} to try again, {} given up",
+            served.stored - before.stored,
+            served.requeued - before.requeued,
+            served.dropped - before.dropped
+        );
+        if let Some(failure) = first_failure {
+            line.push_str(&format!(" (first failure: {failure})"));
         }
+        notes.note(&line);
     }
     served
+}
+
+/// Looks the requested files up in one listing of `directory` and caches their thumbnails, a few at
+/// a time. Each result is `Ok` or why that request could not be served.
+async fn resolve_and_warm<L, S>(
+    cache: &ThumbnailCache,
+    library: &L,
+    source: &S,
+    directory: &str,
+    requests: &[(Miss, String)],
+    retry: Retry,
+) -> Vec<Result<(), String>>
+where
+    L: Library,
+    S: ThumbnailSource,
+{
+    let entries = match library.list(directory).await {
+        Ok(entries) => entries,
+        Err(error) => {
+            let why = library.explain_missing(directory).await;
+            let reason = format!(
+                "listing '{directory}' failed: {error:?}{}",
+                why.map(|why| format!(" ({why})")).unwrap_or_default()
+            );
+            return requests.iter().map(|_| Err(reason.clone())).collect();
+        }
+    };
+    let count = entries.len();
+    let mut results: Vec<Result<(), String>> = Vec::with_capacity(requests.len());
+    let mut jobs = Vec::new();
+    for (index, (miss, path)) in requests.iter().enumerate() {
+        let name = path
+            .rsplit_once('/')
+            .map_or(path.as_str(), |(_, name)| name);
+        let wanted = name.to_lowercase();
+        let asset = entries
+            .iter()
+            .find(|entry| entry.kind == EntryKind::File && entry.name.to_lowercase() == wanted)
+            .and_then(|entry| entry.remote_asset.clone());
+        match asset {
+            Some(asset) => {
+                results.push(Ok(()));
+                jobs.push((
+                    index,
+                    Job {
+                        identity: miss.identity.clone(),
+                        asset,
+                    },
+                ));
+            }
+            None => results.push(Err(format!(
+                "no file of that name among the {count} entries of '{directory}'"
+            ))),
+        }
+    }
+    let only_jobs: Vec<Job> = jobs.iter().map(|(_, job)| job.clone()).collect();
+    for ((index, _), warmed) in jobs
+        .iter()
+        .zip(warm_each(cache, source, &only_jobs, retry).await)
+    {
+        if warmed.stored + warmed.already_cached == 0 {
+            results[*index] = Err(warmed
+                .first_failure
+                .unwrap_or_else(|| "no thumbnail from Immich".to_string()));
+        }
+    }
+    results
 }
 
 /// Serves the requests of the running package's cache until the task is aborted: the app calls it
@@ -319,18 +527,24 @@ where
 /// shell notification.
 pub(super) async fn run_miss_server<R: ItemRefresh>(refresh: R) {
     let Some(cache) = system_cache() else {
+        SystemNotes.note(
+            "the thumbnail request server does not run: no thumbnail cache (no package identity)",
+        );
         return;
     };
+    SystemNotes.note("the thumbnail request server runs");
+    let library = ListingLog::new(StoredCredentialsImmich);
     let mut queue = MissQueue::default();
     loop {
         tokio::time::sleep(MISS_POLL).await;
         let served = serve_misses(
             &cache,
-            &StoredCredentialsImmich,
+            &library,
             &StoredCredentialsImmich,
             &refresh,
             &mut queue,
             RETRY,
+            &SystemNotes,
         )
         .await;
         if served.stored > 0 {
@@ -585,12 +799,12 @@ mod tests {
         let warmed = warm(&cache, &source, &jobs, FAST).await;
 
         assert_eq!(
-            warmed,
-            Warmed {
-                stored: 1,
-                already_cached: 1,
-                failed: 1
-            }
+            (warmed.stored, warmed.already_cached, warmed.failed),
+            (1, 1, 1)
+        );
+        assert_eq!(
+            warmed.first_failure.as_deref(),
+            Some("no thumbnail from Immich for 'fail.jpg'")
         );
     }
 
@@ -616,6 +830,48 @@ mod tests {
         assert_eq!(listed.len(), 2);
         assert!(dir.cache().contains(b"fast.jpg"));
         assert!(!dir.cache().contains(b"slow.jpg"));
+    }
+
+    /// Answers like [`FakeSource`], but only after `delay`.
+    #[derive(Clone)]
+    struct DelayedSource {
+        inner: FakeSource,
+        delay: Duration,
+    }
+
+    impl ThumbnailSource for DelayedSource {
+        async fn thumbnail(&self, asset: &RemoteAssetId) -> Option<Vec<u8>> {
+            tokio::time::sleep(self.delay).await;
+            self.inner.thumbnail(asset).await
+        }
+    }
+
+    #[tokio::test]
+    async fn a_prewarm_that_misses_the_deadline_is_finished_in_the_background_not_abandoned() {
+        let dir = TempDir::new();
+        let source = DelayedSource {
+            inner: FakeSource::with(&[("1", JPEG), ("2", JPEG)]),
+            delay: Duration::from_millis(300),
+        };
+        let mut library = WarmingLibrary::new(
+            FakeLibrary(Ok(vec![file("1.jpg", Some("1")), file("2.jpg", Some("2"))])),
+            source,
+            Some(dir.cache()),
+        );
+        library.retry = FAST;
+        library.prewarm_deadline = Duration::from_millis(50);
+
+        let listed = library.list("").await.unwrap();
+
+        assert_eq!(listed.len(), 2, "the listing does not wait for them");
+        let cache = dir.cache();
+        for _ in 0..100 {
+            if cache.contains(b"1.jpg") && cache.contains(b"2.jpg") {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("the thumbnails the deadline cut short never arrived");
     }
 
     #[tokio::test]
@@ -756,30 +1012,78 @@ mod tests {
         assert_eq!(jobs[0].identity, b"All Photos/Undated/Garfild.3gp".to_vec());
     }
 
-    /// Resolves the paths it was given to assets; every other path is not found.
-    struct PathLibrary(HashMap<String, String>);
+    /// Holds the files it was given by path; resolving one lists its directory, as the real
+    /// projection does, and every listing is counted.
+    struct PathLibrary {
+        files: HashMap<String, String>,
+        listings: AtomicUsize,
+    }
 
     impl PathLibrary {
         fn of(paths: &[(&str, &str)]) -> Self {
-            Self(
-                paths
+            Self {
+                files: paths
                     .iter()
                     .map(|(path, asset)| (path.to_string(), asset.to_string()))
                     .collect(),
-            )
+                listings: AtomicUsize::new(0),
+            }
+        }
+
+        fn listings(&self) -> usize {
+            self.listings.load(Ordering::SeqCst)
+        }
+
+        fn entries_of(&self, directory: &str) -> Result<Vec<Entry>, VirtualLibraryError> {
+            self.listings.fetch_add(1, Ordering::SeqCst);
+            let prefix = if directory.is_empty() {
+                String::new()
+            } else {
+                format!("{directory}/")
+            };
+            let entries: Vec<Entry> = self
+                .files
+                .iter()
+                .filter_map(|(path, asset)| {
+                    let name = path.strip_prefix(&prefix)?;
+                    (!name.contains('/')).then(|| file(name, Some(asset)))
+                })
+                .collect();
+            if entries.is_empty() {
+                Err(VirtualLibraryError::NotFound)
+            } else {
+                Ok(entries)
+            }
         }
     }
 
     impl Library for PathLibrary {
-        async fn list(&self, _path: &str) -> Result<Vec<Entry>, VirtualLibraryError> {
-            Ok(Vec::new())
+        async fn list(&self, path: &str) -> Result<Vec<Entry>, VirtualLibraryError> {
+            self.entries_of(path)
         }
 
         async fn resolve(&self, path: &str) -> Result<RemoteAssetId, VirtualLibraryError> {
-            self.0
-                .get(path)
-                .map(|asset| RemoteAssetId::new(asset))
+            let (directory, name) = path.rsplit_once('/').unwrap_or(("", path));
+            self.entries_of(directory)?
+                .into_iter()
+                .find(|entry| entry.name == name)
+                .and_then(|entry| entry.remote_asset)
                 .ok_or(VirtualLibraryError::NotFound)
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordedNotes(Mutex<Vec<String>>);
+
+    impl Notes for RecordedNotes {
+        fn note(&self, message: &str) {
+            self.0.lock().unwrap().push(message.to_string());
+        }
+    }
+
+    impl RecordedNotes {
+        fn text(&self) -> String {
+            self.0.lock().unwrap().join("\n")
         }
     }
 
@@ -808,6 +1112,7 @@ mod tests {
             &refresh,
             &mut MissQueue::default(),
             FAST,
+            &NoNotes,
         )
         .await;
 
@@ -830,10 +1135,22 @@ mod tests {
         let refresh = RecordingRefresh::default();
         let mut queue = MissQueue::default();
 
-        let first = serve_misses(&cache, &library, &source, &refresh, &mut queue, FAST).await;
-        let second = serve_misses(&cache, &library, &source, &refresh, &mut queue, FAST).await;
-        let third = serve_misses(&cache, &library, &source, &refresh, &mut queue, FAST).await;
-        let fourth = serve_misses(&cache, &library, &source, &refresh, &mut queue, FAST).await;
+        let first = serve_misses(
+            &cache, &library, &source, &refresh, &mut queue, FAST, &NoNotes,
+        )
+        .await;
+        let second = serve_misses(
+            &cache, &library, &source, &refresh, &mut queue, FAST, &NoNotes,
+        )
+        .await;
+        let third = serve_misses(
+            &cache, &library, &source, &refresh, &mut queue, FAST, &NoNotes,
+        )
+        .await;
+        let fourth = serve_misses(
+            &cache, &library, &source, &refresh, &mut queue, FAST, &NoNotes,
+        )
+        .await;
 
         assert_eq!((first.requeued, first.dropped), (1, 0));
         assert_eq!((second.requeued, second.dropped), (1, 0));
@@ -854,7 +1171,10 @@ mod tests {
         let mut queue = MissQueue::default();
 
         for _ in 0..3 {
-            serve_misses(&cache, &library, &source, &refresh, &mut queue, FAST).await;
+            serve_misses(
+                &cache, &library, &source, &refresh, &mut queue, FAST, &NoNotes,
+            )
+            .await;
         }
 
         assert!(cache.take_misses().is_empty());
@@ -877,10 +1197,174 @@ mod tests {
             &RecordingRefresh::default(),
             &mut MissQueue::default(),
             FAST,
+            &NoNotes,
         )
         .await;
 
         assert_eq!(served.dropped, 1);
         assert!(cache.take_misses().is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_thumbnails_asked_for_in_one_month_list_that_month_once_not_once_per_file() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        let mut paths = Vec::new();
+        let mut images = Vec::new();
+        for number in 0..12 {
+            let path = format!("All Photos/2016/04 April/2016-04-29_1824{number:02}_000.mp4");
+            cache.record_miss(path.as_bytes(), &format!(r"C:\Lymic\{number}"));
+            paths.push((path, format!("asset-{number}")));
+            images.push(format!("asset-{number}"));
+        }
+        let library = PathLibrary::of(
+            &paths
+                .iter()
+                .map(|(path, asset)| (path.as_str(), asset.as_str()))
+                .collect::<Vec<_>>(),
+        );
+        let source = FakeSource::with(
+            &images
+                .iter()
+                .map(|id| (id.as_str(), JPEG))
+                .collect::<Vec<_>>(),
+        );
+
+        let served = serve_misses(
+            &cache,
+            &library,
+            &source,
+            &RecordingRefresh::default(),
+            &mut MissQueue::default(),
+            FAST,
+            &NoNotes,
+        )
+        .await;
+
+        assert_eq!(served.stored, 12);
+        assert_eq!(library.listings(), 1, "one listing serves all twelve");
+    }
+
+    #[tokio::test]
+    async fn requests_in_different_directories_are_each_served_from_their_own_listing() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        cache.record_miss(b"Albums/A/a.jpg", r"C:\Lymic\a");
+        cache.record_miss(b"Albums/B/b.jpg", r"C:\Lymic\b");
+        let library = PathLibrary::of(&[("Albums/A/a.jpg", "1"), ("Albums/B/b.jpg", "2")]);
+        let source = FakeSource::with(&[("1", JPEG), ("2", JPEG)]);
+
+        let served = serve_misses(
+            &cache,
+            &library,
+            &source,
+            &RecordingRefresh::default(),
+            &mut MissQueue::default(),
+            FAST,
+            &NoNotes,
+        )
+        .await;
+
+        assert_eq!(served.stored, 2);
+        assert_eq!(library.listings(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_request_for_a_name_the_directory_does_not_hold_is_logged_with_its_path_and_reason() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        cache.record_miss(b"All Photos/2016/04 April/gone.jpg", r"C:\Lymic\gone.jpg");
+        let library = PathLibrary::of(&[("All Photos/2016/04 April/other.jpg", "1")]);
+        let notes = RecordedNotes::default();
+
+        serve_misses(
+            &cache,
+            &library,
+            &FakeSource::with(&[]),
+            &RecordingRefresh::default(),
+            &mut MissQueue::default(),
+            FAST,
+            &notes,
+        )
+        .await;
+
+        let text = notes.text();
+        assert!(text.contains("All Photos/2016/04 April/gone.jpg"), "{text}");
+        assert!(text.contains("no file of that name"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn a_request_whose_directory_cannot_be_listed_is_logged_with_the_reason() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        cache.record_miss(b"All Photos/2016/04 April/a.jpg", r"C:\Lymic\a.jpg");
+        let library = PathLibrary::of(&[]);
+        let notes = RecordedNotes::default();
+
+        serve_misses(
+            &cache,
+            &library,
+            &FakeSource::with(&[]),
+            &RecordingRefresh::default(),
+            &mut MissQueue::default(),
+            FAST,
+            &notes,
+        )
+        .await;
+
+        let text = notes.text();
+        assert!(text.contains("All Photos/2016/04 April"), "{text}");
+        assert!(text.contains("NotFound"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn a_request_given_up_after_three_rounds_is_logged() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        cache.record_miss(b"a.jpg", r"C:\Lymic\a.jpg");
+        let library = PathLibrary::of(&[("a.jpg", "gone")]);
+        let notes = RecordedNotes::default();
+        let mut queue = MissQueue::default();
+
+        for _ in 0..3 {
+            serve_misses(
+                &cache,
+                &library,
+                &FakeSource::with(&[]),
+                &RecordingRefresh::default(),
+                &mut queue,
+                FAST,
+                &notes,
+            )
+            .await;
+        }
+
+        let text = notes.text();
+        assert!(text.contains("gave up on 'a.jpg'"), "{text}");
+        assert!(text.contains("no thumbnail from Immich"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn the_thumbnails_cached_for_a_directory_are_counted_in_the_log() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        cache.record_miss(b"Albums/A/a.jpg", r"C:\Lymic\a");
+        let library = PathLibrary::of(&[("Albums/A/a.jpg", "1")]);
+        let notes = RecordedNotes::default();
+
+        serve_misses(
+            &cache,
+            &library,
+            &FakeSource::with(&[("1", JPEG)]),
+            &RecordingRefresh::default(),
+            &mut MissQueue::default(),
+            FAST,
+            &notes,
+        )
+        .await;
+
+        let text = notes.text();
+        assert!(text.contains("'Albums/A'"), "{text}");
+        assert!(text.contains("1 cached"), "{text}");
     }
 }

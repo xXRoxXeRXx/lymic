@@ -33,6 +33,7 @@ fn spawn_virtual_library_restore(handle: tauri::AppHandle) {
     ));
     tauri::async_runtime::spawn(async move {
         let pool = handle.state::<sqlx::SqlitePool>().inner().clone();
+        crate::cloud_files::use_database(&pool);
         if let Err(error) = crate::commands::virtual_library::restore(&pool).await {
             log_to_ui_error(
                 &handle,

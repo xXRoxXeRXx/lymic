@@ -24,6 +24,11 @@ pub(super) trait Library: Sync {
         &self,
         path: &str,
     ) -> impl Future<Output = Result<RemoteAssetId, VirtualLibraryError>> + Send;
+
+    /// Why nothing was found at `path`, for the diagnostic log (what Immich reports there).
+    fn explain_missing(&self, _path: &str) -> impl Future<Output = Option<String>> + Send {
+        async { None }
+    }
 }
 
 /// The size of a Remote Asset's original, for entries the listing could not size.
@@ -91,6 +96,13 @@ impl Library for StoredCredentialsImmich {
             .resolve(path)
             .await
             .map_err(|error| redacted(&session, error))
+    }
+
+    async fn explain_missing(&self, path: &str) -> Option<String> {
+        let session = Self::session().ok()?;
+        let client = session.client();
+        let why = VirtualLibrary::new(&client).explain_missing(path).await?;
+        Some(session.credentials().redact(&why))
     }
 }
 

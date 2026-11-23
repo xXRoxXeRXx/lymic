@@ -16,6 +16,32 @@ use std::sync::Mutex;
 /// cannot erase the context just before it.
 pub(super) const LIMIT_BYTES: u64 = 512 * 1024;
 
+/// Where diagnostic lines go. The adapter's implementation is the log file; tests record them.
+pub(super) trait Notes: Send + Sync {
+    fn note(&self, message: &str);
+}
+
+/// A shared sink, so a background task can keep writing after the call that started it returned.
+pub(super) type SharedNotes = std::sync::Arc<dyn Notes>;
+
+/// The diagnostic log of the running app (`lymic-virtual-library.log`), or standard error where
+/// there is none.
+#[derive(Clone, Copy)]
+pub(super) struct SystemNotes;
+
+impl Notes for SystemNotes {
+    fn note(&self, message: &str) {
+        super::system_note(message);
+    }
+}
+
+/// Throws every line away.
+pub(super) struct NoNotes;
+
+impl Notes for NoNotes {
+    fn note(&self, _message: &str) {}
+}
+
 pub(super) struct DiagnosticLog {
     path: PathBuf,
     limit: u64,

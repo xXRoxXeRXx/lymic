@@ -219,6 +219,39 @@ Each change addresses one suspected cause. None is established as *the* cause.
 | R8 | Hydration size | A `Content-Length` that differs from the placeholder's size fails the read before any byte is handed over. A `Range` request was not added: with the full hydration policy the platform always asks from offset 0. | The whole body was downloaded before a size mismatch was noticed. | Only visible with a server that announces another length; no manual step. | |
 | R9 | Reconciliation cost | Placeholder state during reconciliation is read through an attributes-only handle instead of `CfOpenFileWithOplock`. | One oplocked open per child. | Refresh Library on a populated tree still updates and removes placeholders as in the reconciliation section above. | |
 
+## Second field report (#266): NOT YET RUN
+
+**Status: NOT YET RUN.** Nothing below was observed in Explorer. What was run: `cargo fmt --all --check`, `cargo clippy --workspace -- -D warnings`, `cargo test --workspace --locked`. **Do not read any symptom as fixed** until the Result column has an entry.
+
+Symptoms: under `All Photos` month folders were often empty; a month that showed files showed generic thumbnails that were never replaced, and clicking such a file gave "Make sure Lymic is running on your PC" (`ERROR_CLOUD_FILE_PROVIDER_NOT_RUNNING`, 0x8007016A) with the Lymic process running. `Albums` behaved correctly. `lymic-virtual-library.log` held only two `FETCH_DATA` lines (Albums); no failure line and no line for the failing actions.
+
+Defects reproduced as failing unit tests and fixed:
+
+| # | Defect | Evidence | Change |
+| --- | --- | --- | --- |
+| S1 | The first 48 thumbnails of a listing were dropped, not finished, when the 3 s deadline passed (`WarmingLibrary::list` cancelled the future). Only the rest ran in the background. A month with many files, as `All Photos/2016/04 April`, was left with no thumbnail for the cut-off ones. | `a_prewarm_that_misses_the_deadline_is_finished_in_the_background_not_abandoned` failed. | The first thumbnails run on a task that the deadline no longer cancels. |
+| S2 | The thumbnail request server resolved every request with `Library::resolve`, which lists the whole directory each time, one request after another, each with its own retries: 12 requests in one month meant 12 month listings (each a paged Immich search plus Live Photo lookups) in sequence, and a failure left no trace. | `the_thumbnails_asked_for_in_one_month_list_that_month_once_not_once_per_file` saw 12 listings. | Requests are grouped by directory, each directory is listed once and its thumbnails are fetched six at a time. |
+| S3 | A month the timeline reports but whose assets the search window misses (Immich holds a creation instant far from the capture time, so `takenAfter`/`takenBefore` on the UTC creation time does not contain them) listed as not found, so the folder was empty. Whether real Immich data does this is **not known**; the test builds the case. | `a_month_the_timeline_reports_is_found_even_when_the_capture_window_misses_its_assets` failed. | When the window finds nothing for a month the timeline says is not empty, the whole timeline is paged for that local month (costly, only in this case). |
+
+Not a defect found by reading, and the likely cause of the "provider not running" symptoms: **the connection to the sync root is lost or was never made** while the process runs. No code path was found that disconnects it on its own (`stop()` runs on disable, logout, a failed enable and before each connect only). The log held nothing for the failing actions, which fits "no callback arrived". Added, not proven to fix: a watchdog (`cloud_files/watchdog.rs`) that every 30 s tells the platform the provider is idle (this fails when the connection key is no longer valid), checks that the folder still is a registered sync root, and registers and connects again when not. It stops with disable and logout.
+
+Diagnostics added to `lymic-virtual-library.log` (all of them were silent before):
+
+- `starting the Virtual Library at '<root>'`, `the Virtual Library is served at '<root>'` or `... could not be started at '<root>': <error>`; `connected the sync root '<root>' (flags 0x..)` or `CfConnectSyncRoot failed for '<root>' ...`; `disconnecting the sync root`; `stopping the Virtual Library`; `the sync root connection is lost (<reason>); connecting again` and its outcome.
+- One line per callback on entry: `FETCH_PLACEHOLDERS '<path>' reader=<pid image>`, `FETCH_DATA ...` (as before), `CANCEL_FETCH_DATA`. A callback that cannot start work (runtime not up) says so and answers the platform with a failure instead of returning silently. A panic in a callback or its task is caught, written as `<callback>: panic ...` or `the work stopped: <reason>`, and the request is answered; a panic hook also writes every panic of the process to the log.
+- Every directory listing: `listed '<path>': N entries (D directories, F files)`, with `0 entries` for an empty one; `listing '<path>' failed: <NotFound plus what Immich's timeline reports, or the Immich failure>`; `could not list a directory: '<path>': <kind>: <message>`; `'<path>': N placeholder(s) handed to the platform` or `the platform refused ...`; skipped items with the directory.
+- Thumbnails: `thumbnails of '<path>': the first N before the listing returned: X cached, Y already cached, Z failed (first failure: ...)`, the same for the late and the background ones, `thumbnail request server runs`, `thumbnail requests for '<dir>': A asked, C cached, R to try again, G given up (first failure: '<path>': <reason>)`, `gave up on '<path>' after 3 rounds: <reason>`, and per failed fetch `thumbnail of asset <id>: Immich did not deliver it: <error>`.
+- `could not hydrate '<path>': <kind>: <message>` (the path was missing before).
+
+If the symptoms return, send `lymic-virtual-library.log` and `lymic-shell-ext.log` from the same test. What the lines would show: no `FETCH_PLACEHOLDERS`/`FETCH_DATA` line for a failing click together with `connection is lost` or no `connected the sync root` line means the connection; `listing '...' failed: NotFound: the timeline reports N asset(s) ... returned 0` means the window defect (S3) did not apply because even the full pass found nothing; `listed '...': 0 entries` or `skipped` lines show an empty plan; `gave up on` lines show unresolvable thumbnail requests.
+
+| # | Check | Result |
+| --- | --- | --- |
+| S4 | Enable the Virtual Library, open `All Photos`, a year and a month with many files. Log shows `FETCH_PLACEHOLDERS` and `listed` lines for each; the folders show their items. | |
+| S5 | A month of more than 48 files: thumbnails appear without F5 (`thumbnails of ...: ... continue in the background`, `thumbnail requests for ...`). | |
+| S6 | Click a file under `All Photos` and one under `Albums`: both open, both have a `FETCH_DATA` line. If one fails with 0x8007016A, the lines before it in the log say whether the connection was lost. | |
+| S7 | Quit and start Lymic with the Virtual Library enabled: `connected the sync root` appears; stop the process and click a file: Explorer's error (expected while Lymic is not running). | |
+
 ## Known gaps this record will not close
 
 - Delete and rename of placeholders are vetoed in code (#279) but have never been run against this code; see the section below. Do not read them as passing.
