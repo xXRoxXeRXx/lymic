@@ -6,12 +6,12 @@
 //! refuse (`write_guard`), do no I/O, and acknowledge inline.
 
 use crate::cloud_files::diagnostic_log::DiagnosticLog;
-use crate::cloud_files::listing_log::ListingLog;
 use crate::cloud_files::failure::{CloudStatus, Failure, FailureKind};
 use crate::cloud_files::hydration::{self, Block, DataRequest, DataSink};
 use crate::cloud_files::identity;
 use crate::cloud_files::inflight::InFlight;
 use crate::cloud_files::library::StoredCredentialsImmich;
+use crate::cloud_files::listing_log::ListingLog;
 use crate::cloud_files::placeholder::PlaceholderSpec;
 use crate::cloud_files::population;
 use crate::cloud_files::readers::{self, Reader, Verdict};
@@ -171,7 +171,10 @@ fn panic_text(payload: &(dyn std::any::Any + Send)) -> String {
 /// aborted without a word); it is written to the log instead.
 fn guarded(name: &str, body: impl FnOnce()) {
     if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)) {
-        note(&format!("{name}: panic in the callback: {}", panic_text(&*payload)));
+        note(&format!(
+            "{name}: panic in the callback: {}",
+            panic_text(&*payload)
+        ));
     }
 }
 
@@ -409,22 +412,12 @@ fn fetch_data(request: Request, offset: i64, length: i64) {
     if let Verdict::Refuse(_) = verdict {
         // A background service reading on its own would download the Library: nothing is fetched
         // and nobody is told (it is not the user's read).
-        fail_data(
-            &request,
-            offset,
-            length,
-            CloudStatus::Unsuccessful,
-        );
+        fail_data(&request, offset, length, CloudStatus::Unsuccessful);
         return;
     }
     let Some(runtime) = super::runtime() else {
         note("FETCH_DATA: the application runtime is not up, failing the read");
-        fail_data(
-            &request,
-            offset,
-            length,
-            CloudStatus::Unsuccessful,
-        );
+        fail_data(&request, offset, length, CloudStatus::Unsuccessful);
         return;
     };
     // Registered before the callback returns, so a cancel that follows at once finds it.
@@ -433,72 +426,60 @@ fn fetch_data(request: Request, offset: i64, length: i64) {
     spawn_guarded(
         runtime,
         "FETCH_DATA",
-        move || {
-            fail_data(
-                &on_panic,
-                offset,
-                length,
-                CloudStatus::Unsuccessful,
-            )
-        },
+        move || fail_data(&on_panic, offset, length, CloudStatus::Unsuccessful),
         async move {
-        let path = request.path();
-        let hydrated = registration
-            .run(async {
-                match &path {
-                    Ok(path) if !path.is_empty() => {
-                        let data_request = DataRequest {
-                            path: path.clone(),
-                            required_offset: offset.max(0) as u64,
-                            file_size: request.file_size.max(0) as u64,
-                        };
-                        hydration::hydrate(
-                            &StoredCredentialsImmich,
-                            &StoredCredentialsImmich,
-                            &mut CfSink { request: &request },
-                            &data_request,
-                        )
-                        .await
-                        .map(|_| ())
+            let path = request.path();
+            let hydrated = registration
+                .run(async {
+                    match &path {
+                        Ok(path) if !path.is_empty() => {
+                            let data_request = DataRequest {
+                                path: path.clone(),
+                                required_offset: offset.max(0) as u64,
+                                file_size: request.file_size.max(0) as u64,
+                            };
+                            hydration::hydrate(
+                                &StoredCredentialsImmich,
+                                &StoredCredentialsImmich,
+                                &mut CfSink { request: &request },
+                                &data_request,
+                            )
+                            .await
+                            .map(|_| ())
+                        }
+                        Ok(_) => Err(Failure::new(FailureKind::NotFound, "not a file")),
+                        Err(failure) => Err(failure.clone()),
                     }
-                    Ok(_) => Err(Failure::new(FailureKind::NotFound, "not a file")),
-                    Err(failure) => Err(failure.clone()),
+                })
+                .await;
+            // The platform has already ended a cancelled read: nothing to complete, nothing to report.
+            let Some(result) = hydrated else {
+                note("a download was cancelled by the reader and stopped");
+                return;
+            };
+            match result {
+                Ok(()) => reporting::report_succeeded(),
+                Err(failure) => {
+                    note(&format!(
+                        "could not hydrate '{}': {:?}: {}",
+                        path.as_deref().unwrap_or("?"),
+                        failure.kind,
+                        failure.message
+                    ));
+                    let report = Report {
+                        operation: Operation::Open,
+                        path: path.as_deref().unwrap_or(""),
+                        failure: &failure,
+                    };
+                    if let Some(removed) = report.removed_asset_path() {
+                        // Reconciliation (#280) drops this placeholder once the asset is gone from its
+                        // listing; this is the point to hand it the path sooner.
+                        note(&format!("'{removed}' was removed from Immich"));
+                    }
+                    reporting::report_failed(&report);
+                    fail_data(&request, offset, length, failure.status());
                 }
-            })
-            .await;
-        // The platform has already ended a cancelled read: nothing to complete, nothing to report.
-        let Some(result) = hydrated else {
-            note("a download was cancelled by the reader and stopped");
-            return;
-        };
-        match result {
-            Ok(()) => reporting::report_succeeded(),
-            Err(failure) => {
-                note(&format!(
-                    "could not hydrate '{}': {:?}: {}",
-                    path.as_deref().unwrap_or("?"),
-                    failure.kind,
-                    failure.message
-                ));
-                let report = Report {
-                    operation: Operation::Open,
-                    path: path.as_deref().unwrap_or(""),
-                    failure: &failure,
-                };
-                if let Some(removed) = report.removed_asset_path() {
-                    // Reconciliation (#280) drops this placeholder once the asset is gone from its
-                    // listing; this is the point to hand it the path sooner.
-                    note(&format!("'{removed}' was removed from Immich"));
-                }
-                reporting::report_failed(&report);
-                fail_data(
-                    &request,
-                    offset,
-                    length,
-                    failure.status(),
-                );
             }
-        }
         },
     );
 }

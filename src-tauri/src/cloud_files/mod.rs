@@ -57,7 +57,9 @@ pub(crate) use cleanup::CLEANUP_FAILED_ERROR;
 pub(crate) use cleanup::{CleanupError, CleanupReport};
 #[cfg(test)]
 pub(crate) use nested::{NestedRoot, Relation as NestedRelation};
-pub(crate) use reconciliation::{mark_populated, run_schedule, LibraryRefresh, SystemRefresh};
+pub(crate) use reconciliation::{
+    mark_populated, run_schedule, use_database, LibraryRefresh, SystemRefresh,
+};
 pub(crate) use reporting::{install as install_notice_sink, Notice, NoticeKind, NoticeSink};
 
 use std::path::PathBuf;

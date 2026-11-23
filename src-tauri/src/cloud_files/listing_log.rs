@@ -6,7 +6,7 @@
 //! each directory listing returned (with its counts) and why a listing or lookup found nothing,
 //! including what Immich itself reports for the directory ([`Library::explain_missing`]).
 
-use super::diagnostic_log::{Notes, SharedNotes, SystemNotes};
+use super::diagnostic_log::{SharedNotes, SystemNotes};
 use super::library::Library;
 use crate::immich::RemoteAssetId;
 use crate::virtual_library::{Entry, EntryKind, VirtualLibraryError};
@@ -83,7 +83,8 @@ impl<L: Library> Library for ListingLog<L> {
         let result = self.inner.resolve(path).await;
         if let Err(error) = &result {
             let why = self.describe_failure(path, error).await;
-            self.notes.note(&format!("resolving '{path}' failed: {why}"));
+            self.notes
+                .note(&format!("resolving '{path}' failed: {why}"));
         }
         result
     }
@@ -96,6 +97,7 @@ impl<L: Library> Library for ListingLog<L> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cloud_files::diagnostic_log::Notes;
     use crate::immich::RemoteFailure;
     use std::sync::Mutex;
 
@@ -138,7 +140,10 @@ mod tests {
         }
     }
 
-    fn logged(listing: Result<Vec<Entry>, VirtualLibraryError>, why: Option<&str>) -> (ListingLog<Fixed>, Arc<Recorded>) {
+    fn logged(
+        listing: Result<Vec<Entry>, VirtualLibraryError>,
+        why: Option<&str>,
+    ) -> (ListingLog<Fixed>, Arc<Recorded>) {
         let notes = Arc::new(Recorded::default());
         let library = ListingLog::with_notes(
             Fixed {
@@ -207,10 +212,16 @@ mod tests {
             None,
         );
 
-        assert!(library.resolve("All Photos/2016/04 April/a.jpg").await.is_err());
+        assert!(library
+            .resolve("All Photos/2016/04 April/a.jpg")
+            .await
+            .is_err());
 
         let lines = notes.0.lock().unwrap().clone();
-        assert!(lines[0].contains("resolving 'All Photos/2016/04 April/a.jpg' failed"), "{lines:?}");
+        assert!(
+            lines[0].contains("resolving 'All Photos/2016/04 April/a.jpg' failed"),
+            "{lines:?}"
+        );
         assert!(lines[0].contains("error sending request"), "{lines:?}");
     }
 

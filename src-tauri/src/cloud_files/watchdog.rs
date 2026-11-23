@@ -178,7 +178,11 @@ mod tests {
         // The next repair works.
         *provider.reconnect_result.lock().unwrap() = Ok(());
         for _ in 0..200 {
-            if notes.lines().iter().any(|line| line.contains("connected again")) {
+            if notes
+                .lines()
+                .iter()
+                .any(|line| line.contains("connected again"))
+            {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -186,6 +190,9 @@ mod tests {
         watching.abort();
 
         assert!(provider.reconnects.load(Ordering::SeqCst) >= 3);
-        assert!(notes.lines().iter().any(|line| line.contains("connected again")));
+        assert!(notes
+            .lines()
+            .iter()
+            .any(|line| line.contains("connected again")));
     }
 }

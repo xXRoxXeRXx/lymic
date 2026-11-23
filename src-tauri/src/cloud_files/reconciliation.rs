@@ -39,15 +39,25 @@ impl PopulatedDirectories for SqlitePopulated<'_> {
     }
 }
 
+/// Gives the callbacks their database before the sync root is served, so that no populated
+/// directory is lost to the time between the connection and the start of the schedule.
+pub(crate) fn use_database(pool: &SqlitePool) {
+    let _ = DATABASE.set(pool.clone());
+}
+
 /// Records that the directory at the root-relative `path` was populated, so reconciliation diffs it
 /// from now on. Called by the `FETCH_PLACEHOLDERS` callback once the platform has the placeholders.
 pub(crate) async fn mark_populated(path: &str) {
     let Some(pool) = DATABASE.get() else {
-        eprintln!("virtual library: no database to record the populated directory '{path}'");
+        super::system_note(&format!(
+            "no database to record the populated directory '{path}'"
+        ));
         return;
     };
     if let Err(error) = db::mark_virtual_library_directory_populated(pool, path).await {
-        eprintln!("virtual library: could not record the populated directory '{path}': {error}");
+        super::system_note(&format!(
+            "could not record the populated directory '{path}': {error}"
+        ));
     }
 }
 
@@ -99,7 +109,7 @@ async fn run_once(pool: &SqlitePool) -> Report {
 
 fn log(trigger: Trigger, report: &Report) {
     if let Some(failure) = &report.failure {
-        eprintln!("virtual library: reconciliation ({trigger:?}) failed: {failure}");
+        super::system_note(&format!("reconciliation ({trigger:?}) failed: {failure}"));
     }
 }
 

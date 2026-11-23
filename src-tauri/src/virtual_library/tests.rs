@@ -435,7 +435,8 @@ async fn disagreeing_server(count: usize, found: Vec<FakeAsset>) -> RoutedServer
             } else {
                 found.iter().map(FakeAsset::json).collect()
             };
-            let page = json!({ "assets": { "items": items, "nextPage": null, "total": items.len() } });
+            let page =
+                json!({ "assets": { "items": items, "nextPage": null, "total": items.len() } });
             return ("200 OK".into(), page.to_string());
         }
         ("404 Not Found".into(), "{}".into())
@@ -449,7 +450,11 @@ async fn a_month_the_timeline_reports_is_found_even_when_the_capture_window_miss
     // a window around April 2016 does not contain it.
     let late = FakeAsset {
         file_created_at: "2024-01-05T00:00:00.000Z",
-        ..asset("a1", "2016-04-29_182422_000.mp4", "2016-04-29T18:24:22.000Z")
+        ..asset(
+            "a1",
+            "2016-04-29_182422_000.mp4",
+            "2016-04-29T18:24:22.000Z",
+        )
     };
     let server = fake_library(vec![late]).await;
     let client = test_client(server.url.clone(), "key");
