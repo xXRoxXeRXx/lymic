@@ -60,6 +60,14 @@ pub(crate) use reporting::{install as install_notice_sink, Notice, NoticeKind, N
 
 use std::path::PathBuf;
 
+/// Writes one line to `lymic-virtual-library.log` (standard error without it, and off Windows).
+pub(crate) fn system_note(message: &str) {
+    #[cfg(windows)]
+    adapter::note(message);
+    #[cfg(not(windows))]
+    eprintln!("virtual library: {message}");
+}
+
 /// The provider part of the sync root id (`<provider>!<SID>!<account>`), also how Lymic recognises
 /// its own registrations.
 const PROVIDER_ID: &str = "Lymic.VirtualLibrary";

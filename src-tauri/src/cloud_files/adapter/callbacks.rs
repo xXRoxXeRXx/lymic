@@ -149,7 +149,7 @@ static LOG: LazyLock<Option<DiagnosticLog>> = LazyLock::new(|| {
 
 /// Diagnostics for failures nobody is waiting on, and the record of who read what. User-facing
 /// notices go through `reporting`.
-fn note(message: &str) {
+pub(in crate::cloud_files) fn note(message: &str) {
     eprintln!("virtual library: {message}");
     if let Some(log) = LOG.as_ref() {
         log.append(message);

@@ -48,6 +48,10 @@ impl ItemRefresh for ShellRefresh {
     }
 }
 
+pub(super) fn note(message: &str) {
+    callbacks::note(message);
+}
+
 fn runtime() -> Option<&'static tokio::runtime::Handle> {
     RUNTIME.get()
 }

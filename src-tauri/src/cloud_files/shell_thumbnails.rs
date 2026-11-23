@@ -22,6 +22,7 @@
 //!
 //! Disabling the Virtual Library or logging out clears the cache ([`clear_system_cache`]).
 
+use super::diagnostic_log::{NoNotes, Notes, SharedNotes, SystemNotes};
 use super::identity;
 use super::library::{Library, StoredCredentialsImmich};
 use crate::immich::RemoteAssetId;
@@ -31,6 +32,7 @@ use futures::StreamExt;
 use lymic_shell_ext::cache::ThumbnailCache;
 use std::collections::HashMap;
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// How many thumbnails of a listing are fetched before the listing returns.
@@ -71,12 +73,29 @@ pub(super) trait ThumbnailSource: Sync {
 
 impl ThumbnailSource for StoredCredentialsImmich {
     async fn thumbnail(&self, asset: &RemoteAssetId) -> Option<Vec<u8>> {
-        let session = Self::session().ok()?;
+        let session = match Self::session() {
+            Ok(session) => session,
+            Err(failure) => {
+                SystemNotes.note(&format!(
+                    "thumbnail of asset {}: no session: {}",
+                    asset.as_str(),
+                    failure.message
+                ));
+                return None;
+            }
+        };
         let client = session.client();
-        client
-            .get_thumbnail_in_format(asset.as_str(), "JPEG")
-            .await
-            .ok()
+        match client.get_thumbnail_in_format(asset.as_str(), "JPEG").await {
+            Ok(image) => Some(image),
+            Err(error) => {
+                SystemNotes.note(&format!(
+                    "thumbnail of asset {}: Immich did not deliver it: {}",
+                    asset.as_str(),
+                    session.credentials().redact(&error)
+                ));
+                None
+            }
+        }
     }
 }
 
@@ -102,11 +121,13 @@ pub(super) fn jobs(parent: &str, entries: &[Entry]) -> Vec<Job> {
 }
 
 /// What caching a batch did.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(super) struct Warmed {
     pub stored: usize,
     pub already_cached: usize,
     pub failed: usize,
+    /// Why the first thumbnail that failed did, for the log.
+    pub first_failure: Option<String>,
 }
 
 impl Warmed {
@@ -114,6 +135,21 @@ impl Warmed {
         self.stored += other.stored;
         self.already_cached += other.already_cached;
         self.failed += other.failed;
+        if self.first_failure.is_none() {
+            self.first_failure = other.first_failure;
+        }
+    }
+
+    /// `3 cached, 1 already cached, 2 failed (first failure: ...)`.
+    pub(super) fn describe(&self) -> String {
+        let mut text = format!(
+            "{} cached, {} already cached, {} failed",
+            self.stored, self.already_cached, self.failed
+        );
+        if let Some(reason) = &self.first_failure {
+            text.push_str(&format!(" (first failure: {reason})"));
+        }
+        text
     }
 }
 
@@ -136,15 +172,24 @@ async fn warm_one<S: ThumbnailSource>(
         }
         tokio::time::sleep(retry.delay * attempt).await;
     }
+    let name = String::from_utf8_lossy(&job.identity).into_owned();
     let Some(image) = image else {
         outcome.failed = 1;
+        outcome.first_failure = Some(format!("no thumbnail from Immich for '{name}'"));
         return outcome;
     };
     let (cache, identity) = (cache.clone(), job.identity.clone());
     let stored = tokio::task::spawn_blocking(move || cache.store(&identity, &image)).await;
     match stored {
         Ok(Ok(())) => outcome.stored = 1,
-        _ => outcome.failed = 1,
+        Ok(Err(error)) => {
+            outcome.failed = 1;
+            outcome.first_failure = Some(format!("'{name}' was not stored: {error}"));
+        }
+        Err(error) => {
+            outcome.failed = 1;
+            outcome.first_failure = Some(format!("'{name}' was not stored: {error}"));
+        }
     }
     outcome
 }
@@ -183,6 +228,7 @@ pub(super) struct WarmingLibrary<L, S> {
     pub(super) prewarm_count: usize,
     pub(super) prewarm_deadline: Duration,
     pub(super) retry: Retry,
+    pub(super) notes: SharedNotes,
 }
 
 impl<L, S> WarmingLibrary<L, S> {
@@ -194,6 +240,7 @@ impl<L, S> WarmingLibrary<L, S> {
             prewarm_count: PREWARM_COUNT,
             prewarm_deadline: PREWARM_DEADLINE,
             retry: RETRY,
+            notes: Arc::new(NoNotes),
         }
     }
 }
@@ -201,7 +248,9 @@ impl<L, S> WarmingLibrary<L, S> {
 impl<L> WarmingLibrary<L, StoredCredentialsImmich> {
     /// Over the real Immich and the running package's cache.
     pub(super) fn system(inner: L) -> Self {
-        Self::new(inner, StoredCredentialsImmich, system_cache())
+        let mut library = Self::new(inner, StoredCredentialsImmich, system_cache());
+        library.notes = Arc::new(SystemNotes);
+        library
     }
 }
 
@@ -213,19 +262,62 @@ where
     async fn list(&self, path: &str) -> Result<Vec<Entry>, VirtualLibraryError> {
         let entries = self.inner.list(path).await?;
         let Some(cache) = &self.cache else {
+            self.notes.note(&format!(
+                "no thumbnail cache (no package identity): '{path}' is listed without thumbnails"
+            ));
             return Ok(entries);
         };
         let mut jobs = jobs(path, &entries);
         let later = jobs.split_off(self.prewarm_count.min(jobs.len()));
-        // Not finishing in time is fine: those thumbnails are simply missing for now.
-        let _ = tokio::time::timeout(
-            self.prewarm_deadline,
-            warm(cache, &self.source, &jobs, self.retry),
-        )
-        .await;
-        let (cache, source, retry) = (cache.clone(), self.source.clone(), self.retry);
+        let (first, rest) = (jobs.len(), later.len());
+        // The first thumbnails are fetched on a task of their own: when the deadline passes the
+        // listing returns and the task carries on, instead of being dropped half way, so what is
+        // not there by then arrives later.
+        let mut prewarm = {
+            let (cache, source, retry) = (cache.clone(), self.source.clone(), self.retry);
+            tokio::spawn(async move { warm(&cache, &source, &jobs, retry).await })
+        };
+        let finished = tokio::time::timeout(self.prewarm_deadline, &mut prewarm).await;
+        let (cache, source, retry, notes) = (
+            cache.clone(),
+            self.source.clone(),
+            self.retry,
+            self.notes.clone(),
+        );
+        let path = path.to_string();
+        match &finished {
+            Ok(Ok(warmed)) => notes.note(&format!(
+                "thumbnails of '{path}': the first {first} before the listing returned: {}",
+                warmed.describe()
+            )),
+            Ok(Err(error)) => notes.note(&format!(
+                "thumbnails of '{path}': the first {first} stopped with an error: {error}"
+            )),
+            Err(_) => notes.note(&format!(
+                "thumbnails of '{path}': the first {first} were not all there after {} ms; they continue in the background",
+                self.prewarm_deadline.as_millis()
+            )),
+        }
+        let late = finished.is_err();
         tokio::spawn(async move {
-            warm(&cache, &source, &later, retry).await;
+            if late {
+                match prewarm.await {
+                    Ok(warmed) => notes.note(&format!(
+                        "thumbnails of '{path}': the first {first}, finished late: {}",
+                        warmed.describe()
+                    )),
+                    Err(error) => notes.note(&format!(
+                        "thumbnails of '{path}': the first {first} stopped with an error: {error}"
+                    )),
+                }
+            }
+            if rest > 0 {
+                let warmed = warm(&cache, &source, &later, retry).await;
+                notes.note(&format!(
+                    "thumbnails of '{path}': the other {rest} in the background: {}",
+                    warmed.describe()
+                ));
+            }
             let _ = tokio::task::spawn_blocking(move || cache.trim(CACHE_LIMIT_BYTES)).await;
         });
         Ok(entries)
@@ -585,12 +677,12 @@ mod tests {
         let warmed = warm(&cache, &source, &jobs, FAST).await;
 
         assert_eq!(
-            warmed,
-            Warmed {
-                stored: 1,
-                already_cached: 1,
-                failed: 1
-            }
+            (warmed.stored, warmed.already_cached, warmed.failed),
+            (1, 1, 1)
+        );
+        assert_eq!(
+            warmed.first_failure.as_deref(),
+            Some("no thumbnail from Immich for 'fail.jpg'")
         );
     }
 
@@ -616,6 +708,51 @@ mod tests {
         assert_eq!(listed.len(), 2);
         assert!(dir.cache().contains(b"fast.jpg"));
         assert!(!dir.cache().contains(b"slow.jpg"));
+    }
+
+    /// Answers like [`FakeSource`], but only after `delay`.
+    #[derive(Clone)]
+    struct DelayedSource {
+        inner: FakeSource,
+        delay: Duration,
+    }
+
+    impl ThumbnailSource for DelayedSource {
+        async fn thumbnail(&self, asset: &RemoteAssetId) -> Option<Vec<u8>> {
+            tokio::time::sleep(self.delay).await;
+            self.inner.thumbnail(asset).await
+        }
+    }
+
+    #[tokio::test]
+    async fn a_prewarm_that_misses_the_deadline_is_finished_in_the_background_not_abandoned() {
+        let dir = TempDir::new();
+        let source = DelayedSource {
+            inner: FakeSource::with(&[("1", JPEG), ("2", JPEG)]),
+            delay: Duration::from_millis(300),
+        };
+        let mut library = WarmingLibrary::new(
+            FakeLibrary(Ok(vec![
+                file("1.jpg", Some("1")),
+                file("2.jpg", Some("2")),
+            ])),
+            source,
+            Some(dir.cache()),
+        );
+        library.retry = FAST;
+        library.prewarm_deadline = Duration::from_millis(50);
+
+        let listed = library.list("").await.unwrap();
+
+        assert_eq!(listed.len(), 2, "the listing does not wait for them");
+        let cache = dir.cache();
+        for _ in 0..100 {
+            if cache.contains(b"1.jpg") && cache.contains(b"2.jpg") {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("the thumbnails the deadline cut short never arrived");
     }
 
     #[tokio::test]
