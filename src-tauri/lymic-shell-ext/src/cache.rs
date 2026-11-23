@@ -6,9 +6,11 @@
 //! the bytes to a file name and looks there. Whatever the app puts under that name is what Explorer
 //! shows.
 //!
-//! The provider must never cause Hydration, so a miss is an error ([`Unavailable`]), never a reason
-//! to fetch anything or to read the placeholder. Explorer then shows its generic icon until the app
-//! has cached a thumbnail.
+//! The provider must never cause Hydration, so a miss is never a reason to fetch anything or to
+//! read the placeholder. It is not reported to Explorer as an error either: Explorer would fall back
+//! to the file type's default handler, which reads the placeholder and downloads the original.
+//! Instead the provider answers a miss with [`generic_thumbnail`] and leaves a request for the app
+//! ([`ThumbnailCache::record_miss`]), which caches the thumbnail and refreshes the item.
 //!
 //! Everything here is plain file I/O and runs on every platform.
 
@@ -24,6 +26,9 @@ pub const MAX_THUMBNAIL_BYTES: usize = 8 * 1024 * 1024;
 
 /// Extension of a cached thumbnail. Anything else in the directory is left alone by [`ThumbnailCache::trim`].
 const EXTENSION: &str = "thumb";
+
+/// Extension of a request for a thumbnail that was asked for and was not cached.
+const MISS_EXTENSION: &str = "miss";
 
 /// Why there is nothing to show for a placeholder. Every case ends the request with an error; none
 /// of them is a reason to touch the placeholder.
@@ -88,6 +93,61 @@ pub fn directory_under(local_state: &Path) -> PathBuf {
     local_state.join("shell-thumbnails")
 }
 
+/// A thumbnail Explorer asked for that was not cached, as left by the provider for the app.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Miss {
+    /// The placeholder's file identity.
+    pub identity: Vec<u8>,
+    /// The file's full path, which is what the shell is told to refresh once the thumbnail is there.
+    pub path: String,
+}
+
+/// A thumbnail image as 32 bit premultiplied BGRA pixels, top row first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pixels {
+    pub width: u32,
+    pub height: u32,
+    pub bgra: Vec<u8>,
+}
+
+/// The smallest and largest edge of [`generic_thumbnail`].
+const GENERIC_MIN_EDGE: u32 = 16;
+const GENERIC_MAX_EDGE: u32 = 256;
+
+/// What a placeholder shows while its thumbnail is not cached: a plain neutral square with a darker
+/// frame, `edge` pixels wide (clamped to 16 to 256). Opaque, so there is nothing to premultiply.
+pub fn generic_thumbnail(edge: u32) -> Pixels {
+    let edge = edge.clamp(GENERIC_MIN_EDGE, GENERIC_MAX_EDGE);
+    let frame = (edge / 32).max(1);
+    let mut bgra = Vec::with_capacity((edge * edge * 4) as usize);
+    for y in 0..edge {
+        for x in 0..edge {
+            let on_frame = x < frame || y < frame || x >= edge - frame || y >= edge - frame;
+            let gray = if on_frame { 0xB4 } else { 0xDC };
+            bgra.extend_from_slice(&[gray, gray, gray, 0xFF]);
+        }
+    }
+    Pixels {
+        width: edge,
+        height: edge,
+        bgra,
+    }
+}
+
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn from_hex(text: &str) -> Option<Vec<u8>> {
+    if text.is_empty() || !text.len().is_multiple_of(2) || !text.is_ascii() {
+        return None;
+    }
+    (0..text.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&text[at..at + 2], 16).ok())
+        .collect()
+}
+
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// A directory of cached thumbnails.
@@ -127,7 +187,67 @@ impl ThumbnailCache {
         if bytes.is_empty() || bytes.len() > MAX_THUMBNAIL_BYTES {
             return Err(Unavailable::Unusable);
         }
+        // Serving it counts as using it, so `trim` removes what nobody looks at first. Best effort.
+        if let Ok(file) = fs::File::options().write(true).open(&path) {
+            let _ = file.set_modified(std::time::SystemTime::now());
+        }
         Ok(bytes)
+    }
+
+    fn miss_path(&self, identity: &[u8]) -> PathBuf {
+        self.directory
+            .join(format!("{}.{MISS_EXTENSION}", key(identity)))
+    }
+
+    /// Leaves the app a request to cache the thumbnail of the placeholder at `path`. Asking again
+    /// for the same placeholder replaces the request; one for a placeholder that is cached by now,
+    /// or without an identity, is not made. Never fails the caller: a request that is lost is made
+    /// again the next time Explorer asks.
+    pub fn record_miss(&self, identity: &[u8], path: &str) {
+        if identity.is_empty() || self.contains(identity) {
+            return;
+        }
+        let _ = fs::create_dir_all(&self.directory);
+        let target = self.miss_path(identity);
+        let temporary = self.directory.join(format!(
+            "{}.{}-{}.tmp",
+            key(identity),
+            std::process::id(),
+            TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let content = format!("{}\n{path}", to_hex(identity));
+        if fs::write(&temporary, content).is_err() || fs::rename(&temporary, &target).is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+    }
+
+    /// The requests left by the provider, removed as they are read. A request whose thumbnail is
+    /// cached by now, or that cannot be read, is dropped and not returned.
+    pub fn take_misses(&self) -> Vec<Miss> {
+        let Ok(entries) = fs::read_dir(&self.directory) else {
+            return Vec::new();
+        };
+        let mut misses = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some(MISS_EXTENSION) {
+                continue;
+            }
+            let content = fs::read_to_string(&path).ok();
+            if fs::remove_file(&path).is_err() {
+                continue;
+            }
+            let Some((identity, path)) = content.as_deref().and_then(|text| {
+                let (hex, path) = text.split_once('\n')?;
+                Some((from_hex(hex)?, path.to_string()))
+            }) else {
+                continue;
+            };
+            if !self.contains(&identity) {
+                misses.push(Miss { identity, path });
+            }
+        }
+        misses
     }
 
     /// Caches `image` for the placeholder, replacing an earlier one. The file appears whole or not
@@ -157,9 +277,10 @@ impl ThumbnailCache {
         })
     }
 
-    /// Deletes the oldest thumbnails until what is left fits in `limit_bytes`. Returns how many
-    /// were removed. The age is the time of writing, so this is first in, first out; a thumbnail
-    /// that is still wanted is written again the next time its directory is listed.
+    /// Deletes the least recently used thumbnails until what is left fits in `limit_bytes`. Returns
+    /// how many were removed. A thumbnail is used when it is written and when it is served
+    /// ([`ThumbnailCache::load`] refreshes its time), so what Explorer keeps showing stays; one that
+    /// is wanted again after it was removed is cached again on the next miss.
     pub fn trim(&self, limit_bytes: u64) -> io::Result<usize> {
         let mut files = Vec::new();
         let entries = match fs::read_dir(&self.directory) {
@@ -411,6 +532,97 @@ mod tests {
         assert!(!cache.contains(b"a.jpg"));
         assert!(!cache.contains(b"b.jpg"));
         assert!(!cache.directory.exists());
+    }
+
+    #[test]
+    fn a_miss_is_recorded_for_the_app_with_the_identity_and_the_path_and_can_be_taken_once() {
+        let dir = TempDir::new();
+        let cache = cache(&dir);
+        let identity = "Albums/Urlaub \u{2600}/IMG_0001.jpg".as_bytes();
+
+        cache.record_miss(identity, r"C:\Users\me\Pictures\Lymic\a.jpg");
+        cache.record_miss(identity, r"C:\Users\me\Pictures\Lymic\a.jpg");
+
+        let misses = cache.take_misses();
+        assert_eq!(misses.len(), 1, "asking twice is one request");
+        assert_eq!(misses[0].identity, identity);
+        assert_eq!(misses[0].path, r"C:\Users\me\Pictures\Lymic\a.jpg");
+        assert!(cache.take_misses().is_empty(), "taken means gone");
+    }
+
+    #[test]
+    fn a_miss_for_a_thumbnail_that_is_cached_by_now_is_not_requested() {
+        let dir = TempDir::new();
+        let cache = cache(&dir);
+        cache.store(b"a.jpg", JPEG).unwrap();
+
+        cache.record_miss(b"a.jpg", r"C:\a.jpg");
+
+        assert!(cache.take_misses().is_empty());
+    }
+
+    #[test]
+    fn an_empty_identity_or_unreadable_miss_file_is_never_a_request() {
+        let dir = TempDir::new();
+        let cache = cache(&dir);
+        cache.record_miss(b"", r"C:\a.jpg");
+        fs::create_dir_all(&cache.directory).unwrap();
+        fs::write(cache.directory.join("garbage.miss"), b"not hex\nx").unwrap();
+
+        assert!(cache.take_misses().is_empty());
+        assert!(
+            !cache.directory.join("garbage.miss").exists(),
+            "a broken request does not stay to be read again"
+        );
+    }
+
+    #[test]
+    fn miss_requests_are_not_thumbnails_and_are_not_trimmed() {
+        let dir = TempDir::new();
+        let cache = cache(&dir);
+        cache.record_miss(b"a.jpg", r"C:\a.jpg");
+
+        assert_eq!(cache.trim(0).unwrap(), 0);
+        assert_eq!(cache.take_misses().len(), 1);
+    }
+
+    #[test]
+    fn the_generic_thumbnail_is_an_opaque_square_of_the_requested_edge_in_bgra() {
+        let image = generic_thumbnail(64);
+
+        assert_eq!((image.width, image.height), (64, 64));
+        assert_eq!(image.bgra.len(), 64 * 64 * 4);
+        assert!(image.bgra.chunks(4).all(|pixel| pixel[3] == 0xFF));
+    }
+
+    #[test]
+    fn the_generic_thumbnail_is_never_huge_or_empty() {
+        assert_eq!(generic_thumbnail(0).width, 16);
+        assert_eq!(generic_thumbnail(100_000).width, 256);
+    }
+
+    #[test]
+    fn a_thumbnail_that_was_just_shown_outlives_one_that_was_written_later_but_never_used() {
+        let dir = TempDir::new();
+        let cache = cache(&dir);
+        let mut image = JPEG.to_vec();
+        image.resize(100, 7);
+        for name in [&b"shown"[..], b"unused"] {
+            cache.store(name, &image).unwrap();
+        }
+        // "shown" was written first, "unused" later; then "shown" is served to Explorer.
+        age(&cache, b"shown", 300);
+        age(&cache, b"unused", 200);
+        cache.load(b"shown").unwrap();
+
+        let removed = cache.trim(150).unwrap();
+
+        assert_eq!(removed, 1);
+        assert!(cache.contains(b"shown"), "recently used stays");
+        assert!(
+            !cache.contains(b"unused"),
+            "written later but never used goes first"
+        );
     }
 
     #[test]
