@@ -105,6 +105,20 @@ where
         .await
         .map_err(Failure::from_library)?;
     let mut stream = source.open(&asset).await?;
+    // The server says how long the original is before sending it: a size that differs from the
+    // placeholder's cannot hydrate it, so fail now instead of downloading the whole body first.
+    if let Some(announced) = stream.content_length() {
+        if announced != request.file_size {
+            return Err(size_mismatch(
+                request,
+                if announced > request.file_size {
+                    "longer"
+                } else {
+                    "shorter"
+                },
+            ));
+        }
+    }
 
     let start = align_down(request.required_offset);
     let mut aligner = BlockAligner::starting_at(start);
@@ -209,6 +223,8 @@ mod tests {
         then_error: Option<Failure>,
         open_error: Option<Failure>,
         opened: Mutex<Vec<String>>,
+        /// The `Content-Length` the server announces, if it does.
+        announced: Option<u64>,
     }
 
     impl FakeSource {
@@ -218,6 +234,7 @@ mod tests {
                 then_error: None,
                 open_error: None,
                 opened: Mutex::new(Vec::new()),
+                announced: Some(data.len() as u64),
             }
         }
     }
@@ -225,6 +242,7 @@ mod tests {
     struct FakeStream {
         chunks: std::vec::IntoIter<Bytes>,
         then_error: Option<Failure>,
+        announced: Option<u64>,
     }
 
     impl OriginalSource for FakeSource {
@@ -237,12 +255,17 @@ mod tests {
                 None => Ok(FakeStream {
                     chunks: self.chunks.clone().into_iter(),
                     then_error: self.then_error.clone(),
+                    announced: self.announced,
                 }),
             }
         }
     }
 
     impl OriginalStream for FakeStream {
+        fn content_length(&self) -> Option<u64> {
+            self.announced
+        }
+
         async fn next_chunk(&mut self) -> Result<Option<Bytes>, Failure> {
             match self.chunks.next() {
                 Some(chunk) => Ok(Some(chunk)),
@@ -312,6 +335,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn an_original_announced_with_another_size_fails_before_any_byte_is_transferred() {
+        let data = bytes_of(5_000);
+        let mut source = FakeSource::serving(&data, 1_000);
+        source.announced = Some(4_000);
+        let mut sink = RecordingSink::default();
+
+        let failure = hydrate(&library(), &source, &mut sink, &request(5_000))
+            .await
+            .unwrap_err();
+
+        assert_eq!(failure.kind, FailureKind::Failed);
+        assert!(sink.blocks.is_empty(), "nothing was handed to the platform");
+    }
+
+    #[tokio::test]
+    async fn an_original_announced_with_the_right_size_or_none_is_served() {
+        let data = bytes_of(5_000);
+        for announced in [Some(5_000), None] {
+            let mut source = FakeSource::serving(&data, 1_000);
+            source.announced = announced;
+            let mut sink = RecordingSink::default();
+
+            hydrate(&library(), &source, &mut sink, &request(5_000))
+                .await
+                .unwrap();
+
+            assert_eq!(sink.blocks.len(), 1, "announced {announced:?}");
+        }
+    }
+
+    #[tokio::test]
     async fn a_small_file_is_one_unaligned_block_that_ends_the_file() {
         let data = bytes_of(5_000);
         let source = FakeSource::serving(&data, 1_000);
@@ -366,6 +420,8 @@ mod tests {
         let data = bytes_of(BLOCK_BYTES + 10);
         let mut source = FakeSource::serving(&data[..BLOCK_BYTES + 5], BLOCK_BYTES);
         source.then_error = Some(Failure::new(FailureKind::Offline, "reset"));
+        // The server announced the whole original before the connection dropped.
+        source.announced = Some(data.len() as u64);
 
         let failure = hydrate(
             &library(),

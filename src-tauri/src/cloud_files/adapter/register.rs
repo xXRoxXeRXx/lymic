@@ -9,7 +9,7 @@
 //! `com:ExeServer` registered, which is why the manifest declares an executable server by default
 //! (`docs/store/local-msix-build.md`).
 
-use crate::cloud_files::PROVIDER_ID;
+use crate::cloud_files::{registration, PROVIDER_ID};
 use std::path::Path;
 use windows::core::{Result, HSTRING, PWSTR};
 use windows::Security::Cryptography::{BinaryStringEncoding, CryptographicBuffer};
@@ -69,11 +69,22 @@ pub(super) fn register(root: &Path) -> Result<()> {
     info.SetId(&HSTRING::from(sync_root_id()?))?;
     info.SetPath(&folder)?;
     info.SetDisplayNameResource(&HSTRING::from("Lymic"))?;
-    info.SetIconResource(&HSTRING::from(r"%SystemRoot%\system32\imageres.dll,-1043"))?;
+    // Lymic's own icon (the first one of the executable); the stock imageres icon if its path is
+    // unknown.
+    info.SetIconResource(&HSTRING::from(registration::icon_resource(
+        std::env::current_exe().ok().as_deref(),
+    )))?;
     info.SetHydrationPolicy(StorageProviderHydrationPolicy::Full)?;
-    info.SetHydrationPolicyModifier(StorageProviderHydrationPolicyModifier::None)?;
+    // Hydrated originals may be given back to the cloud by Storage Sense and "Free up space"; the
+    // placeholders are always in sync, so nothing is lost.
+    info.SetHydrationPolicyModifier(
+        StorageProviderHydrationPolicyModifier::AutoDehydrationAllowed,
+    )?;
     info.SetPopulationPolicy(StorageProviderPopulationPolicy::Full)?;
-    info.SetInSyncPolicy(StorageProviderInSyncPolicy::Default)?;
+    // Placeholders are created in sync and Lymic only ever updates them through
+    // `CfUpdatePlaceholder` with the in-sync mark, so its own changes must not clear that state;
+    // otherwise Explorer would show a sync pending glyph on a read-only library.
+    info.SetInSyncPolicy(StorageProviderInSyncPolicy::PreserveInsyncForSyncEngine)?;
     info.SetHardlinkPolicy(StorageProviderHardlinkPolicy::None)?;
     info.SetShowSiblingsAsGroup(false)?;
     info.SetVersion(&HSTRING::from(env!("CARGO_PKG_VERSION")))?;

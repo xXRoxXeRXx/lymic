@@ -23,11 +23,12 @@ use std::mem::{offset_of, size_of};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use windows::core::{HRESULT, PCWSTR};
-use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND};
+use windows::Win32::Foundation::{CloseHandle, ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND};
 use windows::Win32::Storage::CloudFilters::*;
 use windows::Win32::Storage::FileSystem::{
-    FindClose, FindFirstFileW, FindNextFileW, FILE_ATTRIBUTE_DIRECTORY, FILE_BASIC_INFO,
-    WIN32_FIND_DATAW,
+    CreateFileW, FindClose, FindFirstFileW, FindNextFileW, FILE_ATTRIBUTE_DIRECTORY,
+    FILE_BASIC_INFO, FILE_FLAG_BACKUP_SEMANTICS, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
+    FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, WIN32_FIND_DATAW,
 };
 
 /// Placeholders Lymic is deleting right now, by root-relative path.
@@ -123,9 +124,22 @@ fn is_placeholder(data: &WIN32_FIND_DATAW) -> bool {
 /// when it cannot be read, which makes the item not ours.
 fn placeholder_details(path: &Path) -> Option<(Option<String>, bool)> {
     let wide = wide_path(path);
+    // An attributes-only handle (the one the thumbnail provider reads identities with): it does not
+    // read data, so it cannot hydrate, and unlike `CfOpenFileWithOplock` it takes no oplock, which
+    // matters when every child of a directory is looked at.
     // SAFETY: `wide` is NUL terminated; the handle is closed below.
-    let handle =
-        unsafe { CfOpenFileWithOplock(PCWSTR(wide.as_ptr()), CF_OPEN_FILE_FLAG_NONE) }.ok()?;
+    let handle = unsafe {
+        CreateFileW(
+            PCWSTR(wide.as_ptr()),
+            FILE_READ_ATTRIBUTES.0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            None,
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS,
+            None,
+        )
+    }
+    .ok()?;
     let mut buffer =
         vec![0u8; size_of::<CF_PLACEHOLDER_BASIC_INFO>() + identity::MAX_IDENTITY_BYTES];
     // SAFETY: `buffer` is writable for its whole length.
@@ -138,8 +152,8 @@ fn placeholder_details(path: &Path) -> Option<(Option<String>, bool)> {
             None,
         )
     };
-    // SAFETY: the handle came from `CfOpenFileWithOplock` and is closed once.
-    unsafe { CfCloseHandle(handle) };
+    // SAFETY: the handle came from `CreateFileW` above and is closed once.
+    let _ = unsafe { CloseHandle(handle) };
     result.ok()?;
     // SAFETY: the platform filled a `CF_PLACEHOLDER_BASIC_INFO`; the buffer is only byte aligned.
     let info =
@@ -306,7 +320,11 @@ fn metadata_of(spec: &crate::cloud_files::placeholder::PlaceholderSpec) -> CF_FS
             LastAccessTime: spec.modified,
             LastWriteTime: spec.modified,
             ChangeTime: spec.modified,
-            // 0 leaves the attributes as they are.
+            // 0 leaves the attributes as they are. Placeholders created before they were marked
+            // not content indexed (`PlaceholderSpec::attributes`) keep their old attributes: writing
+            // an attribute set here could also clear the ones the platform manages (offline,
+            // recall on data access), which has not been observed to be safe. Disabling and
+            // enabling the Virtual Library recreates them with the attribute.
             FileAttributes: 0,
         },
         FileSize: spec.size as i64,

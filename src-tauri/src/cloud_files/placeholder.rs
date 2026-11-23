@@ -45,6 +45,23 @@ pub(super) fn filetime(moment: Option<DateTime<Utc>>) -> i64 {
         .saturating_add(i64::from(moment.timestamp_subsec_nanos() / 100))
 }
 
+impl PlaceholderSpec {
+    /// The file attributes the placeholder is created with. `FILE_ATTRIBUTE_NOT_CONTENT_INDEXED`
+    /// asks Windows Search to leave the content alone: its indexer (`SearchProtocolHost`) reads
+    /// every file it indexes, and reading a placeholder downloads the original. It replaces
+    /// `FILE_ATTRIBUTE_NORMAL`, which is only valid on its own. A directory keeps
+    /// `FILE_ATTRIBUTE_DIRECTORY`.
+    pub fn attributes(&self) -> u32 {
+        const NOT_CONTENT_INDEXED: u32 = 0x2000;
+        const DIRECTORY: u32 = 0x10;
+        if self.is_directory {
+            DIRECTORY | NOT_CONTENT_INDEXED
+        } else {
+            NOT_CONTENT_INDEXED
+        }
+    }
+}
+
 /// The placeholders for the `entries` of the directory at `parent`.
 ///
 /// A file whose size Immich did not report is skipped, never shown as an empty file: a zero-byte
@@ -215,5 +232,21 @@ mod tests {
 
         assert!(plan.specs.is_empty());
         assert_eq!(plan.skipped, vec!["a.jpg".to_string()]);
+    }
+
+    #[test]
+    fn placeholders_are_excluded_from_content_indexing() {
+        let plan = plan("", &[file("a.jpg", Some(1)), directory("Albums")]);
+
+        // 0x2000 is FILE_ATTRIBUTE_NOT_CONTENT_INDEXED, 0x10 FILE_ATTRIBUTE_DIRECTORY (winnt.h).
+        assert_eq!(plan.specs[0].attributes(), 0x2000);
+        assert_eq!(plan.specs[1].attributes(), 0x2000 | 0x10);
+    }
+
+    #[test]
+    fn a_file_never_carries_the_normal_attribute_which_is_only_valid_alone() {
+        let plan = plan("", &[file("a.jpg", Some(1))]);
+
+        assert_eq!(plan.specs[0].attributes() & 0x80, 0);
     }
 }

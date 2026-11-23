@@ -377,6 +377,48 @@ async fn assets_without_a_usable_capture_time_are_filed_under_undated() {
 }
 
 #[tokio::test]
+async fn an_asset_whose_capture_time_is_the_unix_epoch_is_filed_under_undated_not_1970() {
+    // Immich reports `localDateTime` = 1970-01-01T00:00:00.000Z for an asset without a capture
+    // time (observed on a real server: a `.3gp` landed in `All Photos/1970/01 January`).
+    let server = fake_library(vec![
+        asset("d1", "IMG_0100.jpg", "2025-06-15T12:00:00.000Z"),
+        asset("e1", "Garfild.3gp", "1970-01-01T00:00:00.000Z"),
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(
+        names(&library.list("All Photos").await.unwrap()),
+        ["2025", "Undated"]
+    );
+    assert_eq!(
+        names(&library.list("All Photos/Undated").await.unwrap()),
+        ["Garfild.3gp"]
+    );
+    assert_eq!(
+        library.list("All Photos/1970").await,
+        Err(VirtualLibraryError::NotFound)
+    );
+    assert_eq!(
+        library.resolve("All Photos/Undated/Garfild.3gp").await,
+        Ok(RemoteAssetId::new("e1"))
+    );
+}
+
+#[tokio::test]
+async fn a_library_whose_only_asset_has_the_epoch_capture_time_shows_only_undated() {
+    let server = fake_library(vec![asset("e1", "Garfild.3gp", "1970-01-01T00:00:00.000Z")]).await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(
+        names(&library.list("All Photos").await.unwrap()),
+        ["Undated"]
+    );
+}
+
+#[tokio::test]
 async fn resolving_a_file_returns_the_remote_asset_it_represents() {
     let server = fake_library(near_midnight_library()).await;
     let client = test_client(server.url.clone(), "key");

@@ -49,4 +49,42 @@ mod tests {
         );
         assert!(template.contains("{{THUMBNAIL_COM_SERVER}}"));
     }
+
+    #[test]
+    fn the_manifest_template_declares_all_five_cloud_files_handlers() {
+        // makeappx (Windows SDK 10.0.26100) rejects a `CloudFiles` element that lacks any of them.
+        let template = include_str!("../../msix/AppxManifest.template.xml");
+
+        for handler in [
+            "<desktop3:CustomStateHandler",
+            "<desktop3:ThumbnailProviderHandler",
+            "<desktop3:ExtendedPropertyHandler",
+            "<desktop3:BannersHandler",
+            "<desktop3:CloudFilesContextMenus",
+        ] {
+            assert!(template.contains(handler), "{handler} is missing");
+        }
+    }
+
+    #[test]
+    fn the_packaging_script_fills_the_clsid_of_every_handler_the_template_leaves_open() {
+        let template = include_str!("../../msix/AppxManifest.template.xml");
+        let script = include_str!("../../../scripts/package-msix.ps1");
+
+        for placeholder in [
+            "{{CUSTOM_STATE_CLSID_ATTRIBUTE}}",
+            "{{EXTENDED_PROPERTY_CLSID_ATTRIBUTE}}",
+            "{{BANNERS_CLSID_ATTRIBUTE}}",
+        ] {
+            assert!(
+                template.contains(placeholder),
+                "{placeholder} not in the template"
+            );
+            let pattern = placeholder.replace('{', r"\{").replace('}', r"\}");
+            assert!(
+                script.contains(&pattern),
+                "{placeholder} not filled by the script"
+            );
+        }
+    }
 }

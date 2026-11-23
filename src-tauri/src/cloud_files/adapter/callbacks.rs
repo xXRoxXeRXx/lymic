@@ -5,6 +5,7 @@
 //! `NOTIFY_DELETE` and `NOTIFY_RENAME` (#279) are the exception to "spawn and return": they only
 //! refuse (`write_guard`), do no I/O, and acknowledge inline.
 
+use crate::cloud_files::diagnostic_log::DiagnosticLog;
 use crate::cloud_files::failure::{CloudStatus, Failure, FailureKind};
 use crate::cloud_files::hydration::{self, Block, DataRequest, DataSink};
 use crate::cloud_files::identity;
@@ -12,6 +13,7 @@ use crate::cloud_files::inflight::InFlight;
 use crate::cloud_files::library::StoredCredentialsImmich;
 use crate::cloud_files::placeholder::PlaceholderSpec;
 use crate::cloud_files::population;
+use crate::cloud_files::readers::{self, Reader, Verdict};
 use crate::cloud_files::reporting::{self, Operation, Report};
 use crate::cloud_files::shell_thumbnails::WarmingLibrary;
 use crate::cloud_files::write_guard;
@@ -24,9 +26,7 @@ use windows::Win32::Foundation::{
     STATUS_CLOUD_FILE_UNSUCCESSFUL, STATUS_OBJECT_NAME_NOT_FOUND,
 };
 use windows::Win32::Storage::CloudFilters::*;
-use windows::Win32::Storage::FileSystem::{
-    FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL, FILE_BASIC_INFO,
-};
+use windows::Win32::Storage::FileSystem::FILE_BASIC_INFO;
 
 const STATUS_SUCCESS: NTSTATUS = NTSTATUS(0);
 /// The downloads in flight, so `CANCEL_FETCH_DATA` can stop one.
@@ -52,6 +52,20 @@ pub(super) struct Request {
     /// The placeholder's file identity: its path relative to the Virtual Library root.
     identity: Vec<u8>,
     file_size: i64,
+    /// The process that triggered the callback (`CF_CONNECT_FLAG_REQUIRE_PROCESS_INFO`).
+    reader: Reader,
+}
+
+/// Reads a platform string that may be null.
+///
+/// # Safety
+/// `text` must be null or point to a NUL terminated string valid for the call.
+unsafe fn optional_string(text: PCWSTR) -> Option<String> {
+    if text.is_null() {
+        None
+    } else {
+        unsafe { text.to_string() }.ok()
+    }
 }
 
 impl Request {
@@ -71,12 +85,26 @@ impl Request {
             }
             .to_vec()
         };
+        let reader = if info.ProcessInfo.is_null() {
+            Reader::default()
+        } else {
+            // SAFETY: the platform passes a valid `CF_PROCESS_INFO` when the connection asked for
+            // process information, valid while the callback runs; its strings are NUL terminated
+            // or null.
+            let process = unsafe { &*info.ProcessInfo };
+            Reader {
+                process_id: process.ProcessId,
+                image_path: unsafe { optional_string(process.ImagePath) },
+                package_name: unsafe { optional_string(process.PackageName) },
+            }
+        };
         Self {
             connection: info.ConnectionKey,
             transfer: info.TransferKey,
             request: info.RequestKey,
             identity,
             file_size: info.FileSize,
+            reader,
         }
     }
 
@@ -112,9 +140,20 @@ fn parameters(member_size: usize) -> CF_OPERATION_PARAMETERS {
     }
 }
 
-/// Diagnostics for failures nobody is waiting on. User-facing notices go through `reporting`.
+/// `lymic-virtual-library.log` in the package's local state folder, next to the thumbnail
+/// provider's log. `None` without Package Identity.
+static LOG: LazyLock<Option<DiagnosticLog>> = LazyLock::new(|| {
+    lymic_shell_ext::shell::package_local_state_dir()
+        .map(|directory| DiagnosticLog::new(directory.join("lymic-virtual-library.log")))
+});
+
+/// Diagnostics for failures nobody is waiting on, and the record of who read what. User-facing
+/// notices go through `reporting`.
 fn note(message: &str) {
     eprintln!("virtual library: {message}");
+    if let Some(log) = LOG.as_ref() {
+        log.append(message);
+    }
 }
 
 fn utf16z(text: &str) -> Vec<u16> {
@@ -181,11 +220,8 @@ pub(super) fn create_info(spec: &PlaceholderSpec, name: &[u16]) -> CF_PLACEHOLDE
                 LastAccessTime: spec.modified,
                 LastWriteTime: spec.modified,
                 ChangeTime: spec.modified,
-                FileAttributes: if spec.is_directory {
-                    FILE_ATTRIBUTE_DIRECTORY.0
-                } else {
-                    FILE_ATTRIBUTE_NORMAL.0
-                },
+                // Not content indexed: see `PlaceholderSpec::attributes`.
+                FileAttributes: spec.attributes(),
             },
             FileSize: spec.size as i64,
         },
@@ -267,6 +303,26 @@ unsafe extern "system" fn on_fetch_data(
 ) {
     // SAFETY: called by the platform with the callback's own `info` and `parameters`.
     let (request, fetch) = unsafe { (Request::capture(info), (*parameters).Anonymous.FetchData) };
+    // Every read is on record with who asked, so a Hydration nobody expected can be traced.
+    let verdict = readers::judge(&request.reader);
+    note(&readers::fetch_log_line(
+        &request.reader,
+        &request.path().unwrap_or_default(),
+        fetch.RequiredFileOffset.max(0) as u64,
+        fetch.RequiredLength.max(0) as u64,
+        verdict,
+    ));
+    if let Verdict::Refuse(_) = verdict {
+        // A background service reading on its own would download the Library: nothing is fetched
+        // and nobody is told (it is not the user's read).
+        fail_data(
+            &request,
+            fetch.RequiredFileOffset,
+            fetch.RequiredLength,
+            CloudStatus::Unsuccessful,
+        );
+        return;
+    }
     let Some(runtime) = super::runtime() else {
         return;
     };
@@ -507,6 +563,14 @@ impl Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        // SAFETY: the key is the live connection; a refused update is only diagnostic.
+        if let Err(error) =
+            unsafe { CfUpdateSyncProviderStatus(self.key, CF_PROVIDER_STATUS_DISCONNECTED) }
+        {
+            note(&format!(
+                "CfUpdateSyncProviderStatus(DISCONNECTED) failed: {error}"
+            ));
+        }
         // SAFETY: the key came from a successful `CfConnectSyncRoot` and is disconnected once. The
         // call returns when no callback is running any more; the table is freed after it, as the
         // fields drop after this body.
@@ -541,19 +605,34 @@ fn callback_table() -> Vec<CF_CALLBACK_REGISTRATION> {
     ]
 }
 
+/// What the connection asks the platform for:
+///
+/// - `REQUIRE_PROCESS_INFO`: the process behind each callback (`CF_CALLBACK_INFO.ProcessInfo`),
+///   which `readers` logs and judges. Without it nobody can tell who hydrates a file.
+/// - `REQUIRE_FULL_FILE_PATH`: the full path of the file in the callback, for the log.
+/// - `BLOCK_SELF_IMPLICIT_HYDRATION`: a read of a placeholder by this very process fails instead of
+///   downloading it. Lymic never reads placeholder content (it lists and updates them), so such a
+///   read is a bug, and the log line says where it came from.
+const CONNECT_FLAGS: CF_CONNECT_FLAGS = CF_CONNECT_FLAGS(
+    CF_CONNECT_FLAG_REQUIRE_PROCESS_INFO.0
+        | CF_CONNECT_FLAG_REQUIRE_FULL_FILE_PATH.0
+        | CF_CONNECT_FLAG_BLOCK_SELF_IMPLICIT_HYDRATION.0,
+);
+
 /// Connects the registered sync root at `root` and starts serving callbacks.
 pub(super) fn connect(root: &Path) -> windows::core::Result<Connection> {
     // The platform may keep the table, so the connection owns it until it is disconnected.
     let table = callback_table().into_boxed_slice();
     let root = utf16z(&root.to_string_lossy());
     // SAFETY: `root` is NUL terminated and `table` is terminated and outlives the connection.
-    let key = unsafe {
-        CfConnectSyncRoot(
-            PCWSTR(root.as_ptr()),
-            table.as_ptr(),
-            None,
-            CF_CONNECT_FLAG_NONE,
-        )?
-    };
+    let key =
+        unsafe { CfConnectSyncRoot(PCWSTR(root.as_ptr()), table.as_ptr(), None, CONNECT_FLAGS)? };
+    // Explorer shows a sync root's state (the cloud overlay, the status column) from what the
+    // provider reports; without a report it stays blank. Lymic has no queue of its own, so the
+    // state is "idle" for as long as it is connected.
+    // SAFETY: `key` is the live connection returned above.
+    if let Err(error) = unsafe { CfUpdateSyncProviderStatus(key, CF_PROVIDER_STATUS_IDLE) } {
+        note(&format!("CfUpdateSyncProviderStatus(IDLE) failed: {error}"));
+    }
     Ok(Connection { key, _table: table })
 }

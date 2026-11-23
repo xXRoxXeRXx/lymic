@@ -17,6 +17,7 @@ mod teardown;
 
 use super::activation::{self, ActivationError, SyncRootHost};
 use super::nested::{RegisteredRoot, SyncRootProbe};
+use super::shell_thumbnails::{self, ItemRefresh};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
@@ -24,6 +25,28 @@ use std::sync::{Mutex, OnceLock};
 static RUNTIME: OnceLock<tokio::runtime::Handle> = OnceLock::new();
 /// The live connection, if any. Dropping the sync root's connection stops callbacks.
 static CONNECTION: Mutex<Option<callbacks::Connection>> = Mutex::new(None);
+
+/// Serves the thumbnails Explorer asked for while the sync root is connected (`shell_thumbnails`).
+static MISS_SERVER: Mutex<Option<tokio::task::JoinHandle<()>>> = Mutex::new(None);
+
+/// Tells the shell that an item changed (`SHChangeNotify`), so Explorer asks for its thumbnail again.
+struct ShellRefresh;
+
+impl ItemRefresh for ShellRefresh {
+    fn refresh(&self, path: &str) {
+        let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+        // SAFETY: `wide` is a NUL terminated path that outlives the call; the second item is unused
+        // for this event.
+        unsafe {
+            windows_sys::Win32::UI::Shell::SHChangeNotify(
+                windows_sys::Win32::UI::Shell::SHCNE_UPDATEITEM as i32,
+                windows_sys::Win32::UI::Shell::SHCNF_PATHW,
+                wide.as_ptr().cast(),
+                std::ptr::null(),
+            );
+        }
+    }
+}
 
 fn runtime() -> Option<&'static tokio::runtime::Handle> {
     RUNTIME.get()
@@ -44,6 +67,9 @@ pub(super) fn disk_tree(root: std::path::PathBuf, populated: &[String]) -> recon
 
 /// Stops serving callbacks. The registration and the placeholders stay.
 pub(super) fn stop() {
+    if let Some(server) = MISS_SERVER.lock().ok().and_then(|mut slot| slot.take()) {
+        server.abort();
+    }
     let connection = CONNECTION.lock().ok().and_then(|mut slot| slot.take());
     if let Some(connection) = connection {
         connection.disconnect();
@@ -92,6 +118,9 @@ impl SyncRootHost for WindowsHost {
         let connection = callbacks::connect(root).map_err(|error| error.to_string())?;
         if let Ok(mut slot) = CONNECTION.lock() {
             *slot = Some(connection);
+        }
+        if let (Some(runtime), Ok(mut slot)) = (runtime(), MISS_SERVER.lock()) {
+            *slot = Some(runtime.spawn(shell_thumbnails::run_miss_server(ShellRefresh)));
         }
         Ok(())
     }

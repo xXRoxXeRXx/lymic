@@ -10,7 +10,11 @@
 //!    must not be given an `IInitializeWithStream` path: that would open the content.
 //! 2. `IThumbnailProvider::GetThumbnail`: the identity selects a cached image
 //!    ([`crate::cache`]); it is decoded from memory with WIC and scaled down to the requested size.
-//!    A thumbnail that is not cached is an error, never a download.
+//!    A thumbnail that is not cached is never a download. It is not an error either: a failing
+//!    provider makes Explorer fall back to the file type's default handler, which reads the
+//!    placeholder and downloads the original. A miss (or an image that cannot be decoded) is
+//!    answered with a plain generic bitmap and a request for the app to cache the thumbnail, which
+//!    then refreshes the item.
 //!
 //! None of this can be unit tested without Explorer and a registered package; see the manual record
 //! in `docs/virtual-library-verification.md`. Every request is logged to
@@ -182,6 +186,8 @@ fn identity_of(handle: HANDLE) -> Result<Vec<u8>> {
 #[implement(IInitializeWithItem, IThumbnailProvider)]
 struct ThumbnailProvider {
     file_identity: Mutex<Option<Vec<u8>>>,
+    /// The item's file system path, for the log and for the request the app refreshes by.
+    item_path: Mutex<String>,
 }
 
 impl ThumbnailProvider {
@@ -190,6 +196,7 @@ impl ThumbnailProvider {
         touch();
         Self {
             file_identity: Mutex::new(None),
+            item_path: Mutex::new(String::new()),
         }
     }
 }
@@ -217,6 +224,7 @@ impl IInitializeWithItem_Impl for ThumbnailProvider_Impl {
                     identity.len()
                 ));
                 *self.file_identity.lock().unwrap() = Some(identity);
+                *self.item_path.lock().unwrap() = path;
                 Ok(())
             }
             Err(error) => {
@@ -244,30 +252,67 @@ impl IThumbnailProvider_Impl for ThumbnailProvider_Impl {
             .unwrap()
             .clone()
             .unwrap_or_default();
-        let result = package_cache()
+        let path = self.item_path.lock().unwrap().clone();
+        let cache = package_cache();
+        let served = cache
+            .as_ref()
             .ok_or(Unavailable::Unusable)
             .and_then(|cache| cache.load(&identity))
-            .map_err(|reason| {
-                log(&format!(
-                    "GetThumbnail cx={cx}: nothing to serve ({reason:?})"
-                ));
-                windows::core::Error::from(E_FAIL)
-            })
+            .map_err(|reason| format!("nothing cached ({reason:?})"))
             .and_then(|image| {
-                decode(&image, cx).inspect_err(|error| {
-                    log(&format!(
-                        "GetThumbnail cx={cx}: the cached image cannot be decoded: {error}"
-                    ))
-                })
+                decode(&image, cx)
+                    .map_err(|error| format!("the cached image cannot be decoded: {error}"))
             });
-        let bitmap = result?;
+        let (bitmap, outcome) = match served {
+            Ok(bitmap) => (bitmap, "served from the cache".to_string()),
+            Err(reason) => {
+                // Never an error: Explorer would read the placeholder with its default handler.
+                // The app is asked to cache the thumbnail and then refreshes the item.
+                if let Some(cache) = &cache {
+                    cache.record_miss(&identity, &path);
+                }
+                (
+                    generic_bitmap(cx)?,
+                    format!("{reason}; answered with the generic image and asked the app"),
+                )
+            }
+        };
         // SAFETY: both out pointers were checked above.
         unsafe {
             *phbmp = bitmap;
             *pdwalpha = WTSAT_ARGB;
         }
-        log(&format!("GetThumbnail cx={cx}: served from the cache"));
+        log(&format!("GetThumbnail cx={cx} {path}: {outcome}"));
         Ok(())
+    }
+}
+
+/// The generic image of [`cache::generic_thumbnail`] as a bitmap: what a placeholder shows until
+/// its thumbnail is cached.
+fn generic_bitmap(cx: u32) -> Result<HBITMAP> {
+    let image = cache::generic_thumbnail(cx.clamp(1, MAX_EDGE));
+    let info = BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: image.width as i32,
+            biHeight: -(image.height as i32), // top-down
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut bits: *mut c_void = std::ptr::null_mut();
+    // SAFETY: `info` describes the section being created; `bits` receives its pixel memory, which
+    // holds `bgra.len()` bytes for these dimensions.
+    unsafe {
+        let bitmap = CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0)?;
+        if bits.is_null() {
+            return Err(E_POINTER.into());
+        }
+        std::ptr::copy_nonoverlapping(image.bgra.as_ptr(), bits.cast::<u8>(), image.bgra.len());
+        Ok(bitmap)
     }
 }
 

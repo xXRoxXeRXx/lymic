@@ -205,8 +205,8 @@ The Virtual Library shows Immich thumbnails for placeholders without Hydration t
 
 ### How it works
 
-- **App side.** `cloud_files/shell_thumbnails.rs` wraps the projection's `Library`: whenever a directory is listed (the first Explorer visit and every Reconciliation run), the Immich thumbnail (`GET assets/{id}/thumbnail?format=JPEG`) of each file is stored under `<package LocalState>\shell-thumbnails\<sha256 of the placeholder's file identity>.thumb`. The first 48 are fetched before the listing returns (so they exist when Explorer asks), the rest in the background. A failed fetch is ignored. Disabling the Virtual Library and logging out delete the directory. It is separate from the app's own Thumbnail Cache and is bounded to 256 MiB, oldest first.
-- **Provider side.** `lymic-shell-ext` implements `IInitializeWithItem` and `IThumbnailProvider`. `Initialize` reads only the item's file system path, opens the placeholder with `FILE_READ_ATTRIBUTES` (an attributes-only open does not read data) and reads its file identity with `CfGetPlaceholderInfo`. `GetThumbnail` hashes the identity, reads that cache file, decodes it with WIC from memory and returns a bitmap no larger than requested. A miss is an error, never a download and never a read of the placeholder: Explorer then shows its generic icon until the app has cached the thumbnail. Every request is logged to `lymic-shell-ext.log` in the package's `LocalState` folder.
+- **App side.** `cloud_files/shell_thumbnails.rs` wraps the projection's `Library`: whenever a directory is listed (the first Explorer visit and every Reconciliation run), the Immich thumbnail (`GET assets/{id}/thumbnail?format=JPEG`) of each file is stored under `<package LocalState>\shell-thumbnails\<sha256 of the placeholder's file identity>.thumb`. The first 48 are fetched before the listing returns (so they exist when Explorer asks), the rest in the background. A failed fetch is ignored. Disabling the Virtual Library and logging out delete the directory. It is separate from the app's own Thumbnail Cache and is bounded to 256 MiB, least recently used first (serving a thumbnail refreshes its time).
+- **Provider side.** `lymic-shell-ext` implements `IInitializeWithItem` and `IThumbnailProvider`. `Initialize` reads only the item's file system path, opens the placeholder with `FILE_READ_ATTRIBUTES` (an attributes-only open does not read data) and reads its file identity with `CfGetPlaceholderInfo`. `GetThumbnail` hashes the identity, reads that cache file, decodes it with WIC from memory and returns a bitmap no larger than requested. A miss is never a download and never a read of the placeholder. Since the review of #266 it is not an error either (an error may make Explorer fall back to the file type's handler, which reads the placeholder): the provider returns a plain grey square and leaves a request file (`<hash>.miss`, holding the identity and the item's path) in the cache folder, which the app serves while the sync root is connected (`shell_thumbnails::run_miss_server`: polls every 2 seconds, retries, caches the thumbnail and sends `SHChangeNotify(SHCNE_UPDATEITEM)` for the item). That Explorer replaces the grey square after that notification is unverified. Every request is logged to `lymic-shell-ext.log` in the package's `LocalState` folder.
 - **No server access, no credentials.** The provider never talks to Immich, so it needs no stored credentials and no network access.
 
 ### The declarations
@@ -216,10 +216,10 @@ In `src-tauri/msix/AppxManifest.template.xml`, under `Package/Applications/Appli
 ```xml
 <desktop3:Extension Category="windows.cloudFiles">
   <desktop3:CloudFiles>
-    <desktop3:CustomStateHandler />
+    <desktop3:CustomStateHandler Clsid="9a3c3e0e-5b7d-4f4d-8f0e-2d6c1f6b7a42" />
     <desktop3:ThumbnailProviderHandler Clsid="9a3c3e0e-5b7d-4f4d-8f0e-2d6c1f6b7a41" />
-    <desktop3:ExtendedPropertyHandler />
-    <desktop3:BannersHandler />
+    <desktop3:ExtendedPropertyHandler Clsid="9a3c3e0e-5b7d-4f4d-8f0e-2d6c1f6b7a43" />
+    <desktop3:BannersHandler Clsid="9a3c3e0e-5b7d-4f4d-8f0e-2d6c1f6b7a44" />
     <desktop3:CloudFilesContextMenus />
   </desktop3:CloudFiles>
 </desktop3:Extension>
@@ -232,7 +232,7 @@ In `src-tauri/msix/AppxManifest.template.xml`, under `Package/Applications/Appli
 </com:Extension>
 ```
 
-plus `xmlns:desktop3="http://schemas.microsoft.com/appx/manifest/desktop/windows10/3"` and `xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"` on `<Package>` (neither is ignorable). The template holds `{{THUMBNAIL_CLSID}}` and `{{THUMBNAIL_COM_SERVER}}`; `package-msix.ps1` fills them (the CLSID lives in the script and in `lymic_shell_ext::THUMBNAIL_PROVIDER_CLSID`; a test in the crate fails when they differ). `LymicShellExt.exe` is `lymic-shell-ext-host.exe`, copied to the package root. The sync root registration (`StorageProviderSyncRootInfo`, `cloud_files/adapter/register.rs`) needed no change: it has no thumbnail field, the handler comes from the manifest.
+plus `xmlns:desktop3="http://schemas.microsoft.com/appx/manifest/desktop/windows10/3"` and `xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"` on `<Package>` (neither is ignorable). The template holds `{{THUMBNAIL_CLSID}}`, `{{THUMBNAIL_COM_SERVER}}` and one `{{..._CLSID_ATTRIBUTE}}` per unused handler (see [the unused handlers](#the-unused-cloud-files-handlers-review-of-266)); `package-msix.ps1` fills them (the CLSID lives in the script and in `lymic_shell_ext::THUMBNAIL_PROVIDER_CLSID`; a test in the crate fails when they differ). `LymicShellExt.exe` is `lymic-shell-ext-host.exe`, copied to the package root. The sync root registration (`StorageProviderSyncRootInfo`, `cloud_files/adapter/register.rs`) needed no change: it has no thumbnail field, the handler comes from the manifest.
 
 The alternative, `package-msix.ps1 -ComServer surrogate`, packages `lymic_shell_ext.dll` and declares
 
@@ -257,6 +257,19 @@ cargo build --manifest-path src-tauri/Cargo.toml --release --locked -p lymic-she
 
 `package-msix.ps1` stops with the build command when the provider binary is missing (`-ShellExtExe` and `-ShellExtDll` override the paths). `validate-msix.ps1` additionally checks that the `ThumbnailProviderHandler` has a Clsid, that a `com:Class` with that Id exists, and that the declared executable or DLL is in the package. Both variants were packed and validated here with a stand-in executable; a package with the server file removed was rejected.
 
+### The unused cloud files handlers (review of #266)
+
+The first run in a registered package (`exe` server) showed correct placeholders but no Explorer cloud state, no Status column text and no `ThumbnailProvider` value under the sync root's `SyncRootManager` key. One suspect was the four handler elements the manifest left empty (`CustomStateHandler`, `ExtendedPropertyHandler`, `BannersHandler`, `CloudFilesContextMenus`): the platform copies the handlers into the sync root registration, and Explorer may not resolve an empty one. This was **not confirmed**; it is a hypothesis the change below tests.
+
+Re-verified on 2026-11-23 with `makeappx` from Windows SDK 10.0.26100: a manifest that omits the four handlers is rejected (`The app manifest must be valid as per schema ... CloudFiles ... not complete`), so omission is not an option. All of these were packed with the real `lymic-desktop.exe` and `lymic-shell-ext-host.exe` of a release build and passed `validate-msix.ps1`: `-ComServer exe` and `-ComServer surrogate`, each with `-CloudFilesHandlers dummy` and `empty`.
+
+What the template does now (`scripts/package-msix.ps1 -CloudFilesHandlers`):
+
+- **`dummy` (default).** `CustomStateHandler`, `ExtendedPropertyHandler` and `BannersHandler` get a made-up, well-formed `Clsid` (`...7a42`, `...7a43`, `...7a44`). This is the pattern of the CloudMirror sample, which gives the handlers it does not implement a made-up GUID with no `com:Class`. They are deliberately **not** registered as COM classes: a registered local server that never answers the request would make Explorer wait for it, while an unregistered class fails at once. `CloudFilesContextMenus` has no `Clsid` attribute (its children, `Verb` elements, carry them) and stays empty.
+- **`empty`.** The previous form, without `Clsid`.
+
+Not verified, and the reason the switch exists: whether `StorageProviderSyncRootManager.Register` accepts the dummy form (the gate prototype's `Register` failed with 0x80070490 once, with a surrogate server, for a reason nobody knows), and whether Explorer shows any state because of it. If `Register` fails or nothing changes, package with `-CloudFilesHandlers empty` and compare the `SyncRootManager` values. The record is in `docs/virtual-library-verification.md`, section "Review fixes after the first packaged run (#266)", item R7.
+
 ### Findings that led to these declarations
 
 Read on 2026-11-23 from Microsoft Learn and the Microsoft sample:
@@ -272,7 +285,7 @@ Read on 2026-11-23 from Microsoft Learn and the Microsoft sample:
 Everything below is open until someone runs the manual record. In the order to try them:
 
 1. **Whether the provider is invoked at all.** The prototype's provider was never called with the `exe` variant. Possible causes this work cannot separate: the declarations (the four empty handler elements, or the exe server), the Explorer view (thumbnails are only requested in the Medium icons and larger views, not in Details or List, and the maintainer's report does not say which view was used), a failed activation of the packaged exe, or a design limit. First check, which needs no code: `reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager" /s` after enabling the Virtual Library, and look for a `ThumbnailProvider` value in the `Lymic.VirtualLibrary!...` key. If it is absent, `Register` did not take the handler from the manifest and no provider can be invoked. `lymic-shell-ext.log` shows whether COM activated the host (`CreateInstance`) and whether Explorer asked (`Initialize`, `GetThumbnail`).
-2. **Empty handler elements versus CloudMirror's dummy CLSIDs.** The template leaves the four unused handlers empty. If the registry check or the log suggests the empty elements are written as a broken value, try the CloudMirror form: a made-up GUID in `Clsid` for each of them.
+2. **Empty handler elements versus CloudMirror's dummy CLSIDs.** Since the review of #266 the default is the CloudMirror form (a made-up GUID in `Clsid`, see above). If `Register` fails with it, or the registry shows no better result, package with `-CloudFilesHandlers empty`.
 3. **Why the surrogate failed `Register`.** Unknown. A guess, not an observation: `Register` resolves the handler CLSIDs in the package's COM registrations and only finds executable servers. Try the surrogate only if the exe variant is invoked but turns out to be the problem.
 4. **`Arguments="-Embedding"`.** Copied from the prototype. COM normally passes `-Embedding` to a local server itself, and the host ignores its command line, so this should not matter.
 5. **Does the attributes-only open avoid Hydration?** The provider opens the placeholder with `FILE_READ_ATTRIBUTES` to read the identity. Documented behaviour, not observed here; the verification record has the check (the file must stay unhydrated after browsing with thumbnails).

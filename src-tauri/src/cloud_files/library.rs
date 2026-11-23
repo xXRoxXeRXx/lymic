@@ -43,6 +43,11 @@ pub(super) trait OriginalSource: Sync {
 
 /// The body of an original being read.
 pub(super) trait OriginalStream: Send {
+    /// The length the server announced for the whole body (`Content-Length`), when it did.
+    fn content_length(&self) -> Option<u64> {
+        None
+    }
+
     /// The next piece, or `None` at the end.
     fn next_chunk(&mut self) -> impl Future<Output = Result<Option<Bytes>, Failure>> + Send;
 }
@@ -134,6 +139,10 @@ impl OriginalSource for StoredCredentialsImmich {
 }
 
 impl OriginalStream for ImmichOriginal {
+    fn content_length(&self) -> Option<u64> {
+        self.body.content_length()
+    }
+
     async fn next_chunk(&mut self) -> Result<Option<Bytes>, Failure> {
         match self.body.next_chunk().await {
             Ok(chunk) => Ok(chunk),
