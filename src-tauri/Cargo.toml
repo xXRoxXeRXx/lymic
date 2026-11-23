@@ -8,6 +8,11 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+# The Virtual Library's COM thumbnail provider (ADR-0003). It lives beside the app so that both
+# build into `src-tauri/target` and share this lock file.
+members = ["lymic-shell-ext"]
+
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
@@ -49,6 +54,8 @@ tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 url = "2"
 tauri-plugin-opener = "2.7.2"
+# The Virtual Library thumbnail cache (the app writes it, the shell extension reads it).
+lymic-shell-ext = { path = "lymic-shell-ext" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"

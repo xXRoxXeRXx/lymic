@@ -2662,6 +2662,7 @@ dependencies = [
  "chrono",
  "futures",
  "keyring",
+ "lymic-shell-ext",
  "notify",
  "reqwest 0.12.28",
  "serde",
@@ -2685,6 +2686,15 @@ dependencies = [
  "walkdir",
  "windows",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "lymic-shell-ext"
+version = "0.30.0"
+dependencies = [
+ "sha2",
+ "windows",
+ "windows-core",
 ]
 
 [[package]]

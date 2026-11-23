@@ -50,12 +50,13 @@ pub(super) trait OriginalStream: Send {
 /// Immich as the signed-in user: every call opens the session from the stored credentials (the
 /// session is cached, so this is cheap) and so follows a re-login without a restart. Errors are
 /// redacted of credentials before they leave.
+#[derive(Clone, Copy)]
 pub(super) struct StoredCredentialsImmich;
 
 impl StoredCredentialsImmich {
     /// The session for the stored credentials. No credentials, or credentials that cannot be read,
     /// mean the user has to sign in again.
-    fn session() -> Result<ImmichSession, RemoteFailure> {
+    pub(super) fn session() -> Result<ImmichSession, RemoteFailure> {
         let credentials = crate::auth::get_credentials()
             .map_err(|_| {
                 RemoteFailure::new(

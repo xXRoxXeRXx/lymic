@@ -49,13 +49,13 @@ jobs:
         run: npm run build
 
       - name: check Rust formatting
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
 
       - name: lint Rust
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --workspace -- -D warnings
 
       - name: test Rust
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --locked
 
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -78,6 +78,7 @@ jobs:
         run: |
           npm run build
           cargo build --manifest-path src-tauri/Cargo.toml --release --locked --features custom-protocol
+          cargo build --manifest-path src-tauri/Cargo.toml --release --locked -p lymic-shell-ext
 
       - name: package and validate MSIX (windows only)
         if: matrix.platform == 'windows-latest'

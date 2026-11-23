@@ -1,0 +1,50 @@
+[package]
+name = "lymic-shell-ext"
+version = "0.30.0"
+description = "COM thumbnail provider for the Lymic Virtual Library (ADR-0003): serves cached Immich thumbnails for placeholders without Hydration"
+repository = "https://github.com/xXRoxXeRXx/lymic"
+authors = ["xXRoxXeRXx"]
+edition = "2021"
+publish = false
+
+[lib]
+# rlib: the thumbnail cache is shared with the Lymic app (it writes, this crate reads) and the host
+# executable links the provider. cdylib: only the optional `surrogate-dll` variant uses it.
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+# The COM server the MSIX manifest declares (`com:ExeServer`). Windows only; empty elsewhere.
+name = "lymic-shell-ext-host"
+path = "src/bin/host.rs"
+
+[features]
+# Exports `DllGetClassObject` for the `com:SurrogateServer` manifest variant (see
+# docs/store/local-msix-build.md). Off by default so that no other crate that links this one exports
+# COM entry points.
+surrogate-dll = []
+
+[dependencies]
+sha2 = "0.10"
+
+# The `implement` macro expands to `windows_core` paths, so the crate has to name it.
+[target.'cfg(windows)'.dependencies]
+windows-core = "=0.62.2"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "=0.62.2"
+features = [
+    "Foundation",
+    "Storage",
+    "Storage_Search",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Imaging",
+    "Win32_Security",
+    "Win32_Storage_CloudFilters",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_IO",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+]

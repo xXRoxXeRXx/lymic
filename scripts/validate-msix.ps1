@@ -22,6 +22,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $zip = $null
 $manifestXml = ""
+$packageFiles = @()
 try {
     $zip = [System.IO.Compression.ZipFile]::OpenRead($fullPath)
     $entry = $zip.GetEntry("AppxManifest.xml")
@@ -34,6 +35,7 @@ try {
     $manifestXml = $reader.ReadToEnd()
     $reader.Close()
     $stream.Close()
+    $packageFiles = @($zip.Entries | ForEach-Object { $_.FullName -replace '/', '\' })
 } finally {
     if ($zip) {
         $zip.Dispose()
@@ -98,6 +100,29 @@ if ($manifestXml -notmatch 'Name="runFullTrust"') {
 
 if ($manifestXml -match 'Name="broadFileSystemAccess"') {
     $errors += "Disallowed restricted capability found: 'broadFileSystemAccess' is not needed for FullTrust Win32 apps and causes Store certification rejections"
+}
+
+# Validate the Virtual Library thumbnail provider (#282): the cloud files handler must name a COM
+# class the package declares, and the executable or DLL behind it must be in the package.
+if ($manifestXml -notmatch '<desktop3:ThumbnailProviderHandler\s+Clsid="([^"]+)"') {
+    $errors += "Missing the windows.cloudFiles ThumbnailProviderHandler with a Clsid"
+} else {
+    $thumbnailClsid = $Matches[1]
+    $classPattern = '<com:Class\s+[^>]*Id="' + [regex]::Escape($thumbnailClsid) + '"'
+    if ($manifestXml -notmatch $classPattern) {
+        $errors += "The thumbnail provider Clsid '$thumbnailClsid' has no com:Class registration in the manifest"
+    }
+    $servers = @()
+    foreach ($match in [regex]::Matches($manifestXml, '<com:ExeServer\s+[^>]*Executable="([^"]+)"')) { $servers += $match.Groups[1].Value }
+    foreach ($match in [regex]::Matches($manifestXml, '<com:Class\s+[^>]*Path="([^"]+)"')) { $servers += $match.Groups[1].Value }
+    if ($servers.Count -eq 0) {
+        $errors += "The manifest declares no COM server (com:ExeServer Executable or com:SurrogateServer Path) for the thumbnail provider"
+    }
+    foreach ($server in $servers) {
+        if ($packageFiles -notcontains ($server -replace '/', '\')) {
+            $errors += "The COM server '$server' declared in the manifest is not in the package"
+        }
+    }
 }
 
 if ($errors.Count -gt 0) {

@@ -55,9 +55,14 @@ pub(super) fn stop() {
 pub(super) async fn clean_up(
     root: std::path::PathBuf,
 ) -> Result<super::cleanup::CleanupReport, super::cleanup::CleanupError> {
-    tokio::task::spawn_blocking(move || super::cleanup::clean_up(&root, &teardown::WindowsCleanup))
-        .await
-        .map_err(|error| super::cleanup::CleanupError::Scan(error.to_string()))?
+    let result = tokio::task::spawn_blocking(move || {
+        super::cleanup::clean_up(&root, &teardown::WindowsCleanup)
+    })
+    .await
+    .map_err(|error| super::cleanup::CleanupError::Scan(error.to_string()))?;
+    // Whatever the outcome, no thumbnail of the account stays behind (#282).
+    super::shell_thumbnails::clear_system_cache();
+    result
 }
 
 struct WindowsHost;

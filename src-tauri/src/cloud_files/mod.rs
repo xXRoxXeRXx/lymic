@@ -38,6 +38,7 @@ mod reconcile;
 mod reconciliation;
 mod refresh;
 mod reporting;
+mod shell_thumbnails;
 mod write_guard;
 
 #[cfg(windows)]
