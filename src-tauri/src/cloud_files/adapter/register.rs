@@ -71,7 +71,11 @@ pub(super) fn register(root: &Path) -> Result<()> {
     info.SetDisplayNameResource(&HSTRING::from("Lymic"))?;
     info.SetIconResource(&HSTRING::from(r"%SystemRoot%\system32\imageres.dll,-1043"))?;
     info.SetHydrationPolicy(StorageProviderHydrationPolicy::Full)?;
-    info.SetHydrationPolicyModifier(StorageProviderHydrationPolicyModifier::None)?;
+    // Hydrated originals may be given back to the cloud by Storage Sense and "Free up space"; the
+    // placeholders are always in sync, so nothing is lost.
+    info.SetHydrationPolicyModifier(
+        StorageProviderHydrationPolicyModifier::AutoDehydrationAllowed,
+    )?;
     info.SetPopulationPolicy(StorageProviderPopulationPolicy::Full)?;
     info.SetInSyncPolicy(StorageProviderInSyncPolicy::Default)?;
     info.SetHardlinkPolicy(StorageProviderHardlinkPolicy::None)?;

@@ -26,9 +26,7 @@ use windows::Win32::Foundation::{
     STATUS_CLOUD_FILE_UNSUCCESSFUL, STATUS_OBJECT_NAME_NOT_FOUND,
 };
 use windows::Win32::Storage::CloudFilters::*;
-use windows::Win32::Storage::FileSystem::{
-    FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL, FILE_BASIC_INFO,
-};
+use windows::Win32::Storage::FileSystem::FILE_BASIC_INFO;
 
 const STATUS_SUCCESS: NTSTATUS = NTSTATUS(0);
 /// The downloads in flight, so `CANCEL_FETCH_DATA` can stop one.
@@ -222,11 +220,8 @@ pub(super) fn create_info(spec: &PlaceholderSpec, name: &[u16]) -> CF_PLACEHOLDE
                 LastAccessTime: spec.modified,
                 LastWriteTime: spec.modified,
                 ChangeTime: spec.modified,
-                FileAttributes: if spec.is_directory {
-                    FILE_ATTRIBUTE_DIRECTORY.0
-                } else {
-                    FILE_ATTRIBUTE_NORMAL.0
-                },
+                // Not content indexed: see `PlaceholderSpec::attributes`.
+                FileAttributes: spec.attributes(),
             },
             FileSize: spec.size as i64,
         },

@@ -306,7 +306,11 @@ fn metadata_of(spec: &crate::cloud_files::placeholder::PlaceholderSpec) -> CF_FS
             LastAccessTime: spec.modified,
             LastWriteTime: spec.modified,
             ChangeTime: spec.modified,
-            // 0 leaves the attributes as they are.
+            // 0 leaves the attributes as they are. Placeholders created before they were marked
+            // not content indexed (`PlaceholderSpec::attributes`) keep their old attributes: writing
+            // an attribute set here could also clear the ones the platform manages (offline,
+            // recall on data access), which has not been observed to be safe. Disabling and
+            // enabling the Virtual Library recreates them with the attribute.
             FileAttributes: 0,
         },
         FileSize: spec.size as i64,
