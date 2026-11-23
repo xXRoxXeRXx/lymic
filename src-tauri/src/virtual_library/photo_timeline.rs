@@ -9,7 +9,7 @@ use super::path::{month_dir_name, year_dir_name, Dir, UNDATED};
 use super::Entry;
 use crate::immich::{LibraryAsset, LivePhotoVideo, RemoteAssetId, TimelineBucket};
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, Utc};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// Where an asset is filed below `All Photos`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,8 +49,10 @@ fn local_wall_clock(text: &str) -> Option<NaiveDateTime> {
 /// Which months, and whether `Undated`, the Photo Timeline has assets in: all that the year and
 /// month directories need, read from Immich's timeline buckets without fetching an asset.
 pub(super) struct Calendar {
-    months: BTreeSet<(i32, u32)>,
-    has_undated: bool,
+    /// The assets Immich reports per month.
+    months: BTreeMap<(i32, u32), u64>,
+    /// The assets Immich reports without a usable capture month.
+    undated: u64,
 }
 
 impl Calendar {
@@ -60,15 +62,15 @@ impl Calendar {
     /// hold nothing.
     pub(super) fn from_buckets(buckets: &[TimelineBucket]) -> Self {
         let mut calendar = Self {
-            months: BTreeSet::new(),
-            has_undated: false,
+            months: BTreeMap::new(),
+            undated: 0,
         };
         for bucket in buckets.iter().filter(|bucket| bucket.count > 0) {
             match bucket_month(&bucket.time_bucket) {
                 Some(month) if month != UNDATED_PLACEHOLDER_MONTH => {
-                    calendar.months.insert(month);
+                    *calendar.months.entry(month).or_default() += bucket.count;
                 }
-                _ => calendar.has_undated = true,
+                _ => calendar.undated += bucket.count,
             }
         }
         calendar
@@ -76,22 +78,41 @@ impl Calendar {
 
     /// The entries of `All Photos`: the years, then `Undated` when there is such an asset.
     pub(super) fn years(&self) -> Vec<Entry> {
-        let years: BTreeSet<i32> = self.months.iter().map(|(year, _)| *year).collect();
+        let years: BTreeSet<i32> = self.months.keys().map(|(year, _)| *year).collect();
         let mut entries: Vec<Entry> = years
             .into_iter()
             .map(|year| Entry::directory(year_dir_name(year)))
             .collect();
-        if self.has_undated {
+        if self.undated > 0 {
             entries.push(Entry::directory(UNDATED));
         }
         entries
+    }
+
+    /// How many assets Immich reports in the month, 0 when it reports none.
+    pub(super) fn count_in(&self, year: i32, month: u32) -> u64 {
+        self.months.get(&(year, month)).copied().unwrap_or(0)
+    }
+
+    /// How many assets Immich reports without a usable capture time.
+    pub(super) fn undated_count(&self) -> u64 {
+        self.undated
+    }
+
+    /// The months Immich reports in `year`, as month numbers.
+    pub(super) fn months_of(&self, year: i32) -> Vec<u32> {
+        self.months
+            .keys()
+            .filter(|(month_year, _)| *month_year == year)
+            .map(|(_, month)| *month)
+            .collect()
     }
 
     /// The month directories of `year`, or `None` when no asset is filed under it.
     pub(super) fn months(&self, year: i32) -> Option<Vec<Entry>> {
         let entries: Vec<Entry> = self
             .months
-            .iter()
+            .keys()
             .filter(|(month_year, _)| *month_year == year)
             .map(|(_, month)| Entry::directory(month_dir_name(*month)))
             .collect();
@@ -137,6 +158,15 @@ fn month_start(year: i32, month: u32) -> DateTime<Utc> {
 /// Whether the asset has no usable local capture time.
 pub(super) fn is_undated(asset: &LibraryAsset) -> bool {
     bucket_of(asset) == Bucket::Undated
+}
+
+/// Whether `asset` is filed in the file directory `dir` (a month or `Undated`).
+pub(super) fn is_filed_in(asset: &LibraryAsset, dir: &Dir) -> bool {
+    match dir {
+        Dir::Month(year, month) => bucket_of(asset) == Bucket::Month(*year, *month),
+        Dir::Undated => bucket_of(asset) == Bucket::Undated,
+        _ => false,
+    }
 }
 
 /// The assets of `assets` filed in the file directory `dir` (a month or `Undated`); none for any

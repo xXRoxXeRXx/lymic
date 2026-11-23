@@ -326,6 +326,10 @@ where
     async fn resolve(&self, path: &str) -> Result<RemoteAssetId, VirtualLibraryError> {
         self.inner.resolve(path).await
     }
+
+    async fn explain_missing(&self, path: &str) -> Option<String> {
+        self.inner.explain_missing(path).await
+    }
 }
 
 /// Tells Explorer that an item changed, so that it asks for its thumbnail again.

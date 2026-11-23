@@ -6,6 +6,7 @@
 //! refuse (`write_guard`), do no I/O, and acknowledge inline.
 
 use crate::cloud_files::diagnostic_log::DiagnosticLog;
+use crate::cloud_files::listing_log::ListingLog;
 use crate::cloud_files::failure::{CloudStatus, Failure, FailureKind};
 use crate::cloud_files::hydration::{self, Block, DataRequest, DataSink};
 use crate::cloud_files::identity;
@@ -45,6 +46,7 @@ fn ntstatus(status: CloudStatus) -> NTSTATUS {
 
 /// What a callback copies out of the platform's structures, which are only valid while the callback
 /// runs. The keys are plain integers, so the request can move to another thread.
+#[derive(Clone)]
 pub(super) struct Request {
     connection: CF_CONNECTION_KEY,
     transfer: i64,
@@ -156,6 +158,58 @@ pub(in crate::cloud_files) fn note(message: &str) {
     }
 }
 
+/// The text of a panic payload.
+fn panic_text(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|text| (*text).to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "a panic without a message".to_string())
+}
+
+/// Runs the body of a callback. A panic must not unwind into the platform (the process would be
+/// aborted without a word); it is written to the log instead.
+fn guarded(name: &str, body: impl FnOnce()) {
+    if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)) {
+        note(&format!("{name}: panic in the callback: {}", panic_text(&*payload)));
+    }
+}
+
+/// Spawns `work` and, when it panics, writes that to the log and runs `on_panic`, which must
+/// still answer the platform: a task that panics silently leaves its request open for good.
+fn spawn_guarded(
+    runtime: &tokio::runtime::Handle,
+    name: &'static str,
+    on_panic: impl FnOnce() + Send + 'static,
+    work: impl std::future::Future<Output = ()> + Send + 'static,
+) {
+    let task = runtime.spawn(work);
+    runtime.spawn(async move {
+        if let Err(error) = task.await {
+            let reason = if error.is_panic() {
+                panic_text(&*error.into_panic())
+            } else {
+                "the task was cancelled".to_string()
+            };
+            note(&format!("{name}: the work stopped: {reason}"));
+            on_panic();
+        }
+    });
+}
+
+/// Makes a panic anywhere in the process appear in the log, whatever thread it happens on. The
+/// previous hook keeps running.
+pub(super) fn log_panics() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            note(&format!("panic: {info}"));
+            previous(info);
+        }));
+    });
+}
+
 fn utf16z(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
 }
@@ -166,49 +220,82 @@ unsafe extern "system" fn on_fetch_placeholders(
     info: *const CF_CALLBACK_INFO,
     _parameters: *const CF_CALLBACK_PARAMETERS,
 ) {
-    // SAFETY: called by the platform with the callback's own `info`.
-    let request = unsafe { Request::capture(info) };
-    let Some(runtime) = super::runtime() else {
-        return;
-    };
-    runtime.spawn(async move {
-        let path = request.path();
-        let plan = match &path {
-            Ok(path) => {
-                // Caches the thumbnails of the listed files for the shell extension (#282).
-                let library = WarmingLibrary::system(StoredCredentialsImmich);
-                population::populate(&library, &StoredCredentialsImmich, path).await
-            }
-            Err(failure) => Err(failure.clone()),
+    guarded("FETCH_PLACEHOLDERS", || {
+        // SAFETY: called by the platform with the callback's own `info`.
+        let request = unsafe { Request::capture(info) };
+        let listed = request.path().unwrap_or_default();
+        note(&format!(
+            "FETCH_PLACEHOLDERS '{listed}' reader={}",
+            readers::describe(&request.reader)
+        ));
+        let Some(runtime) = super::runtime() else {
+            // Answered all the same: a request nobody completes hangs the program that listed.
+            note("FETCH_PLACEHOLDERS: the application runtime is not up, failing the listing");
+            fail_placeholders(&request, CloudStatus::Unsuccessful);
+            return;
         };
-        match plan {
-            Ok(plan) => {
-                reporting::report_succeeded();
-                if !plan.skipped.is_empty() {
-                    note(&format!(
-                        "{} item(s) not shown for now (no size or too long a path): {}",
-                        plan.skipped.len(),
-                        plan.skipped.join(", ")
-                    ));
-                }
-                // Reconciliation (#280) diffs a directory only once it is populated.
-                if transfer_placeholders(&request, &plan.specs) {
-                    if let Ok(path) = request.path() {
-                        crate::cloud_files::mark_populated(&path).await;
-                    }
-                }
+        let on_panic = request.clone();
+        spawn_guarded(
+            runtime,
+            "FETCH_PLACEHOLDERS",
+            move || fail_placeholders(&on_panic, CloudStatus::Unsuccessful),
+            list_directory(request),
+        );
+    });
+}
+
+/// The work of one `FETCH_PLACEHOLDERS`: list the directory, hand the placeholders over.
+async fn list_directory(request: Request) {
+    let path = request.path();
+    let plan = match &path {
+        Ok(path) => {
+            // Says what every listing returned, caches the thumbnails of the listed files for the
+            // shell extension (#282).
+            let library = ListingLog::new(WarmingLibrary::system(StoredCredentialsImmich));
+            population::populate(&library, &StoredCredentialsImmich, path).await
+        }
+        Err(failure) => Err(failure.clone()),
+    };
+    let shown = path.as_deref().unwrap_or("?");
+    match plan {
+        Ok(plan) => {
+            reporting::report_succeeded();
+            if !plan.skipped.is_empty() {
+                note(&format!(
+                    "'{shown}': {} item(s) not shown for now (no size or too long a path): {}",
+                    plan.skipped.len(),
+                    plan.skipped.join(", ")
+                ));
             }
-            Err(failure) => {
-                note(&format!("could not list a directory: {}", failure.message));
-                reporting::report_failed(&Report {
-                    operation: Operation::List,
-                    path: path.as_deref().unwrap_or(""),
-                    failure: &failure,
-                });
-                fail_placeholders(&request, failure.status());
+            // Reconciliation (#280) diffs a directory only once it is populated.
+            if transfer_placeholders(&request, &plan.specs) {
+                note(&format!(
+                    "'{shown}': {} placeholder(s) handed to the platform",
+                    plan.specs.len()
+                ));
+                if let Ok(path) = request.path() {
+                    crate::cloud_files::mark_populated(&path).await;
+                }
+            } else {
+                note(&format!(
+                    "'{shown}': the platform refused the {} placeholder(s)",
+                    plan.specs.len()
+                ));
             }
         }
-    });
+        Err(failure) => {
+            note(&format!(
+                "could not list a directory: '{shown}': {:?}: {}",
+                failure.kind, failure.message
+            ));
+            reporting::report_failed(&Report {
+                operation: Operation::List,
+                path: path.as_deref().unwrap_or(""),
+                failure: &failure,
+            });
+            fail_placeholders(&request, failure.status());
+        }
+    }
 }
 
 pub(super) fn create_info(spec: &PlaceholderSpec, name: &[u16]) -> CF_PLACEHOLDER_CREATE_INFO {
@@ -301,15 +388,22 @@ unsafe extern "system" fn on_fetch_data(
     info: *const CF_CALLBACK_INFO,
     parameters: *const CF_CALLBACK_PARAMETERS,
 ) {
-    // SAFETY: called by the platform with the callback's own `info` and `parameters`.
-    let (request, fetch) = unsafe { (Request::capture(info), (*parameters).Anonymous.FetchData) };
+    guarded("FETCH_DATA", || {
+        // SAFETY: called by the platform with the callback's own `info` and `parameters`.
+        let (request, fetch) =
+            unsafe { (Request::capture(info), (*parameters).Anonymous.FetchData) };
+        fetch_data(request, fetch.RequiredFileOffset, fetch.RequiredLength);
+    });
+}
+
+fn fetch_data(request: Request, offset: i64, length: i64) {
     // Every read is on record with who asked, so a Hydration nobody expected can be traced.
     let verdict = readers::judge(&request.reader);
     note(&readers::fetch_log_line(
         &request.reader,
         &request.path().unwrap_or_default(),
-        fetch.RequiredFileOffset.max(0) as u64,
-        fetch.RequiredLength.max(0) as u64,
+        offset.max(0) as u64,
+        length.max(0) as u64,
         verdict,
     ));
     if let Verdict::Refuse(_) = verdict {
@@ -317,18 +411,37 @@ unsafe extern "system" fn on_fetch_data(
         // and nobody is told (it is not the user's read).
         fail_data(
             &request,
-            fetch.RequiredFileOffset,
-            fetch.RequiredLength,
+            offset,
+            length,
             CloudStatus::Unsuccessful,
         );
         return;
     }
     let Some(runtime) = super::runtime() else {
+        note("FETCH_DATA: the application runtime is not up, failing the read");
+        fail_data(
+            &request,
+            offset,
+            length,
+            CloudStatus::Unsuccessful,
+        );
         return;
     };
     // Registered before the callback returns, so a cancel that follows at once finds it.
     let registration = IN_FLIGHT.begin(request.transfer);
-    runtime.spawn(async move {
+    let on_panic = request.clone();
+    spawn_guarded(
+        runtime,
+        "FETCH_DATA",
+        move || {
+            fail_data(
+                &on_panic,
+                offset,
+                length,
+                CloudStatus::Unsuccessful,
+            )
+        },
+        async move {
         let path = request.path();
         let hydrated = registration
             .run(async {
@@ -336,7 +449,7 @@ unsafe extern "system" fn on_fetch_data(
                     Ok(path) if !path.is_empty() => {
                         let data_request = DataRequest {
                             path: path.clone(),
-                            required_offset: fetch.RequiredFileOffset.max(0) as u64,
+                            required_offset: offset.max(0) as u64,
                             file_size: request.file_size.max(0) as u64,
                         };
                         hydration::hydrate(
@@ -361,7 +474,12 @@ unsafe extern "system" fn on_fetch_data(
         match result {
             Ok(()) => reporting::report_succeeded(),
             Err(failure) => {
-                note(&format!("could not hydrate a file: {}", failure.message));
+                note(&format!(
+                    "could not hydrate '{}': {:?}: {}",
+                    path.as_deref().unwrap_or("?"),
+                    failure.kind,
+                    failure.message
+                ));
                 let report = Report {
                     operation: Operation::Open,
                     path: path.as_deref().unwrap_or(""),
@@ -375,13 +493,14 @@ unsafe extern "system" fn on_fetch_data(
                 reporting::report_failed(&report);
                 fail_data(
                     &request,
-                    fetch.RequiredFileOffset,
-                    fetch.RequiredLength,
+                    offset,
+                    length,
                     failure.status(),
                 );
             }
         }
-    });
+        },
+    );
 }
 
 /// `CANCEL_FETCH_DATA`: the reader gave up, so the download for it stops. Nothing is completed: the
@@ -392,6 +511,7 @@ unsafe extern "system" fn on_cancel_fetch_data(
 ) {
     // SAFETY: called by the platform with the callback's own `info`.
     let transfer = unsafe { (*info).TransferKey };
+    note("CANCEL_FETCH_DATA: the reader gave up");
     let cancelled = IN_FLIGHT.cancel(transfer);
     if cancelled == 0 {
         note("a cancel arrived for a download that is not (or no longer) in flight");
@@ -561,8 +681,18 @@ impl Connection {
     }
 }
 
+impl Connection {
+    /// Whether the platform still knows the connection: telling it the provider is idle fails when
+    /// the connection key is no longer valid.
+    pub(super) fn heartbeat(&self) -> windows::core::Result<()> {
+        // SAFETY: the key is the live connection.
+        unsafe { CfUpdateSyncProviderStatus(self.key, CF_PROVIDER_STATUS_IDLE) }
+    }
+}
+
 impl Drop for Connection {
     fn drop(&mut self) {
+        note("disconnecting the sync root");
         // SAFETY: the key is the live connection; a refused update is only diagnostic.
         if let Err(error) =
             unsafe { CfUpdateSyncProviderStatus(self.key, CF_PROVIDER_STATUS_DISCONNECTED) }
@@ -621,6 +751,23 @@ const CONNECT_FLAGS: CF_CONNECT_FLAGS = CF_CONNECT_FLAGS(
 
 /// Connects the registered sync root at `root` and starts serving callbacks.
 pub(super) fn connect(root: &Path) -> windows::core::Result<Connection> {
+    let result = connect_root(root);
+    match &result {
+        Ok(_) => note(&format!(
+            "connected the sync root '{}' (flags 0x{:X})",
+            root.display(),
+            CONNECT_FLAGS.0
+        )),
+        Err(error) => note(&format!(
+            "CfConnectSyncRoot failed for '{}' (flags 0x{:X}): {error}",
+            root.display(),
+            CONNECT_FLAGS.0
+        )),
+    }
+    result
+}
+
+fn connect_root(root: &Path) -> windows::core::Result<Connection> {
     // The platform may keep the table, so the connection owns it until it is disconnected.
     let table = callback_table().into_boxed_slice();
     let root = utf16z(&root.to_string_lossy());

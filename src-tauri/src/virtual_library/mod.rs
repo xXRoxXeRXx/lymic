@@ -101,6 +101,68 @@ impl<'a> VirtualLibrary<'a> {
         }
     }
 
+    /// Why `list` or `resolve` found nothing at `path`, for the diagnostic log: what Immich's
+    /// timeline reports there against what the listing found. `None` when there is nothing to add
+    /// to "not found" (a path that names nothing in the tree).
+    pub(crate) async fn explain_missing(&self, path: &str) -> Option<String> {
+        let (Target::Dir(dir) | Target::File { dir, .. }) = path::parse(path)?;
+        let unreadable =
+            |error: VirtualLibraryError| format!("the timeline could not be read: {error:?}");
+        match dir {
+            Dir::Year(year) => Some(match self.calendar().await {
+                Ok(calendar) => format!(
+                    "the timeline reports months {:?} in {year:04}",
+                    calendar.months_of(year)
+                ),
+                Err(error) => unreadable(error),
+            }),
+            Dir::Month(year, month) => {
+                let reported = match self.calendar().await {
+                    Ok(calendar) => calendar.count_in(year, month),
+                    Err(error) => return Some(unreadable(error)),
+                };
+                if reported == 0 {
+                    return Some(format!(
+                        "the timeline reports no asset in {year:04}-{month:02}"
+                    ));
+                }
+                let (after, before) = photo_timeline::creation_window(year, month);
+                let found = match self
+                    .client
+                    .list_photo_timeline_assets_created_between(after, before)
+                    .await
+                {
+                    Ok(found) => found,
+                    Err(failure) => {
+                        return Some(format!(
+                            "the timeline reports {reported} asset(s) in {year:04}-{month:02}; the search failed: {failure:?}"
+                        ))
+                    }
+                };
+                let found_total = found.len();
+                let in_month = photo_timeline::assets_in(found, &dir).len();
+                Some(format!(
+                    "the timeline reports {reported} asset(s) in {year:04}-{month:02}; the search between {after} and {before} returned {found_total} asset(s), {in_month} of them in that local month"
+                ))
+            }
+            Dir::Undated => Some(match self.calendar().await {
+                Ok(calendar) => format!(
+                    "the timeline reports {} asset(s) without a capture time",
+                    calendar.undated_count()
+                ),
+                Err(error) => unreadable(error),
+            }),
+            Dir::Album(name) => Some(match self.library_albums().await {
+                Ok(albums) => format!(
+                    "no Album folder is named '{name}' among {} Album(s)",
+                    albums.len()
+                ),
+                Err(error) => format!("the Albums could not be listed: {error:?}"),
+            }),
+            Dir::Root | Dir::AllPhotos | Dir::Albums => None,
+        }
+    }
+
     async fn find_file(&self, dir: Dir, name: &str) -> Result<Entry, VirtualLibraryError> {
         let wanted = name.to_lowercase();
         self.children(dir)
@@ -156,8 +218,20 @@ impl<'a> VirtualLibrary<'a> {
                     .list_photo_timeline_assets_created_between(after, before)
                     .await
                     .map_err(VirtualLibraryError::Remote)?;
-                self.timeline_files(photo_timeline::assets_in(assets, &dir))
-                    .await
+                let mut assets = photo_timeline::assets_in(assets, &dir);
+                if assets.is_empty() && self.timeline_reports(year, month).await > 0 {
+                    // The timeline holds assets of this local month that the window misses (their
+                    // creation instant is not near their capture time): the one way to find them
+                    // is the pass over the whole timeline, which an empty month makes worth it.
+                    assets = self
+                        .client
+                        .find_photo_timeline_assets(&|asset| {
+                            photo_timeline::is_filed_in(asset, &dir)
+                        })
+                        .await
+                        .map_err(VirtualLibraryError::Remote)?;
+                }
+                self.timeline_files(assets).await
             }
             Dir::Undated => {
                 // Immich cannot filter on a missing capture time: page through the timeline and
@@ -169,6 +243,15 @@ impl<'a> VirtualLibrary<'a> {
                     .map_err(VirtualLibraryError::Remote)?;
                 self.timeline_files(assets).await
             }
+        }
+    }
+
+    /// How many assets Immich's timeline reports in the local month; 0 when it reports none or
+    /// cannot be asked (the caller only uses it to look harder, never to show less).
+    async fn timeline_reports(&self, year: i32, month: u32) -> u64 {
+        match self.calendar().await {
+            Ok(calendar) => calendar.count_in(year, month),
+            Err(_) => 0,
         }
     }
 

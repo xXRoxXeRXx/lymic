@@ -31,6 +31,7 @@ mod hydration;
 mod identity;
 mod inflight;
 mod library;
+mod listing_log;
 mod nested;
 mod own_removals;
 mod placeholder;
@@ -42,6 +43,7 @@ mod refresh;
 mod registration;
 mod reporting;
 mod shell_thumbnails;
+mod watchdog;
 mod write_guard;
 
 #[cfg(windows)]
