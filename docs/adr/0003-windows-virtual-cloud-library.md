@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Read-only Windows Virtual Library via Cloud Files API (Store channel only)
@@ -51,7 +51,7 @@ The Virtual Library is read-only by design. This is a product decision, not an A
 
 ## Acceptance gates
 
-The ADR stays `proposed` until prototypes and a packaged build confirm the assumptions that would change the design, and the maintainer decides to accept it:
+The ADR was `proposed` until prototypes and a packaged build confirmed the assumptions that would change the design, and the maintainer decided to accept it (accepted 2026-11-23, see Gate results):
 
 1. Delete and rename of Virtual Placeholders are rejected, including Explorer's Recycle Bin path.
 2. The manifest-declared thumbnail provider renders thumbnails without triggering Hydration.
@@ -65,7 +65,7 @@ Two items are implementation tasks, not gates: autostart inside the MSIX package
 The checklist is [`docs/virtual-library-verification.md`](../virtual-library-verification.md). **No gate has a kept record** (no logs, counts, Windows build or Lymic commit). Two kinds of result exist:
 
 - **Written detail, gate prototype** (`Lymic.GatesProto`, Windows 11, comments on [#266](https://github.com/xXRoxXeRXx/lymic/issues/266)): a single Delete and a Rename of a placeholder raised `NOTIFY_DELETE` and `NOTIFY_RENAME` from `explorer.exe` and were vetoed with `STATUS_CLOUD_FILE_ACCESS_DENIED`; registration and `CfConnectSyncRoot` worked with the `exe` COM server and failed with the surrogate server (`0x80070490`); the prototype's thumbnail provider was never invoked; the nested-root check passed but not against a OneDrive-redirected Pictures folder; gate 3 was not run.
-- **Maintainer-reported, no per-step record.** The maintainer's field tests of a locally registered Package Identity build (`Lymic.Dev`, `exe` COM server, Windows 11, 2026-11-23): the sync root registers, placeholders are real, listing and Hydration of originals work, and in the last reported test it "looks very good and everything works perfectly" (cloud symbols, thumbnails, opening files, folder tree), a smoke test and not a run of the checklist. In addition, the maintainer's answer in the session on 2026-11-23, relayed to the implementer by the coordinating agent and not seen first-hand by it, says that all gate items were checked individually on the Package Identity build and passed. It named: Shift+Delete and drag-to-Recycle-Bin veto, a new local file ignored and never uploaded, the nested sync root, MSIX uninstall behaviour, thumbnails without Hydration, offline and 401 notices, disable and logout cleanup, and autostart. It gave no details.
+- **Maintainer-reported, no per-step record.** The maintainer's field tests of a locally registered Package Identity build (`Lymic.Dev`, `exe` COM server, Windows 11, 2026-11-23): the sync root registers, placeholders are real, listing and Hydration of originals work, and in the last reported test it "looks very good and everything works perfectly" (cloud symbols, thumbnails, opening files, folder tree), a smoke test and not a run of the checklist. In addition, the maintainer's direct answer in the session on 2026-11-23 ("Ja, alles geprüft") confirms that all gate items were checked individually on the Package Identity build and passed. It named: Shift+Delete and drag-to-Recycle-Bin veto, a new local file ignored and never uploaded, the nested sync root, MSIX uninstall behaviour, thumbnails without Hydration, offline and 401 notices, disable and logout cleanup, and autostart. It gave no details.
 
 Per gate:
 
@@ -74,7 +74,7 @@ Per gate:
 3. **MSIX uninstall behaviour.** Reported passed; what Windows leaves behind was not written down. The cleanup does not depend on it, and the guidance for a leftover folder (delete it, or reinstall and switch the Virtual Library on and off) stands.
 4. **Nested sync root.** Reported passed, no record; the prototype's check alone did not cover a OneDrive-redirected Pictures folder.
 
-**Before this ADR is accepted** the maintainer decides whether the relayed report is enough or whether the checklist steps behind it (A7, D1, D2, D5, D6, E3, E4, F1 to F6, F13, F14, H1 to H5, H12 to H14, I1 to I3) are re-run and their Result filled in. Acceptance is the maintainer's explicit decision; until then the status stays `proposed`.
+**Accepted on 2026-11-23** on the strength of the maintainer's own report above. No per-step record was kept. The checklist steps behind it (A7, D1, D2, D5, D6, E3, E4, F1 to F6, F13, F14, H1 to H5, H12 to H14, I1 to I3) can be re-run later to fill in the Result column; a failure there reopens this decision.
 
 The first packaged runs found defects the gates did not predict: generic icons and no cloud status in Explorer, a Hydration storm (1393 placeholders, 6.75 GB hydrated after a few clicks by an unknown process), a console window from the console-subsystem COM host, "Make sure Lymic is running" (`0x8007016A`) until the Virtual Library was disabled and enabled again, and thumbnails missing for `All Photos`. They were addressed in the review and field-report fixes (reader policy, content-indexing attribute, provider status and icon, windows-subsystem host, connection watchdog, per-directory thumbnail serving). This did not change the decisions above.
 
