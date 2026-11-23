@@ -37,6 +37,11 @@ pub(crate) struct AssetOriginal {
 }
 
 impl AssetOriginal {
+    /// The body length the server announced, when it did (not for a compressed or chunked body).
+    pub(crate) fn content_length(&self) -> Option<u64> {
+        self.response.content_length()
+    }
+
     /// The next piece of the original, or `None` at its end.
     pub(crate) async fn next_chunk(&mut self) -> Result<Option<Bytes>, RemoteFailure> {
         match tokio::time::timeout(self.stall, self.response.chunk()).await {
