@@ -39,6 +39,7 @@ mod readers;
 mod reconcile;
 mod reconciliation;
 mod refresh;
+mod registration;
 mod reporting;
 mod shell_thumbnails;
 mod write_guard;

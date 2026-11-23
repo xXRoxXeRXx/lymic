@@ -563,6 +563,14 @@ impl Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        // SAFETY: the key is the live connection; a refused update is only diagnostic.
+        if let Err(error) =
+            unsafe { CfUpdateSyncProviderStatus(self.key, CF_PROVIDER_STATUS_DISCONNECTED) }
+        {
+            note(&format!(
+                "CfUpdateSyncProviderStatus(DISCONNECTED) failed: {error}"
+            ));
+        }
         // SAFETY: the key came from a successful `CfConnectSyncRoot` and is disconnected once. The
         // call returns when no callback is running any more; the table is freed after it, as the
         // fields drop after this body.
@@ -619,5 +627,12 @@ pub(super) fn connect(root: &Path) -> windows::core::Result<Connection> {
     // SAFETY: `root` is NUL terminated and `table` is terminated and outlives the connection.
     let key =
         unsafe { CfConnectSyncRoot(PCWSTR(root.as_ptr()), table.as_ptr(), None, CONNECT_FLAGS)? };
+    // Explorer shows a sync root's state (the cloud overlay, the status column) from what the
+    // provider reports; without a report it stays blank. Lymic has no queue of its own, so the
+    // state is "idle" for as long as it is connected.
+    // SAFETY: `key` is the live connection returned above.
+    if let Err(error) = unsafe { CfUpdateSyncProviderStatus(key, CF_PROVIDER_STATUS_IDLE) } {
+        note(&format!("CfUpdateSyncProviderStatus(IDLE) failed: {error}"));
+    }
     Ok(Connection { key, _table: table })
 }
