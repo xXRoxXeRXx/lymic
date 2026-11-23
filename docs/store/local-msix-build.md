@@ -2,12 +2,12 @@
 
 Developer guide for building Lymic as an MSIX and registering it on your own machine, so the app runs **with Package Identity**.
 
-Why this exists: the planned read-only Windows Virtual Library ([ADR-0003](../adr/0003-windows-virtual-cloud-library.md)) is gated on actual Package Identity at runtime, in addition to `LYMIC_RELEASE_CHANNEL=store` ([ADR-0004](../adr/0004-microsoft-store-release-channel.md)). It is therefore unavailable in `npm run tauri dev` and in any unpackaged run of the executable, including the raw `lymic-desktop.exe` from `target/release`. A locally registered MSIX is how developers exercise it. This guide reuses the release tooling, so the local package has the same manifest and capabilities as the Store package:
+Why this exists: the read-only Windows Virtual Library ([ADR-0003](../adr/0003-windows-virtual-cloud-library.md)) is gated on actual Package Identity at runtime, in addition to `LYMIC_RELEASE_CHANNEL=store` ([ADR-0004](../adr/0004-microsoft-store-release-channel.md)). It is therefore unavailable in `npm run tauri dev` and in any unpackaged run of the executable, including the raw `lymic-desktop.exe` from `target/release`. A locally registered MSIX is how developers exercise it. This guide reuses the release tooling, so the local package has the same manifest and capabilities as the Store package:
 
 - [`scripts/package-msix.ps1`](../../scripts/package-msix.ps1) stages the executable and icons, fills [`src-tauri/msix/AppxManifest.template.xml`](../../src-tauri/msix/AppxManifest.template.xml) and runs `makeappx.exe`.
 - [`scripts/validate-msix.ps1`](../../scripts/validate-msix.ps1) checks the manifest of the produced package.
 
-> **Verification status.** The packaging, validation and self-signed signing commands below were run on a Windows Server 2022 machine, using a stand-in executable instead of a real Lymic build. The registration, launch and removal steps (`Add-AppxPackage`, `Remove-AppxPackage`, certificate trust) were **not** run there, because Developer Mode was off on that machine and was not changed. Treat those steps as written from the documented Windows behavior and report any deviation. Nothing here has been verified against a real Lymic build, and the runtime Package Identity check (#272) has not been run in a registered build either (see [Confirming Package Identity](#confirming-package-identity-at-runtime)).
+> **Verification status.** The maintainer has since registered and run local builds (`Lymic.Dev`, Windows 11, 2026-11-23; see the checklist). The statement below describes the machine the guide was written on. The packaging, validation and self-signed signing commands below were run on a Windows Server 2022 machine, using a stand-in executable instead of a real Lymic build. The registration, launch and removal steps (`Add-AppxPackage`, `Remove-AppxPackage`, certificate trust) were **not** run there, because Developer Mode was off on that machine and was not changed. Treat those steps as written from the documented Windows behavior and report any deviation. Nothing here has been verified against a real Lymic build, and the runtime Package Identity check (#272) has not been run in a registered build either (see [Confirming Package Identity](#confirming-package-identity-at-runtime)).
 
 ## Prerequisites
 
@@ -173,7 +173,7 @@ The Virtual Library settings gate (#272) decides availability at runtime and nev
 3. Open Settings. With an identity, the "Virtual Library" section is shown (the backend command `get_virtual_library_settings` reports `available: true`).
 4. As a negative control, run `npm run tauri dev`, or start the raw `lymic-desktop.exe` from `target/release`. Neither has a package identity, so the "Virtual Library" section must be absent even though the executable was built with `LYMIC_RELEASE_CHANNEL=store`.
 
-The acceptance criterion of ticket #274 (an identity in this local build, none in `tauri dev`) is **not yet verified**: the check exists, but it has not been run in a registered build. Run the steps above and record the result and the Windows version here.
+The acceptance criterion of ticket #274 (an identity in this local build, none in `tauri dev`): the maintainer ran a registered `Lymic.Dev` build on Windows 11 on 2026-11-23 and the section was available there, so the identity check worked in a registered build. The negative control (no section in `tauri dev` or a raw `lymic-desktop.exe`) was not individually recorded; it is step A1 of the checklist.
 
 ## Autostart inside the package (#284)
 
@@ -186,7 +186,7 @@ The acceptance criterion of ticket #274 (an identity in this local build, none i
 - A StartupTask launch carries no `--autostart` argument. It is recognised by its activation kind (`AppInstance::GetActivatedEventArgs`, `ActivationKind::StartupTask`) and starts hidden in the tray when credentials exist, like the login item does.
 - Windows may keep the task off after a request (`DisabledByUser` after the user turned it off in Settings or Task Manager, `DisabledByPolicy`). The toggle then reports an error that says where to turn it back on, instead of silently doing nothing.
 
-**Not verified.** None of the following was run, because the machine used for the implementation (Windows Server 2022) could not register a package. Verify them in a registered build (see the steps above) and record the Windows version and result here.
+**Not individually recorded.** None of the following was run on the machine used for the implementation (Windows Server 2022). The maintainer reports having checked the autostart on a registered build (2026-11-23) without per-step results; the steps are I2 to I5 of [`docs/virtual-library-verification.md`](../virtual-library-verification.md). Record the Windows version and result there.
 
 1. `makeappx` accepts the manifest with the startup task. Packaging and `validate-msix.ps1` were run with a stand-in executable; registration was not.
 2. The toggle in Settings enables the task: after turning autostart on, **Task Manager, Startup apps** lists "Lymic" as Enabled, and **Settings, Apps, Startup** shows it.
@@ -201,7 +201,7 @@ The acceptance criterion of ticket #274 (an identity in this local build, none i
 
 The Virtual Library shows Immich thumbnails for placeholders without Hydration through a COM thumbnail provider, the separate workspace crate `src-tauri/lymic-shell-ext` ([ADR-0003](../adr/0003-windows-virtual-cloud-library.md)). It is declared in the shared manifest template, so the local package and the Store package carry the same declaration.
 
-> **Verification status: NOT OBSERVED IN EXPLORER.** The crate compiles and its pure logic and its decoding are unit tested; the manifest packs with `makeappx` and passes `validate-msix.ps1`. Nothing was registered, no placeholder was shown and no thumbnail was requested by Explorer on the machine this was written on (Windows Server 2022, no Developer Mode). That the provider is invoked, that it shows a thumbnail and that it causes no Hydration is **unproven**. The gate prototype's result (the provider was never invoked) is not explained by this work either; see [What is uncertain](#what-is-uncertain). The manual record is in [`docs/virtual-library-verification.md`](../virtual-library-verification.md), section "Thumbnail provider (#282)".
+> **Verification status.** The crate compiles and its pure logic and its decoding are unit tested; the manifest packs with `makeappx` and passes `validate-msix.ps1`. On the machine this was written on (Windows Server 2022, no Developer Mode) nothing was registered. The maintainer ran a registered `Lymic.Dev` build (`exe` COM server, Windows 11, 2026-11-23): in the first run no thumbnails were shown and the sync root key had no `ThumbnailProvider` value; after the review fixes the last reported test showed thumbnails, and the maintainer reports that browsing causes no Hydration. None of this has a kept record (no log, no registry values, no counts), and the prototype's unexplained result (the provider was never invoked) is still not explained; see [What is uncertain](#what-is-uncertain). The manual checklist is [`docs/virtual-library-verification.md`](../virtual-library-verification.md), section "E. Thumbnails".
 
 ### How it works
 
@@ -268,7 +268,7 @@ What the template does now (`scripts/package-msix.ps1 -CloudFilesHandlers`):
 - **`dummy` (default).** `CustomStateHandler`, `ExtendedPropertyHandler` and `BannersHandler` get a made-up, well-formed `Clsid` (`...7a42`, `...7a43`, `...7a44`). This is the pattern of the CloudMirror sample, which gives the handlers it does not implement a made-up GUID with no `com:Class`. They are deliberately **not** registered as COM classes: a registered local server that never answers the request would make Explorer wait for it, while an unregistered class fails at once. `CloudFilesContextMenus` has no `Clsid` attribute (its children, `Verb` elements, carry them) and stays empty.
 - **`empty`.** The previous form, without `Clsid`.
 
-Not verified, and the reason the switch exists: whether `StorageProviderSyncRootManager.Register` accepts the dummy form (the gate prototype's `Register` failed with 0x80070490 once, with a surrogate server, for a reason nobody knows), and whether Explorer shows any state because of it. If `Register` fails or nothing changes, package with `-CloudFilesHandlers empty` and compare the `SyncRootManager` values. The record is in `docs/virtual-library-verification.md`, section "Review fixes after the first packaged run (#266)", item R7.
+Not verified, and the reason the switch exists: whether `StorageProviderSyncRootManager.Register` accepts the dummy form (the gate prototype's `Register` failed with 0x80070490 once, with a surrogate server, for a reason nobody knows), and whether Explorer shows any state because of it. If `Register` fails or nothing changes, package with `-CloudFilesHandlers empty` and compare the `SyncRootManager` values. The checklist is `docs/virtual-library-verification.md`, steps A4, A5 and E13.
 
 ### Findings that led to these declarations
 
