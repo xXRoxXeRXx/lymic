@@ -13,6 +13,7 @@ use crate::cloud_files::library::StoredCredentialsImmich;
 use crate::cloud_files::placeholder::PlaceholderSpec;
 use crate::cloud_files::population;
 use crate::cloud_files::reporting::{self, Operation, Report};
+use crate::cloud_files::shell_thumbnails::WarmingLibrary;
 use crate::cloud_files::write_guard;
 use std::mem::{offset_of, size_of};
 use std::path::Path;
@@ -135,7 +136,9 @@ unsafe extern "system" fn on_fetch_placeholders(
         let path = request.path();
         let plan = match &path {
             Ok(path) => {
-                population::populate(&StoredCredentialsImmich, &StoredCredentialsImmich, path).await
+                // Caches the thumbnails of the listed files for the shell extension (#282).
+                let library = WarmingLibrary::system(StoredCredentialsImmich);
+                population::populate(&library, &StoredCredentialsImmich, path).await
             }
             Err(failure) => Err(failure.clone()),
         };

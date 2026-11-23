@@ -85,7 +85,9 @@ async fn run_once(pool: &SqlitePool) -> Report {
         };
         let tree = super::adapter::disk_tree(root, &directories);
         let immich = super::library::StoredCredentialsImmich;
-        super::reconcile::reconcile(&immich, &immich, &tree, &populated).await
+        // Lists through the thumbnail cache filler, so new assets get their thumbnail too (#282).
+        let library = super::shell_thumbnails::WarmingLibrary::system(immich);
+        super::reconcile::reconcile(&library, &immich, &tree, &populated).await
     }
     #[cfg(not(windows))]
     {

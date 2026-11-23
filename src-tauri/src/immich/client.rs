@@ -511,10 +511,20 @@ impl ImmichClient {
     }
 
     pub(crate) async fn get_thumbnail(&self, asset_id: &str) -> Result<Vec<u8>, String> {
+        self.get_thumbnail_in_format(asset_id, "WEBP").await
+    }
+
+    /// The thumbnail in an explicit Immich `format` (`WEBP` or `JPEG`). The Virtual Library's shell
+    /// extension asks for JPEG: Windows decodes it everywhere, WebP only with its extension.
+    pub(crate) async fn get_thumbnail_in_format(
+        &self,
+        asset_id: &str,
+        format: &str,
+    ) -> Result<Vec<u8>, String> {
         Self::validate_path_segment(asset_id, "asset ID")?;
         let response = send_checked(
             self.request(Method::GET, &format!("assets/{asset_id}/thumbnail"))
-                .query(&[("format", "WEBP")]),
+                .query(&[("format", format)]),
             "Failed to fetch thumbnail",
         )
         .await?;
@@ -1551,6 +1561,42 @@ mod tests {
                 "Invalid user ID for API path"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn fetches_an_asset_thumbnail_in_the_requested_format() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            requests_tx
+                .send(read_http_request(&mut stream).await)
+                .await
+                .unwrap();
+            let image = b"\xFF\xD8\xFF\xE0asset-thumbnail";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                image.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+            stream.write_all(image).await.unwrap();
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+
+        assert_eq!(
+            client
+                .get_thumbnail_in_format("asset-1", "JPEG")
+                .await
+                .unwrap(),
+            b"\xFF\xD8\xFF\xE0asset-thumbnail"
+        );
+        let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(request.starts_with("GET /api/assets/asset-1/thumbnail?format=JPEG HTTP/1.1"));
     }
 
     #[tokio::test]

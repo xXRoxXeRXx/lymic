@@ -3,8 +3,11 @@
 //! for "the provider fills a directory when it is first listed", which is how the prototype
 //! observed `FETCH_PLACEHOLDERS` arriving one directory at a time.
 //!
-//! Deliberately no `windows.cloudFiles` manifest block and no COM server: with a surrogate COM
-//! server `Register` failed with 0x80070490 in the gate prototype.
+//! The thumbnail provider is not part of the registration: `StorageProviderSyncRootInfo` has no
+//! field for it. It comes from the package manifest (`windows.cloudFiles` with a COM server, #282).
+//! With a `com:SurrogateServer` the gate prototype's `Register` failed with 0x80070490 while a
+//! `com:ExeServer` registered, which is why the manifest declares an executable server by default
+//! (`docs/store/local-msix-build.md`).
 
 use crate::cloud_files::PROVIDER_ID;
 use std::path::Path;

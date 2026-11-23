@@ -36,7 +36,7 @@ Fill the **Result** column with PASS, FAIL or the observed behaviour, and add a 
 | 7 | Open a year, then a month. | The months, then the files appear. Names, sizes and dates match the Immich web app. The month is the capture's local month. Only that month was searched. | |
 | 8 | Find a Live Photo and a name collision in a month or album. | The Live Photo is two files with one base name (`IMG_0001.HEIC` and `IMG_0001.MOV`). A collision shows the ` (<6 characters>)` suffix on every colliding name. | |
 | 9 | Open `All Photos\Undated` and `Albums`, then one album. | Assets without a capture time are under `Undated`. Owned and shared albums appear as folders; an album folder shows its assets. | |
-| 10 | In a month view with Large icons (thumbnails on), watch the Immich access log and the file status icons. | Record whether Explorer reads file content to draw thumbnails. There is no thumbnail provider yet (separate ticket); any `assets/<id>/original` request caused only by browsing is a finding, not a pass. | |
+| 10 | In a month view with Large icons (thumbnails on), watch the Immich access log and the file status icons. | Record whether Explorer reads file content to draw thumbnails. The thumbnail provider (#282) is checked in its own section below; here any `assets/<id>/original` request caused only by browsing is a finding, not a pass. | |
 | 11 | Open a placeholder (for example in Photos or Paint). | The file opens. Its status icon changes to locally available. | |
 | 12 | Copy a hydrated file elsewhere and compare its SHA-256 with the original downloaded from the Immich web app. | Identical. | |
 | 13 | Open a large video (more than 1 GiB if possible). Watch Lymic's memory in Task Manager. | The video plays or copies completely. Memory does not grow with the file size. | |
@@ -52,7 +52,7 @@ Fill the **Result** column with PASS, FAIL or the observed behaviour, and add a 
 | 23 | Restore the server, then give Lymic an invalid API key (log in with a revoked key) and open an unhydrated placeholder. | The read fails with an authentication error; no loop. | |
 | 24 | Open a folder you have not browsed while the server is stopped, then restore the server and open it again. | The first listing fails; the second one works (a failed listing leaves the folder unpopulated). | |
 | 25 | Inspect the Immich access log for the whole session. | Only `GET` requests (plus the `POST` metadata searches). No write to any asset. | |
-| 26 | Inspect `AppxManifest.xml` in the registered package. | No `windows.cloudFiles` extension and no COM server declaration (the gate prototype's `Register` failed with 0x80070490 with one). | |
+| 26 | Inspect `AppxManifest.xml` in the registered package. | Since #282 it declares the `windows.cloudFiles` thumbnail handler and the `com:ExeServer` `LymicShellExt.exe` (the gate prototype's `Register` failed with 0x80070490 with a surrogate server); `Register` in step 3 must still succeed. | |
 | 27 | On a machine where the nested-root check can be exercised only through the registry (or only through `CfGetSyncRootInfoByPath`), note which one caught it, if it can be told. | Record. Reading `HKLM\...\SyncRootManager` from inside the package has not been confirmed to see other providers' roots. | |
 | H1 | **Hydration failures (#281), NOT YET RUN.** With the Virtual Library on and Lymic open, stop (or block) the Immich server. Open an unhydrated placeholder in Photos or Paint, and time it. | The open fails within about 15 seconds (connect and response timeout), with a network-style error ("network not connected" or the cloud provider "not available" message); Explorer does not hang. Immich's access log (or a proxy) shows exactly one attempt for the open: no retry loop. The shell status code is `STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE`. | |
 | H2 | Same situation: Lymic window open, on any view. | Exactly one notice appears (a banner above the content, and one activity log entry: "Could not open ... because Immich could not be reached."). It has no "Sign in again" button. | |
@@ -172,11 +172,38 @@ Do the steps with the Virtual Library enabled and the Immich access log (or a pr
 
 Code-level checks done by reading and by unit tests (not by running Explorer): the projection and hydration make only `GET` requests and the read-only `POST /search/metadata` (`walking_the_whole_projection_sends_only_reads_to_immich`); nothing in `cloud_files` or `virtual_library` references the upload queue, Synchronization or Watched Folders; Watched Folder registration, enabling and moving the root all refuse an overlap, in both directions (`virtual_library_root`, `watched_folders/registration.rs`, `commands/virtual_library.rs`, each with tests).
 
+## Thumbnail provider (#282): NOT YET RUN
+
+**Status: NOT YET RUN. Acceptance criteria 1 ("Explorer thumbnails render for unhydrated placeholders") and 2 ("Browsing thumbnails triggers no Hydration") of #282 are NOT verified, and neither is the part of criterion 4 that asks for this record to hold results.** Criterion 3 (the package still passes the existing MSIX validation) was checked by running `validate-msix.ps1` on packages built with a stand-in executable, not on a real release build. Same environment table as above; additionally record the Explorer view mode and whether the WebP image extension is installed.
+
+What exists: the `lymic-shell-ext` crate (COM provider, host executable, cache), the manifest declarations and the packaging (see [`docs/store/local-msix-build.md`](store/local-msix-build.md), "Thumbnail provider (#282)", for the exact declarations and what is uncertain). Unit tests cover the cache, the cache filler against fakes, the idle policy, the CLSID agreement between the crate and the packaging script, and the WIC decoding and scaling in-process. Nothing was observed in Explorer, with a registered package, or against a real placeholder. The gate prototype's provider was never invoked in Explorer; why is not known.
+
+Preparation: build the provider and package as in the build guide (`-p lymic-shell-ext`, then `package-msix.ps1`), register, start Lymic from its Start menu entry, enable the Virtual Library. Use a library whose photos are real images. Set the Explorer view to Large icons (thumbnails are not requested in Details or List). The provider's log is `%LOCALAPPDATA%\Packages\<package family>\LocalState\lymic-shell-ext.log`; the cache is `...\LocalState\shell-thumbnails`.
+
+| # | Step | Expected | Result |
+| --- | --- | --- | --- |
+| T1 | After enabling, run `reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager" /s` and find the `Lymic.VirtualLibrary!...` key. | Record every value. In particular: is there a `ThumbnailProvider` value, and is it `{9a3c3e0e-5b7d-4f4d-8f0e-2d6c1f6b7a41}`? If not, the handler was not taken from the manifest: stop and report. | |
+| T2 | `reg query "HKCR\CLSID\{9a3c3e0e-5b7d-4f4d-8f0e-2d6c1f6b7a41}" /s` | Record whether the class is registered (a packaged class may not show in the classic registry; then skip). | |
+| T3 | Open a month with 20 or more photos (never opened before) with Large icons. Before that, note in the Immich access log which `assets/<id>/original` requests exist. | Thumbnails appear for the unhydrated placeholders within a few seconds. Record how many of the first screen have one. | |
+| T4 | Immich access log for T3. | `assets/<id>/thumbnail?format=JPEG` requests from Lymic for the listed files; no `assets/<id>/original` request caused by browsing. | |
+| T5 | In the folder from T3, check the file status icons and run `Get-ChildItem <folder> \| Select Name, Attributes` or `fsutil reparsepoint query`. | Every file the user did not open is still a placeholder (cloud icon, `RECALL_ON_DATA_ACCESS` / offline attribute): **no placeholder became hydrated while browsing with thumbnails**. This is criterion 2. | |
+| T6 | Open `lymic-shell-ext.log`. | Lines `CreateInstance`, `Initialize ok: ... identity byte(s)` and `GetThumbnail ...: served from the cache` for the files of T3. A `nothing to serve (NotCached)` line means Explorer asked before the app cached the thumbnail. A decode failure line means the cached image format is not readable (WebP without codec?). | |
+| T7 | Task Manager during T3. | `LymicShellExt.exe` appears while thumbnails are drawn and is gone about 30 seconds after you stop browsing. | |
+| T8 | Scroll through a folder with more than 100 photos. | Thumbnails keep appearing; the first 48 are present at once, the rest arrive within seconds (press F5 if a few show only a generic icon, and record how many needed it). | |
+| T9 | Open one photo (hydrate it), then look at the folder. | That photo now shows Explorer's own thumbnail from the local content; the others are unchanged and still not hydrated. | |
+| T10 | Upload a new photo in Immich, press Refresh Library in Settings, look at the month. | The new placeholder appears and gets a thumbnail (it is cached by the Reconciliation listing). Record whether an F5 was needed. | |
+| T11 | Switch the Virtual Library off (confirm). Check `...\LocalState\shell-thumbnails`. | The directory is gone. | |
+| T12 | Log out with the Virtual Library on, then check the same directory. | The directory is gone. | |
+| T13 | Stop the Immich server (cached thumbnails exist), browse an already visited folder. | Cached thumbnails still show; no hang. | |
+| T14 | If T1 or T3 fail: package with `-ComServer surrogate` (build the DLL with `--features surrogate-dll`) and repeat T1, T3 and T6. Then, only if T1 still shows no `ThumbnailProvider` value, try CloudMirror's dummy CLSIDs for the four empty handlers. | Record what changed. The build guide lists these in the order to try. | |
+
+If `Register` fails (the toggle reports `VIRTUAL_LIBRARY_START_FAILED` with 0x80070490) with the new manifest, the declaration is the cause: record the error and the variant and revert to the previous manifest by packaging without the thumbnail block before continuing with other tickets.
+
 ## Known gaps this record will not close
 
 - Delete and rename of placeholders are vetoed in code (#279) but have never been run against this code; see the section below. Do not read them as passing.
 - Directories populated before reconciliation existed (#280) are not recorded as populated and are not reconciled; test reconciliation on a fresh enable.
 - Hydration failures (#281): the Windows error path (completing `FETCH_DATA` with a failure status, the `CANCEL_FETCH_DATA` callback) has no unit test and is covered only by steps H1 to H12 above, which have not been run. What is unit tested: the classification of Immich failures, the failure to Cloud Files status mapping, the timeouts, the episode rule for notices, the cancel registry and the notice and re-login wiring in the frontend.
 - Disabling and logout run the cleanup (#283); it has not run on Windows yet, see the section below. What Windows leaves behind after an MSIX uninstall (#277) is unknown.
-- No thumbnails from Immich and no autostart hint yet; unhydrated placeholders work only while Lymic runs.
+- The thumbnail provider (#282) has never run in Explorer, see its section above; the autostart hint (#284) is in the autostart section of the build guide. Unhydrated placeholders work only while Lymic runs.
 - Files whose size Immich does not report even after asking for the asset are left out of their directory (logged to standard error only).
