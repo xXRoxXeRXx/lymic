@@ -12,6 +12,14 @@
 //! until the folder is refreshed); the rest are fetched in the background. Fetching is always
 //! best effort: a thumbnail that cannot be fetched never fails a listing.
 //!
+//! Prewarming is not enough on its own (it is capped at 48 thumbnails per listing, runs once and an
+//! Explorer window can ask for any file at any time), so the provider also leaves a request for every
+//! thumbnail it was asked for and did not find ([`ThumbnailCache::record_miss`]). [`serve_misses`]
+//! turns those requests into cached thumbnails and refreshes the item in Explorer
+//! ([`ItemRefresh`]); `run_miss_server` polls for them while the sync root is connected. A fetch
+//! that fails is retried ([`Retry`]), and a request that still cannot be served is asked again for a
+//! few rounds before it is given up.
+//!
 //! Disabling the Virtual Library or logging out clears the cache ([`clear_system_cache`]).
 
 use super::identity;
@@ -21,6 +29,7 @@ use crate::virtual_library::{Entry, EntryKind, VirtualLibraryError};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use lymic_shell_ext::cache::ThumbnailCache;
+use std::collections::HashMap;
 use std::future::Future;
 use std::time::Duration;
 
@@ -30,8 +39,28 @@ const PREWARM_COUNT: usize = 48;
 const PREWARM_DEADLINE: Duration = Duration::from_secs(3);
 /// Thumbnails fetched at once.
 const CONCURRENCY: usize = 6;
-/// What the cache may grow to before the oldest thumbnails are removed.
+/// What the cache may grow to before the least recently used thumbnails are removed.
 const CACHE_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
+/// How often the requests Explorer leaves for missing thumbnails are looked at.
+const MISS_POLL: Duration = Duration::from_secs(2);
+/// How many times a request that cannot be served is asked again before it is given up.
+const MISS_ROUNDS: u32 = 3;
+
+/// How a thumbnail fetch that returned nothing is tried again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Retry {
+    /// Tries in all, the first included.
+    pub attempts: u32,
+    /// Pause after a failed try, multiplied by the number of tries so far.
+    pub delay: Duration,
+}
+
+/// A transient failure (a dropped connection, a server still generating the thumbnail) usually
+/// passes within seconds.
+pub(super) const RETRY: Retry = Retry {
+    attempts: 3,
+    delay: Duration::from_secs(2),
+};
 
 /// The thumbnail of a Remote Asset, as an image the shell can decode.
 pub(super) trait ThumbnailSource: Sync {
@@ -88,13 +117,26 @@ impl Warmed {
     }
 }
 
-async fn warm_one<S: ThumbnailSource>(cache: &ThumbnailCache, source: &S, job: &Job) -> Warmed {
+async fn warm_one<S: ThumbnailSource>(
+    cache: &ThumbnailCache,
+    source: &S,
+    job: &Job,
+    retry: Retry,
+) -> Warmed {
     let mut outcome = Warmed::default();
     if cache.contains(&job.identity) {
         outcome.already_cached = 1;
         return outcome;
     }
-    let Some(image) = source.thumbnail(&job.asset).await else {
+    let mut image = None;
+    for attempt in 1..=retry.attempts.max(1) {
+        image = source.thumbnail(&job.asset).await;
+        if image.is_some() || attempt >= retry.attempts {
+            break;
+        }
+        tokio::time::sleep(retry.delay * attempt).await;
+    }
+    let Some(image) = image else {
         outcome.failed = 1;
         return outcome;
     };
@@ -107,11 +149,13 @@ async fn warm_one<S: ThumbnailSource>(cache: &ThumbnailCache, source: &S, job: &
     outcome
 }
 
-/// Caches the thumbnails of `jobs` that are not cached yet, a few at a time.
+/// Caches the thumbnails of `jobs` that are not cached yet, a few at a time, trying each as
+/// `retry` says.
 pub(super) async fn warm<S: ThumbnailSource>(
     cache: &ThumbnailCache,
     source: &S,
     jobs: &[Job],
+    retry: Retry,
 ) -> Warmed {
     // A plain loop, not `buffer_unordered` over a closure: a closure over each borrowed job makes
     // the future fail the higher-ranked `Send` check of `tokio::spawn`.
@@ -121,7 +165,7 @@ pub(super) async fn warm<S: ThumbnailSource>(
     loop {
         while running.len() < CONCURRENCY {
             let Some(job) = waiting.next() else { break };
-            running.push(warm_one(cache, source, job));
+            running.push(warm_one(cache, source, job, retry));
         }
         match running.next().await {
             Some(outcome) => total.add(outcome),
@@ -138,6 +182,7 @@ pub(super) struct WarmingLibrary<L, S> {
     cache: Option<ThumbnailCache>,
     pub(super) prewarm_count: usize,
     pub(super) prewarm_deadline: Duration,
+    pub(super) retry: Retry,
 }
 
 impl<L, S> WarmingLibrary<L, S> {
@@ -148,6 +193,7 @@ impl<L, S> WarmingLibrary<L, S> {
             cache,
             prewarm_count: PREWARM_COUNT,
             prewarm_deadline: PREWARM_DEADLINE,
+            retry: RETRY,
         }
     }
 }
@@ -172,10 +218,14 @@ where
         let mut jobs = jobs(path, &entries);
         let later = jobs.split_off(self.prewarm_count.min(jobs.len()));
         // Not finishing in time is fine: those thumbnails are simply missing for now.
-        let _ = tokio::time::timeout(self.prewarm_deadline, warm(cache, &self.source, &jobs)).await;
-        let (cache, source) = (cache.clone(), self.source.clone());
+        let _ = tokio::time::timeout(
+            self.prewarm_deadline,
+            warm(cache, &self.source, &jobs, self.retry),
+        )
+        .await;
+        let (cache, source, retry) = (cache.clone(), self.source.clone(), self.retry);
         tokio::spawn(async move {
-            warm(&cache, &source, &later).await;
+            warm(&cache, &source, &later, retry).await;
             let _ = tokio::task::spawn_blocking(move || cache.trim(CACHE_LIMIT_BYTES)).await;
         });
         Ok(entries)
@@ -183,6 +233,110 @@ where
 
     async fn resolve(&self, path: &str) -> Result<RemoteAssetId, VirtualLibraryError> {
         self.inner.resolve(path).await
+    }
+}
+
+/// Tells Explorer that an item changed, so that it asks for its thumbnail again.
+pub(super) trait ItemRefresh: Sync {
+    /// `path` is the item's full file system path.
+    fn refresh(&self, path: &str);
+}
+
+/// How often each request that could not be served has been tried, so that a thumbnail that cannot
+/// be had is not asked for for ever.
+#[derive(Debug, Default)]
+pub(super) struct MissQueue {
+    rounds: HashMap<Vec<u8>, u32>,
+}
+
+/// What one pass over the requests did.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Served {
+    /// Thumbnails now cached (and their items refreshed).
+    pub stored: usize,
+    /// Requests that failed and were left to be tried again.
+    pub requeued: usize,
+    /// Requests given up: no path, or too many failed rounds.
+    pub dropped: usize,
+}
+
+/// Serves the thumbnails Explorer asked for and the cache did not have: the provider answered those
+/// with a generic image and left a request. Each is looked up (`identity` to path to Remote Asset),
+/// fetched with `retry` and stored, and its item is refreshed so Explorer replaces the generic
+/// image. A request that cannot be served is put back for another round, up to [`MISS_ROUNDS`]
+/// rounds, because Explorer keeps the generic image it was given and will not ask again by itself.
+pub(super) async fn serve_misses<L, S, R>(
+    cache: &ThumbnailCache,
+    library: &L,
+    source: &S,
+    refresh: &R,
+    queue: &mut MissQueue,
+    retry: Retry,
+) -> Served
+where
+    L: Library,
+    S: ThumbnailSource,
+    R: ItemRefresh,
+{
+    let mut served = Served::default();
+    for miss in cache.take_misses() {
+        let Some(path) = identity::decode(&miss.identity) else {
+            served.dropped += 1;
+            continue;
+        };
+        let done = match library.resolve(&path).await {
+            Ok(asset) => {
+                let job = Job {
+                    identity: miss.identity.clone(),
+                    asset,
+                };
+                let warmed = warm_one(cache, source, &job, retry).await;
+                warmed.stored + warmed.already_cached > 0
+            }
+            Err(_) => false,
+        };
+        if done {
+            queue.rounds.remove(&miss.identity);
+            refresh.refresh(&miss.path);
+            served.stored += 1;
+            continue;
+        }
+        let rounds = queue.rounds.entry(miss.identity.clone()).or_insert(0);
+        *rounds += 1;
+        if *rounds >= MISS_ROUNDS {
+            queue.rounds.remove(&miss.identity);
+            served.dropped += 1;
+        } else {
+            cache.record_miss(&miss.identity, &miss.path);
+            served.requeued += 1;
+        }
+    }
+    served
+}
+
+/// Serves the requests of the running package's cache until the task is aborted: the app calls it
+/// when the sync root is connected and aborts it when it stops. `refresh` is the adapter's
+/// shell notification.
+pub(super) async fn run_miss_server<R: ItemRefresh>(refresh: R) {
+    let Some(cache) = system_cache() else {
+        return;
+    };
+    let mut queue = MissQueue::default();
+    loop {
+        tokio::time::sleep(MISS_POLL).await;
+        let served = serve_misses(
+            &cache,
+            &StoredCredentialsImmich,
+            &StoredCredentialsImmich,
+            &refresh,
+            &mut queue,
+            RETRY,
+        )
+        .await;
+        if served.stored > 0 {
+            let cache = cache.clone();
+            let _ = tokio::task::spawn_blocking(move || cache.trim(CACHE_LIMIT_BYTES)).await;
+        }
     }
 }
 
@@ -323,7 +477,10 @@ mod tests {
         source: &FakeSource,
         dir: &TempDir,
     ) -> WarmingLibrary<FakeLibrary, FakeSource> {
-        WarmingLibrary::new(FakeLibrary(Ok(entries)), source.clone(), Some(dir.cache()))
+        let mut library =
+            WarmingLibrary::new(FakeLibrary(Ok(entries)), source.clone(), Some(dir.cache()));
+        library.retry = FAST;
+        library
     }
 
     #[test]
@@ -425,7 +582,7 @@ mod tests {
             ],
         );
 
-        let warmed = warm(&cache, &source, &jobs).await;
+        let warmed = warm(&cache, &source, &jobs, FAST).await;
 
         assert_eq!(
             warmed,
@@ -519,5 +676,211 @@ mod tests {
             library.resolve("x").await.unwrap(),
             RemoteAssetId::new("resolved")
         );
+    }
+
+    // ------------------------------------------------------------------ retries and misses
+
+    const FAST: Retry = Retry {
+        attempts: 3,
+        delay: Duration::from_millis(1),
+    };
+
+    /// Answers like [`FakeSource`], except that the first `times` asks for `id` get nothing.
+    #[derive(Clone)]
+    struct FlakySource {
+        inner: FakeSource,
+        failures_left: Arc<Mutex<HashMap<String, usize>>>,
+    }
+
+    impl FlakySource {
+        fn new(inner: FakeSource, id: &str, times: usize) -> Self {
+            Self {
+                inner,
+                failures_left: Arc::new(Mutex::new(HashMap::from([(id.to_string(), times)]))),
+            }
+        }
+    }
+
+    impl ThumbnailSource for FlakySource {
+        async fn thumbnail(&self, asset: &RemoteAssetId) -> Option<Vec<u8>> {
+            {
+                let mut left = self.failures_left.lock().unwrap();
+                if let Some(remaining) = left.get_mut(asset.as_str()) {
+                    if *remaining > 0 {
+                        *remaining -= 1;
+                        return None;
+                    }
+                }
+            }
+            self.inner.thumbnail(asset).await
+        }
+    }
+
+    #[tokio::test]
+    async fn a_thumbnail_that_fails_at_first_is_tried_again_and_cached() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        let source = FlakySource::new(FakeSource::with(&[("a", JPEG)]), "a", 2);
+        let jobs = jobs("", &[file("a.jpg", Some("a"))]);
+
+        let warmed = warm(&cache, &source, &jobs, FAST).await;
+
+        assert_eq!(warmed.stored, 1);
+        assert_eq!(warmed.failed, 0);
+        assert!(cache.contains(b"a.jpg"));
+    }
+
+    #[tokio::test]
+    async fn a_thumbnail_that_keeps_failing_is_given_up_after_the_attempts() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        let source = FakeSource::with(&[]);
+        let jobs = jobs("", &[file("a.jpg", Some("gone"))]);
+
+        let warmed = warm(&cache, &source, &jobs, FAST).await;
+
+        assert_eq!(warmed.failed, 1);
+        assert_eq!(source.asked().len(), 3, "three attempts, no more");
+    }
+
+    #[test]
+    fn a_video_is_a_thumbnail_job_like_a_photo() {
+        // Immich renders a JPEG thumbnail for a video too (`format=JPEG`), so a `.3gp` is cached
+        // like any photo and is not special-cased.
+        let jobs = jobs(
+            "All Photos/Undated",
+            &[file("Garfild.3gp", Some("video-1"))],
+        );
+
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].identity, b"All Photos/Undated/Garfild.3gp".to_vec());
+    }
+
+    /// Resolves the paths it was given to assets; every other path is not found.
+    struct PathLibrary(HashMap<String, String>);
+
+    impl PathLibrary {
+        fn of(paths: &[(&str, &str)]) -> Self {
+            Self(
+                paths
+                    .iter()
+                    .map(|(path, asset)| (path.to_string(), asset.to_string()))
+                    .collect(),
+            )
+        }
+    }
+
+    impl Library for PathLibrary {
+        async fn list(&self, _path: &str) -> Result<Vec<Entry>, VirtualLibraryError> {
+            Ok(Vec::new())
+        }
+
+        async fn resolve(&self, path: &str) -> Result<RemoteAssetId, VirtualLibraryError> {
+            self.0
+                .get(path)
+                .map(|asset| RemoteAssetId::new(asset))
+                .ok_or(VirtualLibraryError::NotFound)
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingRefresh(Mutex<Vec<String>>);
+
+    impl ItemRefresh for RecordingRefresh {
+        fn refresh(&self, path: &str) {
+            self.0.lock().unwrap().push(path.to_string());
+        }
+    }
+
+    #[tokio::test]
+    async fn a_thumbnail_explorer_asked_for_is_cached_and_the_item_refreshed() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        cache.record_miss(b"Albums/Trip/a.jpg", r"C:\Lymic\Albums\Trip\a.jpg");
+        let library = PathLibrary::of(&[("Albums/Trip/a.jpg", "asset-1")]);
+        let source = FakeSource::with(&[("asset-1", JPEG)]);
+        let refresh = RecordingRefresh::default();
+
+        let served = serve_misses(
+            &cache,
+            &library,
+            &source,
+            &refresh,
+            &mut MissQueue::default(),
+            FAST,
+        )
+        .await;
+
+        assert_eq!(served.stored, 1);
+        assert!(cache.contains(b"Albums/Trip/a.jpg"));
+        assert_eq!(
+            *refresh.0.lock().unwrap(),
+            vec![r"C:\Lymic\Albums\Trip\a.jpg".to_string()]
+        );
+        assert!(cache.take_misses().is_empty(), "the request is done");
+    }
+
+    #[tokio::test]
+    async fn a_request_that_cannot_be_served_is_asked_again_later_and_dropped_after_three_rounds() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        cache.record_miss(b"a.jpg", r"C:\Lymic\a.jpg");
+        let library = PathLibrary::of(&[("a.jpg", "gone")]);
+        let source = FakeSource::with(&[]);
+        let refresh = RecordingRefresh::default();
+        let mut queue = MissQueue::default();
+
+        let first = serve_misses(&cache, &library, &source, &refresh, &mut queue, FAST).await;
+        let second = serve_misses(&cache, &library, &source, &refresh, &mut queue, FAST).await;
+        let third = serve_misses(&cache, &library, &source, &refresh, &mut queue, FAST).await;
+        let fourth = serve_misses(&cache, &library, &source, &refresh, &mut queue, FAST).await;
+
+        assert_eq!((first.requeued, first.dropped), (1, 0));
+        assert_eq!((second.requeued, second.dropped), (1, 0));
+        assert_eq!((third.requeued, third.dropped), (0, 1));
+        assert_eq!(fourth, Served::default());
+        assert!(refresh.0.lock().unwrap().is_empty());
+        assert!(cache.take_misses().is_empty(), "nothing is left to retry");
+    }
+
+    #[tokio::test]
+    async fn a_request_for_a_path_that_no_longer_resolves_is_dropped_in_the_end() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        cache.record_miss(b"removed.jpg", r"C:\Lymic\removed.jpg");
+        let library = PathLibrary::of(&[]);
+        let source = FakeSource::with(&[]);
+        let refresh = RecordingRefresh::default();
+        let mut queue = MissQueue::default();
+
+        for _ in 0..3 {
+            serve_misses(&cache, &library, &source, &refresh, &mut queue, FAST).await;
+        }
+
+        assert!(cache.take_misses().is_empty());
+        assert!(
+            source.asked().is_empty(),
+            "nothing to fetch for an unknown asset"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_request_whose_identity_is_not_a_path_is_dropped_at_once() {
+        let dir = TempDir::new();
+        let cache = dir.cache();
+        cache.record_miss(&[0xFF, 0xFE, 0x00], r"C:\Lymic\x");
+
+        let served = serve_misses(
+            &cache,
+            &PathLibrary::of(&[]),
+            &FakeSource::with(&[]),
+            &RecordingRefresh::default(),
+            &mut MissQueue::default(),
+            FAST,
+        )
+        .await;
+
+        assert_eq!(served.dropped, 1);
+        assert!(cache.take_misses().is_empty());
     }
 }
