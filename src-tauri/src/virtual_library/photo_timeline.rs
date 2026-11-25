@@ -18,24 +18,30 @@ enum Bucket {
     Undated,
 }
 
-/// The month Immich reports for an asset that has no capture time: it sends `localDateTime` as the
-/// Unix epoch (`1970-01-01T00:00:00.000Z`, observed on a real server), which is January 1970.
-/// Nothing real was captured then, so the whole month is read as "no capture time": the exact epoch
-/// instant and the rest of that month are filed under `Undated` and no `1970` directory exists. The
-/// timeline buckets are per month, so the calendar and the assets have to agree on the whole month.
-const UNDATED_PLACEHOLDER_MONTH: (i32, u32) = (1970, 1);
+/// The month of the Unix epoch, `1970-01-01T00:00:00.000Z`: what Immich reports as `localDateTime`
+/// for an asset without a capture time (observed on a real server). Only that exact instant means
+/// "no capture time" ([`is_epoch`]); another asset of the month is a real photograph and is filed
+/// under it like any other. The timeline buckets are per month, so the calendar cannot tell the two
+/// apart and the month needs one look at its assets ([`Calendar::from_buckets`]).
+pub(super) const EPOCH_MONTH: (i32, u32) = (1970, 1);
 
 /// The local capture month of `asset`. Immich's `localDateTime` already is the wall-clock time at
 /// the place of capture, so its components are read as written and no time zone is applied.
-/// An asset without a usable `localDateTime`, or with the epoch placeholder, is undated.
+/// An asset without a usable `localDateTime`, or at exactly the epoch instant, is undated.
 fn bucket_of(asset: &LibraryAsset) -> Bucket {
     asset
         .local_date_time
         .as_deref()
         .and_then(local_wall_clock)
-        .map(|time| (time.year(), time.month()))
-        .filter(|month| *month != UNDATED_PLACEHOLDER_MONTH)
-        .map_or(Bucket::Undated, |(year, month)| Bucket::Month(year, month))
+        .filter(|time| !is_epoch(time))
+        .map_or(Bucket::Undated, |time| {
+            Bucket::Month(time.year(), time.month())
+        })
+}
+
+/// Whether `time` is exactly `1970-01-01T00:00:00`, the instant Immich uses for "no capture time".
+fn is_epoch(time: &NaiveDateTime) -> bool {
+    *time == DateTime::UNIX_EPOCH.naive_utc()
 }
 
 fn local_wall_clock(text: &str) -> Option<NaiveDateTime> {
@@ -57,17 +63,26 @@ pub(super) struct Calendar {
 
 impl Calendar {
     /// A bucket names its month in its first seven characters (`2025-03-01T00:00:00.000Z`, or
-    /// `2025-03-01`); one that names no calendar month, or the epoch placeholder month
-    /// ([`UNDATED_PLACEHOLDER_MONTH`]), holds assets without a usable capture time. Empty buckets
-    /// hold nothing.
-    pub(super) fn from_buckets(buckets: &[TimelineBucket]) -> Self {
+    /// `2025-03-01`); one that names no calendar month holds assets without a usable capture time.
+    /// Empty buckets hold nothing. The [`EPOCH_MONTH`] bucket holds both real photographs and
+    /// assets at the epoch instant (no capture time); `dated_in_epoch_month` is how many of its
+    /// assets are real (see [`holds_epoch_month`]), the rest are undated. So `1970` appears only
+    /// when a real photograph of January 1970 exists.
+    pub(super) fn from_buckets(buckets: &[TimelineBucket], dated_in_epoch_month: u64) -> Self {
         let mut calendar = Self {
             months: BTreeMap::new(),
             undated: 0,
         };
         for bucket in buckets.iter().filter(|bucket| bucket.count > 0) {
             match bucket_month(&bucket.time_bucket) {
-                Some(month) if month != UNDATED_PLACEHOLDER_MONTH => {
+                Some(EPOCH_MONTH) => {
+                    let dated = dated_in_epoch_month.min(bucket.count);
+                    if dated > 0 {
+                        *calendar.months.entry(EPOCH_MONTH).or_default() += dated;
+                    }
+                    calendar.undated += bucket.count - dated;
+                }
+                Some(month) => {
                     *calendar.months.entry(month).or_default() += bucket.count;
                 }
                 _ => calendar.undated += bucket.count,
@@ -118,6 +133,14 @@ impl Calendar {
             .collect();
         (!entries.is_empty()).then_some(entries)
     }
+}
+
+/// Whether the timeline has assets in the [`EPOCH_MONTH`], which may or may not be real
+/// photographs.
+pub(super) fn holds_epoch_month(buckets: &[TimelineBucket]) -> bool {
+    buckets
+        .iter()
+        .any(|bucket| bucket.count > 0 && bucket_month(&bucket.time_bucket) == Some(EPOCH_MONTH))
 }
 
 fn bucket_month(time_bucket: &str) -> Option<(i32, u32)> {

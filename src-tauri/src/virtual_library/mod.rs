@@ -266,7 +266,26 @@ impl<'a> VirtualLibrary<'a> {
             .list_photo_timeline_months()
             .await
             .map_err(VirtualLibraryError::Remote)?;
-        Ok(photo_timeline::Calendar::from_buckets(&buckets))
+        // January 1970 is the one month whose bucket also holds assets without a capture time
+        // (Immich reports them at the epoch), so it alone needs a look at its assets to tell
+        // whether a `1970` folder exists. One windowed search, never the whole timeline; a month
+        // that cannot be looked at fails the listing rather than guessing.
+        let dated_in_epoch_month = if photo_timeline::holds_epoch_month(&buckets) {
+            let (year, month) = photo_timeline::EPOCH_MONTH;
+            let (after, before) = photo_timeline::creation_window(year, month);
+            let assets = self
+                .client
+                .list_photo_timeline_assets_created_between(after, before)
+                .await
+                .map_err(VirtualLibraryError::Remote)?;
+            photo_timeline::assets_in(assets, &Dir::Month(year, month)).len() as u64
+        } else {
+            0
+        };
+        Ok(photo_timeline::Calendar::from_buckets(
+            &buckets,
+            dated_in_epoch_month,
+        ))
     }
 
     /// The files of a month or `Undated` directory holding `assets`.

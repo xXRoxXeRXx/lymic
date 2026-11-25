@@ -413,6 +413,70 @@ async fn an_asset_whose_capture_time_is_the_unix_epoch_is_filed_under_undated_no
 }
 
 #[tokio::test]
+async fn a_real_photo_from_january_1970_stays_in_1970_next_to_the_undated_epoch_asset() {
+    // Only the exact epoch instant means "no capture time": a scan taken on 15 January 1970 is a
+    // real photograph and keeps its place in `All Photos/1970/01 January`.
+    let server = fake_library(vec![
+        asset("d1", "IMG_0100.jpg", "2025-06-15T12:00:00.000Z"),
+        asset("e1", "Garfild.3gp", "1970-01-01T00:00:00.000Z"),
+        asset("r1", "scan_1970.jpg", "1970-01-15T09:30:00.000Z"),
+        asset("r2", "one_second_later.jpg", "1970-01-01T00:00:01.000Z"),
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(
+        names(&library.list("All Photos").await.unwrap()),
+        ["1970", "2025", "Undated"]
+    );
+    assert_eq!(
+        names(&library.list("All Photos/1970").await.unwrap()),
+        ["01 January"]
+    );
+    assert_eq!(
+        names(&library.list("All Photos/1970/01 January").await.unwrap()),
+        ["one_second_later.jpg", "scan_1970.jpg"]
+    );
+    assert_eq!(
+        names(&library.list("All Photos/Undated").await.unwrap()),
+        ["Garfild.3gp"]
+    );
+    assert_eq!(
+        library
+            .resolve("All Photos/1970/01 January/scan_1970.jpg")
+            .await,
+        Ok(RemoteAssetId::new("r1"))
+    );
+    assert_eq!(
+        library.resolve("All Photos/Undated/Garfild.3gp").await,
+        Ok(RemoteAssetId::new("e1"))
+    );
+}
+
+#[tokio::test]
+async fn a_library_with_only_real_january_1970_photos_has_a_1970_folder_and_no_undated() {
+    let server = fake_library(vec![asset(
+        "r1",
+        "scan_1970.jpg",
+        "1970-01-15T09:30:00.000Z",
+    )])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(names(&library.list("All Photos").await.unwrap()), ["1970"]);
+    assert_eq!(
+        library.list("All Photos/Undated").await,
+        Err(VirtualLibraryError::NotFound)
+    );
+    assert_eq!(
+        names(&library.list("All Photos/1970/01 January").await.unwrap()),
+        ["scan_1970.jpg"]
+    );
+}
+
+#[tokio::test]
 async fn a_library_whose_only_asset_has_the_epoch_capture_time_shows_only_undated() {
     let server = fake_library(vec![asset("e1", "Garfild.3gp", "1970-01-01T00:00:00.000Z")]).await;
     let client = test_client(server.url.clone(), "key");
