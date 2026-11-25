@@ -21,6 +21,11 @@ pub(super) const BLOCK_BYTES: usize = 1024 * 1024;
 /// reader is not interrupted by a request per read and a seek is not queued behind a download of
 /// the whole file. The platform asks again for what the reader needs next.
 pub(super) const READ_AHEAD_BYTES: u64 = 32 * 1024 * 1024;
+/// The first bytes of a read are handed over as soon as they arrive (in pieces of any multiple of
+/// [`ALIGNMENT`]) instead of after a whole block: a program that reads the start of a file gives
+/// up when the first bytes take too long. This many bytes from the start of a read get that
+/// treatment; after that the full blocks resume.
+pub(super) const EAGER_BYTES: u64 = 8 * 1024 * 1024;
 
 /// A piece of the original at its offset.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,6 +65,23 @@ impl BlockAligner {
             self.next_offset += BLOCK_BYTES as u64;
         }
         blocks
+    }
+
+    /// Hands over what is held up to the last [`ALIGNMENT`] boundary, without waiting for a full
+    /// block. `None` when less than one aligned unit is held.
+    pub(super) fn flush_aligned(&mut self) -> Option<Block> {
+        let ready = self.buffer.len() / ALIGNMENT as usize * ALIGNMENT as usize;
+        if ready == 0 {
+            return None;
+        }
+        let rest = self.buffer.split_off(ready);
+        let data = std::mem::replace(&mut self.buffer, rest);
+        let block = Block {
+            offset: self.next_offset,
+            data,
+        };
+        self.next_offset += ready as u64;
+        Some(block)
     }
 
     /// The bytes still held, which end the file.
@@ -148,6 +170,17 @@ where
     }
 
     let stop_at = stop_at(request);
+    // The first bytes of the range are handed over as they arrive, up to the end of the range the
+    // reader waits for (or [`EAGER_BYTES`] of it).
+    let eager_until = if request.required_length == 0 {
+        start
+    } else {
+        request
+            .required_offset
+            .saturating_add(request.required_length)
+            .min(start.saturating_add(EAGER_BYTES))
+            .min(request.file_size)
+    };
     let mut aligner = BlockAligner::starting_at(start);
     let mut transferred: u64 = 0;
     // The end of what the platform has been given.
@@ -163,6 +196,13 @@ where
             sink.transfer(&block)?;
             transferred += block.data.len() as u64;
             handed_over = block.offset + block.data.len() as u64;
+        }
+        if handed_over < eager_until {
+            if let Some(block) = aligner.flush_aligned() {
+                sink.transfer(&block)?;
+                transferred += block.data.len() as u64;
+                handed_over = block.offset + block.data.len() as u64;
+            }
         }
         if handed_over >= stop_at && handed_over < request.file_size {
             // Enough for now: dropping the stream ends the download. What the aligner still holds
@@ -693,7 +733,6 @@ mod tests {
         assert!(transferred >= READ_AHEAD_BYTES + 4_096, "{transferred}");
         assert!(transferred < data.len() as u64, "{transferred}");
         assert_platform_alignment(&sink.blocks, data.len() as u64);
-        assert!(sink.blocks.iter().all(|b| b.data.len() == BLOCK_BYTES));
         let joined: Vec<u8> = sink.blocks.iter().flat_map(|b| b.data.clone()).collect();
         assert_eq!(joined, data[..joined.len()]);
     }
@@ -767,5 +806,120 @@ mod tests {
 
             assert_eq!(transferred, data.len() as u64, "length {length}");
         }
+    }
+
+    #[test]
+    fn the_aligner_hands_over_what_it_holds_up_to_the_last_aligned_unit() {
+        let mut aligner = BlockAligner::starting_at(0);
+        aligner.push(&bytes_of(ALIGNMENT as usize * 2 + 100));
+
+        let block = aligner.flush_aligned().unwrap();
+
+        assert_eq!(block.offset, 0);
+        assert_eq!(block.data.len() as u64, 2 * ALIGNMENT);
+        assert!(
+            aligner.flush_aligned().is_none(),
+            "100 bytes are not a unit"
+        );
+        // The rest keeps its place: the next block starts where the first ended.
+        aligner.push(&bytes_of(ALIGNMENT as usize));
+        assert_eq!(aligner.flush_aligned().unwrap().offset, 2 * ALIGNMENT);
+    }
+
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    /// Records, with the number of network chunks delivered so far, each block as it is handed over.
+    struct TimedSink {
+        delivered: Arc<AtomicUsize>,
+        blocks: Vec<(usize, Block)>,
+    }
+
+    impl DataSink for TimedSink {
+        fn transfer(&mut self, block: &Block) -> Result<(), Failure> {
+            self.blocks
+                .push((self.delivered.load(Ordering::SeqCst), block.clone()));
+            Ok(())
+        }
+    }
+
+    /// A source whose streams count the chunks they deliver.
+    struct CountingSource {
+        inner: FakeSource,
+        delivered: Arc<AtomicUsize>,
+    }
+
+    struct CountingStream {
+        inner: FakeStream,
+        delivered: Arc<AtomicUsize>,
+    }
+
+    impl OriginalSource for CountingSource {
+        type Stream = CountingStream;
+
+        async fn open(&self, asset: &RemoteAssetId, from: u64) -> Result<CountingStream, Failure> {
+            Ok(CountingStream {
+                inner: self.inner.open(asset, from).await?,
+                delivered: self.delivered.clone(),
+            })
+        }
+    }
+
+    impl OriginalStream for CountingStream {
+        fn starts_at(&self) -> u64 {
+            self.inner.starts_at()
+        }
+
+        fn content_length(&self) -> Option<u64> {
+            self.inner.content_length()
+        }
+
+        async fn next_chunk(&mut self) -> Result<Option<Bytes>, Failure> {
+            let chunk = self.inner.next_chunk().await?;
+            if chunk.is_some() {
+                self.delivered.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok(chunk)
+        }
+    }
+
+    #[tokio::test]
+    async fn the_range_a_reader_waits_for_is_handed_over_with_the_first_chunks_not_after_a_full_block(
+    ) {
+        // Chunks of 16 KiB, as a network delivers them: the first 64 KiB are there after 4 chunks.
+        let data = bytes_of(4 * BLOCK_BYTES);
+        let delivered = Arc::new(AtomicUsize::new(0));
+        let source = CountingSource {
+            inner: FakeSource::serving(&data, 16 * 1024),
+            delivered: delivered.clone(),
+        };
+        let mut sink = TimedSink {
+            delivered,
+            blocks: Vec::new(),
+        };
+
+        hydrate(
+            &library(),
+            &source,
+            &mut sink,
+            &ranged_request(0, 65_536, data.len() as u64),
+        )
+        .await
+        .unwrap();
+
+        let (chunks_at_first, first) = &sink.blocks[0];
+        assert_eq!(first.offset, 0);
+        assert!(*chunks_at_first <= 4, "after {chunks_at_first} chunks");
+        let covered: u64 = sink
+            .blocks
+            .iter()
+            .take_while(|(_, block)| block.offset < 65_536)
+            .map(|(_, block)| block.data.len() as u64)
+            .sum();
+        assert!(covered >= 65_536);
+        let blocks: Vec<Block> = sink.blocks.iter().map(|(_, b)| b.clone()).collect();
+        assert_platform_alignment(&blocks, data.len() as u64);
+        let joined: Vec<u8> = blocks.iter().flat_map(|b| b.data.clone()).collect();
+        assert_eq!(joined, data, "every byte arrives once, in order");
     }
 }

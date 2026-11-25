@@ -434,7 +434,7 @@ fn fetch_data(request: Request, offset: i64, length: i64) {
         return;
     };
     // Registered before the callback returns, so a cancel that follows at once finds it.
-    let registration = IN_FLIGHT.begin(request.transfer);
+    let registration = IN_FLIGHT.begin(request.transfer, offset, length);
     let on_panic = request.clone();
     spawn_guarded(
         runtime,
@@ -452,14 +452,28 @@ fn fetch_data(request: Request, offset: i64, length: i64) {
                                 required_length: length.max(0) as u64,
                                 file_size: request.file_size.max(0) as u64,
                             };
-                            hydration::hydrate(
+                            let mut sink = CfSink {
+                                request: &request,
+                                started: std::time::Instant::now(),
+                                first_data_after: None,
+                            };
+                            let result = hydration::hydrate(
                                 &StoredCredentialsImmich,
                                 &StoredCredentialsImmich,
-                                &mut CfSink { request: &request },
+                                &mut sink,
                                 &data_request,
                             )
-                            .await
-                            .map(|_| ())
+                            .await;
+                            // How long the reader waited for its first bytes: a program that
+                            // reads a range gives up when they come too late.
+                            if let Ok(bytes) = &result {
+                                note(&format!(
+                                    "FETCH_DATA served '{path}' offset={offset} length={length}: {bytes} bytes, first data after {} ms, done after {} ms",
+                                    sink.first_data_after.map_or(0, |after| after.as_millis()),
+                                    sink.started.elapsed().as_millis()
+                                ));
+                            }
+                            result.map(|_| ())
                         }
                         Ok(_) => Err(Failure::new(FailureKind::NotFound, "not a file")),
                         Err(failure) => Err(failure.clone()),
@@ -502,12 +516,25 @@ fn fetch_data(request: Request, offset: i64, length: i64) {
 /// platform has already ended the read.
 unsafe extern "system" fn on_cancel_fetch_data(
     info: *const CF_CALLBACK_INFO,
-    _parameters: *const CF_CALLBACK_PARAMETERS,
+    parameters: *const CF_CALLBACK_PARAMETERS,
 ) {
-    // SAFETY: called by the platform with the callback's own `info`.
-    let transfer = unsafe { (*info).TransferKey };
-    note("CANCEL_FETCH_DATA: the reader gave up");
-    let cancelled = IN_FLIGHT.cancel(transfer);
+    // SAFETY: called by the platform with the callback's own `info` and `parameters`; for this
+    // callback the parameters are the `Cancel` variant, whose `FetchData` names the cancelled range.
+    let (transfer, flags, range) = unsafe {
+        let cancel = (*parameters).Anonymous.Cancel;
+        (
+            (*info).TransferKey,
+            cancel.Flags,
+            cancel.Anonymous.FetchData,
+        )
+    };
+    // The platform says whether the reader timed out or aborted the read: what ended it is the
+    // first thing to know when a program gives up.
+    note(&format!(
+        "CANCEL_FETCH_DATA: the reader gave up on offset={} length={} (flags {:#x})",
+        range.FileOffset, range.Length, flags.0
+    ));
+    let cancelled = IN_FLIGHT.cancel(transfer, range.FileOffset, range.Length);
     if cancelled == 0 {
         note("a cancel arrived for a download that is not (or no longer) in flight");
     }
@@ -516,10 +543,15 @@ unsafe extern "system" fn on_cancel_fetch_data(
 /// Hands blocks of the original to the platform.
 struct CfSink<'a> {
     request: &'a Request,
+    started: std::time::Instant,
+    /// How long after the start the first block went to the platform.
+    first_data_after: Option<std::time::Duration>,
 }
 
 impl DataSink for CfSink<'_> {
     fn transfer(&mut self, block: &Block) -> Result<(), Failure> {
+        self.first_data_after
+            .get_or_insert_with(|| self.started.elapsed());
         let operation = operation_info(self.request, CF_OPERATION_TYPE_TRANSFER_DATA);
         let mut params = parameters(size_of::<CF_OPERATION_PARAMETERS_0_0>());
         params.Anonymous.TransferData = CF_OPERATION_PARAMETERS_0_0 {

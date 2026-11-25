@@ -11,7 +11,10 @@ use crate::immich::{
 };
 use crate::virtual_library::{Entry, VirtualLibrary, VirtualLibraryError};
 use bytes::Bytes;
+use std::collections::HashMap;
 use std::future::Future;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 /// The Virtual Library tree. Paths are relative to the root, `/` separated, `""` is the root.
 pub(super) trait Library: Sync {
@@ -65,6 +68,54 @@ pub(super) trait OriginalStream: Send {
     fn next_chunk(&mut self) -> impl Future<Output = Result<Option<Bytes>, Failure>> + Send;
 }
 
+/// How long a listed file keeps pointing at its Remote Asset without a new listing.
+const ASSET_PATH_TTL: Duration = Duration::from_secs(10 * 60);
+/// More files than this are forgotten at once, so the table cannot grow without bound.
+const ASSET_PATH_LIMIT: usize = 200_000;
+
+/// Which Remote Asset each file of an already listed directory is. Resolving a path means listing
+/// its whole directory (hundreds of entries), which takes about as long as a reader is willing to
+/// wait for its first bytes: a read right after a listing, which is how every file is opened,
+/// finds its asset here instead.
+#[derive(Default)]
+pub(super) struct AssetPaths {
+    files: Mutex<HashMap<String, (RemoteAssetId, Instant)>>,
+}
+
+impl AssetPaths {
+    /// Remembers the files among `entries`, the children of the directory `dir`.
+    pub(super) fn remember(&self, dir: &str, entries: &[Entry], now: Instant) {
+        let Ok(mut files) = self.files.lock() else {
+            return;
+        };
+        if files.len() > ASSET_PATH_LIMIT {
+            files.clear();
+        }
+        for entry in entries {
+            if let Some(asset) = &entry.remote_asset {
+                files.insert(join(dir, &entry.name), (asset.clone(), now));
+            }
+        }
+    }
+
+    /// The asset of the file at `path`, when it was listed within [`ASSET_PATH_TTL`].
+    pub(super) fn lookup(&self, path: &str, now: Instant) -> Option<RemoteAssetId> {
+        let files = self.files.lock().ok()?;
+        let (asset, listed) = files.get(path)?;
+        (now.saturating_duration_since(*listed) < ASSET_PATH_TTL).then(|| asset.clone())
+    }
+}
+
+fn join(dir: &str, name: &str) -> String {
+    if dir.is_empty() {
+        name.to_string()
+    } else {
+        format!("{dir}/{name}")
+    }
+}
+
+static ASSET_PATHS: std::sync::LazyLock<AssetPaths> = std::sync::LazyLock::new(AssetPaths::default);
+
 /// Immich as the signed-in user: every call opens the session from the stored credentials (the
 /// session is cached, so this is cheap) and so follows a re-login without a restart. Errors are
 /// redacted of credentials before they leave.
@@ -91,13 +142,18 @@ impl Library for StoredCredentialsImmich {
     async fn list(&self, path: &str) -> Result<Vec<Entry>, VirtualLibraryError> {
         let session = Self::session().map_err(VirtualLibraryError::Remote)?;
         let client = session.client();
-        VirtualLibrary::new(&client)
+        let entries = VirtualLibrary::new(&client)
             .list(path)
             .await
-            .map_err(|error| redacted(&session, error))
+            .map_err(|error| redacted(&session, error))?;
+        ASSET_PATHS.remember(path, &entries, Instant::now());
+        Ok(entries)
     }
 
     async fn resolve(&self, path: &str) -> Result<RemoteAssetId, VirtualLibraryError> {
+        if let Some(asset) = ASSET_PATHS.lookup(path, Instant::now()) {
+            return Ok(asset);
+        }
         let session = Self::session().map_err(VirtualLibraryError::Remote)?;
         let client = session.client();
         VirtualLibrary::new(&client)
@@ -172,5 +228,79 @@ impl OriginalStream for ImmichOriginal {
             Ok(chunk) => Ok(chunk),
             Err(error) => Err(Failure::from_remote(redact_failure(&self.session, error))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::virtual_library::EntryKind;
+
+    fn file(name: &str, asset: &str) -> Entry {
+        Entry {
+            name: name.to_string(),
+            kind: EntryKind::File,
+            remote_asset: Some(RemoteAssetId::new(asset)),
+            size: Some(1),
+            created: None,
+            modified: None,
+        }
+    }
+
+    fn directory(name: &str) -> Entry {
+        Entry {
+            name: name.to_string(),
+            kind: EntryKind::Directory,
+            remote_asset: None,
+            size: None,
+            created: None,
+            modified: None,
+        }
+    }
+
+    #[test]
+    fn a_listed_file_resolves_without_a_new_listing_and_directories_do_not() {
+        let paths = AssetPaths::default();
+        let now = Instant::now();
+        paths.remember(
+            "All Photos/2024/03 March",
+            &[file("IMG_1.jpg", "a1"), directory("sub")],
+            now,
+        );
+
+        assert_eq!(
+            paths.lookup("All Photos/2024/03 March/IMG_1.jpg", now),
+            Some(RemoteAssetId::new("a1"))
+        );
+        assert_eq!(paths.lookup("All Photos/2024/03 March/sub", now), None);
+        assert_eq!(
+            paths.lookup("All Photos/2024/03 March/other.jpg", now),
+            None
+        );
+    }
+
+    #[test]
+    fn a_file_in_the_root_has_no_leading_separator() {
+        let paths = AssetPaths::default();
+        let now = Instant::now();
+        paths.remember("", &[file("a.jpg", "a1")], now);
+
+        assert_eq!(paths.lookup("a.jpg", now), Some(RemoteAssetId::new("a1")));
+    }
+
+    #[test]
+    fn a_file_is_forgotten_after_the_time_to_live_and_a_new_listing_replaces_it() {
+        let paths = AssetPaths::default();
+        let listed = Instant::now();
+        paths.remember("d", &[file("a.jpg", "old")], listed);
+
+        let later = listed + ASSET_PATH_TTL + Duration::from_secs(1);
+        assert_eq!(paths.lookup("d/a.jpg", later), None);
+
+        paths.remember("d", &[file("a.jpg", "new")], later);
+        assert_eq!(
+            paths.lookup("d/a.jpg", later),
+            Some(RemoteAssetId::new("new"))
+        );
     }
 }
