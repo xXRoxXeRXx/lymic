@@ -6,7 +6,7 @@
 //! that ends at the end of the file, so network chunks of any size are regrouped by
 //! [`BlockAligner`]. Only the original is fetched, never a preview. It is read from the aligned start
 //! of the requested range (a `Range` request when the server honours it, byte 0 with the bytes
-//! before it dropped when it does not) and, under the progressive hydration policy, only a bounded
+//! before it dropped when it does not) and, when a reader asks for a range (the progressive policy), only a bounded
 //! read-ahead past the end of that range: the platform asks again when the reader gets that far, so
 //! a video starts at once and a seek does not wait for the bytes in between.
 

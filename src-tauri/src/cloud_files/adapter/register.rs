@@ -1,5 +1,5 @@
 //! Sync root registration through the WinRT `StorageProviderSyncRootManager`, which needs Package
-//! Identity. Hydration is always the original, never a preview, read progressively; the population policy `Full` is the WinRT name
+//! Identity. Hydration is always the original, never a preview; the population policy `Full` is the WinRT name
 //! for "the provider fills a directory when it is first listed", which is how the prototype
 //! observed `FETCH_PLACEHOLDERS` arriving one directory at a time.
 //!
@@ -74,10 +74,11 @@ pub(super) fn register(root: &Path) -> Result<()> {
     info.SetIconResource(&HSTRING::from(registration::icon_resource(
         std::env::current_exe().ok().as_deref(),
     )))?;
-    // Progressive: a reader waits only for the range it asked for, so a video starts at once and a
-    // seek does not wait for the whole original (`Full` completes the open only after the last
-    // byte). `hydration::hydrate` serves the range plus a bounded read-ahead.
-    info.SetHydrationPolicy(StorageProviderHydrationPolicy::Progressive)?;
+    // Full: the open completes once the whole original is local, so a reader never sees a slow read.
+    // `Progressive` starts a video at once, but Windows Photos reads six ranges of an image in
+    // parallel and aborts the I/O before the first bytes arrive (field test 2026-11-25, ADR-0003),
+    // so images could not be opened. `hydration::hydrate` is range aware and serves either policy.
+    info.SetHydrationPolicy(StorageProviderHydrationPolicy::Full)?;
     // Hydrated originals may be given back to the cloud by Storage Sense and "Free up space"; the
     // placeholders are always in sync, so nothing is lost.
     info.SetHydrationPolicyModifier(

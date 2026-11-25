@@ -1,7 +1,7 @@
 //! The Windows adapter of the read-only Virtual Library (ADR-0003, #278).
 //!
 //! It registers the sync root, creates placeholders for a directory when Explorer first lists it and
-//! hydrates the original (the range a reader waits for plus a read-ahead) when a placeholder is read. It is deliberately thin: every rule
+//! hydrates the original when a placeholder is opened. It is deliberately thin: every rule
 //! about names, paths, dates, Live Photo pairs and collisions lives in `virtual_library`, and
 //! this module only translates Cloud Files callbacks into `Library::list` and `Library::resolve`.
 //!
