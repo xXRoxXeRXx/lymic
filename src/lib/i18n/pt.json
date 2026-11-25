@@ -88,6 +88,13 @@
   "autostart_subtitle": "Executar o Lymic em segundo plano na inicialização do sistema para fazer backup imediato de novas fotos.",
   "autostart_enable": "Ativar inicialização automática",
   "autostart_disable": "Desativar inicialização automática",
+  "virtual_library": "Biblioteca virtual",
+  "virtual_library_subtitle": "Mostrar sua biblioteca do Immich como pastas somente leitura no Explorador de Arquivos do Windows.",
+  "virtual_library_enable": "Ativar a biblioteca virtual",
+  "virtual_library_disable": "Desativar a biblioteca virtual",
+  "virtual_library_folder": "Pasta",
+  "virtual_library_change_folder": "Alterar pasta",
+  "virtual_library_autostart_hint": "As fotos que ainda não abriu só funcionam enquanto o Lymic está em execução. Ative a inicialização automática para que o Lymic arranque com o Windows.",
   "language": "Idioma",
   "language_subtitle": "Escolha seu idioma de preferência.",
   "appearance": "Aparência",
@@ -449,5 +456,27 @@
   ,"archive_archive_failed": "Não foi possível arquivar. Tente novamente."
   ,"archive_archive_permission": "O arquivamento foi recusado. Conceda à chave de API a permissão asset.update."
   ,"archive_archive_stays": "Arquivado. Continua nesta lista."
-  ,"archive_unarchive_stays": "Desarquivado. Continua nesta lista."
+  ,"archive_unarchive_stays": "Desarquivado. Continua nesta lista.",
+  "log_virtual_library_start_failed": "Não foi possível iniciar a biblioteca virtual: {error}",
+  "virtual_library_nested_root": "Esta pasta está dentro de outra pasta de sincronização na nuvem (por exemplo, o OneDrive) ou a contém, por isso a biblioteca virtual não pode ser configurada nela. Escolha outra pasta.",
+  "virtual_library_start_failed": "Não foi possível iniciar a biblioteca virtual:",
+  "virtual_library_disable_to_change_folder": "Desative a biblioteca virtual antes de alterar a respetiva pasta.",
+  "log_virtual_library_offline": "Não foi possível abrir «{name}» a partir da biblioteca virtual porque não foi possível ligar ao Immich.",
+  "log_virtual_library_unauthorized": "Não foi possível abrir «{name}» a partir da biblioteca virtual porque o seu início de sessão no Immich já não é válido.",
+  "log_virtual_library_not_found": "Não foi possível abrir «{name}» a partir da biblioteca virtual porque foi removido do Immich. Desaparecerá na próxima atualização.",
+  "log_virtual_library_failed": "Não foi possível abrir «{name}» a partir da biblioteca virtual.",
+  "virtual_library_notice_relogin": "Iniciar sessão novamente",
+  "virtual_library_notice_dismiss": "Dispensar aviso",
+  "virtual_library_relogin_hint": "O seu início de sessão no Immich já não é válido. Introduza uma nova chave de API para continuar a usar a biblioteca virtual.",
+  "virtual_library_relogin_cancel": "Agora não",
+  "virtual_library_refresh": "Atualizar biblioteca",
+  "virtual_library_refreshing": "A atualizar…",
+  "virtual_library_refresh_description": "Verifica no Immich fotos novas, alteradas e removidas nas pastas que já abriu. Isto também acontece automaticamente a cada 10 minutos.",
+  "virtual_library_refresh_failed": "Não foi possível atualizar a biblioteca virtual:",
+  "virtual_library_disable_confirmation": "Desativar a biblioteca virtual?",
+  "virtual_library_cleanup_warning": "O Lymic remove os marcadores da biblioteca virtual e todos os originais que transferiu para a pasta, incluindo os ficheiros transferidos e os que definiu para manter sempre neste dispositivo. Os ficheiros da pasta que não são marcadores e não foram criados pelo Lymic permanecem no local, juntamente com a respetiva pasta. As suas fotos no Immich não são afetadas.",
+  "virtual_library_cleanup_kept": "Alguns ficheiros na pasta da biblioteca virtual não foram criados pelo Lymic e, por isso, foram mantidos juntamente com a pasta:",
+  "virtual_library_cleanup_failed_items": "Não foi possível remover estes itens. Desative e volte a ativar a biblioteca virtual para tentar novamente:",
+  "virtual_library_cleanup_not_run": "Não foi possível remover a pasta de sincronização da biblioteca virtual, por isso nenhum ficheiro foi eliminado:",
+  "virtual_library_cleanup_failed": "Não foi possível desativar a biblioteca virtual, que continua ativada:"
 }

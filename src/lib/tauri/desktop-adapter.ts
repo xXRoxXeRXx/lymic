@@ -1,8 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
-import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { confirm, open, save } from "@tauri-apps/plugin-dialog";
+import { confirm, message, open, save } from "@tauri-apps/plugin-dialog";
 import { isPermissionGranted, sendNotification } from "@tauri-apps/plugin-notification";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -28,6 +27,9 @@ import type {
   RemoveFolderResult,
   SyncSnapshot,
   SyncSummary,
+  VirtualLibraryNotice,
+  VirtualLibraryCleanupReport,
+  VirtualLibrarySettings,
   WebviewStartupPhase,
   DetectedVolume,
   WatchedFolder,
@@ -185,8 +187,35 @@ export interface PreferencesDesktopAdapter {
   getLocaleCatalog(): Promise<LocaleCatalogEntry[]>;
   updateLocale(locale: string): Promise<void>;
   getDatabaseRecoveryNotice(): Promise<DatabaseRecoveryNotice | null>;
+  /** The backend picks the mechanism: the Windows StartupTask in an MSIX package, the login-item plugin elsewhere. */
   isAutostartEnabled(): Promise<boolean>;
+  /** Rejects with an explanation when Windows keeps autostart off (disabled by the user in Settings or by policy). */
   setAutostartEnabled(enabled: boolean): Promise<void>;
+}
+
+export interface VirtualLibraryDesktopAdapter {
+  /** Whether this run can offer the Virtual Library, and whether the user switched it on. */
+  getVirtualLibrarySettings(): Promise<VirtualLibrarySettings>;
+  /** Persists the toggle and resolves to the settings as stored. Rejects when the Virtual Library is unavailable. */
+  setVirtualLibraryEnabled(enabled: boolean): Promise<VirtualLibrarySettings>;
+  /** Persists the chosen folder. Rejects, naming the Watched Folder, when it would overlap one. */
+  setVirtualLibraryRootFolder(path: string): Promise<VirtualLibrarySettings>;
+  openFolderDialog(options: { directory: true; multiple: false; defaultPath?: string; title: string }): Promise<string | string[] | null>;
+  /**
+   * Refresh Library: reconciles the already-populated directories with Immich now and resolves when
+   * that run is done. Rejects with `VIRTUAL_LIBRARY_REFRESH_FAILED: <reason>` when it could not.
+   */
+  refreshVirtualLibrary(): Promise<void>;
+  /** Backend announcements of changed Virtual Library settings. */
+  subscribeToVirtualLibrarySettings(listener: (settings: VirtualLibrarySettings) => void): Promise<() => void>;
+  /** Backend announcements of a file that could not be opened (offline, expired sign-in, removed, other), once per failure episode. */
+  subscribeToVirtualLibraryNotices(listener: (notice: VirtualLibraryNotice) => void): Promise<() => void>;
+  /** Backend announcements of a cleanup (disabling, logout) that left something in place or could not remove something. */
+  subscribeToVirtualLibraryCleanup(listener: (report: VirtualLibraryCleanupReport) => void): Promise<() => void>;
+  /** The native confirmation dialog, used before a disable removes the originals the Virtual Library downloaded. */
+  confirm(message: string, options: { title: string; kind: "warning" }): Promise<boolean>;
+  /** A native notice with an OK button. */
+  notify(text: string, options: { title: string; kind: "warning" }): Promise<void>;
 }
 
 export interface UpdateDesktopAdapter {
@@ -239,6 +268,7 @@ export interface DesktopAdapter
     AllMemoriesDesktopAdapter,
     SearchDesktopAdapter,
     PreferencesDesktopAdapter,
+    VirtualLibraryDesktopAdapter,
     UpdateDesktopAdapter,
     RemovableVolumeDesktopAdapter {}
 
@@ -312,8 +342,25 @@ export const tauriDesktopAdapter: DesktopAdapter = {
   getLocaleCatalog: () => invoke<LocaleCatalogEntry[]>("get_locale_catalog"),
   updateLocale: (locale) => invoke<void>("update_locale", { locale }),
   getDatabaseRecoveryNotice: () => invoke<DatabaseRecoveryNotice | null>("get_database_recovery_notice"),
-  isAutostartEnabled: () => isEnabled(),
-  setAutostartEnabled: (enabled) => enabled ? enable() : disable(),
+  isAutostartEnabled: () => invoke<boolean>("get_autostart_enabled"),
+  setAutostartEnabled: (enabled) => invoke<void>("set_autostart_enabled", { enabled }),
+  getVirtualLibrarySettings: () => invoke<VirtualLibrarySettings>("get_virtual_library_settings"),
+  setVirtualLibraryEnabled: (enabled) => invoke<VirtualLibrarySettings>("set_virtual_library_enabled", { enabled }),
+  setVirtualLibraryRootFolder: (path) => invoke<VirtualLibrarySettings>("set_virtual_library_root_folder", { path }),
+  refreshVirtualLibrary: () => invoke<void>("refresh_virtual_library"),
+  subscribeToVirtualLibrarySettings: (listener) => listen<VirtualLibrarySettings>(
+    "virtual-library-settings-changed",
+    (event) => listener(event.payload),
+  ),
+  subscribeToVirtualLibraryNotices: (listener) => listen<VirtualLibraryNotice>(
+    "virtual-library-notice",
+    (event) => listener(event.payload),
+  ),
+  subscribeToVirtualLibraryCleanup: (listener) => listen<VirtualLibraryCleanupReport>(
+    "virtual-library-cleanup-finished",
+    (event) => listener(event.payload),
+  ),
+  notify: async (text, options) => { await message(text, options); },
   recordWebviewStartupPhaseProbe: (phase) => invoke<void>("record_webview_startup_phase_probe", { phase }),
   getReleaseChannel: () => invoke<ReleaseChannel>("get_release_channel"),
   getAppVersion: getVersion,

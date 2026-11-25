@@ -88,6 +88,13 @@
   "autostart_subtitle": "Ejecutar Lymic automáticamente en segundo plano al iniciar el sistema para respaldar fotos de inmediato.",
   "autostart_enable": "Activar inicio automático",
   "autostart_disable": "Desactivar inicio automático",
+  "virtual_library": "Biblioteca virtual",
+  "virtual_library_subtitle": "Mostrar tu biblioteca de Immich como carpetas de solo lectura en el Explorador de archivos de Windows.",
+  "virtual_library_enable": "Activar la biblioteca virtual",
+  "virtual_library_disable": "Desactivar la biblioteca virtual",
+  "virtual_library_folder": "Carpeta",
+  "virtual_library_change_folder": "Cambiar carpeta",
+  "virtual_library_autostart_hint": "Las fotos que aún no has abierto solo funcionan mientras Lymic está en ejecución. Activa el inicio automático para que Lymic arranque con Windows.",
   "language": "Idioma",
   "language_subtitle": "Elige tu idioma preferido.",
   "appearance": "Apariencia",
@@ -449,5 +456,27 @@
   ,"archive_archive_failed": "No se pudo archivar. Inténtalo de nuevo."
   ,"archive_archive_permission": "Se rechazó el archivado. Concede a la clave de API el permiso asset.update."
   ,"archive_archive_stays": "Archivado. Sigue en esta lista."
-  ,"archive_unarchive_stays": "Desarchivado. Sigue en esta lista."
+  ,"archive_unarchive_stays": "Desarchivado. Sigue en esta lista.",
+  "log_virtual_library_start_failed": "No se pudo iniciar la biblioteca virtual: {error}",
+  "virtual_library_nested_root": "Esta carpeta está dentro de otra carpeta de sincronización en la nube (por ejemplo OneDrive) o la contiene, por lo que la biblioteca virtual no se puede configurar allí. Elige otra carpeta.",
+  "virtual_library_start_failed": "No se pudo iniciar la biblioteca virtual:",
+  "virtual_library_disable_to_change_folder": "Desactiva la biblioteca virtual antes de cambiar su carpeta.",
+  "log_virtual_library_offline": "No se pudo abrir «{name}» desde la biblioteca virtual porque no se pudo conectar con Immich.",
+  "log_virtual_library_unauthorized": "No se pudo abrir «{name}» desde la biblioteca virtual porque tu inicio de sesión en Immich ya no es válido.",
+  "log_virtual_library_not_found": "No se pudo abrir «{name}» desde la biblioteca virtual porque se eliminó de Immich. Desaparecerá en la próxima actualización.",
+  "log_virtual_library_failed": "No se pudo abrir «{name}» desde la biblioteca virtual.",
+  "virtual_library_notice_relogin": "Iniciar sesión de nuevo",
+  "virtual_library_notice_dismiss": "Descartar aviso",
+  "virtual_library_relogin_hint": "Tu inicio de sesión en Immich ya no es válido. Introduce una nueva clave de API para seguir usando la biblioteca virtual.",
+  "virtual_library_relogin_cancel": "Ahora no",
+  "virtual_library_refresh": "Actualizar biblioteca",
+  "virtual_library_refreshing": "Actualizando…",
+  "virtual_library_refresh_description": "Busca en Immich fotos nuevas, modificadas y eliminadas en las carpetas que ya has abierto. Esto también ocurre automáticamente cada 10 minutos.",
+  "virtual_library_refresh_failed": "No se pudo actualizar la biblioteca virtual:",
+  "virtual_library_disable_confirmation": "¿Desactivar la biblioteca virtual?",
+  "virtual_library_cleanup_warning": "Lymic elimina los marcadores de posición de la biblioteca virtual y todos los originales que descargó en la carpeta, incluidos los archivos descargados y los que marcaste para mantener siempre en este dispositivo. Los archivos de la carpeta que no son marcadores de posición y no fueron creados por Lymic se quedan donde están, junto con su carpeta. Tus fotos de Immich no se ven afectadas.",
+  "virtual_library_cleanup_kept": "Algunos archivos de la carpeta de la biblioteca virtual no fueron creados por Lymic, así que se conservaron junto con su carpeta:",
+  "virtual_library_cleanup_failed_items": "No se pudieron eliminar estos elementos. Desactiva y vuelve a activar la biblioteca virtual para intentarlo de nuevo:",
+  "virtual_library_cleanup_not_run": "No se pudo quitar la carpeta de sincronización de la biblioteca virtual, así que no se eliminó ningún archivo:",
+  "virtual_library_cleanup_failed": "No se pudo desactivar la biblioteca virtual y sigue activada:"
 }

@@ -88,6 +88,13 @@
   "autostart_subtitle": "تشغيل Lymic تلقائيًا في الخلفية عند بدء تشغيل النظام لنسخ الصور الجديدة فورًا احتياطيًا.",
   "autostart_enable": "تفعيل التشغيل التلقائي",
   "autostart_disable": "تعطيل التشغيل التلقائي",
+  "virtual_library": "المكتبة الافتراضية",
+  "virtual_library_subtitle": "عرض مكتبة Immich الخاصة بك كمجلدات للقراءة فقط في مستكشف ملفات Windows.",
+  "virtual_library_enable": "تفعيل المكتبة الافتراضية",
+  "virtual_library_disable": "تعطيل المكتبة الافتراضية",
+  "virtual_library_folder": "المجلد",
+  "virtual_library_change_folder": "تغيير المجلد",
+  "virtual_library_autostart_hint": "الصور التي لم تفتحها بعد تعمل فقط أثناء تشغيل Lymic. فعّل التشغيل التلقائي ليبدأ Lymic مع Windows.",
   "language": "اللغة",
   "language_subtitle": "اختر لغتك المفضلة.",
   "appearance": "المظهر",
@@ -449,5 +456,27 @@
   ,"archive_archive_failed": "تعذرت الأرشفة. يُرجى المحاولة مرة أخرى."
   ,"archive_archive_permission": "تم رفض الأرشفة. امنح مفتاح API الإذن asset.update."
   ,"archive_archive_stays": "تمت الأرشفة. يبقى العنصر في هذه القائمة."
-  ,"archive_unarchive_stays": "تم إلغاء الأرشفة. يبقى العنصر في هذه القائمة."
+  ,"archive_unarchive_stays": "تم إلغاء الأرشفة. يبقى العنصر في هذه القائمة.",
+  "log_virtual_library_start_failed": "تعذر تشغيل المكتبة الافتراضية: {error}",
+  "virtual_library_nested_root": "هذا المجلد داخل مجلد مزامنة سحابية آخر (مثل OneDrive) أو يحتوي عليه، لذا لا يمكن إعداد المكتبة الافتراضية فيه. اختر مجلدًا آخر.",
+  "virtual_library_start_failed": "تعذر تشغيل المكتبة الافتراضية:",
+  "virtual_library_disable_to_change_folder": "عطّل المكتبة الافتراضية قبل تغيير مجلدها.",
+  "log_virtual_library_offline": "تعذر فتح «{name}» من المكتبة الافتراضية لأنه تعذر الوصول إلى Immich.",
+  "log_virtual_library_unauthorized": "تعذر فتح «{name}» من المكتبة الافتراضية لأن تسجيل دخولك إلى Immich لم يعد صالحًا.",
+  "log_virtual_library_not_found": "تعذر فتح «{name}» من المكتبة الافتراضية لأنه حُذف من Immich. سيختفي عند التحديث التالي.",
+  "log_virtual_library_failed": "تعذر فتح «{name}» من المكتبة الافتراضية.",
+  "virtual_library_notice_relogin": "تسجيل الدخول مرة أخرى",
+  "virtual_library_notice_dismiss": "إغلاق الإشعار",
+  "virtual_library_relogin_hint": "تسجيل دخولك إلى Immich لم يعد صالحًا. أدخل مفتاح API جديدًا لمواصلة استخدام المكتبة الافتراضية.",
+  "virtual_library_relogin_cancel": "ليس الآن",
+  "virtual_library_refresh": "تحديث المكتبة",
+  "virtual_library_refreshing": "جارٍ التحديث…",
+  "virtual_library_refresh_description": "تحقق في Immich من الصور الجديدة والمعدّلة والمحذوفة في المجلدات التي فتحتها بالفعل. يحدث هذا أيضًا تلقائيًا كل 10 دقائق.",
+  "virtual_library_refresh_failed": "تعذّر تحديث المكتبة الافتراضية:",
+  "virtual_library_disable_confirmation": "هل تريد تعطيل المكتبة الافتراضية؟",
+  "virtual_library_cleanup_warning": "سيزيل Lymic العناصر النائبة للمكتبة الافتراضية وكل الأصول التي نزّلها إلى المجلد، بما في ذلك الملفات المنزَّلة والملفات التي حددتها للاحتفاظ بها دائمًا على هذا الجهاز. أما الملفات الموجودة في المجلد التي ليست عناصر نائبة ولم ينشئها Lymic فتبقى في مكانها مع مجلدها. صورك في Immich لن تتأثر.",
+  "virtual_library_cleanup_kept": "بعض الملفات في مجلد المكتبة الافتراضية لم ينشئها Lymic، لذلك تم الاحتفاظ بها مع مجلدها:",
+  "virtual_library_cleanup_failed_items": "تعذّرت إزالة هذه العناصر. عطّل المكتبة الافتراضية ثم شغّلها مرة أخرى للمحاولة من جديد:",
+  "virtual_library_cleanup_not_run": "تعذّرت إزالة مجلد المزامنة الخاص بالمكتبة الافتراضية، لذلك لم يُحذف أي ملف:",
+  "virtual_library_cleanup_failed": "تعذّر تعطيل المكتبة الافتراضية وما زالت قيد التشغيل:"
 }

@@ -88,6 +88,13 @@
   "autostart_subtitle": "Lancer automatiquement Lymic en arrière-plan au démarrage du système pour sauvegarder immédiatement les nouvelles photos.",
   "autostart_enable": "Activer le démarrage automatique",
   "autostart_disable": "Désactiver le démarrage automatique",
+  "virtual_library": "Bibliothèque virtuelle",
+  "virtual_library_subtitle": "Afficher votre bibliothèque Immich sous forme de dossiers en lecture seule dans l'Explorateur de fichiers Windows.",
+  "virtual_library_enable": "Activer la bibliothèque virtuelle",
+  "virtual_library_disable": "Désactiver la bibliothèque virtuelle",
+  "virtual_library_folder": "Dossier",
+  "virtual_library_change_folder": "Changer de dossier",
+  "virtual_library_autostart_hint": "Les photos que vous n'avez pas encore ouvertes ne fonctionnent que tant que Lymic est en cours d'exécution. Activez le démarrage automatique pour que Lymic se lance avec Windows.",
   "language": "Langue",
   "language_subtitle": "Choisissez votre langue préférée.",
   "appearance": "Apparence",
@@ -449,5 +456,27 @@
   ,"archive_archive_failed": "Échec de l'archivage. Veuillez réessayer."
   ,"archive_archive_permission": "L'archivage a été refusé. Accordez à la clé API l'autorisation asset.update."
   ,"archive_archive_stays": "Archivé. Il reste dans cette liste."
-  ,"archive_unarchive_stays": "Désarchivé. Il reste dans cette liste."
+  ,"archive_unarchive_stays": "Désarchivé. Il reste dans cette liste.",
+  "log_virtual_library_start_failed": "Impossible de démarrer la bibliothèque virtuelle : {error}",
+  "virtual_library_nested_root": "Ce dossier se trouve dans un autre dossier de synchronisation cloud (par exemple OneDrive) ou en contient un, la bibliothèque virtuelle ne peut donc pas y être configurée. Choisissez un autre dossier.",
+  "virtual_library_start_failed": "Impossible de démarrer la bibliothèque virtuelle :",
+  "virtual_library_disable_to_change_folder": "Désactivez la bibliothèque virtuelle avant de modifier son dossier.",
+  "log_virtual_library_offline": "Impossible d'ouvrir « {name} » depuis la bibliothèque virtuelle, car Immich est injoignable.",
+  "log_virtual_library_unauthorized": "Impossible d'ouvrir « {name} » depuis la bibliothèque virtuelle, car votre connexion à Immich n'est plus valide.",
+  "log_virtual_library_not_found": "Impossible d'ouvrir « {name} » depuis la bibliothèque virtuelle, car il a été supprimé d'Immich. Il disparaîtra à la prochaine actualisation.",
+  "log_virtual_library_failed": "Impossible d'ouvrir « {name} » depuis la bibliothèque virtuelle.",
+  "virtual_library_notice_relogin": "Se reconnecter",
+  "virtual_library_notice_dismiss": "Fermer la notification",
+  "virtual_library_relogin_hint": "Votre connexion à Immich n'est plus valide. Saisissez une nouvelle clé API pour continuer à utiliser la bibliothèque virtuelle.",
+  "virtual_library_relogin_cancel": "Pas maintenant",
+  "virtual_library_refresh": "Actualiser la bibliothèque",
+  "virtual_library_refreshing": "Actualisation…",
+  "virtual_library_refresh_description": "Rechercher dans Immich les photos nouvelles, modifiées et supprimées dans les dossiers déjà ouverts. Cela se fait aussi automatiquement toutes les 10 minutes.",
+  "virtual_library_refresh_failed": "La bibliothèque virtuelle n'a pas pu être actualisée :",
+  "virtual_library_disable_confirmation": "Désactiver la bibliothèque virtuelle ?",
+  "virtual_library_cleanup_warning": "Lymic supprime les espaces réservés de la bibliothèque virtuelle et tous les originaux qu'il a téléchargés dans le dossier, y compris les fichiers téléchargés et ceux que vous avez choisi de toujours conserver sur cet appareil. Les fichiers du dossier qui ne sont pas des espaces réservés et n'ont pas été créés par Lymic restent en place, avec leur dossier. Vos photos dans Immich ne sont pas affectées.",
+  "virtual_library_cleanup_kept": "Certains fichiers du dossier de la bibliothèque virtuelle n'ont pas été créés par Lymic ; ils ont donc été conservés avec leur dossier :",
+  "virtual_library_cleanup_failed_items": "Ces éléments n'ont pas pu être supprimés. Désactivez puis réactivez la bibliothèque virtuelle pour réessayer :",
+  "virtual_library_cleanup_not_run": "Le dossier de synchronisation de la bibliothèque virtuelle n'a pas pu être supprimé ; aucun fichier n'a donc été effacé :",
+  "virtual_library_cleanup_failed": "La bibliothèque virtuelle n'a pas pu être désactivée et reste activée :"
 }

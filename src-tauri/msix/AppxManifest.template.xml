@@ -2,6 +2,9 @@
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:desktop3="http://schemas.microsoft.com/appx/manifest/desktop/windows10/3"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap rescap">
 
@@ -46,6 +49,46 @@
         Square44x44Logo="Assets\Square44x44Logo.png">
         <uap:DefaultTile Square71x71Logo="Assets\Square71x71Logo.png" />
       </uap:VisualElements>
+      <Extensions>
+        <!-- Autostart inside the package. A registry Run entry written by a packaged app is
+             virtualized, so the in-app toggle uses this task through the StartupTask API (see
+             src-tauri/src/app/autostart.rs). Enabled="false": off until the user turns it on.
+             The TaskId must match STARTUP_TASK_ID there. -->
+        <desktop:Extension
+          Category="windows.startupTask"
+          Executable="{{EXECUTABLE}}"
+          EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask
+            TaskId="LymicStartup"
+            Enabled="false"
+            DisplayName="{{DISPLAY_NAME}}" />
+        </desktop:Extension>
+        <!-- Thumbnails for Virtual Library placeholders without Hydration (ADR-0003, #282). Explorer
+             asks the handler named here instead of opening the placeholder. The schema
+             (DesktopManifestSchema_v3.xsd) requires all five handler elements (makeappx rejects a
+             manifest that has only the thumbnail handler, re-checked with the Windows SDK
+             10.0.26100). Only the thumbnail handler has an implementation. The other four are
+             filled in by scripts/package-msix.ps1 (-CloudFilesHandlers): by default each gets a
+             made-up Clsid that no COM class answers to, the pattern Microsoft's CloudMirror sample
+             uses for the handlers it does not implement, so that the sync root registration copies a
+             well-formed value instead of an empty element; "empty" leaves them without a Clsid.
+             The thumbnail Clsid is the one of src-tauri/lymic-shell-ext (a test in that crate checks
+             it against scripts/package-msix.ps1, which fills it in).
+             Findings and what is still unverified: docs/store/local-msix-build.md, "Thumbnail
+             provider (#282)". -->
+        <desktop3:Extension Category="windows.cloudFiles">
+          <desktop3:CloudFiles>
+            <desktop3:CustomStateHandler{{CUSTOM_STATE_CLSID_ATTRIBUTE}} />
+            <desktop3:ThumbnailProviderHandler Clsid="{{THUMBNAIL_CLSID}}" />
+            <desktop3:ExtendedPropertyHandler{{EXTENDED_PROPERTY_CLSID_ATTRIBUTE}} />
+            <desktop3:BannersHandler{{BANNERS_CLSID_ATTRIBUTE}} />
+            <desktop3:CloudFilesContextMenus />
+          </desktop3:CloudFiles>
+        </desktop3:Extension>
+        <!-- The COM class behind that Clsid: package-msix.ps1 writes either a com:ExeServer (the
+             default, the pattern of Microsoft's CloudMirror sample) or a com:SurrogateServer. -->
+{{THUMBNAIL_COM_SERVER}}
+      </Extensions>
     </Application>
   </Applications>
 </Package>

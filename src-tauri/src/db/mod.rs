@@ -3,6 +3,7 @@ mod init;
 mod queue;
 mod settings;
 mod sync_state;
+mod virtual_library_populated;
 
 pub use folders::{
     add_folder, bind_removable_folder, get_folders, remap_watched_folder_path, remove_folder,
@@ -147,11 +148,18 @@ pub(crate) async fn test_pool() -> sqlx::SqlitePool {
 pub use queue::{
     enqueue_sync_assets, next_sync_queue_block, update_upload_unit_remote_id, QueueAsset,
 };
-pub use settings::{get_upload_parallelism, set_upload_parallelism};
+pub use settings::{
+    get_upload_parallelism, get_virtual_library_enabled, get_virtual_library_root,
+    set_upload_parallelism, set_virtual_library_enabled, set_virtual_library_root,
+};
 pub use sync_state::{
     discard_failed_sync_paths, discard_sync_data_in_folder, get_cached_hash, get_failed_syncs,
     has_sync_work_in_folder, mark_sync_failed, persist_uploaded_unit, update_sync_state,
     FailedSyncEntry, UploadedAssetState,
+};
+pub use virtual_library_populated::{
+    clear_virtual_library_populated_directories, forget_virtual_library_populated_tree,
+    list_virtual_library_populated_directories, mark_virtual_library_directory_populated,
 };
 
 #[cfg(test)]

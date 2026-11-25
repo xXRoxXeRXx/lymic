@@ -562,6 +562,100 @@ describe("SettingsView", () => {
     expect(screen.queryByRole("button", { name: "Check for updates" })).toBeNull();
     expect(screen.queryByText("Updates")).toBeNull();
   });
+
+  describe("Virtual Library section", () => {
+    function renderSettings(overrides: Record<string, unknown> = {}) {
+      return render(SettingsView, {
+        currentUserName: "Meyer",
+        serverUrl: "https://immich.example",
+        isAutostartEnabled: false,
+        themePreference: "system",
+        uploadParallelism: 3,
+        isSavingUploadParallelism: false,
+        updateStatus: "unknown",
+        isCheckingForUpdates: false,
+        locales: localeCatalog,
+        onToggleAutostart: vi.fn(),
+        onLocaleChange: vi.fn(),
+        onThemeChange: vi.fn(),
+        onUploadParallelismChange: vi.fn(),
+        onCheckForUpdates: vi.fn(),
+        onLogout: vi.fn(),
+        ...overrides,
+      });
+    }
+
+    it("is absent unless the backend reports the Virtual Library as available", () => {
+      renderSettings();
+      expect(screen.queryByText("Virtual Library")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Enable Virtual Library" })).toBeNull();
+    });
+
+    it("shows the persisted toggle state and forwards a click when available", async () => {
+      const onToggleVirtualLibrary = vi.fn();
+      const { rerender } = renderSettings({ isVirtualLibraryAvailable: true, isVirtualLibraryEnabled: false, onToggleVirtualLibrary });
+
+      const enable = screen.getByRole("button", { name: "Enable Virtual Library" });
+      expect(enable).toHaveAttribute("aria-pressed", "false");
+      await fireEvent.click(enable);
+      expect(onToggleVirtualLibrary).toHaveBeenCalledOnce();
+
+      await rerender({ isVirtualLibraryEnabled: true });
+      expect(screen.getByRole("button", { name: "Disable Virtual Library" })).toHaveAttribute("aria-pressed", "true");
+
+      await rerender({ isSavingVirtualLibrary: true });
+      expect(screen.getByRole("button", { name: "Disable Virtual Library" })).toBeDisabled();
+    });
+
+    it("shows the effective folder and lets the user change it", async () => {
+      const onChangeVirtualLibraryFolder = vi.fn();
+      const { rerender } = renderSettings({
+        isVirtualLibraryAvailable: true,
+        virtualLibraryRootFolder: "D:\\Fotos\\Lymic",
+        onChangeVirtualLibraryFolder,
+      });
+
+      expect(screen.getByText("D:\\Fotos\\Lymic")).toBeInTheDocument();
+      await fireEvent.click(screen.getByRole("button", { name: "Change folder" }));
+      expect(onChangeVirtualLibraryFolder).toHaveBeenCalledOnce();
+
+      await rerender({ isSavingVirtualLibrary: true });
+      expect(screen.getByRole("button", { name: "Change folder" })).toBeDisabled();
+    });
+
+    it("offers Refresh Library only while the Virtual Library is enabled and forwards a click", async () => {
+      const onRefreshVirtualLibrary = vi.fn();
+      const { rerender } = renderSettings({ isVirtualLibraryAvailable: true, isVirtualLibraryEnabled: false, onRefreshVirtualLibrary });
+      expect(screen.queryByRole("button", { name: "Refresh Library" })).toBeNull();
+
+      await rerender({ isVirtualLibraryEnabled: true });
+      await fireEvent.click(screen.getByRole("button", { name: "Refresh Library" }));
+      expect(onRefreshVirtualLibrary).toHaveBeenCalledOnce();
+    });
+
+    it("shows that a refresh is running and blocks a second press", async () => {
+      const { rerender } = renderSettings({ isVirtualLibraryAvailable: true, isVirtualLibraryEnabled: true, isVirtualLibraryRefreshing: false });
+      expect(screen.getByRole("button", { name: "Refresh Library" })).toBeEnabled();
+
+      await rerender({ isVirtualLibraryRefreshing: true });
+      expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    });
+
+    it("shows the autostart hint only when asked to", async () => {
+      const hint = "Photos you have not opened yet only work while Lymic is running. Turn on autostart so Lymic starts with Windows.";
+      const { rerender } = renderSettings({ isVirtualLibraryAvailable: true, isVirtualLibraryEnabled: true, showVirtualLibraryAutostartHint: false });
+      expect(screen.queryByText(hint)).toBeNull();
+
+      await rerender({ showVirtualLibraryAutostartHint: true });
+      expect(screen.getByText(hint)).toBeInTheDocument();
+    });
+
+    it("still offers a folder choice when the system could not name a default folder", () => {
+      renderSettings({ isVirtualLibraryAvailable: true, virtualLibraryRootFolder: null });
+
+      expect(screen.getByRole("button", { name: "Change folder" })).toBeEnabled();
+    });
+  });
 });
 
 describe("TargetAlbumModal", () => {

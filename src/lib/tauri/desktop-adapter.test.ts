@@ -1,13 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { invoke, confirm, open, save, disable, enable, isEnabled, getVersion, check, relaunch, listen, isPermissionGranted, sendNotification, openUrl } = vi.hoisted(() => ({
+const { invoke, confirm, message, open, save, getVersion, check, relaunch, listen, isPermissionGranted, sendNotification, openUrl } = vi.hoisted(() => ({
   invoke: vi.fn(),
   confirm: vi.fn(),
+  message: vi.fn(),
   open: vi.fn(),
   save: vi.fn(),
-  disable: vi.fn(),
-  enable: vi.fn(),
-  isEnabled: vi.fn(),
   getVersion: vi.fn(),
   check: vi.fn(),
   relaunch: vi.fn(),
@@ -20,8 +18,7 @@ const { invoke, confirm, open, save, disable, enable, isEnabled, getVersion, che
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/app", () => ({ getVersion }));
 vi.mock("@tauri-apps/api/event", () => ({ listen }));
-vi.mock("@tauri-apps/plugin-autostart", () => ({ disable, enable, isEnabled }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm, open, save }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm, message, open, save }));
 vi.mock("@tauri-apps/plugin-notification", () => ({ isPermissionGranted, sendNotification }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch }));
@@ -46,6 +43,7 @@ import {
   type SyncDesktopAdapter,
   type TimelineDesktopAdapter,
   type UpdateDesktopAdapter,
+  type VirtualLibraryDesktopAdapter,
   type WatchedFoldersDesktopAdapter,
 } from "./desktop-adapter";
 
@@ -64,6 +62,7 @@ describe("tauriDesktopAdapter", () => {
   const albumTimelineAdapter: AlbumTimelineDesktopAdapter = tauriDesktopAdapter;
   const placeTimelineAdapter: PlaceTimelineDesktopAdapter = tauriDesktopAdapter;
   const preferencesAdapter: PreferencesDesktopAdapter = tauriDesktopAdapter;
+  const virtualLibraryAdapter: VirtualLibraryDesktopAdapter = tauriDesktopAdapter;
   const updateAdapter: UpdateDesktopAdapter = tauriDesktopAdapter;
   const removableVolumeAdapter: RemovableVolumeDesktopAdapter = tauriDesktopAdapter;
 
@@ -198,15 +197,15 @@ describe("tauriDesktopAdapter", () => {
       ["get_locale_catalog"],
       ["update_locale", { locale: "de" }],
       ["get_database_recovery_notice"],
+      ["get_autostart_enabled"],
+      ["set_autostart_enabled", { enabled: true }],
+      ["set_autostart_enabled", { enabled: false }],
       ["record_webview_startup_phase_probe", { phase: "update_check_started" }],
       ["get_release_channel"],
     ]);
     expect(confirm).toHaveBeenCalledWith("Log out?", { title: "Log out", kind: "warning" });
     expect(open).toHaveBeenCalledWith({ directory: true, multiple: false, title: "Select folder" });
     expect(save).toHaveBeenCalledWith({ defaultPath: "IMG_0001.CR3" });
-    expect(isEnabled).toHaveBeenCalledOnce();
-    expect(enable).toHaveBeenCalledOnce();
-    expect(disable).toHaveBeenCalledOnce();
     expect(getVersion).toHaveBeenCalledOnce();
     expect(check).toHaveBeenCalledOnce();
     expect(downloadAndInstall).toHaveBeenCalledOnce();
@@ -219,6 +218,64 @@ describe("tauriDesktopAdapter", () => {
       ["removable-volume-removed", expect.any(Function)],
       ["removable-volume-remounted", expect.any(Function)],
     ]);
+  });
+
+  it("reads and persists the Virtual Library settings and forwards the backend's change announcements", async () => {
+    const settings = { available: true, enabled: true, root_folder: "C:\\Users\\Me\\Pictures\\Lymic" };
+    invoke.mockResolvedValueOnce(settings).mockResolvedValueOnce(settings).mockResolvedValueOnce(settings);
+    listen.mockImplementationOnce(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+      handler({ payload: settings });
+      return () => {};
+    });
+    const listener = vi.fn();
+
+    await expect(virtualLibraryAdapter.getVirtualLibrarySettings()).resolves.toEqual(settings);
+    await expect(virtualLibraryAdapter.setVirtualLibraryEnabled(true)).resolves.toEqual(settings);
+    await expect(virtualLibraryAdapter.setVirtualLibraryRootFolder("D:\\Photos")).resolves.toEqual(settings);
+    invoke.mockResolvedValueOnce(undefined);
+    await expect(virtualLibraryAdapter.refreshVirtualLibrary()).resolves.toBeUndefined();
+    await virtualLibraryAdapter.subscribeToVirtualLibrarySettings(listener);
+
+    expect(invoke).toHaveBeenCalledWith("get_virtual_library_settings");
+    expect(invoke).toHaveBeenCalledWith("set_virtual_library_enabled", { enabled: true });
+    expect(invoke).toHaveBeenCalledWith("set_virtual_library_root_folder", { path: "D:\\Photos" });
+    expect(invoke).toHaveBeenCalledWith("refresh_virtual_library");
+    expect(listen).toHaveBeenCalledWith("virtual-library-settings-changed", expect.any(Function));
+    expect(listener).toHaveBeenCalledWith(settings);
+  });
+
+  it("forwards the backend's Virtual Library notices", async () => {
+    const notice = { kind: "unauthorized", name: "IMG_1.jpg" };
+    listen.mockImplementationOnce(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+      handler({ payload: notice });
+      return () => {};
+    });
+    const listener = vi.fn();
+
+    await virtualLibraryAdapter.subscribeToVirtualLibraryNotices(listener);
+
+    expect(listen).toHaveBeenCalledWith("virtual-library-notice", expect.any(Function));
+    expect(listener).toHaveBeenCalledWith(notice);
+  });
+
+  it("forwards the Virtual Library cleanup reports and shows the user's notices and confirmations through the native dialogs", async () => {
+    const report = { root_folder: "D:/Lib", removed_files: 1, removed_folders: 1, kept_count: 1, kept_examples: ["mine.txt"], root_kept: true, failed_count: 0, failed_examples: [], error: null };
+    listen.mockImplementationOnce(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+      handler({ payload: report });
+      return () => {};
+    });
+    confirm.mockResolvedValueOnce(true);
+    message.mockResolvedValueOnce(undefined);
+    const listener = vi.fn();
+
+    await virtualLibraryAdapter.subscribeToVirtualLibraryCleanup(listener);
+    await expect(virtualLibraryAdapter.confirm("Disable?", { title: "Virtual Library", kind: "warning" })).resolves.toBe(true);
+    await virtualLibraryAdapter.notify("Kept", { title: "Virtual Library", kind: "warning" });
+
+    expect(listen).toHaveBeenCalledWith("virtual-library-cleanup-finished", expect.any(Function));
+    expect(listener).toHaveBeenCalledWith(report);
+    expect(confirm).toHaveBeenCalledWith("Disable?", { title: "Virtual Library", kind: "warning" });
+    expect(message).toHaveBeenCalledWith("Kept", { title: "Virtual Library", kind: "warning" });
   });
 
   it("returns the partial result of Move to Trash with its failure code as the backend reports it", async () => {

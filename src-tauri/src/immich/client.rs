@@ -1,6 +1,7 @@
 use super::bulk_check::{
     bulk_check_response_error, parse_bulk_check_response, BulkCheckDuplicate, BulkCheckError,
 };
+use super::remote_failure::{send_bounded, RemoteFailure, RemoteFailureKind};
 use super::response::{
     non_empty, read_response_body_limited, send_checked, send_checked_as,
     MAX_SUCCESS_RESPONSE_BYTES,
@@ -511,10 +512,20 @@ impl ImmichClient {
     }
 
     pub(crate) async fn get_thumbnail(&self, asset_id: &str) -> Result<Vec<u8>, String> {
+        self.get_thumbnail_in_format(asset_id, "WEBP").await
+    }
+
+    /// The thumbnail in an explicit Immich `format` (`WEBP` or `JPEG`). The Virtual Library's shell
+    /// extension asks for JPEG: Windows decodes it everywhere, WebP only with its extension.
+    pub(crate) async fn get_thumbnail_in_format(
+        &self,
+        asset_id: &str,
+        format: &str,
+    ) -> Result<Vec<u8>, String> {
         Self::validate_path_segment(asset_id, "asset ID")?;
         let response = send_checked(
             self.request(Method::GET, &format!("assets/{asset_id}/thumbnail"))
-                .query(&[("format", "WEBP")]),
+                .query(&[("format", format)]),
             "Failed to fetch thumbnail",
         )
         .await?;
@@ -565,6 +576,39 @@ impl ImmichClient {
         serde_json::from_slice::<AssetDetailsResponse>(&body)
             .map(AssetDetails::from)
             .map_err(|error| format!("Invalid asset details response: {error}"))
+    }
+
+    /// The details of one asset for the Virtual Library, which must tell "the asset is gone" from
+    /// "the lookup failed": `Ok(None)` is a 404 (deleted, or not visible to this key), every other
+    /// failure comes back typed so the caller does not read it as absence. Bounded like the
+    /// other listing requests.
+    pub(crate) async fn find_asset_details(
+        &self,
+        asset_id: &str,
+        timeout: std::time::Duration,
+    ) -> Result<Option<AssetDetails>, RemoteFailure> {
+        Self::validate_path_segment(asset_id, "asset ID").map_err(RemoteFailure::rejected)?;
+        let response = match send_bounded(
+            self.request(Method::GET, &format!("assets/{asset_id}")),
+            "Failed to fetch asset details",
+            timeout,
+        )
+        .await
+        {
+            Ok(response) => response,
+            Err(failure) if failure.kind == RemoteFailureKind::NotFound => return Ok(None),
+            Err(failure) => return Err(failure),
+        };
+        let body = read_response_body_limited(response, MAX_SUCCESS_RESPONSE_BYTES)
+            .await
+            .map_err(|error| {
+                RemoteFailure::unavailable(format!("Failed to read asset details: {error}"))
+            })?;
+        serde_json::from_slice::<AssetDetailsResponse>(&body)
+            .map(|details| Some(AssetDetails::from(details)))
+            .map_err(|error| {
+                RemoteFailure::rejected(format!("Invalid asset details response: {error}"))
+            })
     }
 
     pub(crate) async fn set_asset_favorite(
@@ -1551,6 +1595,42 @@ mod tests {
                 "Invalid user ID for API path"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn fetches_an_asset_thumbnail_in_the_requested_format() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            requests_tx
+                .send(read_http_request(&mut stream).await)
+                .await
+                .unwrap();
+            let image = b"\xFF\xD8\xFF\xE0asset-thumbnail";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                image.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+            stream.write_all(image).await.unwrap();
+        });
+        let client = ImmichClient {
+            client: Client::new(),
+            server_url: Url::parse(&format!("http://{address}/api/")).unwrap(),
+            api_key: "test-key".to_string(),
+        };
+
+        assert_eq!(
+            client
+                .get_thumbnail_in_format("asset-1", "JPEG")
+                .await
+                .unwrap(),
+            b"\xFF\xD8\xFF\xE0asset-thumbnail"
+        );
+        let request = String::from_utf8(requests_rx.recv().await.unwrap()).unwrap();
+        assert!(request.starts_with("GET /api/assets/asset-1/thumbnail?format=JPEG HTTP/1.1"));
     }
 
     #[tokio::test]

@@ -5,6 +5,16 @@ param (
     [string]$Publisher = "CN=EB6D92C3-1B82-4D11-B562-6EA2D7C2FDEC",
     [string]$PublisherDisplayName = "xXRoxXeRXx",
     [string]$SourceExe,
+    # The Virtual Library thumbnail provider (src-tauri/lymic-shell-ext, #282). The COM server is an
+    # executable by default; "surrogate" packages the DLL instead (see docs/store/local-msix-build.md).
+    [ValidateSet("exe", "surrogate")][string]$ComServer = "exe",
+    # The windows.cloudFiles schema requires the five handler elements; Lymic implements only the
+    # thumbnail handler. "dummy" gives CustomState, ExtendedProperty and Banners a made-up Clsid that
+    # no COM class answers to (Microsoft's CloudMirror pattern); "empty" leaves them without one.
+    # Both pack; which one lets Explorer show the cloud status is unverified (docs/store/local-msix-build.md).
+    [ValidateSet("dummy", "empty")][string]$CloudFilesHandlers = "dummy",
+    [string]$ShellExtExe,
+    [string]$ShellExtDll,
     [string]$OutputDir = "dist/msix"
 )
 
@@ -22,7 +32,7 @@ $parts = $Version -replace '^v','' -split '\.'
 while ($parts.Count -lt 4) { $parts += "0" }
 $quadVersion = ($parts[0..3] -join '.')
 
-Write-Host "Packaging Lymic MSIX version $quadVersion ($IdentityName)..."
+Write-Host "Packaging Lymic MSIX version $quadVersion ($IdentityName, thumbnail provider: $ComServer)..."
 
 # Locate makeappx.exe
 $cmd = Get-Command makeappx.exe -ErrorAction SilentlyContinue
@@ -62,6 +72,35 @@ if ($SourceExe) {
     }
 }
 
+# The thumbnail provider build output. Build it with:
+#   cargo build --manifest-path src-tauri/Cargo.toml --release --locked -p lymic-shell-ext
+# (add --features surrogate-dll for -ComServer surrogate)
+$shellExtClsid = "9a3c3e0e-5b7d-4f4d-8f0e-2d6c1f6b7a41"
+# Made-up class ids for the handlers Lymic does not implement. They are deliberately NOT registered
+# as COM classes: a registered local server that never answers would make Explorer wait for it.
+$dummyHandlerClsids = @{
+    CUSTOM_STATE      = "9a3c3e0e-5b7d-4f4d-8f0e-2d6c1f6b7a42"
+    EXTENDED_PROPERTY = "9a3c3e0e-5b7d-4f4d-8f0e-2d6c1f6b7a43"
+    BANNERS           = "9a3c3e0e-5b7d-4f4d-8f0e-2d6c1f6b7a44"
+}
+function Get-HandlerClsidAttribute([string]$name) {
+    if ($CloudFilesHandlers -eq "dummy") { return " Clsid=`"$($dummyHandlerClsids[$name])`"" }
+    return ""
+}
+if ($ComServer -eq "exe") {
+    if (-not $ShellExtExe) { $ShellExtExe = "$repoRoot/src-tauri/target/release/lymic-shell-ext-host.exe" }
+    if (-not (Test-Path $ShellExtExe)) {
+        throw "Thumbnail provider host not found at: $ShellExtExe. Run 'cargo build --manifest-path src-tauri/Cargo.toml --release --locked -p lymic-shell-ext' first."
+    }
+    $ShellExtExe = (Get-Item $ShellExtExe).FullName
+} else {
+    if (-not $ShellExtDll) { $ShellExtDll = "$repoRoot/src-tauri/target/release/lymic_shell_ext.dll" }
+    if (-not (Test-Path $ShellExtDll)) {
+        throw "Thumbnail provider DLL not found at: $ShellExtDll. Run 'cargo build --manifest-path src-tauri/Cargo.toml --release --locked -p lymic-shell-ext --features surrogate-dll' first."
+    }
+    $ShellExtDll = (Get-Item $ShellExtDll).FullName
+}
+
 $stagingDir = "$repoRoot/target/msix-staging"
 if (Test-Path $stagingDir) {
     Remove-Item -Recurse -Force $stagingDir
@@ -70,6 +109,31 @@ New-Item -ItemType Directory -Path "$stagingDir/Assets" -Force | Out-Null
 
 # Copy executable
 Copy-Item $SourceExe "$stagingDir/Lymic.exe"
+
+# Copy the thumbnail provider (declared in the manifest below)
+if ($ComServer -eq "exe") {
+    Copy-Item $ShellExtExe "$stagingDir/LymicShellExt.exe"
+    $comServerBlock = @"
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="LymicShellExt.exe" Arguments="-Embedding" DisplayName="Lymic Thumbnail Provider">
+              <com:Class Id="$shellExtClsid" DisplayName="Lymic Thumbnail Provider" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+"@
+} else {
+    Copy-Item $ShellExtDll "$stagingDir/LymicShellExt.dll"
+    $comServerBlock = @"
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="Lymic Thumbnail Provider">
+              <com:Class Id="$shellExtClsid" Path="LymicShellExt.dll" ThreadingModel="Both" DisplayName="Lymic Thumbnail Provider" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+"@
+}
 
 # Copy icons
 $iconsDir = "$repoRoot/src-tauri/icons"
@@ -88,7 +152,12 @@ $manifest = $template `
     -replace '\{\{ARCHITECTURE\}\}', "x64" `
     -replace '\{\{DISPLAY_NAME\}\}', "Lymic" `
     -replace '\{\{EXECUTABLE\}\}', "Lymic.exe" `
-    -replace '\{\{DESCRIPTION\}\}', "High-performance desktop synchronization client for self-hosted Immich servers."
+    -replace '\{\{DESCRIPTION\}\}', "High-performance desktop synchronization client for self-hosted Immich servers." `
+    -replace '\{\{THUMBNAIL_CLSID\}\}', $shellExtClsid `
+    -replace '\{\{CUSTOM_STATE_CLSID_ATTRIBUTE\}\}', (Get-HandlerClsidAttribute "CUSTOM_STATE") `
+    -replace '\{\{EXTENDED_PROPERTY_CLSID_ATTRIBUTE\}\}', (Get-HandlerClsidAttribute "EXTENDED_PROPERTY") `
+    -replace '\{\{BANNERS_CLSID_ATTRIBUTE\}\}', (Get-HandlerClsidAttribute "BANNERS") `
+    -replace '\{\{THUMBNAIL_COM_SERVER\}\}', $comServerBlock.TrimEnd()
 
 Set-Content -Path "$stagingDir/AppxManifest.xml" -Value $manifest -Encoding utf8
 

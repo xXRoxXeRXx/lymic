@@ -8,6 +8,11 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+# The Virtual Library's COM thumbnail provider (ADR-0003). It lives beside the app so that both
+# build into `src-tauri/target` and share this lock file.
+members = ["lymic-shell-ext"]
+
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
@@ -49,6 +54,8 @@ tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 url = "2"
 tauri-plugin-opener = "2.7.2"
+# The Virtual Library thumbnail cache (the app writes it, the shell extension reads it).
+lymic-shell-ext = { path = "lymic-shell-ext" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
@@ -61,9 +68,38 @@ windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_Storage_FileSystem",
+    "Win32_Storage_Packaging_Appx",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_LibraryLoader",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
 ] }
+
+# The Virtual Library Windows adapter (`cloud_files`, ADR-0003): the WinRT sync root registration and
+# the Cloud Filter API, plus the WinRT StartupTask of a packaged (MSIX) run. windows-sys, above, has no
+# WinRT. Pinned to the version tauri already resolves so the lock file gains no second copy.
+[target.'cfg(windows)'.dependencies.windows]
+version = "=0.62.2"
+features = [
+    "ApplicationModel",
+    "ApplicationModel_Activation",
+    "Foundation",
+    "Foundation_Collections",
+    "Security_Cryptography",
+    "Storage",
+    "Storage_Provider",
+    "Storage_Search",
+    "Storage_Streams",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_CloudFilters",
+    "Win32_Storage_FileSystem",
+    "Win32_System_CorrelationVector",
+    "Win32_System_IO",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+]
 
 [target.'cfg(windows)'.dev-dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }

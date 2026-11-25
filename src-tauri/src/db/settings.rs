@@ -12,11 +12,7 @@ pub fn validate_upload_parallelism(value: i64) -> Option<usize> {
 }
 
 pub async fn get_upload_parallelism(pool: &SqlitePool) -> Result<usize, sqlx::Error> {
-    let value = sqlx::query_scalar::<_, String>(
-        "SELECT value FROM app_settings WHERE key = 'upload_parallelism'",
-    )
-    .fetch_optional(pool)
-    .await?;
+    let value = get_setting(pool, UPLOAD_PARALLELISM_KEY).await?;
 
     Ok(value
         .and_then(|value| value.parse::<i64>().ok())
@@ -32,13 +28,61 @@ pub async fn set_upload_parallelism(pool: &SqlitePool, value: usize) -> Result<(
         ));
     }
 
+    set_setting(pool, UPLOAD_PARALLELISM_KEY, &value.to_string())
+        .await
+        .map_err(|error| error.to_string())
+}
+
+const UPLOAD_PARALLELISM_KEY: &str = "upload_parallelism";
+const VIRTUAL_LIBRARY_ENABLED_KEY: &str = "virtual_library_enabled";
+const VIRTUAL_LIBRARY_ROOT_KEY: &str = "virtual_library_root";
+
+async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar::<_, String>("SELECT value FROM app_settings WHERE key = ?")
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+}
+
+async fn set_setting(pool: &SqlitePool, key: &str, value: &str) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO app_settings (key, value) VALUES ('upload_parallelism', ?) \
+        "INSERT INTO app_settings (key, value) VALUES (?, ?) \
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     )
-    .bind(value.to_string())
+    .bind(key)
+    .bind(value)
     .execute(pool)
-    .await
-    .map_err(|error| error.to_string())?;
+    .await?;
     Ok(())
+}
+
+/// The persisted Virtual Library toggle. Missing or unrecognised values count as disabled.
+pub async fn get_virtual_library_enabled(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+    Ok(get_setting(pool, VIRTUAL_LIBRARY_ENABLED_KEY)
+        .await?
+        .as_deref()
+        == Some("1"))
+}
+
+pub async fn set_virtual_library_enabled(
+    pool: &SqlitePool,
+    enabled: bool,
+) -> Result<(), sqlx::Error> {
+    set_setting(
+        pool,
+        VIRTUAL_LIBRARY_ENABLED_KEY,
+        if enabled { "1" } else { "0" },
+    )
+    .await
+}
+
+/// The root folder the user chose for the Virtual Library, or `None` while the default applies.
+pub async fn get_virtual_library_root(pool: &SqlitePool) -> Result<Option<String>, sqlx::Error> {
+    Ok(get_setting(pool, VIRTUAL_LIBRARY_ROOT_KEY)
+        .await?
+        .filter(|root| !root.trim().is_empty()))
+}
+
+pub async fn set_virtual_library_root(pool: &SqlitePool, root: &str) -> Result<(), sqlx::Error> {
+    set_setting(pool, VIRTUAL_LIBRARY_ROOT_KEY, root).await
 }

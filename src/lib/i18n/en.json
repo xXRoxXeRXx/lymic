@@ -88,6 +88,13 @@
   "autostart_subtitle": "Start Lymic automatically in the background at system launch to back up new photos right away.",
   "autostart_enable": "Enable autostart",
   "autostart_disable": "Disable autostart",
+  "virtual_library": "Virtual Library",
+  "virtual_library_subtitle": "Show your Immich library as read-only folders in Windows File Explorer.",
+  "virtual_library_enable": "Enable Virtual Library",
+  "virtual_library_disable": "Disable Virtual Library",
+  "virtual_library_folder": "Folder",
+  "virtual_library_change_folder": "Change folder",
+  "virtual_library_autostart_hint": "Photos you have not opened yet only work while Lymic is running. Turn on autostart so Lymic starts with Windows.",
   "language": "Language",
   "language_subtitle": "Choose your preferred language.",
   "appearance": "Appearance",
@@ -449,5 +456,27 @@
   ,"archive_archive_failed": "Could not archive. Please try again."
   ,"archive_archive_permission": "Archiving was refused. Give the API key the asset.update permission."
   ,"archive_archive_stays": "Archived. It stays in this list."
-  ,"archive_unarchive_stays": "Unarchived. It stays in this list."
+  ,"archive_unarchive_stays": "Unarchived. It stays in this list.",
+  "log_virtual_library_start_failed": "Could not start the Virtual Library: {error}",
+  "virtual_library_nested_root": "This folder is inside or contains another cloud sync folder, such as OneDrive, so the Virtual Library cannot be set up there. Choose another folder.",
+  "virtual_library_start_failed": "The Virtual Library could not be started:",
+  "virtual_library_disable_to_change_folder": "Disable the Virtual Library before changing its folder.",
+  "log_virtual_library_offline": "Could not open “{name}” from the Virtual Library because Immich could not be reached.",
+  "log_virtual_library_unauthorized": "Could not open “{name}” from the Virtual Library because your Immich sign-in is no longer valid.",
+  "log_virtual_library_not_found": "Could not open “{name}” from the Virtual Library because it was removed from Immich. It disappears at the next refresh.",
+  "log_virtual_library_failed": "Could not open “{name}” from the Virtual Library.",
+  "virtual_library_notice_relogin": "Sign in again",
+  "virtual_library_notice_dismiss": "Dismiss notice",
+  "virtual_library_relogin_hint": "Your Immich sign-in is no longer valid. Enter a new API key to keep using the Virtual Library.",
+  "virtual_library_relogin_cancel": "Not now",
+  "virtual_library_refresh": "Refresh Library",
+  "virtual_library_refreshing": "Refreshing…",
+  "virtual_library_refresh_description": "Check Immich for new, changed and removed photos in the folders you have already opened. This also happens automatically every 10 minutes.",
+  "virtual_library_refresh_failed": "The Virtual Library could not be refreshed:",
+  "virtual_library_disable_confirmation": "Disable the Virtual Library?",
+  "virtual_library_cleanup_warning": "Lymic removes the Virtual Library placeholders and every original it downloaded into the folder, including hydrated files and files you set to always keep on this device. Files in the folder that are not placeholders and were not created by Lymic stay in place, together with their folder. Your photos in Immich are not affected.",
+  "virtual_library_cleanup_kept": "Some files in the Virtual Library folder were not created by Lymic, so they were kept together with their folder:",
+  "virtual_library_cleanup_failed_items": "These items could not be removed. Turn the Virtual Library on and off again to try once more:",
+  "virtual_library_cleanup_not_run": "The Virtual Library sync folder could not be removed, so no files were deleted:",
+  "virtual_library_cleanup_failed": "The Virtual Library could not be disabled and stays on:"
 }

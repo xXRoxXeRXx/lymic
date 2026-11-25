@@ -88,6 +88,13 @@
   "autostart_subtitle": "নতুন ছবি অবিলম্বে ব্যাকআপ করতে সিস্টেম চালুর সময় পটভূমিতে স্বয়ংক্রিয়ভাবে Lymic চালান।",
   "autostart_enable": "অটোস্টার্ট সক্রিয় করুন",
   "autostart_disable": "অটোস্টার্ট নিষ্ক্রিয় করুন",
+  "virtual_library": "ভার্চুয়াল লাইব্রেরি",
+  "virtual_library_subtitle": "আপনার Immich লাইব্রেরি Windows ফাইল এক্সপ্লোরারে শুধু-পঠনযোগ্য ফোল্ডার হিসেবে দেখান।",
+  "virtual_library_enable": "ভার্চুয়াল লাইব্রেরি সক্রিয় করুন",
+  "virtual_library_disable": "ভার্চুয়াল লাইব্রেরি নিষ্ক্রিয় করুন",
+  "virtual_library_folder": "ফোল্ডার",
+  "virtual_library_change_folder": "ফোল্ডার পরিবর্তন করুন",
+  "virtual_library_autostart_hint": "যে ছবিগুলো আপনি এখনও খোলেননি, সেগুলো কেবল Lymic চালু থাকলেই কাজ করে। অটোস্টার্ট চালু করুন, যাতে Lymic Windows-এর সাথে শুরু হয়।",
   "language": "ভাষা",
   "language_subtitle": "আপনার পছন্দের ভাষা নির্বাচন করুন।",
   "appearance": "চেহারা",
@@ -449,5 +456,27 @@
   ,"archive_archive_failed": "আর্কাইভ করা যায়নি। আবার চেষ্টা করুন।"
   ,"archive_archive_permission": "আর্কাইভ করা প্রত্যাখ্যান করা হয়েছে। API কী-কে asset.update অনুমতি দিন।"
   ,"archive_archive_stays": "আর্কাইভ করা হয়েছে। এটি এই তালিকায় থাকবে।"
-  ,"archive_unarchive_stays": "আর্কাইভ থেকে সরানো হয়েছে। এটি এই তালিকায় থাকবে।"
+  ,"archive_unarchive_stays": "আর্কাইভ থেকে সরানো হয়েছে। এটি এই তালিকায় থাকবে।",
+  "log_virtual_library_start_failed": "ভার্চুয়াল লাইব্রেরি চালু করা যায়নি: {error}",
+  "virtual_library_nested_root": "এই ফোল্ডারটি অন্য একটি ক্লাউড সিঙ্ক ফোল্ডারের (যেমন OneDrive) ভিতরে আছে বা সেটি ধারণ করে, তাই এখানে ভার্চুয়াল লাইব্রেরি সেট আপ করা যাবে না। অন্য একটি ফোল্ডার বেছে নিন।",
+  "virtual_library_start_failed": "ভার্চুয়াল লাইব্রেরি চালু করা যায়নি:",
+  "virtual_library_disable_to_change_folder": "ফোল্ডার পরিবর্তনের আগে ভার্চুয়াল লাইব্রেরি বন্ধ করুন।",
+  "log_virtual_library_offline": "ভার্চুয়াল লাইব্রেরি থেকে “{name}” খোলা যায়নি, কারণ Immich-এ পৌঁছানো যায়নি।",
+  "log_virtual_library_unauthorized": "ভার্চুয়াল লাইব্রেরি থেকে “{name}” খোলা যায়নি, কারণ আপনার Immich সাইন-ইন আর বৈধ নয়।",
+  "log_virtual_library_not_found": "ভার্চুয়াল লাইব্রেরি থেকে “{name}” খোলা যায়নি, কারণ এটি Immich থেকে সরিয়ে ফেলা হয়েছে। পরের রিফ্রেশে এটি মুছে যাবে।",
+  "log_virtual_library_failed": "ভার্চুয়াল লাইব্রেরি থেকে “{name}” খোলা যায়নি।",
+  "virtual_library_notice_relogin": "আবার সাইন ইন করুন",
+  "virtual_library_notice_dismiss": "বিজ্ঞপ্তি বন্ধ করুন",
+  "virtual_library_relogin_hint": "আপনার Immich সাইন-ইন আর বৈধ নয়। ভার্চুয়াল লাইব্রেরি ব্যবহার চালিয়ে যেতে একটি নতুন API কী দিন।",
+  "virtual_library_relogin_cancel": "এখন নয়",
+  "virtual_library_refresh": "লাইব্রেরি রিফ্রেশ করুন",
+  "virtual_library_refreshing": "রিফ্রেশ হচ্ছে…",
+  "virtual_library_refresh_description": "আপনি ইতিমধ্যে যে ফোল্ডারগুলো খুলেছেন সেগুলোতে Immich থেকে নতুন, পরিবর্তিত ও সরানো ছবি দেখে নিন। এটি প্রতি ১০ মিনিটে স্বয়ংক্রিয়ভাবেও হয়।",
+  "virtual_library_refresh_failed": "ভার্চুয়াল লাইব্রেরি রিফ্রেশ করা যায়নি:",
+  "virtual_library_disable_confirmation": "ভার্চুয়াল লাইব্রেরি নিষ্ক্রিয় করবেন?",
+  "virtual_library_cleanup_warning": "Lymic ভার্চুয়াল লাইব্রেরির প্লেসহোল্ডার এবং ফোল্ডারে ডাউনলোড করা সব মূল ফাইল সরিয়ে দেবে, ডাউনলোড হওয়া ফাইল এবং এই ডিভাইসে সবসময় রাখার জন্য চিহ্নিত ফাইলসহ। ফোল্ডারে যে ফাইলগুলো প্লেসহোল্ডার নয় এবং Lymic তৈরি করেনি, সেগুলো নিজেদের ফোল্ডারসহ যেখানে আছে সেখানেই থাকবে। Immich-এ থাকা আপনার ছবিগুলোর কোনো ক্ষতি হবে না।",
+  "virtual_library_cleanup_kept": "ভার্চুয়াল লাইব্রেরি ফোল্ডারের কিছু ফাইল Lymic তৈরি করেনি, তাই সেগুলো ফোল্ডারসহ রেখে দেওয়া হয়েছে:",
+  "virtual_library_cleanup_failed_items": "এই আইটেমগুলো সরানো যায়নি। আবার চেষ্টা করতে ভার্চুয়াল লাইব্রেরি বন্ধ করে আবার চালু করুন:",
+  "virtual_library_cleanup_not_run": "ভার্চুয়াল লাইব্রেরির সিঙ্ক ফোল্ডার সরানো যায়নি, তাই কোনো ফাইল মোছা হয়নি:",
+  "virtual_library_cleanup_failed": "ভার্চুয়াল লাইব্রেরি নিষ্ক্রিয় করা যায়নি এবং এটি চালু আছে:"
 }

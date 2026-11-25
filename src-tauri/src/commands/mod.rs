@@ -1,5 +1,6 @@
 pub(crate) mod albums;
 pub(crate) mod auth;
+pub(crate) mod autostart;
 pub(crate) mod folders;
 pub(crate) mod map;
 pub(crate) mod memories;
@@ -12,3 +13,4 @@ pub(crate) mod settings;
 pub(crate) mod sync;
 pub(crate) mod tags;
 pub(crate) mod timeline;
+pub(crate) mod virtual_library;

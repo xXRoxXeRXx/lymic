@@ -5,6 +5,7 @@
   import hero from "#lib/assets/hero.png";
   import logo from "#lib/assets/logo.png";
   import LoginView from "#lib/components/LoginView.svelte";
+  import VirtualLibraryNoticeBanner from "#lib/components/VirtualLibraryNoticeBanner.svelte";
   import DashboardView from "#lib/components/DashboardView.svelte";
   import TimelineView from "#lib/components/TimelineView.svelte";
   import MapView from "#lib/components/MapView.svelte";
@@ -26,6 +27,7 @@
   import { createSessionController } from "#lib/controllers/session-controller.svelte.ts";
   import { createPreferencesController } from "#lib/controllers/preferences-controller.svelte.ts";
   import { createUpdateController } from "#lib/controllers/update-controller.svelte.ts";
+  import { createVirtualLibraryController } from "#lib/controllers/virtual-library-controller.svelte.ts";
   import {
     ALBUMS_VIEW,
     ALBUM_TIMELINE_VIEW,
@@ -308,6 +310,7 @@
     },
     isExploreActive: () => currentView === EXPLORE_VIEW,
     isTagsActive: () => currentView === TAGS_VIEW,
+    isVirtualLibraryEnabled: () => virtualLibrary.isEnabled,
   });
   const {
     auth,
@@ -372,6 +375,7 @@
     setLocale: (value) => $locale = value,
   });
   const updater = createUpdateController(() => sync.isActive, desktop);
+  const virtualLibrary = createVirtualLibraryController({ adapter: desktop, reportError: feedback.report, autostartEnabled: () => preferences.autostartState, beginRelogin: auth.beginRelogin, t: (key) => $t(key) });
   const targetAlbumDialog = $derived(watchedFolders.targetAlbumDialog);
 
   // Leaving the Trash Timeline drops its assets and selection; returning shows a fresh load.
@@ -399,16 +403,19 @@
     session.startLifecycle();
     updater.startLifecycle();
     preferences.startLifecycle();
+    void virtualLibrary.startLifecycle();
 
     void auth.hydrate()
       .catch((error) => console.error("Failed to hydrate authentication", error));
     void preferences.hydrate().catch((error) => console.error("Failed to hydrate preferences", error));
+    void virtualLibrary.hydrate().catch((error) => console.error("Failed to hydrate Virtual Library settings", error));
     updater.startup();
 
     return () => {
       session.destroy();
       updater.destroy();
       preferences.stopLifecycle();
+      virtualLibrary.stopLifecycle();
     };
   });
   const sharedTimelineProps = $derived({
@@ -427,7 +434,7 @@
 </script>
 
 <div class="h-screen flex selection:bg-blue-600 selection:text-white overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60">
-  {#if !auth.isAuthenticated}
+  {#if !auth.isAuthenticated || auth.isRelogin}
     <!-- Left Side: Hero Image (Login Screen) -->
     <aside class="w-[38%] h-full shrink-0 relative overflow-hidden select-none">
       <div class="hero-container">
@@ -465,6 +472,8 @@
           loginError={auth.loginError}
           loginErrorCode={auth.loginErrorCode}
           onLogin={auth.login}
+          reloginNotice={auth.isRelogin ? $t('virtual_library_relogin_hint') : ""}
+          onCancel={auth.isRelogin ? auth.cancelRelogin : undefined}
         />
       </div>
 
@@ -548,6 +557,9 @@
               <X class="w-4 h-4" />
             </button>
           </div>
+        {/if}
+        {#if virtualLibrary.notice}
+          <VirtualLibraryNoticeBanner notice={virtualLibrary.notice} onRelogin={virtualLibrary.relogin} onDismiss={virtualLibrary.dismissNotice} />
         {/if}
         {#if removable.currentPrompt}
           <RemovableVolumePrompt
@@ -645,8 +657,17 @@
             updateStatus={updater.updateStatus}
             isCheckingForUpdates={updater.isCheckingForUpdates}
             isUpdatesSupported={updater.isUpdatesSupported}
+            isVirtualLibraryAvailable={virtualLibrary.isAvailable}
+            isVirtualLibraryEnabled={virtualLibrary.isEnabled}
+            isSavingVirtualLibrary={virtualLibrary.isSaving}
+            isVirtualLibraryRefreshing={virtualLibrary.isRefreshing}
+            virtualLibraryRootFolder={virtualLibrary.rootFolder}
+            showVirtualLibraryAutostartHint={virtualLibrary.showAutostartHint}
             locales={preferences.locales}
             onToggleAutostart={preferences.toggleAutostart}
+            onToggleVirtualLibrary={virtualLibrary.toggle}
+            onChangeVirtualLibraryFolder={virtualLibrary.chooseRootFolder}
+            onRefreshVirtualLibrary={virtualLibrary.refresh}
             onLocaleChange={preferences.setLocale}
             onThemeChange={preferences.setThemePreference}
             onUploadParallelismChange={preferences.changeUploadParallelism}

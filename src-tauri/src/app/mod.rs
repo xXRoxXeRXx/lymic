@@ -1,23 +1,20 @@
 mod asset_protocol;
+pub(crate) mod autostart;
 pub(crate) mod background;
 pub(crate) mod events;
 pub(crate) mod locale;
+pub(crate) mod package_identity;
+pub(crate) mod release_channel;
 pub(crate) mod startup;
 pub(crate) mod state;
 pub(crate) mod thumbnail_protocol;
 pub(crate) mod tray;
 
-use std::ffi::{OsStr, OsString};
+use autostart::{should_start_in_background, AUTOSTART_ARGUMENT};
 use tauri::Manager;
-
-const AUTOSTART_ARGUMENT: &str = "--autostart";
 
 fn has_stored_credentials<T, E>(credentials: Result<Option<T>, E>) -> bool {
     matches!(credentials, Ok(Some(_)))
-}
-
-fn should_start_in_background(args: &[OsString], has_credentials: bool) -> bool {
-    has_credentials && args.iter().any(|arg| arg == OsStr::new(AUTOSTART_ARGUMENT))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -36,7 +33,12 @@ pub(crate) fn run() {
         .setup(|app| {
             let args = std::env::args_os().collect::<Vec<_>>();
             let has_credentials = has_stored_credentials(crate::auth::get_credentials());
-            let start_in_background = should_start_in_background(&args, has_credentials);
+            // Read the activation once, before anything else: Windows hands it out a single time.
+            let start_in_background = should_start_in_background(
+                &args,
+                has_credentials,
+                autostart::launched_by_startup_task(),
+            );
 
             let startup = startup::initialize(app)?;
             let has_folders = startup.has_folders;
@@ -147,6 +149,12 @@ pub(crate) fn run() {
             crate::commands::settings::record_webview_startup_phase_probe,
             crate::commands::settings::get_database_recovery_notice,
             crate::commands::settings::get_release_channel,
+            crate::commands::autostart::get_autostart_enabled,
+            crate::commands::autostart::set_autostart_enabled,
+            crate::commands::virtual_library::get_virtual_library_settings,
+            crate::commands::virtual_library::set_virtual_library_enabled,
+            crate::commands::virtual_library::set_virtual_library_root_folder,
+            crate::commands::virtual_library::refresh_virtual_library,
         ])
         .on_window_event(tray::hide_on_close)
         .build(tauri::generate_context!())
@@ -245,6 +253,12 @@ mod tests {
             "get_database_recovery_notice",
             "record_webview_startup_phase_probe",
             "get_release_channel",
+            "get_autostart_enabled",
+            "set_autostart_enabled",
+            "get_virtual_library_settings",
+            "set_virtual_library_enabled",
+            "set_virtual_library_root_folder",
+            "refresh_virtual_library",
         ] {
             assert!(
                 adapter.contains(&format!("\"{command}\"")),
@@ -258,38 +272,18 @@ mod tests {
     }
 
     #[test]
-    fn autostart_with_credentials_starts_in_background() {
-        assert!(should_start_in_background(
-            &[OsString::from("lymic"), OsString::from(AUTOSTART_ARGUMENT)],
-            true
-        ));
-    }
-
-    #[test]
-    fn autostart_without_credentials_shows_window() {
-        assert!(!should_start_in_background(
-            &[OsString::from("lymic"), OsString::from(AUTOSTART_ARGUMENT)],
-            false
-        ));
-    }
-
-    #[test]
-    fn manual_launch_with_credentials_shows_window() {
-        assert!(!should_start_in_background(
-            &[OsString::from("lymic")],
-            true
-        ));
-    }
-
-    #[test]
     fn credential_errors_are_treated_as_not_authenticated() {
         let has_credentials = has_stored_credentials::<(), _>(Err("keyring unavailable"));
 
         assert!(!has_credentials);
         assert!(!has_stored_credentials::<(), ()>(Ok(None)));
         assert!(!should_start_in_background(
-            &[OsString::from("lymic"), OsString::from(AUTOSTART_ARGUMENT)],
-            has_credentials
+            &[
+                std::ffi::OsString::from("lymic"),
+                std::ffi::OsString::from(AUTOSTART_ARGUMENT)
+            ],
+            has_credentials,
+            false
         ));
     }
 }

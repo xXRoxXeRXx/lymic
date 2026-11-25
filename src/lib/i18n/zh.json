@@ -88,6 +88,13 @@
   "autostart_subtitle": "系统启动时在后台自动运行 Lymic，以便即时备份新照片。",
   "autostart_enable": "启用开机自启",
   "autostart_disable": "禁用开机自启",
+  "virtual_library": "虚拟图库",
+  "virtual_library_subtitle": "在 Windows 文件资源管理器中以只读文件夹的形式显示您的 Immich 图库。",
+  "virtual_library_enable": "启用虚拟图库",
+  "virtual_library_disable": "禁用虚拟图库",
+  "virtual_library_folder": "文件夹",
+  "virtual_library_change_folder": "更改文件夹",
+  "virtual_library_autostart_hint": "尚未打开过的照片只有在 Lymic 运行时才能使用。请开启开机自启，让 Lymic 随 Windows 一起启动。",
   "language": "语言",
   "language_subtitle": "选择你的首选语言。",
   "appearance": "外观",
@@ -449,5 +456,27 @@
   ,"archive_archive_failed": "无法归档，请重试。"
   ,"archive_archive_permission": "归档被拒绝。请为 API 密钥授予 asset.update 权限。"
   ,"archive_archive_stays": "已归档。它仍保留在此列表中。"
-  ,"archive_unarchive_stays": "已取消归档。它仍保留在此列表中。"
+  ,"archive_unarchive_stays": "已取消归档。它仍保留在此列表中。",
+  "log_virtual_library_start_failed": "无法启动虚拟图库：{error}",
+  "virtual_library_nested_root": "此文件夹位于另一个云同步文件夹（例如 OneDrive）内或包含该文件夹，因此无法在此设置虚拟图库。请选择其他文件夹。",
+  "virtual_library_start_failed": "无法启动虚拟图库：",
+  "virtual_library_disable_to_change_folder": "更改虚拟图库文件夹之前，请先停用虚拟图库。",
+  "log_virtual_library_offline": "无法从虚拟图库打开“{name}”，因为无法连接到 Immich。",
+  "log_virtual_library_unauthorized": "无法从虚拟图库打开“{name}”，因为你的 Immich 登录已失效。",
+  "log_virtual_library_not_found": "无法从虚拟图库打开“{name}”，因为它已从 Immich 中删除。下次刷新时它会消失。",
+  "log_virtual_library_failed": "无法从虚拟图库打开“{name}”。",
+  "virtual_library_notice_relogin": "重新登录",
+  "virtual_library_notice_dismiss": "关闭通知",
+  "virtual_library_relogin_hint": "你的 Immich 登录已失效。请输入新的 API 密钥以继续使用虚拟图库。",
+  "virtual_library_relogin_cancel": "暂不",
+  "virtual_library_refresh": "刷新资料库",
+  "virtual_library_refreshing": "正在刷新…",
+  "virtual_library_refresh_description": "在 Immich 中检查已打开文件夹里新增、变更和已移除的照片。此操作也会每 10 分钟自动进行一次。",
+  "virtual_library_refresh_failed": "无法刷新虚拟资料库：",
+  "virtual_library_disable_confirmation": "要禁用虚拟图库吗？",
+  "virtual_library_cleanup_warning": "Lymic 会移除虚拟图库的占位符，以及它下载到该文件夹中的所有原图，包括已下载的文件和你设为“始终保留在此设备上”的文件。文件夹中不是占位符且不是由 Lymic 创建的文件会连同其文件夹一起保留在原处。你在 Immich 中的照片不会受到影响。",
+  "virtual_library_cleanup_kept": "虚拟图库文件夹中有一些文件不是由 Lymic 创建的，因此已连同文件夹一起保留：",
+  "virtual_library_cleanup_failed_items": "无法移除以下项目。请先关闭再重新开启虚拟图库以重试：",
+  "virtual_library_cleanup_not_run": "无法移除虚拟图库的同步文件夹，因此没有删除任何文件：",
+  "virtual_library_cleanup_failed": "无法禁用虚拟图库，它仍保持开启："
 }

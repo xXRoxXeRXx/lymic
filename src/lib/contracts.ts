@@ -252,6 +252,54 @@ export interface LoginRequest {
 
 export type ReleaseChannel = "github" | "store";
 
+/**
+ * The Virtual Library section of the settings (ADR-0003). Mirrors `VirtualLibrarySettings` in
+ * `src-tauri/src/commands/virtual_library.rs`. `available` is decided by the backend at runtime
+ * (Windows, Store release channel and real Package Identity); `enabled` is the persisted toggle
+ * and is always false while the Virtual Library is unavailable. `root_folder` defaults to `Lymic` inside
+ * the Windows Known Folder Pictures.
+ */
+export interface VirtualLibrarySettings {
+  available: boolean;
+  enabled: boolean;
+  /** The effective Virtual Library folder (the user's choice or the default); null when unavailable or unknown. */
+  root_folder: string | null;
+}
+
+/**
+ * A Virtual Library request that failed and that the user should hear about, once per failure
+ * episode (#281). Mirrors `cloud_files::Notice`, sent as the `virtual-library-notice` event. `name`
+ * is the photo or folder the failed request was about.
+ */
+export interface VirtualLibraryNotice {
+  kind: "offline" | "unauthorized" | "not_found" | "failed";
+  name: string;
+}
+
+/**
+ * What a Virtual Library cleanup (disabling, logout) did, sent as `virtual-library-cleanup-finished`
+ * only when something stayed or failed. Mirrors `CleanupReport` in
+ * `src-tauri/src/cloud_files/cleanup.rs`.
+ */
+export interface VirtualLibraryCleanupReport {
+  /** The Virtual Library folder that was cleaned. */
+  root_folder: string;
+  removed_files: number;
+  removed_folders: number;
+  /** Items left in place because Lymic did not create them (or the user changed them). */
+  kept_count: number;
+  /** The first few of them, relative to the folder. */
+  kept_examples: string[];
+  /** The folder itself stays, because something is left in it. */
+  root_kept: boolean;
+  /** Items that could not be removed. */
+  failed_count: number;
+  /** The first few of them with the reason. */
+  failed_examples: string[];
+  /** The cleanup could not run at all (the sync folder could not be unregistered); nothing was removed. */
+  error: string | null;
+}
+
 export interface MapMarker { id: string; lat: number; lon: number; }
 
 // Search (ADR-0008, ADR-0009). Mirrors `src-tauri/src/immich/search.rs`.

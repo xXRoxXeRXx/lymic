@@ -88,6 +88,13 @@
   "autostart_subtitle": "Lymic beim Systemstart automatisch im Hintergrund ausführen, um neue Fotos sofort zu sichern.",
   "autostart_enable": "Autostart aktivieren",
   "autostart_disable": "Autostart deaktivieren",
+  "virtual_library": "Virtuelle Bibliothek",
+  "virtual_library_subtitle": "Deine Immich-Bibliothek als schreibgeschützte Ordner im Windows-Explorer anzeigen.",
+  "virtual_library_enable": "Virtuelle Bibliothek aktivieren",
+  "virtual_library_disable": "Virtuelle Bibliothek deaktivieren",
+  "virtual_library_folder": "Ordner",
+  "virtual_library_change_folder": "Ordner ändern",
+  "virtual_library_autostart_hint": "Noch nicht geöffnete Fotos funktionieren nur, solange Lymic läuft. Aktiviere den Autostart, damit Lymic mit Windows startet.",
   "language": "Sprache",
   "language_subtitle": "Wähle deine bevorzugte Sprache.",
   "appearance": "Darstellung",
@@ -449,5 +456,27 @@
   ,"archive_archive_failed": "Archivieren fehlgeschlagen. Bitte versuche es erneut."
   ,"archive_archive_permission": "Das Archivieren wurde abgelehnt. Erteile dem API-Schlüssel die Berechtigung asset.update."
   ,"archive_archive_stays": "Archiviert. Es bleibt in dieser Liste."
-  ,"archive_unarchive_stays": "Dearchiviert. Es bleibt in dieser Liste."
+  ,"archive_unarchive_stays": "Dearchiviert. Es bleibt in dieser Liste.",
+  "log_virtual_library_start_failed": "Die virtuelle Bibliothek konnte nicht gestartet werden: {error}",
+  "virtual_library_nested_root": "Dieser Ordner liegt in einem anderen Cloud-Synchronisierungsordner (zum Beispiel OneDrive) oder enthält einen, daher kann die virtuelle Bibliothek dort nicht eingerichtet werden. Wähle einen anderen Ordner.",
+  "virtual_library_start_failed": "Die virtuelle Bibliothek konnte nicht gestartet werden:",
+  "virtual_library_disable_to_change_folder": "Deaktiviere die virtuelle Bibliothek, bevor du ihren Ordner änderst.",
+  "log_virtual_library_offline": "„{name}“ konnte nicht aus der virtuellen Bibliothek geöffnet werden, weil Immich nicht erreichbar war.",
+  "log_virtual_library_unauthorized": "„{name}“ konnte nicht aus der virtuellen Bibliothek geöffnet werden, weil deine Immich-Anmeldung nicht mehr gültig ist.",
+  "log_virtual_library_not_found": "„{name}“ konnte nicht aus der virtuellen Bibliothek geöffnet werden, weil es aus Immich entfernt wurde. Es verschwindet bei der nächsten Aktualisierung.",
+  "log_virtual_library_failed": "„{name}“ konnte nicht aus der virtuellen Bibliothek geöffnet werden.",
+  "virtual_library_notice_relogin": "Erneut anmelden",
+  "virtual_library_notice_dismiss": "Hinweis schließen",
+  "virtual_library_relogin_hint": "Deine Immich-Anmeldung ist nicht mehr gültig. Gib einen neuen API-Schlüssel ein, um die virtuelle Bibliothek weiter zu nutzen.",
+  "virtual_library_relogin_cancel": "Jetzt nicht",
+  "virtual_library_refresh": "Bibliothek aktualisieren",
+  "virtual_library_refreshing": "Wird aktualisiert…",
+  "virtual_library_refresh_description": "Bei Immich nach neuen, geänderten und entfernten Fotos in den bereits geöffneten Ordnern suchen. Das geschieht auch automatisch alle 10 Minuten.",
+  "virtual_library_refresh_failed": "Die virtuelle Bibliothek konnte nicht aktualisiert werden:",
+  "virtual_library_disable_confirmation": "Virtuelle Bibliothek deaktivieren?",
+  "virtual_library_cleanup_warning": "Lymic entfernt die Platzhalter der virtuellen Bibliothek und jedes Original, das in den Ordner heruntergeladen wurde, einschließlich heruntergeladener Dateien und Dateien, die du auf diesem Gerät immer behalten wolltest. Dateien im Ordner, die keine Platzhalter sind und nicht von Lymic erstellt wurden, bleiben samt ihrem Ordner erhalten. Deine Fotos in Immich bleiben unberührt.",
+  "virtual_library_cleanup_kept": "Einige Dateien im Ordner der virtuellen Bibliothek wurden nicht von Lymic erstellt und blieben deshalb samt ihrem Ordner erhalten:",
+  "virtual_library_cleanup_failed_items": "Diese Elemente konnten nicht entfernt werden. Schalte die virtuelle Bibliothek aus und wieder ein, um es noch einmal zu versuchen:",
+  "virtual_library_cleanup_not_run": "Der Synchronisierungsordner der virtuellen Bibliothek konnte nicht entfernt werden, daher wurden keine Dateien gelöscht:",
+  "virtual_library_cleanup_failed": "Die virtuelle Bibliothek konnte nicht deaktiviert werden und bleibt eingeschaltet:"
 }
