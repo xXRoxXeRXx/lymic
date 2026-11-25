@@ -1,5 +1,5 @@
 //! Sync root registration through the WinRT `StorageProviderSyncRootManager`, which needs Package
-//! Identity. Hydration is always the full original; the population policy `Full` is the WinRT name
+//! Identity. Hydration is always the original, never a preview, read progressively; the population policy `Full` is the WinRT name
 //! for "the provider fills a directory when it is first listed", which is how the prototype
 //! observed `FETCH_PLACEHOLDERS` arriving one directory at a time.
 //!
@@ -74,7 +74,10 @@ pub(super) fn register(root: &Path) -> Result<()> {
     info.SetIconResource(&HSTRING::from(registration::icon_resource(
         std::env::current_exe().ok().as_deref(),
     )))?;
-    info.SetHydrationPolicy(StorageProviderHydrationPolicy::Full)?;
+    // Progressive: a reader waits only for the range it asked for, so a video starts at once and a
+    // seek does not wait for the whole original (`Full` completes the open only after the last
+    // byte). `hydration::hydrate` serves the range plus a bounded read-ahead.
+    info.SetHydrationPolicy(StorageProviderHydrationPolicy::Progressive)?;
     // Hydrated originals may be given back to the cloud by Storage Sense and "Free up space"; the
     // placeholders are always in sync, so nothing is lost.
     info.SetHydrationPolicyModifier(

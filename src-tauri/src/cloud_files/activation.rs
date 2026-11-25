@@ -19,7 +19,7 @@ pub(crate) const START_FAILED_ERROR: &str = "VIRTUAL_LIBRARY_START_FAILED";
 /// The part of the operating system the activation steps need.
 pub(super) trait SyncRootHost: SyncRootProbe {
     fn create_root_folder(&self, root: &Path) -> Result<(), String>;
-    /// Registers the sync root (hydration full, population per directory).
+    /// Registers the sync root (progressive hydration, population per directory).
     fn register(&self, root: &Path) -> Result<(), String>;
     /// Starts serving callbacks for the registered root.
     fn connect(&self, root: &Path) -> Result<(), String>;

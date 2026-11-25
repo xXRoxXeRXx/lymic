@@ -449,6 +449,7 @@ fn fetch_data(request: Request, offset: i64, length: i64) {
                             let data_request = DataRequest {
                                 path: path.clone(),
                                 required_offset: offset.max(0) as u64,
+                                required_length: length.max(0) as u64,
                                 file_size: request.file_size.max(0) as u64,
                             };
                             hydration::hydrate(

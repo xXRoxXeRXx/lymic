@@ -4,9 +4,11 @@
 //! (`Library::resolve`), streams the original from Immich and passes it to the platform in blocks.
 //! The platform only accepts data at offsets that are multiples of 4096, except for the final block
 //! that ends at the end of the file, so network chunks of any size are regrouped by
-//! [`BlockAligner`]. Only the original is fetched, never a preview. It is read from byte 0, or from
-//! the aligned start of a later requested range when the server honours a `Range` request and from
-//! byte 0 (skipping what is not needed) when it does not.
+//! [`BlockAligner`]. Only the original is fetched, never a preview. It is read from the aligned start
+//! of the requested range (a `Range` request when the server honours it, byte 0 with the bytes
+//! before it dropped when it does not) and, under the progressive hydration policy, only a bounded
+//! read-ahead past the end of that range: the platform asks again when the reader gets that far, so
+//! a video starts at once and a seek does not wait for the bytes in between.
 
 use super::failure::{Failure, FailureKind};
 use super::library::{Library, OriginalSource, OriginalStream};
@@ -15,6 +17,10 @@ use super::library::{Library, OriginalSource, OriginalStream};
 pub(super) const ALIGNMENT: u64 = 4096;
 /// How much is handed to the platform at once: a multiple of [`ALIGNMENT`].
 pub(super) const BLOCK_BYTES: usize = 1024 * 1024;
+/// How far past the end of the requested range a download goes before it stops, so a sequential
+/// reader is not interrupted by a request per read and a seek is not queued behind a download of
+/// the whole file. The platform asks again for what the reader needs next.
+pub(super) const READ_AHEAD_BYTES: u64 = 32 * 1024 * 1024;
 
 /// A piece of the original at its offset.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,6 +83,9 @@ pub(super) struct DataRequest {
     pub path: String,
     /// The first byte the reader needs.
     pub required_offset: u64,
+    /// How many bytes from `required_offset` the reader waits for. 0 means everything to the end
+    /// of the file.
+    pub required_length: u64,
     /// The size the placeholder was created with.
     pub file_size: u64,
 }
@@ -89,9 +98,11 @@ fn align_down(value: u64) -> u64 {
 ///
 /// The bytes below the aligned start of the requested range are not transferred: they are not even
 /// downloaded when the server serves the range, and are read and dropped when it sends the whole
-/// original. With the full hydration policy that start is 0, so no range is ever asked for. A body that does not end exactly at the size the
-/// placeholder announced fails the read: the platform would otherwise wait for bytes that never
-/// come, or reject the excess.
+/// original. The download stops [`READ_AHEAD_BYTES`] after the end of the requested range, at a
+/// block boundary, so the reader's range is always complete when it ends; a read of the whole file
+/// (the full hydration policy asks for it) therefore downloads the whole file. A body that does not
+/// end exactly at the size the placeholder announced fails the read: the platform would otherwise
+/// wait for bytes that never come, or reject the excess.
 pub(super) async fn hydrate<L, S, K>(
     library: &L,
     source: &S,
@@ -136,8 +147,11 @@ where
         }
     }
 
+    let stop_at = stop_at(request);
     let mut aligner = BlockAligner::starting_at(start);
     let mut transferred: u64 = 0;
+    // The end of what the platform has been given.
+    let mut handed_over = start;
     while let Some(chunk) = stream.next_chunk().await? {
         let end = position + chunk.len() as u64;
         if end > request.file_size {
@@ -148,6 +162,12 @@ where
         for block in aligner.push(&chunk[skip..]) {
             sink.transfer(&block)?;
             transferred += block.data.len() as u64;
+            handed_over = block.offset + block.data.len() as u64;
+        }
+        if handed_over >= stop_at && handed_over < request.file_size {
+            // Enough for now: dropping the stream ends the download. What the aligner still holds
+            // is not on a block boundary and is read again when the platform asks.
+            return Ok(transferred);
         }
     }
     if position != request.file_size {
@@ -158,6 +178,19 @@ where
         transferred += block.data.len() as u64;
     }
     Ok(transferred)
+}
+
+/// The offset from which the download may stop: past the end of the requested range plus the
+/// read-ahead, or the end of the file for a read of all of it.
+fn stop_at(request: &DataRequest) -> u64 {
+    if request.required_length == 0 {
+        return request.file_size;
+    }
+    request
+        .required_offset
+        .saturating_add(request.required_length)
+        .saturating_add(READ_AHEAD_BYTES)
+        .min(request.file_size)
 }
 
 fn size_mismatch(request: &DataRequest, how: &str) -> Failure {
@@ -343,6 +376,7 @@ mod tests {
         DataRequest {
             path: "All Photos/2024/03 March/IMG_0001.jpg".to_string(),
             required_offset: 0,
+            required_length: 0,
             file_size: file_size as u64,
         }
     }
@@ -628,5 +662,110 @@ mod tests {
         assert_eq!(transferred, 20_000 - 4_096);
         assert_eq!(sink.blocks[0].offset, 4_096);
         assert_eq!(sink.blocks[0].data, &data[4_096..]);
+    }
+
+    /// A reader's range inside a large file, as the progressive policy asks for it.
+    fn ranged_request(offset: u64, length: u64, file_size: u64) -> DataRequest {
+        DataRequest {
+            required_offset: offset,
+            required_length: length,
+            file_size,
+            ..request(0)
+        }
+    }
+
+    #[tokio::test]
+    async fn a_read_of_the_start_stops_a_read_ahead_after_its_range_instead_of_the_whole_file() {
+        let data = bytes_of(READ_AHEAD_BYTES as usize + 4 * BLOCK_BYTES);
+        let source = FakeSource::serving(&data, 700_001);
+        let mut sink = RecordingSink::default();
+
+        let transferred = hydrate(
+            &library(),
+            &source,
+            &mut sink,
+            &ranged_request(0, 4_096, data.len() as u64),
+        )
+        .await
+        .unwrap();
+
+        // The range plus the read-ahead, rounded up to a block, and not the whole file.
+        assert!(transferred >= READ_AHEAD_BYTES + 4_096, "{transferred}");
+        assert!(transferred < data.len() as u64, "{transferred}");
+        assert_platform_alignment(&sink.blocks, data.len() as u64);
+        assert!(sink.blocks.iter().all(|b| b.data.len() == BLOCK_BYTES));
+        let joined: Vec<u8> = sink.blocks.iter().flat_map(|b| b.data.clone()).collect();
+        assert_eq!(joined, data[..joined.len()]);
+    }
+
+    #[tokio::test]
+    async fn a_seek_far_into_a_file_downloads_from_there_and_not_the_bytes_in_between() {
+        let data = bytes_of(3 * READ_AHEAD_BYTES as usize);
+        let mut source = FakeSource::serving(&data, 700_001);
+        source.ranged = true;
+        let mut sink = RecordingSink::default();
+        let offset = 2 * READ_AHEAD_BYTES + 100;
+
+        hydrate(
+            &library(),
+            &source,
+            &mut sink,
+            &ranged_request(offset, 8_192, data.len() as u64),
+        )
+        .await
+        .unwrap();
+
+        let from = align_down(offset);
+        assert_eq!(*source.opened_from.lock().unwrap(), [from]);
+        assert_eq!(sink.blocks[0].offset, from);
+        let last = sink.blocks.last().unwrap();
+        assert_eq!(
+            last.offset + last.data.len() as u64,
+            data.len() as u64,
+            "the end of the file is reached before the read-ahead is used up"
+        );
+        assert_platform_alignment(&sink.blocks, data.len() as u64);
+    }
+
+    #[tokio::test]
+    async fn the_range_the_reader_waits_for_is_complete_when_the_download_stops() {
+        // A range that ends in the middle of a block, far from the end of the file.
+        let data = bytes_of(4 * READ_AHEAD_BYTES as usize);
+        let source = FakeSource::serving(&data, 123_457);
+        let mut sink = RecordingSink::default();
+        let range = (5_000u64, 3 * BLOCK_BYTES as u64 + 17);
+
+        hydrate(
+            &library(),
+            &source,
+            &mut sink,
+            &ranged_request(range.0, range.1, data.len() as u64),
+        )
+        .await
+        .unwrap();
+
+        let last = sink.blocks.last().unwrap();
+        assert!(last.offset + last.data.len() as u64 >= range.0 + range.1);
+        assert_eq!(sink.blocks[0].offset, 4_096);
+    }
+
+    #[tokio::test]
+    async fn a_read_of_the_whole_file_downloads_all_of_it_under_either_policy() {
+        let data = bytes_of(READ_AHEAD_BYTES as usize + BLOCK_BYTES + 7);
+        for length in [0, data.len() as u64] {
+            let source = FakeSource::serving(&data, 700_001);
+            let mut sink = RecordingSink::default();
+
+            let transferred = hydrate(
+                &library(),
+                &source,
+                &mut sink,
+                &ranged_request(0, length, data.len() as u64),
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(transferred, data.len() as u64, "length {length}");
+        }
     }
 }
