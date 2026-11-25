@@ -60,6 +60,18 @@ impl<T: Clone> SingleFlight<T> {
         Some(result)
     }
 
+    /// Runs `work` with no run in progress and none able to start until it ends: it waits for a
+    /// run that is going, and a start or timer run that comes meanwhile does nothing. For cleanup
+    /// (disable, logout), which must not interleave with a run that creates placeholders.
+    pub(super) async fn exclusive<R, F, Fut>(&self, work: F) -> R
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = R>,
+    {
+        let _held = self.run.lock().await;
+        work().await
+    }
+
     /// Runs `work` after any run in progress has finished, unless another run began after this
     /// request in the meantime, in which case that run's result is returned instead.
     pub(super) async fn run_after_current<F, Fut>(&self, work: F) -> T
@@ -244,6 +256,65 @@ mod tests {
 
         assert_eq!(results, vec![1, 1, 1]);
         assert_eq!(*counter.lock().unwrap(), 1, "one run for all three");
+    }
+
+    #[tokio::test]
+    async fn an_exclusive_section_waits_for_a_run_in_progress() {
+        let flight = Arc::new(SingleFlight::new());
+        let (running, release, started) = gate();
+        let first = tokio::spawn({
+            let flight = flight.clone();
+            async move { flight.run_unless_busy(|| running.run()).await }
+        });
+        started.notified().await;
+        let counter = Arc::new(StdMutex::new(0));
+        let exclusive = tokio::spawn({
+            let flight = flight.clone();
+            let counter = counter.clone();
+            async move { flight.exclusive(|| counted(&counter)).await }
+        });
+        tokio::task::yield_now().await;
+        assert_eq!(*counter.lock().unwrap(), 0, "cleanup waits for the run");
+
+        release.send(7).unwrap();
+
+        assert_eq!(first.await.unwrap(), Some(7));
+        assert_eq!(exclusive.await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn no_run_starts_while_an_exclusive_section_is_in_progress() {
+        let flight = Arc::new(SingleFlight::<u32>::new());
+        let (held, release, started) = gate();
+        let exclusive = tokio::spawn({
+            let flight = flight.clone();
+            async move { flight.exclusive(|| held.run()).await }
+        });
+        started.notified().await;
+        let counter = Arc::new(StdMutex::new(0));
+
+        let timer = flight.run_unless_busy(|| counted(&counter)).await;
+        let manual = tokio::spawn({
+            let flight = flight.clone();
+            let counter = counter.clone();
+            async move { flight.run_after_current(|| counted(&counter)).await }
+        });
+        tokio::task::yield_now().await;
+        assert_eq!(timer, None);
+        assert_eq!(
+            *counter.lock().unwrap(),
+            0,
+            "nothing ran during the section"
+        );
+
+        release.send(1).unwrap();
+        exclusive.await.unwrap();
+
+        assert_eq!(
+            manual.await.unwrap(),
+            1,
+            "the manual refresh ran afterwards"
+        );
     }
 
     #[tokio::test]

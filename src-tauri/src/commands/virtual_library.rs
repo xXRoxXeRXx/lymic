@@ -14,7 +14,7 @@
 use crate::{
     app::events::log_to_ui_keyed,
     cloud_files::{
-        CleanupReport, LibraryRefresh, Notice, NoticeKind, NoticeSink, SyncRootService,
+        self, CleanupReport, LibraryRefresh, Notice, NoticeKind, NoticeSink, SyncRootService,
         SystemRefresh, SystemSyncRoot,
     },
     db,
@@ -167,24 +167,34 @@ async fn change_enabled(
             return Err(error.to_string());
         }
     } else {
-        match load_root(pool, known_folders).await? {
-            Some(root) => match service.clean_up(root.clone()).await {
-                Ok(report) => cleanup = Some(report),
-                Err(error) => {
-                    // Nothing was removed: keep serving what the user still has enabled.
-                    let _ = service.start(root).await;
-                    return Err(error.user_message());
+        // No reconciliation run may create or delete placeholders while the cleanup looks at the
+        // folder and deletes, nor start between the cleanup and the "off" being remembered.
+        cleanup = cloud_files::while_reconciliation_is_paused(async {
+            let cleanup = match load_root(pool, known_folders).await? {
+                Some(root) => match service.clean_up(root.clone()).await {
+                    Ok(report) => Some(report),
+                    Err(error) => {
+                        // Nothing was removed: keep serving what the user still has enabled.
+                        let _ = service.start(root).await;
+                        return Err(error.user_message());
+                    }
+                },
+                None => {
+                    service.stop();
+                    None
                 }
-            },
-            None => service.stop(),
-        }
-        db::set_virtual_library_enabled(pool, false)
-            .await
-            .map_err(|error| error.to_string())?;
-        // The placeholders are gone, so no directory is populated any more (#280).
-        db::clear_virtual_library_populated_directories(pool)
-            .await
-            .map_err(|error| error.to_string())?;
+            };
+            db::set_virtual_library_enabled(pool, false)
+                .await
+                .map_err(|error| error.to_string())?;
+            // The placeholders are gone, so no directory is populated any more (#280).
+            db::clear_virtual_library_populated_directories(pool)
+                .await
+                .map_err(|error| error.to_string())?;
+            cloud_files::forget_unrecorded();
+            Ok(cleanup)
+        })
+        .await?;
     }
     Ok(Change {
         settings: load_settings(pool, available, known_folders).await?,
@@ -205,23 +215,28 @@ async fn clean_up_for_logout_with(
     if !available || !db::get_virtual_library_enabled(pool).await.unwrap_or(false) {
         return None;
     }
-    let report = match load_root(pool, known_folders).await {
-        Ok(Some(root)) => match service.clean_up(root.clone()).await {
-            Ok(report) => Some(report),
-            Err(error) => Some(CleanupReport::not_run(&root, error.user_message())),
-        },
-        _ => {
-            service.stop();
-            None
+    // Same exclusion as disabling: no reconciliation run overlaps the cleanup.
+    cloud_files::while_reconciliation_is_paused(async {
+        let report = match load_root(pool, known_folders).await {
+            Ok(Some(root)) => match service.clean_up(root.clone()).await {
+                Ok(report) => Some(report),
+                Err(error) => Some(CleanupReport::not_run(&root, error.user_message())),
+            },
+            _ => {
+                service.stop();
+                None
+            }
+        };
+        if let Err(error) = db::set_virtual_library_enabled(pool, false).await {
+            eprintln!("virtual library: could not remember that it is off after logout: {error}");
         }
-    };
-    if let Err(error) = db::set_virtual_library_enabled(pool, false).await {
-        eprintln!("virtual library: could not remember that it is off after logout: {error}");
-    }
-    if let Err(error) = db::clear_virtual_library_populated_directories(pool).await {
-        eprintln!("virtual library: could not forget the populated directories: {error}");
-    }
-    report
+        if let Err(error) = db::clear_virtual_library_populated_directories(pool).await {
+            eprintln!("virtual library: could not forget the populated directories: {error}");
+        }
+        cloud_files::forget_unrecorded();
+        report
+    })
+    .await
 }
 
 /// Called by `logout` before the credentials are deleted. Tells the frontend the new settings and,
