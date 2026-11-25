@@ -277,7 +277,20 @@ async fn list_directory(request: Request) {
                     plan.specs.len()
                 ));
                 if let Ok(path) = request.path() {
-                    crate::cloud_files::mark_populated(&path).await;
+                    // The platform will not ask for this listing again, so a record that fails is
+                    // kept and retried by the next reconciliation run, and is reported now.
+                    if let Err(error) = crate::cloud_files::mark_populated(&path).await {
+                        let failure = Failure::new(
+                            FailureKind::Failed,
+                            format!("could not record the populated directory: {error}"),
+                        );
+                        note(&format!("'{shown}': {}", failure.message));
+                        reporting::report_failed(&Report {
+                            operation: Operation::List,
+                            path: &path,
+                            failure: &failure,
+                        });
+                    }
                 }
             } else {
                 note(&format!(

@@ -40,15 +40,23 @@ pub(super) trait SizeLookup: Sync {
 pub(super) trait OriginalSource: Sync {
     type Stream: OriginalStream;
 
+    /// Starts reading at byte `from`: the stream may begin there ([`OriginalStream::starts_at`]) or,
+    /// when the server cannot serve a range, at byte 0.
     fn open(
         &self,
         asset: &RemoteAssetId,
+        from: u64,
     ) -> impl Future<Output = Result<Self::Stream, Failure>> + Send;
 }
 
 /// The body of an original being read.
 pub(super) trait OriginalStream: Send {
-    /// The length the server announced for the whole body (`Content-Length`), when it did.
+    /// The byte of the original the body begins at.
+    fn starts_at(&self) -> u64 {
+        0
+    }
+
+    /// The length the server announced for the whole original, when it did.
     fn content_length(&self) -> Option<u64> {
         None
     }
@@ -140,10 +148,10 @@ pub(super) struct ImmichOriginal {
 impl OriginalSource for StoredCredentialsImmich {
     type Stream = ImmichOriginal;
 
-    async fn open(&self, asset: &RemoteAssetId) -> Result<ImmichOriginal, Failure> {
+    async fn open(&self, asset: &RemoteAssetId, from: u64) -> Result<ImmichOriginal, Failure> {
         let session = Self::session().map_err(Failure::from_remote)?;
         let client = session.client();
-        match client.open_asset_original(asset.as_str()).await {
+        match client.open_asset_original_at(asset.as_str(), from).await {
             Ok(body) => Ok(ImmichOriginal { body, session }),
             Err(error) => Err(Failure::from_remote(redact_failure(&session, error))),
         }
@@ -151,6 +159,10 @@ impl OriginalSource for StoredCredentialsImmich {
 }
 
 impl OriginalStream for ImmichOriginal {
+    fn starts_at(&self) -> u64 {
+        self.body.starts_at()
+    }
+
     fn content_length(&self) -> Option<u64> {
         self.body.content_length()
     }

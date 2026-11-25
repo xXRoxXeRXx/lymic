@@ -10,7 +10,7 @@ use super::remote_failure::{send_bounded, RemoteFailure};
 use super::response::{non_empty, read_response_body_limited, MAX_SUCCESS_RESPONSE_BYTES};
 use super::timeline::TimelineBucket;
 use chrono::{DateTime, SecondsFormat, Utc};
-use futures::{stream, StreamExt};
+use futures::{stream, StreamExt, TryStreamExt};
 use reqwest::Method;
 use serde::Deserialize;
 use serde_json::json;
@@ -187,12 +187,14 @@ impl ImmichClient {
 
     /// The video halves of the Live Photos among `assets`, by video id. Immich lists the video as
     /// an asset of its own that no timeline search returns, so each one is looked up. A video
-    /// that cannot be looked up (deleted, or not readable) is left out, which leaves its still
-    /// to be projected alone rather than failing the whole listing.
+    /// that no longer exists (404) is left out, which leaves its still to be projected alone.
+    /// Any other failed lookup (timeout, 5xx, 401) fails the whole listing: leaving the video out
+    /// would make a listing that is only partial look complete, and reconciliation removes the
+    /// placeholders a complete listing no longer shows (an outage must not delete anything).
     pub(crate) async fn list_live_photo_videos(
         &self,
         assets: &[LibraryAsset],
-    ) -> HashMap<RemoteAssetId, LivePhotoVideo> {
+    ) -> Result<HashMap<RemoteAssetId, LivePhotoVideo>, RemoteFailure> {
         // Owned ids, so the lookups do not borrow from the listing: a borrowing closure makes
         // this future impossible to prove `Send`, which the Windows adapter needs.
         let ids: BTreeSet<RemoteAssetId> = assets
@@ -201,16 +203,25 @@ impl ImmichClient {
             .collect();
         stream::iter(ids)
             .map(|id| async move {
-                let details = self.get_asset_details(id.as_str()).await.ok()?;
+                let Some(details) = self
+                    .find_asset_details(id.as_str(), LISTING_TIMEOUT)
+                    .await?
+                else {
+                    return Ok(None);
+                };
                 let video = LivePhotoVideo {
                     original_file_name: details.original_file_name,
                     file_size: details.file_size,
                 };
-                Some((id, video))
+                Ok(Some((id, video)))
             })
             .buffer_unordered(VIDEO_LOOKUP_CONCURRENCY)
-            .filter_map(|found| async move { found })
-            .collect()
+            .try_fold(HashMap::new(), |mut videos, found| async move {
+                if let Some((id, video)) = found {
+                    videos.insert(id, video);
+                }
+                Ok(videos)
+            })
             .await
     }
 

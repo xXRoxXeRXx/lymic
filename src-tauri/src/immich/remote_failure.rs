@@ -76,6 +76,17 @@ pub(crate) async fn send_bounded(
     failure: &str,
     timeout: Duration,
 ) -> Result<Response, RemoteFailure> {
+    send_bounded_allowing(request, failure, timeout, &[]).await
+}
+
+/// [`send_bounded`] that also hands back a response with one of the statuses in `also`, for a
+/// caller that acts on that answer itself (a `416` to a range request).
+pub(crate) async fn send_bounded_allowing(
+    request: RequestBuilder,
+    failure: &str,
+    timeout: Duration,
+    also: &[StatusCode],
+) -> Result<Response, RemoteFailure> {
     let sent = tokio::time::timeout(timeout, request.send()).await;
     let response = match sent {
         Err(_) => {
@@ -87,7 +98,7 @@ pub(crate) async fn send_bounded(
         Ok(Err(error)) => return Err(RemoteFailure::unavailable(format!("{failure}: {error}"))),
         Ok(Ok(response)) => response,
     };
-    if response.status().is_success() {
+    if response.status().is_success() || also.contains(&response.status()) {
         Ok(response)
     } else {
         Err(RemoteFailure::of_response(failure, response).await)

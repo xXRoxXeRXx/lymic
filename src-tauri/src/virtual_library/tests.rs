@@ -20,6 +20,8 @@ struct FakeAsset {
     trashed: bool,
     /// Immich's `livePhotoVideoId`: the hidden video asset paired with this still.
     live_video: Option<&'static str>,
+    /// The status `GET /assets/<id>` answers with for this asset.
+    lookup_status: &'static str,
 }
 
 /// An asset captured at `local_date_time` in UTC, so its local and UTC capture time agree. One
@@ -38,6 +40,7 @@ fn asset(id: &'static str, name: &'static str, local_date_time: &'static str) ->
         visibility: "timeline",
         trashed: false,
         live_video: None,
+        lookup_status: "200 OK",
     }
 }
 
@@ -148,7 +151,10 @@ async fn fake_immich_shared(
         let assets = library.lock().unwrap().clone();
         if let Some(id) = request.target.strip_prefix("/api/assets/") {
             return match assets.iter().find(|asset| asset.id == id) {
-                Some(asset) => ("200 OK".into(), asset.json().to_string()),
+                Some(asset) if asset.lookup_status == "200 OK" => {
+                    ("200 OK".into(), asset.json().to_string())
+                }
+                Some(asset) => (asset.lookup_status.into(), "{}".into()),
                 None => ("404 Not Found".into(), "{}".into()),
             };
         }
@@ -403,6 +409,70 @@ async fn an_asset_whose_capture_time_is_the_unix_epoch_is_filed_under_undated_no
     assert_eq!(
         library.resolve("All Photos/Undated/Garfild.3gp").await,
         Ok(RemoteAssetId::new("e1"))
+    );
+}
+
+#[tokio::test]
+async fn a_real_photo_from_january_1970_stays_in_1970_next_to_the_undated_epoch_asset() {
+    // Only the exact epoch instant means "no capture time": a scan taken on 15 January 1970 is a
+    // real photograph and keeps its place in `All Photos/1970/01 January`.
+    let server = fake_library(vec![
+        asset("d1", "IMG_0100.jpg", "2025-06-15T12:00:00.000Z"),
+        asset("e1", "Garfild.3gp", "1970-01-01T00:00:00.000Z"),
+        asset("r1", "scan_1970.jpg", "1970-01-15T09:30:00.000Z"),
+        asset("r2", "one_second_later.jpg", "1970-01-01T00:00:01.000Z"),
+    ])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(
+        names(&library.list("All Photos").await.unwrap()),
+        ["1970", "2025", "Undated"]
+    );
+    assert_eq!(
+        names(&library.list("All Photos/1970").await.unwrap()),
+        ["01 January"]
+    );
+    assert_eq!(
+        names(&library.list("All Photos/1970/01 January").await.unwrap()),
+        ["one_second_later.jpg", "scan_1970.jpg"]
+    );
+    assert_eq!(
+        names(&library.list("All Photos/Undated").await.unwrap()),
+        ["Garfild.3gp"]
+    );
+    assert_eq!(
+        library
+            .resolve("All Photos/1970/01 January/scan_1970.jpg")
+            .await,
+        Ok(RemoteAssetId::new("r1"))
+    );
+    assert_eq!(
+        library.resolve("All Photos/Undated/Garfild.3gp").await,
+        Ok(RemoteAssetId::new("e1"))
+    );
+}
+
+#[tokio::test]
+async fn a_library_with_only_real_january_1970_photos_has_a_1970_folder_and_no_undated() {
+    let server = fake_library(vec![asset(
+        "r1",
+        "scan_1970.jpg",
+        "1970-01-15T09:30:00.000Z",
+    )])
+    .await;
+    let client = test_client(server.url.clone(), "key");
+    let library = VirtualLibrary::new(&client);
+
+    assert_eq!(names(&library.list("All Photos").await.unwrap()), ["1970"]);
+    assert_eq!(
+        library.list("All Photos/Undated").await,
+        Err(VirtualLibraryError::NotFound)
+    );
+    assert_eq!(
+        names(&library.list("All Photos/1970/01 January").await.unwrap()),
+        ["scan_1970.jpg"]
     );
 }
 
@@ -724,6 +794,43 @@ async fn a_still_whose_video_cannot_be_found_is_listed_alone() {
     let march = library.list("All Photos/2025/03 March").await.unwrap();
 
     assert_eq!(names(&march), ["IMG_0001.HEIC", "IMG_0002.jpg"]);
+}
+
+/// A listing that lost a Live Photo's video to a failed lookup is not a listing: the video's
+/// placeholder would look removed, and reconciliation deletes what a listing no longer shows.
+#[tokio::test]
+async fn a_failed_video_lookup_fails_the_listing_instead_of_dropping_the_video() {
+    for (status, kind) in [
+        ("503 Service Unavailable", RemoteFailureKind::Unavailable),
+        ("500 Internal Server Error", RemoteFailureKind::Rejected),
+        ("401 Unauthorized", RemoteFailureKind::Unauthorized),
+    ] {
+        let server = fake_immich(
+            vec![
+                FakeAsset {
+                    live_video: Some("v-live"),
+                    ..asset("s-live", "IMG_0001.HEIC", "2025-03-10T10:00:00.000Z")
+                },
+                FakeAsset {
+                    lookup_status: status,
+                    ..live_video("v-live", "IMG_0001.MOV", 9_000)
+                },
+            ],
+            vec![album("al1", "Trip", &["s-live", "v-live"])],
+        )
+        .await;
+        let client = test_client(server.url.clone(), "key");
+        let library = VirtualLibrary::new(&client);
+
+        for path in ["All Photos/2025/03 March", "Albums/Trip"] {
+            match library.list(path).await {
+                Err(VirtualLibraryError::Remote(failure)) => {
+                    assert_eq!(failure.kind, kind, "{status} {path}");
+                }
+                other => panic!("{status} {path}: expected a remote failure, got {other:?}"),
+            }
+        }
+    }
 }
 
 #[tokio::test]

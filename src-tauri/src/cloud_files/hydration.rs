@@ -4,7 +4,9 @@
 //! (`Library::resolve`), streams the original from Immich and passes it to the platform in blocks.
 //! The platform only accepts data at offsets that are multiples of 4096, except for the final block
 //! that ends at the end of the file, so network chunks of any size are regrouped by
-//! [`BlockAligner`]. The whole original is always fetched, never a preview and never a byte range.
+//! [`BlockAligner`]. Only the original is fetched, never a preview. It is read from byte 0, or from
+//! the aligned start of a later requested range when the server honours a `Range` request and from
+//! byte 0 (skipping what is not needed) when it does not.
 
 use super::failure::{Failure, FailureKind};
 use super::library::{Library, OriginalSource, OriginalStream};
@@ -85,8 +87,9 @@ fn align_down(value: u64) -> u64 {
 
 /// Hydrates the placeholder at `request.path`. Returns the number of bytes handed to the platform.
 ///
-/// The bytes below the aligned start of the requested range are read but not transferred; with the
-/// full hydration policy that start is 0. A body that does not end exactly at the size the
+/// The bytes below the aligned start of the requested range are not transferred: they are not even
+/// downloaded when the server serves the range, and are read and dropped when it sends the whole
+/// original. With the full hydration policy that start is 0, so no range is ever asked for. A body that does not end exactly at the size the
 /// placeholder announced fails the read: the platform would otherwise wait for bytes that never
 /// come, or reject the excess.
 pub(super) async fn hydrate<L, S, K>(
@@ -104,7 +107,20 @@ where
         .resolve(&request.path)
         .await
         .map_err(Failure::from_library)?;
-    let mut stream = source.open(&asset).await?;
+    let start = align_down(request.required_offset);
+    let mut stream = source.open(&asset, start).await?;
+    // Where the body begins: the aligned start when the server served the range, 0 when it sent
+    // the whole original. Anything else cannot be placed in the file.
+    let mut position = stream.starts_at();
+    if position != 0 && position != start {
+        return Err(Failure::new(
+            FailureKind::Failed,
+            format!(
+                "the original for '{}' began at byte {position}, not at the {start} asked for",
+                request.path
+            ),
+        ));
+    }
     // The server says how long the original is before sending it: a size that differs from the
     // placeholder's cannot hydrate it, so fail now instead of downloading the whole body first.
     if let Some(announced) = stream.content_length() {
@@ -120,9 +136,7 @@ where
         }
     }
 
-    let start = align_down(request.required_offset);
     let mut aligner = BlockAligner::starting_at(start);
-    let mut position: u64 = 0;
     let mut transferred: u64 = 0;
     while let Some(chunk) = stream.next_chunk().await? {
         let end = position + chunk.len() as u64;
@@ -223,6 +237,13 @@ mod tests {
         then_error: Option<Failure>,
         open_error: Option<Failure>,
         opened: Mutex<Vec<String>>,
+        /// The byte each open asked to start at.
+        opened_from: Mutex<Vec<u64>>,
+        /// Whether the server honours a range request (otherwise it sends the whole original).
+        ranged: bool,
+        /// Serves from this byte whatever was asked for.
+        forced_start: Option<u64>,
+        data: Vec<u8>,
         /// The `Content-Length` the server announces, if it does.
         announced: Option<u64>,
     }
@@ -234,12 +255,17 @@ mod tests {
                 then_error: None,
                 open_error: None,
                 opened: Mutex::new(Vec::new()),
+                opened_from: Mutex::new(Vec::new()),
+                ranged: false,
+                forced_start: None,
+                data: data.to_vec(),
                 announced: Some(data.len() as u64),
             }
         }
     }
 
     struct FakeStream {
+        starts_at: u64,
         chunks: std::vec::IntoIter<Bytes>,
         then_error: Option<Failure>,
         announced: Option<u64>,
@@ -248,12 +274,28 @@ mod tests {
     impl OriginalSource for FakeSource {
         type Stream = FakeStream;
 
-        async fn open(&self, asset: &RemoteAssetId) -> Result<FakeStream, Failure> {
+        async fn open(&self, asset: &RemoteAssetId, from: u64) -> Result<FakeStream, Failure> {
             self.opened.lock().unwrap().push(asset.to_string());
+            self.opened_from.lock().unwrap().push(from);
+            let served_from = self
+                .forced_start
+                .or((self.ranged && from > 0).then_some(from));
+            let (starts_at, chunks) = if let Some(from) = served_from {
+                (
+                    from,
+                    self.data[from as usize..]
+                        .chunks(3_000)
+                        .map(Bytes::copy_from_slice)
+                        .collect(),
+                )
+            } else {
+                (0, self.chunks.clone())
+            };
             match &self.open_error {
                 Some(error) => Err(error.clone()),
                 None => Ok(FakeStream {
-                    chunks: self.chunks.clone().into_iter(),
+                    starts_at,
+                    chunks: chunks.into_iter(),
                     then_error: self.then_error.clone(),
                     announced: self.announced,
                 }),
@@ -262,6 +304,10 @@ mod tests {
     }
 
     impl OriginalStream for FakeStream {
+        fn starts_at(&self) -> u64 {
+            self.starts_at
+        }
+
         fn content_length(&self) -> Option<u64> {
             self.announced
         }
@@ -481,6 +527,87 @@ mod tests {
 
         assert_eq!(failure.message, "platform refused");
         assert_eq!(sink.blocks.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_later_start_is_asked_for_as_a_range_and_only_the_rest_is_downloaded() {
+        let data = bytes_of(20_000);
+        let mut source = FakeSource::serving(&data, 3_000);
+        source.ranged = true;
+        let mut sink = RecordingSink::default();
+        let request = DataRequest {
+            required_offset: 5_000,
+            ..request(data.len())
+        };
+
+        let transferred = hydrate(&library(), &source, &mut sink, &request)
+            .await
+            .unwrap();
+
+        assert_eq!(*source.opened_from.lock().unwrap(), [4_096]);
+        assert_eq!(transferred, 20_000 - 4_096);
+        assert_eq!(sink.blocks[0].offset, 4_096);
+        assert_eq!(sink.blocks[0].data, &data[4_096..]);
+    }
+
+    #[tokio::test]
+    async fn a_server_without_range_support_gives_the_same_blocks_as_one_with() {
+        let data = bytes_of(BLOCK_BYTES + 20_000);
+        let mut blocks = Vec::new();
+        for ranged in [true, false] {
+            let mut source = FakeSource::serving(&data, 700_001);
+            source.ranged = ranged;
+            let mut sink = RecordingSink::default();
+            let request = DataRequest {
+                required_offset: 2 * ALIGNMENT + 1,
+                ..request(data.len())
+            };
+
+            hydrate(&library(), &source, &mut sink, &request)
+                .await
+                .unwrap();
+
+            assert_platform_alignment(&sink.blocks, data.len() as u64);
+            blocks.push(sink.blocks);
+        }
+        assert_eq!(blocks[0], blocks[1]);
+        assert_eq!(blocks[0][0].offset, 2 * ALIGNMENT);
+    }
+
+    #[tokio::test]
+    async fn a_read_from_the_start_never_asks_for_a_range() {
+        let data = bytes_of(5_000);
+        let mut source = FakeSource::serving(&data, 1_000);
+        source.ranged = true;
+
+        hydrate(
+            &library(),
+            &source,
+            &mut RecordingSink::default(),
+            &request(data.len()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(*source.opened_from.lock().unwrap(), [0]);
+    }
+
+    #[tokio::test]
+    async fn a_body_that_starts_at_an_unexpected_byte_fails_the_read() {
+        let data = bytes_of(20_000);
+        let mut source = FakeSource::serving(&data, 3_000);
+        // The server serves from 4096, but the request wanted to start at 8192.
+        source.forced_start = Some(4_096);
+        let request = DataRequest {
+            required_offset: 8_192,
+            ..request(data.len())
+        };
+
+        let failure = hydrate(&library(), &source, &mut RecordingSink::default(), &request)
+            .await
+            .unwrap_err();
+
+        assert_eq!(failure.kind, FailureKind::Failed);
     }
 
     #[tokio::test]

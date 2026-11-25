@@ -57,6 +57,12 @@ pub(super) trait PopulatedDirectories: Sync {
     fn forget_tree(&self, path: &str) -> impl Future<Output = Result<(), String>> + Send;
 }
 
+/// Whether the run may still change the disk. Cleanup (disable, logout) can begin while a run is
+/// listing from Immich; a plan made before that must not be applied to a root being cleaned up.
+pub(super) trait RunGate: Sync {
+    fn still_enabled(&self) -> impl Future<Output = bool> + Send;
+}
+
 /// What a run did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Report {
@@ -94,12 +100,19 @@ fn is_within(path: &str, ancestor: &str) -> bool {
 }
 
 /// Reconciles every populated directory once.
-pub(super) async fn reconcile<L, S, T, P>(library: &L, sizes: &S, tree: &T, populated: &P) -> Report
+pub(super) async fn reconcile<L, S, T, P, G>(
+    library: &L,
+    sizes: &S,
+    tree: &T,
+    populated: &P,
+    gate: &G,
+) -> Report
 where
     L: Library,
     S: SizeLookup,
     T: LocalTree,
     P: PopulatedDirectories,
+    G: RunGate,
 {
     let mut report = Report::default();
     let mut directories = match populated.all().await {
@@ -151,6 +164,11 @@ where
         let plan = diff::diff(&path, &desired.specs, &desired.skipped, &local);
         if plan.is_empty() {
             continue;
+        }
+        // Re-checked right before every change: the listing above can take a while, and a cleanup
+        // that began meanwhile owns the folder now.
+        if !gate.still_enabled().await {
+            break;
         }
         let applied = tree.apply(&path, &plan).await;
         report.created += applied.created;
@@ -378,6 +396,31 @@ mod tests {
         }
     }
 
+    /// The Virtual Library stays on for the whole run.
+    struct Enabled;
+
+    impl RunGate for Enabled {
+        async fn still_enabled(&self) -> bool {
+            true
+        }
+    }
+
+    /// The Virtual Library is turned off after `answers` checks: the first `answers` say on.
+    struct TurnsOff {
+        answers: Mutex<usize>,
+    }
+
+    impl RunGate for TurnsOff {
+        async fn still_enabled(&self) -> bool {
+            let mut left = self.answers.lock().unwrap();
+            if *left == 0 {
+                return false;
+            }
+            *left -= 1;
+            true
+        }
+    }
+
     /// A library with `Albums` holding two albums, each populated on disk with one photo.
     fn world() -> (FakeLibrary, FakeTree) {
         let library = FakeLibrary::default();
@@ -411,7 +454,14 @@ mod tests {
             Ok(vec![file("a.jpg", "id-a", 10), file("b.jpg", "id-b", 20)]),
         );
 
-        let report = reconcile(&library, &NoSizes, &tree, &FakePopulated::of(&POPULATED)).await;
+        let report = reconcile(
+            &library,
+            &NoSizes,
+            &tree,
+            &FakePopulated::of(&POPULATED),
+            &Enabled,
+        )
+        .await;
 
         assert_eq!(tree.names("Albums/Trip"), vec!["a.jpg", "b.jpg"]);
         assert_eq!((report.created, report.updated, report.removed), (1, 0, 0));
@@ -423,7 +473,14 @@ mod tests {
         let (library, tree) = world();
         library.set("Albums/Trip", Ok(vec![]));
 
-        let report = reconcile(&library, &NoSizes, &tree, &FakePopulated::of(&POPULATED)).await;
+        let report = reconcile(
+            &library,
+            &NoSizes,
+            &tree,
+            &FakePopulated::of(&POPULATED),
+            &Enabled,
+        )
+        .await;
 
         assert!(tree.names("Albums/Trip").is_empty());
         assert_eq!(report.removed, 1);
@@ -434,10 +491,46 @@ mod tests {
         let (library, tree) = world();
         library.set("Albums/Trip", Ok(vec![file("a.jpg", "id-a", 99)]));
 
-        let report = reconcile(&library, &NoSizes, &tree, &FakePopulated::of(&POPULATED)).await;
+        let report = reconcile(
+            &library,
+            &NoSizes,
+            &tree,
+            &FakePopulated::of(&POPULATED),
+            &Enabled,
+        )
+        .await;
 
         assert_eq!(tree.directories.lock().unwrap()["Albums/Trip"][0].size, 99);
         assert_eq!(report.updated, 1);
+    }
+
+    #[tokio::test]
+    async fn a_run_that_finds_the_virtual_library_turned_off_applies_nothing_more() {
+        let (library, tree) = world();
+        library.set(
+            "Albums/Trip",
+            Ok(vec![file("a.jpg", "id-a", 10), file("b.jpg", "id-b", 20)]),
+        );
+        library.set("Albums/Home", Ok(vec![]));
+        // Cleanup began after the listing of the first directories: nothing may be created in, or
+        // removed from, a root that is being (or has been) cleaned up.
+        let gate = TurnsOff {
+            answers: Mutex::new(0),
+        };
+
+        let report = reconcile(
+            &library,
+            &NoSizes,
+            &tree,
+            &FakePopulated::of(&POPULATED),
+            &gate,
+        )
+        .await;
+
+        assert_eq!(tree.names("Albums/Trip"), vec!["a.jpg"]);
+        assert_eq!(tree.names("Albums/Home"), vec!["h.jpg"]);
+        assert_eq!((report.created, report.updated, report.removed), (0, 0, 0));
+        assert_eq!(report.failure, None, "being turned off is not a failure");
     }
 
     #[tokio::test]
@@ -451,6 +544,7 @@ mod tests {
             &NoSizes,
             &tree,
             &FakePopulated::of(&["", "Albums", "Albums/Trip"]),
+            &Enabled,
         )
         .await;
 
@@ -470,7 +564,7 @@ mod tests {
         library.set("Albums/Trip", Err(VirtualLibraryError::NotFound));
         let populated = FakePopulated::of(&POPULATED);
 
-        let report = reconcile(&library, &NoSizes, &tree, &populated).await;
+        let report = reconcile(&library, &NoSizes, &tree, &populated, &Enabled).await;
 
         assert_eq!(tree.names("Albums"), vec!["Home"]);
         assert_eq!(populated.paths(), vec!["", "Albums", "Albums/Home"]);
@@ -487,6 +581,7 @@ mod tests {
             &NoSizes,
             &tree,
             &FakePopulated::of(&["Albums/Trip", "Albums", "", "Albums/Home"]),
+            &Enabled,
         )
         .await;
 
@@ -504,7 +599,14 @@ mod tests {
             ))),
         );
 
-        let report = reconcile(&library, &NoSizes, &tree, &FakePopulated::of(&POPULATED)).await;
+        let report = reconcile(
+            &library,
+            &NoSizes,
+            &tree,
+            &FakePopulated::of(&POPULATED),
+            &Enabled,
+        )
+        .await;
 
         assert_eq!(tree.names("Albums"), vec!["Home", "Trip"]);
         assert_eq!(report.directories, 1, "only the root was compared");
@@ -523,7 +625,14 @@ mod tests {
         );
         library.set("Albums/Home", Ok(vec![]));
 
-        let report = reconcile(&library, &NoSizes, &tree, &FakePopulated::of(&POPULATED)).await;
+        let report = reconcile(
+            &library,
+            &NoSizes,
+            &tree,
+            &FakePopulated::of(&POPULATED),
+            &Enabled,
+        )
+        .await;
 
         assert_eq!(tree.names("Albums/Trip"), vec!["a.jpg"], "left alone");
         assert!(tree.names("Albums/Home").is_empty());
@@ -536,7 +645,7 @@ mod tests {
         tree.directories.lock().unwrap().remove("Albums/Trip");
         let populated = FakePopulated::of(&POPULATED);
 
-        let report = reconcile(&library, &NoSizes, &tree, &populated).await;
+        let report = reconcile(&library, &NoSizes, &tree, &populated, &Enabled).await;
 
         assert_eq!(populated.paths(), vec!["", "Albums", "Albums/Home"]);
         assert_eq!(report.failure, None);
@@ -548,7 +657,7 @@ mod tests {
         *tree.read_error.lock().unwrap() = Some(LocalError::Other("access denied".to_string()));
         let populated = FakePopulated::of(&POPULATED);
 
-        let report = reconcile(&library, &NoSizes, &tree, &populated).await;
+        let report = reconcile(&library, &NoSizes, &tree, &populated, &Enabled).await;
 
         assert_eq!(populated.paths().len(), 4);
         assert!(report.failure.unwrap().contains("access denied"));
@@ -559,7 +668,7 @@ mod tests {
     async fn nothing_populated_means_nothing_is_listed() {
         let (library, tree) = world();
 
-        let report = reconcile(&library, &NoSizes, &tree, &FakePopulated::of(&[])).await;
+        let report = reconcile(&library, &NoSizes, &tree, &FakePopulated::of(&[]), &Enabled).await;
 
         assert!(library.listed.lock().unwrap().is_empty());
         assert_eq!(report, Report::default());
@@ -573,7 +682,7 @@ mod tests {
             ..FakePopulated::of(&POPULATED)
         };
 
-        let report = reconcile(&library, &NoSizes, &tree, &populated).await;
+        let report = reconcile(&library, &NoSizes, &tree, &populated, &Enabled).await;
 
         assert!(library.listed.lock().unwrap().is_empty());
         assert!(report.failure.unwrap().contains("database is locked"));
@@ -599,7 +708,7 @@ mod tests {
             });
         let populated = FakePopulated::of(&POPULATED);
 
-        let report = reconcile(&library, &NoSizes, &tree, &populated).await;
+        let report = reconcile(&library, &NoSizes, &tree, &populated, &Enabled).await;
 
         assert_eq!(report.removed, 0);
         assert!(tree.directories.lock().unwrap().contains_key("Albums/Trip"));
