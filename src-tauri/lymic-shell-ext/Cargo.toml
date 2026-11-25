@@ -1,6 +1,6 @@
 [package]
 name = "lymic-shell-ext"
-version = "0.30.0"
+version = "0.40.0"
 description = "COM thumbnail provider for the Lymic Virtual Library (ADR-0003): serves cached Immich thumbnails for placeholders without Hydration"
 repository = "https://github.com/xXRoxXeRXx/lymic"
 authors = ["xXRoxXeRXx"]

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-11-25
+
 ### Added
 - **Virtual Library: failed opens**:
   - When a photo in the Virtual Library cannot be opened because Immich is unreachable, your sign-in expired (HTTP 401 or 403) or the photo was removed from Immich, the open now fails promptly with a matching Windows error instead of hanging: Lymic gives up on a server that does not answer after 15 seconds (30 seconds of silence in the middle of a download) and never retries on its own. A photo removed from Immich is reported as not found.
