@@ -57,12 +57,14 @@ impl StartupTaskState {
         }
     }
 
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub(crate) fn is_enabled(self) -> bool {
         matches!(self, Self::Enabled | Self::EnabledByPolicy)
     }
 }
 
 /// The StartupTask API of the current package. Implemented over WinRT on Windows; faked in tests.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) trait StartupTaskPort {
     fn state(&self) -> Result<StartupTaskState, String>;
     /// `StartupTask.RequestEnableAsync`. A packaged desktop app gets no consent dialog. It does not
@@ -72,6 +74,7 @@ pub(crate) trait StartupTaskPort {
 }
 
 /// What the user should do when Windows kept autostart off after an enable request.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn enable_refusal(state: StartupTaskState) -> String {
     match state {
         StartupTaskState::DisabledByUser => "Windows is keeping Lymic from starting at sign-in because it was turned off in Windows. Turn it back on in Windows Settings under Apps, Startup, or in the Startup apps tab of Task Manager.".to_string(),
@@ -80,12 +83,14 @@ fn enable_refusal(state: StartupTaskState) -> String {
     }
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn startup_task_is_enabled(port: &impl StartupTaskPort) -> Result<bool, String> {
     port.state().map(StartupTaskState::is_enabled)
 }
 
 /// Switches the startup task. The outcome is read back from Windows and never assumed: a request
 /// that Windows declined is an error that says why, not a silent no-op.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn set_startup_task_enabled(
     port: &impl StartupTaskPort,
     enabled: bool,
