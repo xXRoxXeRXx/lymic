@@ -115,6 +115,8 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         uses: snapcore/action-build@v1
         id: build-snap
+        with:
+          snapcraft-args: '--destructive-mode'
 
       - name: upload Snap artifact (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
